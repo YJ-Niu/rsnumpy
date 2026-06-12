@@ -525,6 +525,20 @@ impl NdArray {
         })
     }
 
+    fn __round__(&self, ndigits: Option<i32>) -> PyResult<NdArray> {
+        match ndigits {
+            None => Ok(NdArray {
+                data: self.data.mapv(|x| x.round()),
+            }),
+            Some(n) => {
+                let factor = 10.0_f64.powi(n);
+                Ok(NdArray {
+                    data: self.data.mapv(|x| (x * factor).round() / factor),
+                })
+            }
+        }
+    }
+
     fn __gt__(&self, other: &Bound<'_, PyAny>) -> PyResult<NdArray> {
         binary_op_lr(self, other, |a, b| if a > b { 1.0 } else { 0.0 })
     }
@@ -1823,7 +1837,7 @@ fn reshape(a: &NdArray, shape: &Bound<'_, PyAny>) -> PyResult<NdArray> {
 // ===== Module Initialization =====
 
 #[pymodule]
-fn rsnum(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<NdArray>()?;
     m.add_class::<NdArrayIter>()?;
 

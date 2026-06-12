@@ -11,3 +11,10 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dynamic = ["version"]
+dependencies = [
+    "xlrd>=2.0.2",
+]
+
+[tool.maturin]
+module-name = "rsnum._core"
+include = ["rsnum/__init__.py", "rsnum/linalg/__init__.py", "rsnum/random/__init__.py"]

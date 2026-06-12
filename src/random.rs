@@ -2,6 +2,8 @@ use ndarray::{Array, IxDyn};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyTuple;
+use rand::SeedableRng;
+use rand_distr::Distribution;
 
 use crate::NdArray;
 
@@ -11,19 +13,18 @@ fn get_rng() -> std::sync::MutexGuard<'static, Option<::rand::rngs::StdRng>> {
     RNG.lock().unwrap()
 }
 
-/// 设置随机种子
 #[pyfunction]
 fn seed(val: u64) {
     let mut guard = get_rng();
-    *guard = Some(<::rand::rngs::StdRng as ::rand::SeedableRng>::seed_from_u64(val));
+    *guard = Some(::rand::rngs::StdRng::seed_from_u64(val));
 }
 
-fn ensure_rng() -> ::rand::rngs::StdRng {
+fn ensure_rng_mut() -> std::sync::MutexGuard<'static, Option<::rand::rngs::StdRng>> {
     let mut guard = get_rng();
     if guard.is_none() {
-        *guard = Some(<::rand::rngs::StdRng as ::rand::SeedableRng>::from_entropy());
+        *guard = Some(::rand::rngs::StdRng::seed_from_u64(0xdeadbeef));
     }
-    guard.as_ref().unwrap().clone()
+    guard
 }
 
 fn parse_shape_from_args(args: &Bound<'_, PyTuple>) -> Vec<usize> {
@@ -61,81 +62,85 @@ fn parse_size_arg(size: Option<&Bound<'_, PyAny>>) -> PyResult<Vec<usize>> {
     }
 }
 
-/// 均匀分布 [0, 1) 随机数
 #[pyfunction]
 #[pyo3(signature = (*args), name = "rand")]
 fn random_rand(args: &Bound<'_, PyTuple>) -> PyResult<NdArray> {
     let shape = parse_shape_from_args(args);
+    let dist = ::rand_distr::Uniform::<f64>::new(0.0, 1.0)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     if shape.is_empty() {
-        let mut rng = ensure_rng();
+        let mut guard = ensure_rng_mut();
+        let rng = guard.as_mut().unwrap();
         return Ok(NdArray {
-            data: Array::from_elem(IxDyn(&[]), ::rand::Rng::r#gen(&mut rng)),
+            data: Array::from_elem(IxDyn(&[]), dist.sample(rng)),
         });
     }
-    let mut rng = ensure_rng();
+    let mut guard = ensure_rng_mut();
+    let rng = guard.as_mut().unwrap();
     let total: usize = shape.iter().product();
-    let values: Vec<f64> = (0..total).map(|_| ::rand::Rng::r#gen(&mut rng)).collect();
+    let values: Vec<f64> = (0..total).map(|_| dist.sample(rng)).collect();
     let arr = Array::from_shape_vec(IxDyn(&shape), values)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(NdArray { data: arr })
 }
 
-/// 标准正态分布随机数
 #[pyfunction]
 #[pyo3(signature = (*args))]
 fn randn(args: &Bound<'_, PyTuple>) -> PyResult<NdArray> {
     let shape = parse_shape_from_args(args);
-    if shape.is_empty() {
-        let mut rng = ensure_rng();
-        let normal = ::rand_distr::Normal::new(0.0, 1.0)
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        return Ok(NdArray {
-            data: Array::from_elem(IxDyn(&[]), ::rand::distributions::Distribution::sample(&normal, &mut rng)),
-        });
-    }
-    let mut rng = ensure_rng();
     let normal = ::rand_distr::Normal::new(0.0, 1.0)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    if shape.is_empty() {
+        let mut guard = ensure_rng_mut();
+        let rng = guard.as_mut().unwrap();
+        return Ok(NdArray {
+            data: Array::from_elem(IxDyn(&[]), normal.sample(rng)),
+        });
+    }
+    let mut guard = ensure_rng_mut();
+    let rng = guard.as_mut().unwrap();
     let total: usize = shape.iter().product();
-    let values: Vec<f64> = (0..total).map(|_| ::rand::distributions::Distribution::sample(&normal, &mut rng)).collect();
+    let values: Vec<f64> = (0..total).map(|_| normal.sample(rng)).collect();
     let arr = Array::from_shape_vec(IxDyn(&shape), values)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(NdArray { data: arr })
 }
 
-/// 随机整数
 #[pyfunction]
 #[pyo3(signature = (low, high, size=None), name = "randint")]
 fn random_randint(low: i64, high: i64, size: Option<&Bound<'_, PyAny>>) -> PyResult<NdArray> {
     let shape = parse_size_arg(size)?;
-    let mut rng = ensure_rng();
-    let dist = ::rand_distr::Uniform::new(low, high);
+    let dist = ::rand_distr::Uniform::new(low, high)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let mut guard = ensure_rng_mut();
+    let rng = guard.as_mut().unwrap();
     if shape.is_empty() {
         return Ok(NdArray {
-            data: Array::from_elem(IxDyn(&[]), ::rand::distributions::Distribution::sample(&dist, &mut rng) as f64),
+            data: Array::from_elem(IxDyn(&[]), dist.sample(rng) as f64),
         });
     }
     let total: usize = shape.iter().product();
-    let values: Vec<f64> = (0..total).map(|_| ::rand::distributions::Distribution::sample(&dist, &mut rng) as f64).collect();
+    let values: Vec<f64> = (0..total).map(|_| dist.sample(rng) as f64).collect();
     let arr = Array::from_shape_vec(IxDyn(&shape), values)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(NdArray { data: arr })
 }
 
-/// 均匀分布随机数
 #[pyfunction]
 #[pyo3(signature = (low=0.0, high=1.0, size=None))]
 fn uniform(low: f64, high: f64, size: Option<&Bound<'_, PyAny>>) -> PyResult<NdArray> {
     let shape = parse_size_arg(size)?;
-    let mut rng = ensure_rng();
-    let dist = ::rand_distr::Uniform::new(low, high);
+    let dist = ::rand_distr::Uniform::new(low, high)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let mut guard = ensure_rng_mut();
+    let rng = guard.as_mut().unwrap();
     if shape.is_empty() {
         return Ok(NdArray {
-            data: Array::from_elem(IxDyn(&[]), ::rand::distributions::Distribution::sample(&dist, &mut rng)),
+            data: Array::from_elem(IxDyn(&[]), dist.sample(rng)),
         });
     }
     let total: usize = shape.iter().product();
-    let values: Vec<f64> = (0..total).map(|_| ::rand::distributions::Distribution::sample(&dist, &mut rng)).collect();
+    let values: Vec<f64> = (0..total).map(|_| dist.sample(rng)).collect();
     let arr = Array::from_shape_vec(IxDyn(&shape), values)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(NdArray { data: arr })
