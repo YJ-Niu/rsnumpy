@@ -30,6 +30,10 @@ Thumbs.db
 wheelhouse/
 main*.py
 test*.py
+debug*.py
+rsnum*.whl
+check*.py
+
 # Environment
 .venv
 .env
