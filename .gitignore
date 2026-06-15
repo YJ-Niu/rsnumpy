@@ -29,7 +29,7 @@ uv.lock
 Thumbs.db
 
 # Data / plots
-
+push*.sh
 main*.py
 test*.py
 debug*.py
