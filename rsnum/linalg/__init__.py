@@ -113,4 +113,3 @@ class linalg_module:
     def solve_banded(lower, upper, ab, b):
         """求解带状线性方程组。"""
         return _wrap(_core.linalg.solve_banded(lower, upper, _ensure(ab), _ensure(b)))
-
