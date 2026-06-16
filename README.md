@@ -1,4 +1,4 @@
-# rsnum
+# rsnumpy
 
 **A Rust-powered NumPy-compatible array library.**
 
@@ -8,7 +8,7 @@
 
 ### 1. 项目简介
 
-**rsnum** 是一个由 **Rust** 驱动的高性能多维数组库，提供与 **NumPy** 兼容的 API。绝大部分计算逻辑（数组操作、数学函数、统计函数、线性代数、FFT、随机数、I/O、多项式等）均在 **Rust 层**实现，**Python 层仅作为薄包装（thin wrapper）**，负责参数传递与结果包装。
+**rsnumpy** 是一个由 **Rust** 驱动的高性能多维数组库，提供与 **NumPy** 兼容的 API。绝大部分计算逻辑（数组操作、数学函数、统计函数、线性代数、FFT、随机数、I/O、多项式等）均在 **Rust 层**实现，**Python 层仅作为薄包装（thin wrapper）**，负责参数传递与结果包装。
 
 **优势：**
 - 性能：核心计算使用 Rust 实现，接近或超过 NumPy 的速度
@@ -18,13 +18,13 @@
 
 **项目结构：**
 ```
-rsnum/
+rsnumpy/
 ├── src/                       # Rust 源码
 │   ├── lib.rs                 # 核心 ndarray 与通用函数
 │   ├── fft.rs                 # 快速傅里叶变换
 │   ├── linalg.rs              # 线性代数
 │   └── random.rs              # 随机数生成
-├── rsnum/                     # Python 薄包装
+├── rsnumpy/                     # Python 薄包装
 │   ├── __init__.py            # 主模块，整合所有 API
 │   ├── array_methods.py       # ndarray 对象方法
 │   ├── array_ops.py           # 数组操作函数
@@ -58,8 +58,8 @@ rsnum/
 #### 3.1 克隆项目
 
 ```bash
-git clone <your-repo-url> rsnum
-cd rsnum
+git clone <your-repo-url> rsnumpy
+cd rsnumpy
 ```
 
 #### 3.2 创建虚拟环境（推荐使用 uv）
@@ -98,7 +98,7 @@ bash build_wheel.sh
 构建完成后即可使用：
 
 ```python
-python -c "import rsnum; print(rsnum.__doc__)"
+python -c "import rsnumpy; print(rsnumpy.__doc__)"
 ```
 
 ---
@@ -131,7 +131,7 @@ maturin develop --release
 maturin build --release -o wheelhouse/
 
 # 手动安装 wheel
-uv pip install --no-deps wheelhouse/rsnum-*.whl
+uv pip install --no-deps wheelhouse/rsnumpy-*.whl
 ```
 
 #### 4.3 清理构建产物
@@ -147,7 +147,7 @@ rm -rf target/ wheelhouse/
 #### 5.1 基本数组操作
 
 ```python
-import rsnum as np
+import rsnumpy as np
 
 # 创建数组
 a = np.array([1.0, 2.0, 3.0])
@@ -166,7 +166,7 @@ print(a.size)     # 3
 #### 5.2 数学函数
 
 ```python
-import rsnum as np
+import rsnumpy as np
 
 a = np.array([0.0, np.pi / 2, np.pi])
 print(np.sin(a))         # [0.0, 1.0, 0.0]
@@ -179,7 +179,7 @@ print(np.log(a + 1))     # 自然对数
 #### 5.3 数组操作
 
 ```python
-import rsnum as np
+import rsnumpy as np
 
 a = np.array([[1, 2, 3], [4, 5, 6]])
 
@@ -206,7 +206,7 @@ f = np.hstack([a, a])   # 水平堆叠
 #### 5.4 统计函数
 
 ```python
-import rsnum as np
+import rsnumpy as np
 
 a = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
 
@@ -221,7 +221,7 @@ print(np.argmin(a))      # 0
 #### 5.5 线性代数
 
 ```python
-import rsnum as np
+import rsnumpy as np
 
 A = np.array([[1.0, 2.0], [3.0, 4.0]])
 
@@ -238,7 +238,7 @@ Q, R = np.linalg.qr(A)
 #### 5.6 随机数
 
 ```python
-import rsnum as np
+import rsnumpy as np
 
 # 新 API
 rng = np.random.default_rng(seed=42)
@@ -255,7 +255,7 @@ print(np.random.randn(3).tolist())
 #### 5.7 FFT
 
 ```python
-import rsnum as np
+import rsnumpy as np
 
 x = np.array([1.0, 0.0, 0.0, 0.0])
 spectrum = np.fft.fft(x)
@@ -269,7 +269,7 @@ recovered_r = np.fft.irfft(r_spectrum, n=4)
 #### 5.8 多项式
 
 ```python
-import rsnum as np
+import rsnumpy as np
 
 # 系数从高到低（NumPy 兼容）
 p = np.polynomial.Poly([1, -3, 2])  # x^2 - 3x + 2
@@ -290,7 +290,7 @@ coef = np.polynomial.polyfit(x, y, 2)
 #### 5.9 文件 I/O
 
 ```python
-import rsnum as np
+import rsnumpy as np
 
 # 保存 / 加载 .npy
 a = np.array([1, 2, 3])
@@ -316,7 +316,7 @@ arr = np.frombuffer(bytes_data)
 #### 5.10 判断函数与常量
 
 ```python
-import rsnum as np
+import rsnumpy as np
 
 print(np.pi)           # 3.141592653589793
 print(np.e)            # 2.718281828459045
@@ -333,7 +333,7 @@ print(np.isfinite(a))
 
 ### 6. 常见问题
 
-#### Q1: `ModuleNotFoundError: No module named 'rsnum'`
+#### Q1: `ModuleNotFoundError: No module named 'rsnumpy'`
 A: 需要先构建并安装：`bash build_wheel.sh`
 
 #### Q2: 编译报错 `error: linker not found`
@@ -355,7 +355,7 @@ A: 当前版本仅支持 CPU。
 - **所有计算逻辑都应在 Rust 层实现**，Python 层只保留 `def f(x): return _core.f(x)` 这样的薄包装
 - 新增 API 时，先在 `src/lib.rs` 实现，再用 `m.add_function(wrap_pyfunction!(name, m)?)?` 注册
 - 修改后需要重新运行 `bash build_wheel.sh`
-- 提交前请运行 `/Users/user/Desktop/rust_project/rsnum/.venv/bin/python /tmp/test_*.py` 验证
+- 提交前请运行 `/Users/user/Desktop/rust_project/rsnumpy/.venv/bin/python /tmp/test_*.py` 验证
 
 ---
 
@@ -363,7 +363,7 @@ A: 当前版本仅支持 CPU。
 
 ### 1. Overview
 
-**rsnum** is a high-performance multi-dimensional array library powered by **Rust**, providing a **NumPy-compatible** API. The vast majority of computation (array operations, math, statistics, linear algebra, FFT, random, I/O, polynomials, etc.) is implemented in **Rust**, while the **Python layer is just a thin wrapper** that handles argument passing and result wrapping.
+**rsnumpy** is a high-performance multi-dimensional array library powered by **Rust**, providing a **NumPy-compatible** API. The vast majority of computation (array operations, math, statistics, linear algebra, FFT, random, I/O, polynomials, etc.) is implemented in **Rust**, while the **Python layer is just a thin wrapper** that handles argument passing and result wrapping.
 
 **Advantages:**
 - **Performance**: Core computations in Rust, comparable to or faster than NumPy
@@ -373,13 +373,13 @@ A: 当前版本仅支持 CPU。
 
 **Project layout:**
 ```
-rsnum/
+rsnumpy/
 ├── src/                       # Rust source
 │   ├── lib.rs                 # Core ndarray & general functions
 │   ├── fft.rs                 # Fast Fourier Transform
 │   ├── linalg.rs              # Linear algebra
 │   └── random.rs              # Random number generation
-├── rsnum/                     # Python thin wrappers
+├── rsnumpy/                     # Python thin wrappers
 │   ├── __init__.py            # Main module, exports public API
 │   ├── array_methods.py       # ndarray object methods
 │   ├── array_ops.py           # Array manipulation functions
@@ -413,8 +413,8 @@ rsnum/
 #### 3.1 Clone the repository
 
 ```bash
-git clone <your-repo-url> rsnum
-cd rsnum
+git clone <your-repo-url> rsnumpy
+cd rsnumpy
 ```
 
 #### 3.2 Create a virtual environment (uv recommended)
@@ -453,7 +453,7 @@ The script will:
 After build, verify:
 
 ```python
-python -c "import rsnum; print(rsnum.__doc__)"
+python -c "import rsnumpy; print(rsnumpy.__doc__)"
 ```
 
 ---
@@ -486,7 +486,7 @@ maturin develop --release
 maturin build --release -o wheelhouse/
 
 # Install the wheel manually
-uv pip install --no-deps wheelhouse/rsnum-*.whl
+uv pip install --no-deps wheelhouse/rsnumpy-*.whl
 ```
 
 #### 4.3 Clean build artifacts
@@ -502,7 +502,7 @@ rm -rf target/ wheelhouse/
 #### 5.1 Basic array operations
 
 ```python
-import rsnum as np
+import rsnumpy as np
 
 # Array creation
 a = np.array([1.0, 2.0, 3.0])
@@ -521,7 +521,7 @@ print(a.size)     # 3
 #### 5.2 Math functions
 
 ```python
-import rsnum as np
+import rsnumpy as np
 
 a = np.array([0.0, np.pi / 2, np.pi])
 print(np.sin(a))         # [0.0, 1.0, 0.0]
@@ -534,7 +534,7 @@ print(np.log(a + 1))     # natural log
 #### 5.3 Array manipulation
 
 ```python
-import rsnum as np
+import rsnumpy as np
 
 a = np.array([[1, 2, 3], [4, 5, 6]])
 
@@ -561,7 +561,7 @@ f = np.hstack([a, a])   # horizontal stack
 #### 5.4 Statistics
 
 ```python
-import rsnum as np
+import rsnumpy as np
 
 a = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
 
@@ -576,7 +576,7 @@ print(np.argmin(a))      # 0
 #### 5.5 Linear algebra
 
 ```python
-import rsnum as np
+import rsnumpy as np
 
 A = np.array([[1.0, 2.0], [3.0, 4.0]])
 
@@ -593,7 +593,7 @@ Q, R = np.linalg.qr(A)
 #### 5.6 Random numbers
 
 ```python
-import rsnum as np
+import rsnumpy as np
 
 # New API
 rng = np.random.default_rng(seed=42)
@@ -610,7 +610,7 @@ print(np.random.randn(3).tolist())
 #### 5.7 FFT
 
 ```python
-import rsnum as np
+import rsnumpy as np
 
 x = np.array([1.0, 0.0, 0.0, 0.0])
 spectrum = np.fft.fft(x)
@@ -624,7 +624,7 @@ recovered_r = np.fft.irfft(r_spectrum, n=4)
 #### 5.8 Polynomials
 
 ```python
-import rsnum as np
+import rsnumpy as np
 
 # Coefficients from high to low (NumPy-compatible)
 p = np.polynomial.Poly([1, -3, 2])  # x^2 - 3x + 2
@@ -645,7 +645,7 @@ coef = np.polynomial.polyfit(x, y, 2)
 #### 5.9 File I/O
 
 ```python
-import rsnum as np
+import rsnumpy as np
 
 # Save / load .npy
 a = np.array([1, 2, 3])
@@ -671,7 +671,7 @@ arr = np.frombuffer(bytes_data)
 #### 5.10 Constants & predicates
 
 ```python
-import rsnum as np
+import rsnumpy as np
 
 print(np.pi)           # 3.141592653589793
 print(np.e)            # 2.718281828459045
@@ -688,7 +688,7 @@ print(np.isfinite(a))
 
 ### 6. FAQ
 
-#### Q1: `ModuleNotFoundError: No module named 'rsnum'`
+#### Q1: `ModuleNotFoundError: No module named 'rsnumpy'`
 A: Build and install first: `bash build_wheel.sh`
 
 #### Q2: Compilation error `error: linker not found`
@@ -697,7 +697,7 @@ A: Install Xcode Command Line Tools (macOS): `xcode-select --install`
 #### Q3: Compilation error `pyo3` version conflict
 A: Ensure Python ≥ 3.8 and `pip install --upgrade maturin pyo3`
 
-#### Q4: Is rsnum faster than NumPy?
+#### Q4: Is rsnumpy faster than NumPy?
 A: It depends. Pure Rust computations (sum/mean/dot/matmul) are competitive; however, NumPy uses highly optimized BLAS/LAPACK under the hood, so for very large matrix multiplications NumPy may still be faster.
 
 #### Q5: GPU support?
