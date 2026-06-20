@@ -136,10 +136,10 @@ fn format_scalar(val: f64) -> String {
         return if val > 0.0 { "inf".to_string() } else { "-inf".to_string() };
     }
     if val == val.floor() && val.is_finite() && val.abs() < 1e16 {
-        // 与 numpy 一致：整数值的浮点使用 `1.` 形式（无前导零、无尾随零）
+        // 整数值不显示小数点，与 numpy print 输出一致
         let v = val as i64;
         if v as f64 == val {
-            return format!("{}.", v);
+            return format!("{}", v);
         }
     }
     let s = format!("{}", val);
@@ -172,6 +172,11 @@ impl NdArray {
     fn __repr__(&self) -> PyResult<String> {
         let arr_str = format_array_repr(&self.data, "");
         Ok(format!("rsnumpy.ndarray({}) dtype=float64", arr_str))
+    }
+
+    fn __str__(&self) -> PyResult<String> {
+        let arr_str = format_array_repr(&self.data, "");
+        Ok(arr_str)
     }
 
     fn __len__(&self) -> PyResult<usize> {

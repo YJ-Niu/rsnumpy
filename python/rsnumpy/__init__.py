@@ -66,6 +66,9 @@ class ndarray:
     def __repr__(self):
         return repr(self._array)
 
+    def __str__(self):
+        return str(self._array)
+
     def __len__(self):
         if self.ndim == 0:
             raise TypeError("len() of unsized object")
