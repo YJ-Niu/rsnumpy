@@ -6,10 +6,16 @@ set -euo pipefail
 
 RELEASE=true
 OUT_DIR="wheelhouse"
+cache_file="/Users/user/Desktop/rust_project/rsplotlib/python/rsplotlib/rsplotlib.cpython-313-darwin.so"
 # 如果 wheelhouse 目录存在, 则删除
 if [[ -d "$OUT_DIR" ]]; then
   rm -rf "$OUT_DIR"
 fi
+# 如果 cache_file 目录存在, 则删除
+if [[ -f "$cache_file" ]]; then
+  rm "$cache_file"
+fi
+
 # Default python executable; may be overridden by --python or positional arg
 PYTHON_EXEC="python"
 # Flag set when the user explicitly provided a Python executable
@@ -69,18 +75,6 @@ if [[ -n "$WHEEL" && -f "$WHEEL" ]]; then
     echo "Installed into .venv successfully."
   else
     echo "Warning: .venv not found; skip install. Wheels available in $OUT_DIR" >&2
-  fi
-  # 同步 .so 到项目内的 rsnumpy 包目录，避免本地源包遮蔽安装的 wheel
-  SO_FILE=".venv/lib/python${PYTHON_VERSION:-3.13}/site-packages/rsnumpy/_core.cpython-${PYTHON_VERSION:-313}-darwin.so"
-  if [[ -f "$SO_FILE" ]]; then
-    cp -f "$SO_FILE" "rsnumpy/_core.cpython-${PYTHON_VERSION:-313}-darwin.so" 2>/dev/null || true
-  fi
-  # 通用回退：找任何 .venv 中刚生成的 _core .so
-  SO_GLOB=$(ls .venv/lib/python*/site-packages/rsnumpy/_core.cpython-*-darwin.so 2>/dev/null | head -1)
-  if [[ -n "$SO_GLOB" && -f "$SO_GLOB" ]]; then
-    DEST="rsnumpy/$(basename "$SO_GLOB")"
-    cp -f "$SO_GLOB" "$DEST"
-    echo "Synced $DEST"
   fi
 else
   echo "Warning: no .whl file found in $OUT_DIR; skip install." >&2

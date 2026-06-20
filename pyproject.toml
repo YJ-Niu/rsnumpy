@@ -22,4 +22,5 @@ dynamic = ["version"]
 
 [tool.maturin]
 module-name = "rsnumpy._core"
-include = ["rsnumpy/__init__.py", "rsnumpy/linalg/__init__.py", "rsnumpy/random/__init__.py"]
+python-source = "python"
+include = ["python/rsnumpy/__init__.py", "python/rsnumpy/linalg/__init__.py", "python/rsnumpy/random/__init__.py"]

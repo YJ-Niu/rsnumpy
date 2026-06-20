@@ -107,13 +107,9 @@ fn format_array_repr(arr: &Array<f64, IxDyn>, _prefix: &str) -> String {
         let mut s = String::from("[");
         for (i, val) in arr.iter().enumerate() {
             if i > 0 {
-                s.push_str(", ");
+                s.push_str(" ");
             }
-            if *val == val.floor() && val.is_finite() {
-                s.push_str(&format!("{}.", val));
-            } else {
-                s.push_str(&format!("{}", val));
-            }
+            s.push_str(&format_scalar(*val));
         }
         s.push(']');
         return s;
@@ -122,14 +118,31 @@ fn format_array_repr(arr: &Array<f64, IxDyn>, _prefix: &str) -> String {
     let n = arr.shape()[0];
     for i in 0..n {
         if i > 0 {
-            s.push_str(",\n");
+            s.push_str("\n ");
         }
         let sub = arr.index_axis(Axis(0), i).to_owned().into_dyn();
         let row_str = format_array_repr(&sub, "");
-        s.push_str(" ");
         s.push_str(&row_str);
     }
     s.push_str("]");
+    s
+}
+
+fn format_scalar(val: f64) -> String {
+    if val.is_nan() {
+        return "nan".to_string();
+    }
+    if val.is_infinite() {
+        return if val > 0.0 { "inf".to_string() } else { "-inf".to_string() };
+    }
+    if val == val.floor() && val.is_finite() && val.abs() < 1e16 {
+        // 与 numpy 一致：整数值的浮点使用 `1.` 形式（无前导零、无尾随零）
+        let v = val as i64;
+        if v as f64 == val {
+            return format!("{}.", v);
+        }
+    }
+    let s = format!("{}", val);
     s
 }
 
