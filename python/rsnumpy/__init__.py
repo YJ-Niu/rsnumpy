@@ -12,6 +12,7 @@ Examples:
     2.0
 """
 
+import builtins
 import rsnumpy._core as _core
 from rsnumpy._core import ndarray_iter as NdArrayIter
 # ========== 子模块导入和函数挂载 ==========
@@ -143,6 +144,11 @@ class ndarray:
         raw = getattr(self, '_raw_data', None)
         if raw is not None:
             return _format_ragged_repr(self)
+        dt = getattr(self, '_dtype', "float64")
+        if dt == "float64" and self.ndim == 1:
+            values = self._array.tolist()
+            inner = _format_float_repr_1d(values)
+            return f"array({inner})"
         return f"array({self.__str__()})"
 
     def __str__(self):
@@ -236,7 +242,6 @@ class ndarray:
 
     def __setitem__(self, key, value):
         if isinstance(key, tuple):
-            import builtins
             val = ndarray(value)
             flat_val = val.ravel().tolist()
             strides = [1]
@@ -757,6 +762,44 @@ def _format_nested_iterable(data):
     return str(data)
 
 
+class _float64:
+    """float64 标量，显示为 np.float64(value)。"""
+    def __init__(self, value):
+        self._value = float(value)
+
+    def __repr__(self):
+        return f"np.float64({self._value})"
+
+    def __str__(self):
+        return repr(self)
+
+    def __float__(self):
+        return self._value
+
+
+def _format_float_repr_1d(values):
+    """格式化 1D float64 数组的 repr，带逗号和对齐（匹配 NumPy）。"""
+    fmt = [format_float_scalar(v) for v in values]
+    max_w = builtins.max(len(f) for f in fmt) if fmt else 0
+    parts = [f.rjust(max_w) for f in fmt]
+    return "[" + ", ".join(parts) + "]"
+
+
+def format_float_scalar(val):
+    """Python 版的浮点数格式化（与 Rust 一致）。"""
+    if val != val:
+        return "nan"
+    if val == float("inf"):
+        return "inf"
+    if val == float("-inf"):
+        return "-inf"
+    if val == int(val) and abs(val) < 1e16:
+        v = int(val)
+        if float(v) == val:
+            return f"{v}."
+    return str(val)
+
+
 def _format_fields_for_dtype(fields):
     """将字段列表格式化为 dtype 字符串。"""
     parts = []
@@ -1226,7 +1269,7 @@ def linspace(start, stop, num=50, endpoint=True, retstep=False, dtype=None, axis
         values = [start_val + i * step for i in range(num)]
         result = ndarray(values, _dtype=_dtype) if _dtype != "float64" else ndarray(values)
     if retstep:
-        return result, step
+        return result, _float64(step)
     return result
 
 
