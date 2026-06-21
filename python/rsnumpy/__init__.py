@@ -657,14 +657,6 @@ def _scalar(x):
     return x
 
 
-def _format_structured_flat(arr):
-    """将结构化 ndarray 展平为 Python 列表。"""
-    raw = getattr(arr, '_raw_data', None)
-    if raw is not None:
-        return raw
-    return arr.tolist()
-
-
 def _format_structured_val(val, fields=None):
     """格式化结构化数组中的单个元素值。"""
     def fmt(v, field_type=None):
@@ -805,18 +797,6 @@ def format_float_scalar(val):
         if float(v) == val:
             return f"{v}."
     return str(val)
-
-
-def _format_fields_for_dtype(fields):
-    """将字段列表格式化为 dtype 字符串。"""
-    parts = []
-    for name, tp in fields:
-        # tp 可能是类对象（如 np.int8），需要先解析为字符串
-        if not isinstance(tp, str):
-            tp = _resolve_type_name(tp)
-        code = _RS_NAME_TO_CODE.get(tp, tp)
-        parts.append(f"('{name}', '{code}')")
-    return "[" + ", ".join(parts) + "]"
 
 
 def _ndarray_methods():
@@ -1021,17 +1001,10 @@ complex128 = type('complex128', (), {})
 
 # ========== 构造/工厂函数 ==========
 
-def _has_complex(data):
-    """检查数据中是否包含复数。"""
-    for item in _flatten_data(data):
-        if isinstance(item, complex):
-            return True
-    return False
-
-
-def _flatten_data(data):
-    """展平嵌套的可迭代对象为扁平列表。"""
+def _flatten_check(data):
+    """单次遍历：展平数据并检查是否包含复数。"""
     flat = []
+    has_complex = False
     stack = [data]
     while stack:
         item = stack.pop()
@@ -1039,6 +1012,20 @@ def _flatten_data(data):
             stack.extend(reversed(item))
         else:
             flat.append(item)
+            if isinstance(item, complex):
+                has_complex = True
+    return flat, has_complex
+
+
+def _has_complex(data):
+    """检查数据中是否包含复数。"""
+    flat, has_c = _flatten_check(data)
+    return has_c
+
+
+def _flatten_data(data):
+    """展平嵌套的可迭代对象为扁平列表。"""
+    flat, _ = _flatten_check(data)
     return flat
 
 
@@ -1064,9 +1051,9 @@ def _is_rectangular(data):
 def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
     """创建数组。"""
     if dtype is None:
-        # 从数据推断 dtype
-        flat = _flatten_data(data)
-        if _has_complex(data):
+        # 单次遍历：展平 + 推断 dtype
+        flat, has_c = _flatten_check(data)
+        if has_c:
             _dtype = "complex128"
         else:
             _dtype = _infer_int_dtype(*flat)
@@ -1102,9 +1089,9 @@ def asarray(a, dtype=None, order=None):
         else:
             _dtype = _resolve_dtype(dtype)
     else:
-        # 从数据推断 dtype
+        # 从数据推断 dtype（单次遍历）
         if isinstance(a, (list, tuple)):
-            flat = _flatten_data(a)
+            flat, _ = _flatten_check(a)
             _dtype = _infer_int_dtype(*flat)
         else:
             _dtype = "float64"
@@ -1313,15 +1300,8 @@ def ix_(*args):
         >>> x = np.arange(32).reshape((8, 4))
         >>> x[np.ix_([1,5,7,2], [0,3,1,2])]
     """
-    ndim = len(args)
-    result = []
-    for i, arr in enumerate(args):
-        a = ndarray(arr)
-        shape = [1] * ndim
-        shape[i] = a.size
-        reshaped = a.reshape(tuple(shape))
-        result.append(reshaped)
-    return tuple(result)
+    raw = _core.ix_rs(args)
+    return tuple(ndarray._wrap(r) for r in raw)
 
 
 def where(condition, x=None, y=None):
@@ -1344,23 +1324,17 @@ def put(a, indices, values, mode='raise'):
 
 
 def select(condlist, choicelist, default=0):
-    """根据条件列表选择值。"""
-    result = ndarray([default] * ndarray(condlist[0]).size)
-    for cond, choice in zip(condlist, choicelist):
-        mask = ndarray(cond)
-        result = where(mask, choice, result)
-    return result
+    """根据条件列表选择值（Rust 单次遍历实现）。"""
+    cond_arrays = [_ensure(c) for c in condlist]
+    choice_arrays = [_ensure(c) for c in choicelist]
+    result = _core.select_rs(cond_arrays, choice_arrays, float(default))
+    return ndarray(result)
 
 
 def nonzero(a):
     """返回非零元素的索引，返回元组形式的数组（兼容NumPy）。"""
-    raw = _core.nonzero(_ensure(a))
-    # raw is Vec<Vec<usize>>, convert to tuple of 1D arrays
-    result = []
-    for indices in raw:
-        arr = _core.ndarray(list(indices))
-        result.append(ndarray(arr))
-    return tuple(result)
+    raw = _core.nonzero_arrs(_ensure(a))
+    return tuple(ndarray._wrap(arr) for arr in raw)
 
 
 def argwhere(a):
@@ -1377,7 +1351,7 @@ def flatnonzero(a):
 
 def fromfunction(function, shape, *, dtype=None, **kwargs):
     """根据函数和形状创建数组。"""
-    indices = [ndarray(list(range(d))) for d in shape]
+    indices = _core._arange_arrays(shape)
     grid = _core.meshgrid(*indices, indexing='ij')
     return function(*grid, **kwargs)
 
@@ -1456,33 +1430,27 @@ def ogrid(*ranges):
 
 def fft(a, n=None, axis=-1):
     """计算一维离散傅里叶变换。"""
-    if isinstance(a, ndarray):
-        a = a.tolist()
-    elif isinstance(a, (list, tuple)):
-        pass
-    else:
-        a = [float(a)]
-    return _core.py_fft(a)
+    arr = ndarray(a)
+    return _core.py_fft_ndarray(arr._array)
 
 
 def ifft(a, n=None, axis=-1):
     """计算一维逆离散傅里叶变换。"""
+    if isinstance(a, ndarray):
+        return _core.py_ifft_ndarray(a._array)
     return _core.py_ifft(a)
 
 
 def rfft(a, n=None, axis=-1):
     """计算实输入的一维离散傅里叶变换。"""
-    if isinstance(a, ndarray):
-        a = a.tolist()
-    elif isinstance(a, (list, tuple)):
-        pass
-    else:
-        a = [float(a)]
-    return _core.py_rfft(a)
+    arr = ndarray(a)
+    return _core.py_rfft_ndarray(arr._array)
 
 
 def irfft(a, n=None, axis=-1):
     """计算 rfft 的逆变换。"""
+    if isinstance(a, ndarray):
+        return _core.py_irfft_ndarray(a._array, n)
     return _core.py_irfft(a, n)
 
 

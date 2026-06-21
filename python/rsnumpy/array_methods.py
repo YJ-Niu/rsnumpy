@@ -445,9 +445,5 @@ class NdArrayMethods:
         返回:
             tuple: 非零元素的索引元组。
         """
-        raw = arr._array.nonzero()
-        # raw is list of lists (Vec<Vec<usize>>), convert to tuple of 1D arrays
-        result = [ndarray(list(indices)) for indices in raw]
-        # for indices in raw:
-        #     result.append(ndarray(list(indices)))
-        return tuple(result)
+        raw = _core.nonzero_arrs(arr._array)
+        return tuple(ndarray._wrap(r) for r in raw)
