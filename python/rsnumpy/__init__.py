@@ -213,8 +213,14 @@ class ndarray:
             field_names = [f[0] for f in fields]
             if key in field_names:
                 return ndarray._wrap(self._array, self._dtype, _fields=None)
+        # 复数数组的布尔索引
+        cpx = getattr(self, '_complex_data', None)
+        if isinstance(key, ndarray) and cpx is not None:
+            mask = key.tolist()
+            filtered = [v for v, m in zip(cpx, mask) if m > 0.5]
+            return ndarray(filtered)
+        # 展开省略号（...），补充完整切片以匹配数组维度
         if isinstance(key, tuple):
-            # 展开省略号（...），补充完整切片以匹配数组维度
             new_key = []
             ellipsis_count = builtins.sum(1 for k in key if k is Ellipsis)
             if ellipsis_count > 0:
@@ -227,191 +233,14 @@ class ndarray:
                     else:
                         new_key.append(k)
                 key = tuple(new_key)
-            # 检查花式索引（整数列表/数组作为索引，如 x[[0,1,2], [0,1,0]] 或 a[1:3, [1,2]]）
-            has_fancy = False
-            has_slice_in_fancy = False
-            fancy_indices = []
-            fancy_shape = None
-            for k in key:
-                if isinstance(k, (list, tuple)) and all(isinstance(x, (int, builtins.bool)) for x in _flatten_data(k)):
-                    fancy_indices.append([int(x) for x in _flatten_data(k)])
-                    has_fancy = True
-                    if fancy_shape is None:
-                        fancy_shape = _shape_of_nested(k)
-                elif hasattr(k, '__class__') and k.__class__.__name__ == 'ndarray':
-                    fancy_indices.append([int(x) for x in _flatten_data(k.tolist())])
-                    has_fancy = True
-                    if fancy_shape is None:
-                        fancy_shape = k.shape
-                elif isinstance(k, slice):
-                    has_slice_in_fancy = True
-            if has_fancy:
-                # 为每一维构建索引列表
-                dim_lists = []
-                for i, k in enumerate(key):
-                    if isinstance(k, slice):
-                        start = k.start or 0
-                        stop = k.stop if k.stop is not None else self.shape[i]
-                        step = k.step or 1
-                        if start < 0:
-                            start = self.shape[i] + start
-                        if stop < 0:
-                            stop = self.shape[i] + stop
-                        dim_lists.append(list(range(start, stop, step)))
-                    elif isinstance(k, (list, tuple)):
-                        dim_lists.append([int(x) for x in _flatten_data(k)])
-                    elif hasattr(k, '__class__') and k.__class__.__name__ == 'ndarray':
-                        dim_lists.append([int(x) for x in _flatten_data(k.tolist())])
-                    else:
-                        dim_lists.append([int(k)])
-
-                if not has_slice_in_fancy:
-                    # 检查是否为 ix_ 风格（ndarray ndim > 1 → 笛卡尔积）
-                    ix_style = builtins.any(
-                        hasattr(k, '__class__') and k.__class__.__name__ == 'ndarray' and k.ndim > 1
-                        for k in key
-                    )
-                    if ix_style:
-                        # ix_ 风格索引：笛卡尔积
-                        result_vals = []
-
-                        def _gen_ix(d, coords):
-                            if d == len(dim_lists):
-                                cur = self._array
-                                for c in coords:
-                                    cur = cur[c]
-                                result_vals.append(cur)
-                                return
-                            for val in dim_lists[d]:
-                                _gen_ix(d + 1, coords + [val])
-                        _gen_ix(0, [])
-                        out_shape = tuple(len(dl) for dl in dim_lists)
-                        result = _core.ndarray(result_vals)
-                        if len(out_shape) > 1:
-                            result = result.reshape(out_shape)
-                        return _wrap_result(result, self._dtype)
-                    else:
-                        # 纯花式索引：逐元素配对（如 x[[0,1,2], [0,1,0]]）
-                        n = len(dim_lists[0])
-                        result_vals = []
-                        for i in range(n):
-                            cur = self._array
-                            for d in range(len(dim_lists)):
-                                cur = cur[dim_lists[d][i]]
-                            result_vals.append(cur)
-                        result = _core.ndarray(result_vals)
-                        if fancy_shape and len(fancy_shape) > 1:
-                            result = result.reshape(fancy_shape)
-                        return _wrap_result(result, self._dtype)
-                else:
-                    # 混合索引（slice + list）：笛卡尔积
-                    result_vals = []
-
-                    def _gen_fancy(d, coords):
-                        if d == len(dim_lists):
-                            cur = self._array
-                            for c in coords:
-                                cur = cur[c]
-                            result_vals.append(cur)
-                            return
-                        for val in dim_lists[d]:
-                            _gen_fancy(d + 1, coords + [val])
-                    _gen_fancy(0, [])
-                    # 输出形状：移除 int 维度
-                    out_shape = [len(dim_lists[i]) for i, k in enumerate(key)
-                                 if isinstance(k, (slice, list, tuple)) or (hasattr(k, '__class__') and k.__class__.__name__ == 'ndarray')]
-                    result = _core.ndarray(result_vals)
-                    if len(out_shape) > 1:
-                        result = result.reshape(out_shape)
-                    return _wrap_result(result, self._dtype)
-            # 拆分为整数索引和切片，避免把整数当作 (i, i+1, 1) 的范围
-            int_indices = []
-            slice_ranges = []
-            int_positions = []
-            slice_positions = []
-            for i, k in enumerate(key):
-                if isinstance(k, slice):
-                    start = k.start or 0
-                    end = k.stop if k.stop is not None else self.shape[i]
-                    step = k.step or 1
-                    slice_ranges.append((start, end, step))
-                    slice_positions.append(i)
-                else:
-                    int_indices.append(int(k))
-                    int_positions.append(i)
-            if not slice_ranges:
-                # 全部是整数索引，递归走 Rust 的 __getitem__，最后变成标量
-                cur = self
-                for idx in int_indices:
-                    cur = _wrap_result(cur._array[idx], self._dtype)
-                return cur
-            # 既有整数又有切片：先将整数转为单元素范围，统一用 tuple_getitem，再去除整数维度
-            all_ranges = []
-            for i, k in enumerate(key):
-                if isinstance(k, slice):
-                    start = k.start or 0
-                    end = k.stop if k.stop is not None else self.shape[i]
-                    step = k.step or 1
-                    if start < 0:
-                        start = self.shape[i] + start
-                    if end < 0:
-                        end = self.shape[i] + end
-                    all_ranges.append((start, end, step))
-                else:
-                    idx = int(k)
-                    if idx < 0:
-                        idx = self.shape[i] + idx
-                    all_ranges.append((idx, idx + 1, 1))
-            result_arr = _core.tuple_getitem(self._array, all_ranges)
-            # 去除整数索引对应的维度
-            out_shape = list(result_arr.shape)
-            new_shape = [out_shape[i] for i in range(len(key)) if isinstance(key[i], slice)]
-            if not new_shape:
-                # 全部是整数索引 → 标量
-                flat = result_arr.tolist()
-                return _wrap_result(flat[0] if flat else 0, self._dtype)
-            if new_shape != out_shape:
-                result_arr = result_arr.reshape(new_shape)
-            return _wrap_result(result_arr, self._dtype)
-        elif isinstance(key, ndarray):
-            # 复数数组的布尔索引
-            cpx = getattr(self, '_complex_data', None)
-            if cpx is not None:
-                mask = key.tolist()
-                filtered = [v for v, m in zip(cpx, mask) if m > 0.5]
-                return ndarray(filtered)
-            # 布尔 / 花式索引：把包装的 ndarray 转换为底层 _array
-            return _wrap_result(self._array[key._array], self._dtype)
-        elif isinstance(key, (list, tuple)) and all(isinstance(x, (int, builtins.bool)) for x in _flatten_data(key)):
-            # 整数列表索引（花式索引，如 x[[0, 6]] 或 x[[4, 2, 1, 7]]）
-            flat = [int(x) for x in _flatten_data(key)]
-            result_vals = [self._array[idx] for idx in flat]
-            if self.ndim == 1:
-                # 1D 数组：每个元素是标量
-                return _wrap_result(_core.ndarray(result_vals), self._dtype)
-            else:
-                # 多维数组：每行是一个 Rust ndarray，用 stack 组合
-                return _wrap_result(_core.stack(result_vals, 0), self._dtype)
-        elif isinstance(key, (list, tuple)) and any(isinstance(x, bool) for x in key):
-            # 布尔列表索引
-            return _wrap_result(self._array[key], self._dtype)
-        elif isinstance(key, slice):
-            # 切片索引（如 a[2:7:2]），支持多维数组
-            start = key.start or 0
-            stop = key.stop if key.stop is not None else self.shape[0]
-            step = key.step or 1
-            if start < 0:
-                start = self.shape[0] + start
-            if stop < 0:
-                stop = self.shape[0] + stop
-            ranges = [(start, stop, step)]
-            # 对于多维数组，补充剩余维度的完整切片范围（相当于 NumPy 的 a[1:, :]）
-            for i in range(1, self.ndim):
-                ranges.append((0, self.shape[i], 1))
-            return _wrap_result(_core.tuple_getitem(self._array, ranges), self._dtype)
+        # 将 Python ndarray 索引替换为底层 _array（Rust 对象）
+        if isinstance(key, tuple):
+            key = tuple(k._array if isinstance(k, ndarray) else k for k in key)
         else:
-            result = self._array[key]
-            return _wrap_result(result, self._dtype)
+            key = (key._array if isinstance(key, ndarray) else key,)
+        # 委托给 Rust getitem_multi 处理所有索引逻辑
+        result = _core.getitem_multi(self._array, key, list(self.shape))
+        return _wrap_result(result, self._dtype)
 
     def __setitem__(self, key, value):
         if isinstance(key, tuple):

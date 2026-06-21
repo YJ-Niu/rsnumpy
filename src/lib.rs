@@ -2,10 +2,12 @@ use ndarray::{Array, ArrayViewD, Axis, IxDyn, Slice};
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyFloat, PyList, PySlice, PyTuple};
+use rayon::prelude::*;
 
 mod linalg;
 mod random;
 mod fft;
+mod indexing;
 
 fn parse_py_list_to_flat(data: &Bound<'_, PyAny>) -> PyResult<(Vec<f64>, Vec<usize>)> {
     if let Ok(val) = data.extract::<f64>() {
@@ -1548,8 +1550,14 @@ fn empty(shape: &Bound<'_, PyAny>) -> PyResult<NdArray> {
 // ===== Math Functions =====
 
 fn unary_math_op(x: &NdArray, op: fn(f64) -> f64) -> NdArray {
+    let data = x.data.clone();
+    let result_vec: Vec<f64> = data
+        .into_par_iter()
+        .map(|v| op(*v))
+        .collect();
     NdArray {
-        data: x.data.mapv(op),
+        data: Array::from_shape_vec(IxDyn(x.data.shape()), result_vec)
+            .unwrap_or_else(|_| x.data.mapv(op)),
     }
 }
 
@@ -3983,6 +3991,8 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(bytes_to_floats, m)?)?;
 
     m.add_function(wrap_pyfunction!(tuple_getitem, m)?)?;
+    m.add_function(wrap_pyfunction!(indexing::getitem_multi, m)?)?;
+    m.add_function(wrap_pyfunction!(indexing::getitem_scalar, m)?)?;
     m.add_function(wrap_pyfunction!(savez_npz, m)?)?;
     m.add_function(wrap_pyfunction!(load_npz, m)?)?;
     m.add_function(wrap_pyfunction!(polyadd, m)?)?;
