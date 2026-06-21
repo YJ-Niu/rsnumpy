@@ -1508,8 +1508,8 @@ fn arange(start: f64, stop: f64, step: f64) -> PyResult<NdArray> {
 }
 
 #[pyfunction]
-#[pyo3(signature = (start, stop, num=50))]
-fn linspace(start: f64, stop: f64, num: usize) -> PyResult<NdArray> {
+#[pyo3(signature = (start, stop, num=50, endpoint=true))]
+fn linspace(start: f64, stop: f64, num: usize, endpoint: bool) -> PyResult<NdArray> {
     if num == 0 {
         return Err(PyValueError::new_err("Number of samples must be positive"));
     }
@@ -1519,7 +1519,11 @@ fn linspace(start: f64, stop: f64, num: usize) -> PyResult<NdArray> {
                 .map_err(|e| PyValueError::new_err(e.to_string()))?,
         });
     }
-    let step = (stop - start) / (num - 1) as f64;
+    let step = if endpoint {
+        (stop - start) / (num - 1) as f64
+    } else {
+        (stop - start) / num as f64
+    };
     let values: Vec<f64> = (0..num).map(|i| start + i as f64 * step).collect();
     let arr = Array::from_shape_vec(IxDyn(&[num]), values)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -2314,7 +2318,7 @@ fn heaviside(x: &NdArray, h0: f64) -> NdArray {
 
 #[pyfunction]
 fn logspace(start: f64, stop: f64, num: usize) -> PyResult<NdArray> {
-    linspace(start, stop, num).map(|nd| {
+    linspace(start, stop, num, false).map(|nd| {
         NdArray { data: nd.data.mapv(|v| 10.0_f64.powf(v)) }
     })
 }

@@ -1290,15 +1290,11 @@ def linspace(start, stop, num=50, endpoint=True, retstep=False, dtype=None, axis
     if num == 1:
         result = ndarray([start_val], _dtype=_dtype)
         step = 0.0
-    elif endpoint:
-        result = ndarray(_core.linspace(start_val, stop_val, num))
+    else:
+        result = ndarray(_core.linspace(start_val, stop_val, num, endpoint=endpoint))
         if _dtype != "float64":
             result._dtype = _dtype
-        step = (stop_val - start_val) / (num - 1)
-    else:
-        step = (stop_val - start_val) / num
-        values = [start_val + i * step for i in range(num)]
-        result = ndarray(values, _dtype=_dtype) if _dtype != "float64" else ndarray(values)
+        step = (stop_val - start_val) / (num - 1) if endpoint else (stop_val - start_val) / num
     if retstep:
         return result, _float64(step)
     return result
