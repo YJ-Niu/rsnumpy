@@ -115,7 +115,14 @@ class ndarray:
                 # 原始数据存储：用一个虚拟 Rust 数组占位
                 self._array = _core.zeros((len(data),) if isinstance(data, (list, tuple)) else (1,))
             else:
-                self._array = _core.ndarray(data)
+                if isinstance(data, tuple):
+                    data = list(data)
+                if isinstance(data, list) and not _is_rectangular(data):
+                    # 不规则列表（子列表长度不同），存储为原始数据
+                    self._raw_data = data
+                    self._array = _core.zeros((len(data),))
+                else:
+                    self._array = _core.ndarray(data)
             self._dtype = _dtype
             self._fields = _fields
 
@@ -133,21 +140,25 @@ class ndarray:
         fields = getattr(self, '_fields', None)
         if fields:
             return _format_structured_repr(self)
-        if getattr(self, '_dtype', "float64") == "complex128":
-            return _core._format_complex_repr(self._array)
-        if getattr(self, '_dtype', "float64") == "int64" and getattr(self, '_is_empty', False):
-            return _core._format_int_repr(self._array)
-        return repr(self._array)
+        raw = getattr(self, '_raw_data', None)
+        if raw is not None:
+            return _format_ragged_repr(self)
+        return f"array({self.__str__()})"
 
     def __str__(self):
         fields = getattr(self, '_fields', None)
         if fields:
             return _format_structured_str(self)
+        raw = getattr(self, '_raw_data', None)
+        if raw is not None:
+            return _format_ragged_str(self)
         if getattr(self, '_dtype', "float64") == "complex128":
             return _core._format_complex_str(self._array)
-        if getattr(self, '_dtype', "float64") == "int64" and getattr(self, '_is_empty', False):
-            return _core._format_int_str(self._array)
-        return str(self._array)
+        if getattr(self, '_dtype', "float64") == "int64":
+            if getattr(self, '_is_empty', False):
+                return _core._format_int_str(self._array)
+            return _core._format_int_val_str(self._array)
+        return _core._format_float_str(self._array)
 
     def __len__(self):
         raw = getattr(self, '_raw_data', None)
@@ -338,8 +349,20 @@ class ndarray:
     def shape(self):
         """返回数组维度的元组。"""
         raw = getattr(self, '_raw_data', None)
+        arr = getattr(self, '_array', None)
+        if raw is not None and arr is not None:
+            return self._array.shape
         if raw is not None:
-            return (len(raw),)
+            # 从嵌套列表递归计算形状
+            shape = []
+            obj = raw
+            while isinstance(obj, list):
+                shape.append(len(obj))
+                if obj:
+                    obj = obj[0]
+                else:
+                    break
+            return tuple(shape)
         return self._array.shape
 
     @shape.setter
@@ -704,10 +727,34 @@ def _format_structured_recursive(data, ndim, fields=None):
 
 def _format_structured_repr(arr):
     """__repr__ 用于结构化数组。"""
-    fields = getattr(arr, '_fields', None)
-    dtype_str = _format_fields_for_dtype(fields) if fields else ""
     inner = _format_structured_str(arr)
-    return f"rsnumpy.ndarray({inner}) dtype={dtype_str}"
+    return f"array({inner})"
+
+
+def _format_ragged_str(arr):
+    """__str__ 用于不规则数组（包含列表/元组元素）。"""
+    data = arr.tolist()
+    return _format_nested_iterable(data)
+
+
+def _format_ragged_repr(arr):
+    """__repr__ 用于不规则数组。"""
+    inner = _format_ragged_str(arr)
+    return f"array({inner})"
+
+
+def _format_nested_iterable(data):
+    """递归格式化嵌套可迭代对象为数组字符串。"""
+    if isinstance(data, (list, tuple)):
+        if not data:
+            return "[]"
+        items = list(data)
+        has_nested = any(isinstance(x, (list, tuple)) for x in items)
+        if not has_nested:
+            return "[" + " ".join(str(x) for x in items) + "]"
+        parts = [_format_nested_iterable(x) for x in items]
+        return "[" + "\n ".join(parts) + "]"
+    return str(data)
 
 
 def _format_fields_for_dtype(fields):
@@ -924,9 +971,46 @@ complex128 = type('complex128', (), {})
 
 # ========== 构造/工厂函数 ==========
 
+def _flatten_data(data):
+    """展平嵌套的可迭代对象为扁平列表。"""
+    flat = []
+    stack = [data]
+    while stack:
+        item = stack.pop()
+        if isinstance(item, (list, tuple)):
+            stack.extend(reversed(item))
+        else:
+            flat.append(item)
+    return flat
+
+
+def _is_rectangular(data):
+    """检查嵌套列表是否为矩形（所有子列表长度相同）。"""
+    if not isinstance(data, (list, tuple)):
+        return True
+    if not data:
+        return True
+    first_len = None
+    for item in data:
+        if isinstance(item, (list, tuple)):
+            if first_len is None:
+                first_len = len(item)
+            elif len(item) != first_len:
+                return False
+        else:
+            if first_len is not None:
+                return False
+    return True
+
+
 def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
     """创建数组。"""
-    _dtype = _resolve_dtype(dtype)
+    if dtype is None:
+        # 从数据推断 dtype：纯整数用 int64，否则 float64
+        flat = _flatten_data(data)
+        _dtype = _infer_int_dtype(*flat)
+    else:
+        _dtype = _resolve_dtype(dtype)
     _fields = None
     _raw_data = None
     if isinstance(dtype, DType) and dtype._fields:
@@ -950,11 +1034,19 @@ def asarray(a, dtype=None, order=None):
     """转换输入为数组。"""
     if isinstance(a, ndarray):
         return a
-    _dtype = "float64"
     if dtype is not None:
         dt_str = dtype if isinstance(dtype, str) else dtype.__name__
         if dt_str in ("complex", "complex128", "complex64", "cfloat", "cdouble"):
             _dtype = "complex128"
+        else:
+            _dtype = _resolve_dtype(dtype)
+    else:
+        # 从数据推断 dtype
+        if isinstance(a, (list, tuple)):
+            flat = _flatten_data(a)
+            _dtype = _infer_int_dtype(*flat)
+        else:
+            _dtype = "float64"
     return ndarray(a, _dtype=_dtype)
 
 
@@ -992,6 +1084,8 @@ def _resolve_dtype(dtype):
         return "float64"
     if isinstance(dtype, DType):
         return dtype.name
+    if isinstance(dtype, (list, tuple)):
+        return "void"
     dt_str = dtype if isinstance(dtype, str) else dtype.__name__
     if dt_str in ("complex", "complex128", "complex64", "cfloat", "cdouble"):
         return "complex128"
@@ -1008,10 +1102,42 @@ def _infer_int_dtype(*args):
     return "int64"
 
 
+def _make_structured_zeros(shape, fields):
+    """为结构化 dtype 生成零填充的原始数据。"""
+    elem = tuple(0 for _ in fields)
+    if isinstance(shape, int):
+        total = shape
+    else:
+        total = 1
+        for s in shape:
+            total *= s
+    flat = [elem] * total
+    if isinstance(shape, int):
+        shape = (shape,)
+    if len(shape) <= 1:
+        return flat
+    # 重塑为多维
+    result = flat
+    for dim in reversed(shape[1:]):
+        result = [result[i:i+dim] for i in range(0, len(result), dim)]
+    return result
+
+
 def zeros(shape, dtype=None, order='C'):
     """返回指定形状的零数组。"""
-    _dtype = _resolve_dtype(dtype)
-    return ndarray(_core.zeros(shape), _dtype=_dtype)
+    _fields = None
+    _raw_data = None
+    if isinstance(dtype, (list, tuple)):
+        _fields = [(item[0], item[1]) for item in dtype]
+        _raw_data = _make_structured_zeros(shape, _fields)
+        _dtype = "void"
+    elif isinstance(dtype, DType) and dtype._fields:
+        _fields = dtype._fields
+        _raw_data = _make_structured_zeros(shape, _fields)
+        _dtype = "void"
+    else:
+        _dtype = _resolve_dtype(dtype)
+    return ndarray(_core.zeros(shape), _dtype=_dtype, _fields=_fields, _raw_data=_raw_data)
 
 
 def ones(shape, dtype=None, order='C'):
@@ -1023,7 +1149,9 @@ def ones(shape, dtype=None, order='C'):
 def empty(shape, dtype=None, order='C'):
     """返回指定形状的空数组。"""
     _dtype = _resolve_dtype(dtype)
-    return ndarray(_core.empty(shape), _dtype=_dtype)
+    arr = ndarray(_core.empty(shape), _dtype=_dtype)
+    arr._is_empty = True
+    return arr
 
 
 def full(shape, fill_value, dtype=None, order='C'):
@@ -1035,25 +1163,29 @@ def full(shape, fill_value, dtype=None, order='C'):
 def zeros_like(a, dtype=None, order='K', subok=True, shape=None):
     """返回与输入形状相同的零数组。"""
     arr = ndarray(a)
-    return zeros(arr.shape)
+    _dtype = dtype if dtype is not None else getattr(arr, '_dtype', 'float64')
+    return zeros(arr.shape, dtype=_dtype)
 
 
 def ones_like(a, dtype=None, order='K', subok=True, shape=None):
     """返回与输入形状相同的1数组。"""
     arr = ndarray(a)
-    return ones(arr.shape)
+    _dtype = dtype if dtype is not None else getattr(arr, '_dtype', 'float64')
+    return ones(arr.shape, dtype=_dtype)
 
 
 def empty_like(a, dtype=None, order='K', subok=True, shape=None):
     """返回与输入形状相同的空数组。"""
     arr = ndarray(a)
-    return empty(arr.shape)
+    _dtype = dtype if dtype is not None else getattr(arr, '_dtype', 'float64')
+    return empty(arr.shape, dtype=_dtype)
 
 
 def full_like(a, fill_value, dtype=None, order='K', subok=True, shape=None):
     """返回与输入形状相同的填充数组。"""
     arr = ndarray(a)
-    return full(arr.shape, fill_value)
+    _dtype = dtype if dtype is not None else getattr(arr, '_dtype', 'float64')
+    return full(arr.shape, fill_value, dtype=_dtype)
 
 
 def eye(N, M=None, k=0, dtype=None, order='C'):
@@ -1080,9 +1212,20 @@ def linspace(start, stop, num=50, endpoint=True, retstep=False, dtype=None, axis
     """返回指定间隔内均匀间隔的数字。"""
     start_val = _scalar(_ensure(start))
     stop_val = _scalar(_ensure(stop))
-    result = ndarray(_core.linspace(start_val, stop_val, num))
+    _dtype = _resolve_dtype(dtype)
+    if num == 1:
+        result = ndarray([start_val], _dtype=_dtype)
+        step = 0.0
+    elif endpoint:
+        result = ndarray(_core.linspace(start_val, stop_val, num))
+        if _dtype != "float64":
+            result._dtype = _dtype
+        step = (stop_val - start_val) / (num - 1)
+    else:
+        step = (stop_val - start_val) / num
+        values = [start_val + i * step for i in range(num)]
+        result = ndarray(values, _dtype=_dtype) if _dtype != "float64" else ndarray(values)
     if retstep:
-        step = (stop_val - start_val) / (num - 1) if num > 1 else 0
         return result, step
     return result
 
@@ -1165,8 +1308,28 @@ def fromfunction(function, shape, *, dtype=None, **kwargs):
 def frombuffer(buffer, dtype=None, count=-1, offset=0, *, like=None):
     """从缓冲区创建一维数组（使用 Rust 层实现）。"""
     if isinstance(buffer, bytes):
+        if offset > 0:
+            buffer = buffer[offset:]
+        if isinstance(dtype, str) and len(dtype) > 1 and dtype[0] == 'S' and dtype[1:].isdigit():
+            # Byte string type (e.g. S1, S2, ...)
+            elem_size = int(dtype[1:])
+            total = len(buffer) // elem_size
+            if count >= 0:
+                total = min(total, count)
+            raw = [buffer[i * elem_size:(i + 1) * elem_size] for i in range(total)]
+            return ndarray(_core.zeros((len(raw),)), _dtype=dtype, _raw_data=raw)
         return ndarray(_core.bytes_to_floats(buffer, count))
     return ndarray(list(buffer))
+
+
+def fromiter(iterable, dtype=None, count=-1, *, like=None):
+    """从可迭代对象创建一维数组。"""
+    _dtype = _resolve_dtype(dtype)
+    if count >= 0:
+        data = [next(iterable) for _ in range(count)]
+    else:
+        data = list(iterable)
+    return ndarray(data, _dtype=_dtype)
 
 
 class _RClass:

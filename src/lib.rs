@@ -168,6 +168,23 @@ fn format_scalar(val: f64) -> String {
     s
 }
 
+fn format_float_scalar(val: f64) -> String {
+    if val.is_nan() {
+        return "nan".to_string();
+    }
+    if val.is_infinite() {
+        return if val > 0.0 { "inf".to_string() } else { "-inf".to_string() };
+    }
+    if val == val.floor() && val.is_finite() && val.abs() < 1e16 {
+        let v = val as i64;
+        if v as f64 == val {
+            // 整数浮点数显示小数点，如 0. 1. -3.
+            return format!("{}.", v);
+        }
+    }
+    format!("{}", val)
+}
+
 /// NdArray: 类似 NumPy ndarray 的多维数组
 #[pyclass(name = "ndarray", from_py_object)]
 #[derive(Clone)]
@@ -1519,8 +1536,9 @@ fn full(shape: &Bound<'_, PyAny>, fill_value: f64) -> PyResult<NdArray> {
 fn empty(shape: &Bound<'_, PyAny>) -> PyResult<NdArray> {
     let s = shape_to_vec(shape)?;
     let size: usize = s.iter().product();
+    // 仅分配内存，不初始化，比 zeros 更快
     let mut v: Vec<f64> = Vec::with_capacity(size);
-    // safety: f64 所有位模式都是有效的
+    // SAFETY: f64 所有位模式都是有效的
     unsafe { v.set_len(size); }
     let data = Array::from_shape_vec(IxDyn(&s), v)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -3739,6 +3757,81 @@ fn _format_int_str(arr: &NdArray) -> String {
     format_int_array(&arr.data)
 }
 
+// ===== Float64 Formatting (always show decimal point for integer values) =====
+
+fn compute_max_width_float(arr: &Array<f64, IxDyn>) -> usize {
+    arr.iter()
+        .map(|v| format_float_scalar(*v).len())
+        .max()
+        .unwrap_or(1)
+}
+
+fn format_float_array_inner(arr: &Array<f64, IxDyn>, pad_width: usize) -> String {
+    if arr.ndim() == 0 {
+        return format_float_scalar(arr.iter().next().copied().unwrap_or(0.0_f64));
+    }
+    if arr.ndim() == 1 {
+        let mut s = String::from("[");
+        for (i, val) in arr.iter().enumerate() {
+            if i > 0 {
+                s.push_str(" ");
+            }
+            let val_str = format_float_scalar(*val);
+            if pad_width > 0 {
+                s.push_str(&format!("{:>width$}", val_str, width = pad_width));
+            } else {
+                s.push_str(&val_str);
+            }
+        }
+        s.push(']');
+        return s;
+    }
+    let mut s = String::from("[");
+    let n = arr.shape()[0];
+    for i in 0..n {
+        if i > 0 {
+            s.push_str("\n ");
+        }
+        let sub = arr.index_axis(Axis(0), i).to_owned().into_dyn();
+        let row_str = format_float_array_inner(&sub, pad_width);
+        s.push_str(&row_str);
+    }
+    s.push_str("]");
+    s
+}
+
+fn format_float_array(arr: &Array<f64, IxDyn>) -> String {
+    let pad_width = if arr.ndim() >= 2 {
+        compute_max_width_float(arr)
+    } else {
+        0
+    };
+    format_float_array_inner(arr, pad_width)
+}
+
+#[pyfunction]
+fn _format_float_repr(arr: &NdArray) -> String {
+    let inner = format_float_array(&arr.data);
+    format!("rsnumpy.ndarray({}) dtype=float64", inner)
+}
+
+#[pyfunction]
+fn _format_float_str(arr: &NdArray) -> String {
+    format_float_array(&arr.data)
+}
+
+// int64 值显示：使用 format_scalar（整数值不显示小数点，如 0 1 2）
+#[pyfunction]
+fn _format_int_val_repr(arr: &NdArray) -> String {
+    let inner = format_array_repr(&arr.data, "");
+    format!("rsnumpy.ndarray({}) dtype=int64", inner)
+}
+
+#[pyfunction]
+fn _format_int_val_str(arr: &NdArray) -> String {
+    format_array_repr(&arr.data, "")
+}
+
 // ===== Module Initialization =====
 
 #[pymodule]
@@ -3895,6 +3988,12 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     m.add_function(wrap_pyfunction!(_format_int_repr, m)?)?;
     m.add_function(wrap_pyfunction!(_format_int_str, m)?)?;
+
+    m.add_function(wrap_pyfunction!(_format_float_repr, m)?)?;
+    m.add_function(wrap_pyfunction!(_format_float_str, m)?)?;
+
+    m.add_function(wrap_pyfunction!(_format_int_val_repr, m)?)?;
+    m.add_function(wrap_pyfunction!(_format_int_val_str, m)?)?;
 
     m.add_function(wrap_pyfunction!(fft::py_fft, m)?)?;
     m.add_function(wrap_pyfunction!(fft::py_ifft, m)?)?;
