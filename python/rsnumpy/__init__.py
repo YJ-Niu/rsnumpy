@@ -105,6 +105,7 @@ class ndarray:
             self._dtype = data._dtype
             self._fields = getattr(data, '_fields', None)
             self._raw_data = getattr(data, '_raw_data', None)
+            self._complex_data = getattr(data, '_complex_data', None)
         elif hasattr(data, '__class__') and data.__class__.__name__ == 'ndarray':
             self._array = data
             self._dtype = _dtype
@@ -122,6 +123,12 @@ class ndarray:
                     # 不规则列表（子列表长度不同），存储为原始数据
                     self._raw_data = data
                     self._array = _core.zeros((len(data),))
+                elif _has_complex(data):
+                    # 包含复数 → 存储为 _complex_data
+                    flat = _flatten_data(data)
+                    self._complex_data = [complex(v) for v in flat]
+                    _dtype = "complex128"
+                    self._array = _core.zeros((len(flat),))
                 else:
                     self._array = _core.ndarray(data)
             self._dtype = _dtype
@@ -144,6 +151,10 @@ class ndarray:
         raw = getattr(self, '_raw_data', None)
         if raw is not None:
             return _format_ragged_repr(self)
+        cpx = getattr(self, '_complex_data', None)
+        if cpx is not None:
+            inner = _format_complex_repr_1d(cpx)
+            return f"array({inner})"
         dt = getattr(self, '_dtype', "float64")
         if dt == "float64" and self.ndim == 1:
             values = self._array.tolist()
@@ -158,8 +169,10 @@ class ndarray:
         raw = getattr(self, '_raw_data', None)
         if raw is not None:
             return _format_ragged_str(self)
-        if getattr(self, '_dtype', "float64") == "complex128":
-            return _core._format_complex_str(self._array)
+        cpx = getattr(self, '_complex_data', None)
+        if cpx is not None:
+            inner = _format_complex_repr_1d(cpx)
+            return inner
         if getattr(self, '_dtype', "float64") == "int64":
             if getattr(self, '_is_empty', False):
                 return _core._format_int_str(self._array)
@@ -179,12 +192,19 @@ class ndarray:
         raw = getattr(self, '_raw_data', None)
         if raw is not None:
             return raw
+        cpx = getattr(self, '_complex_data', None)
+        if cpx is not None:
+            return list(cpx)
         return self._array.tolist()
 
     def __bool__(self):
         if self.ndim == 0:
             return bool(self.tolist())
         raise ValueError("The truth value of an array with more than one element is ambiguous.")
+
+    def __invert__(self):
+        """逐元素取反（~ 运算符），用于布尔数组。"""
+        return _wrap_result(_core.invert(self._array), self._dtype)
 
     def __getitem__(self, key):
         # 结构化数组的字段访问：a['age']
@@ -194,6 +214,91 @@ class ndarray:
             if key in field_names:
                 return ndarray._wrap(self._array, self._dtype, _fields=None)
         if isinstance(key, tuple):
+            # 展开省略号（...），补充完整切片以匹配数组维度
+            new_key = []
+            ellipsis_count = builtins.sum(1 for k in key if k is Ellipsis)
+            if ellipsis_count > 0:
+                non_ellipsis = [k for k in key if k is not Ellipsis]
+                fill = self.ndim - len(non_ellipsis)
+                for k in key:
+                    if k is Ellipsis:
+                        for _ in range(fill):
+                            new_key.append(slice(None, None, None))
+                    else:
+                        new_key.append(k)
+                key = tuple(new_key)
+            # 检查花式索引（整数列表/数组作为索引，如 x[[0,1,2], [0,1,0]] 或 a[1:3, [1,2]]）
+            has_fancy = False
+            has_slice_in_fancy = False
+            fancy_indices = []
+            fancy_shape = None
+            for k in key:
+                if isinstance(k, (list, tuple)) and all(isinstance(x, (int, builtins.bool)) for x in _flatten_data(k)):
+                    fancy_indices.append([int(x) for x in _flatten_data(k)])
+                    has_fancy = True
+                    if fancy_shape is None:
+                        fancy_shape = _shape_of_nested(k)
+                elif hasattr(k, '__class__') and k.__class__.__name__ == 'ndarray':
+                    fancy_indices.append([int(x) for x in _flatten_data(k.tolist())])
+                    has_fancy = True
+                    if fancy_shape is None:
+                        fancy_shape = k.shape
+                elif isinstance(k, slice):
+                    has_slice_in_fancy = True
+            if has_fancy:
+                # 为每一维构建索引列表
+                dim_lists = []
+                for i, k in enumerate(key):
+                    if isinstance(k, slice):
+                        start = k.start or 0
+                        stop = k.stop if k.stop is not None else self.shape[i]
+                        step = k.step or 1
+                        if start < 0:
+                            start = self.shape[i] + start
+                        if stop < 0:
+                            stop = self.shape[i] + stop
+                        dim_lists.append(list(range(start, stop, step)))
+                    elif isinstance(k, (list, tuple)):
+                        dim_lists.append([int(x) for x in _flatten_data(k)])
+                    elif hasattr(k, '__class__') and k.__class__.__name__ == 'ndarray':
+                        dim_lists.append([int(x) for x in _flatten_data(k.tolist())])
+                    else:
+                        dim_lists.append([int(k)])
+
+                if not has_slice_in_fancy:
+                    # 纯花式索引：逐元素配对（如 x[[0,1,2], [0,1,0]]）
+                    n = len(dim_lists[0])
+                    result_vals = []
+                    for i in range(n):
+                        cur = self._array
+                        for d in range(len(dim_lists)):
+                            cur = cur[dim_lists[d][i]]
+                        result_vals.append(cur)
+                    result = _core.ndarray(result_vals)
+                    if fancy_shape and len(fancy_shape) > 1:
+                        result = result.reshape(fancy_shape)
+                    return _wrap_result(result, self._dtype)
+                else:
+                    # 混合索引（slice + list）：笛卡尔积
+                    result_vals = []
+
+                    def _gen_fancy(d, coords):
+                        if d == len(dim_lists):
+                            cur = self._array
+                            for c in coords:
+                                cur = cur[c]
+                            result_vals.append(cur)
+                            return
+                        for val in dim_lists[d]:
+                            _gen_fancy(d + 1, coords + [val])
+                    _gen_fancy(0, [])
+                    # 输出形状：移除 int 维度
+                    out_shape = [len(dim_lists[i]) for i, k in enumerate(key)
+                                 if isinstance(k, (slice, list, tuple)) or (hasattr(k, '__class__') and k.__class__.__name__ == 'ndarray')]
+                    result = _core.ndarray(result_vals)
+                    if len(out_shape) > 1:
+                        result = result.reshape(out_shape)
+                    return _wrap_result(result, self._dtype)
             # 拆分为整数索引和切片，避免把整数当作 (i, i+1, 1) 的范围
             int_indices = []
             slice_ranges = []
@@ -215,27 +320,65 @@ class ndarray:
                 for idx in int_indices:
                     cur = _wrap_result(cur._array[idx], self._dtype)
                 return cur
-            # 既有整数又有切片：先按整数逐维减维，再按切片
-            cur = self
-            for idx in reversed(int_indices):
-                cur = _wrap_result(cur._array[idx], self._dtype)
-            if not isinstance(cur, ndarray):
-                return cur
-            # cur 的 ndim 现在等于切片数量，把切片按原 key 中的轴位置重新组装
-            new_key = []
-            for i in range(len(key)):
-                if i in int_positions:
-                    new_key.append(slice(0, cur.shape[0]))  # 占位，不再使用
+            # 既有整数又有切片：先将整数转为单元素范围，统一用 tuple_getitem，再去除整数维度
+            all_ranges = []
+            for i, k in enumerate(key):
+                if isinstance(k, slice):
+                    start = k.start or 0
+                    end = k.stop if k.stop is not None else self.shape[i]
+                    step = k.step or 1
+                    if start < 0:
+                        start = self.shape[i] + start
+                    if end < 0:
+                        end = self.shape[i] + end
+                    all_ranges.append((start, end, step))
                 else:
-                    new_key.append(key[i])
-            # 直接调用 _core.tuple_getitem 但只针对剩余维度的切片
-            return _wrap_result(_core.tuple_getitem(cur._array, slice_ranges), self._dtype)
+                    idx = int(k)
+                    if idx < 0:
+                        idx = self.shape[i] + idx
+                    all_ranges.append((idx, idx + 1, 1))
+            result_arr = _core.tuple_getitem(self._array, all_ranges)
+            # 去除整数索引对应的维度
+            out_shape = list(result_arr.shape)
+            new_shape = [out_shape[i] for i in range(len(key)) if isinstance(key[i], slice)]
+            if not new_shape:
+                # 全部是整数索引 → 标量
+                flat = result_arr.tolist()
+                return _wrap_result(flat[0] if flat else 0, self._dtype)
+            if new_shape != out_shape:
+                result_arr = result_arr.reshape(new_shape)
+            return _wrap_result(result_arr, self._dtype)
         elif isinstance(key, ndarray):
+            # 复数数组的布尔索引
+            cpx = getattr(self, '_complex_data', None)
+            if cpx is not None:
+                mask = key.tolist()
+                filtered = [v for v, m in zip(cpx, mask) if m > 0.5]
+                return ndarray(filtered)
             # 布尔 / 花式索引：把包装的 ndarray 转换为底层 _array
             return _wrap_result(self._array[key._array], self._dtype)
+        elif isinstance(key, (list, tuple)) and all(isinstance(x, (int, builtins.bool)) for x in _flatten_data(key)):
+            # 整数列表索引（花式索引，如 x[[0, 6]]）
+            flat = [int(x) for x in _flatten_data(key)]
+            result_vals = [self._array[idx] for idx in flat]
+            return _wrap_result(_core.ndarray(result_vals), self._dtype)
         elif isinstance(key, (list, tuple)) and any(isinstance(x, bool) for x in key):
             # 布尔列表索引
             return _wrap_result(self._array[key], self._dtype)
+        elif isinstance(key, slice):
+            # 切片索引（如 a[2:7:2]），支持多维数组
+            start = key.start or 0
+            stop = key.stop if key.stop is not None else self.shape[0]
+            step = key.step or 1
+            if start < 0:
+                start = self.shape[0] + start
+            if stop < 0:
+                stop = self.shape[0] + stop
+            ranges = [(start, stop, step)]
+            # 对于多维数组，补充剩余维度的完整切片范围（相当于 NumPy 的 a[1:, :]）
+            for i in range(1, self.ndim):
+                ranges.append((0, self.shape[i], 1))
+            return _wrap_result(_core.tuple_getitem(self._array, ranges), self._dtype)
         else:
             result = self._array[key]
             return _wrap_result(result, self._dtype)
@@ -657,6 +800,8 @@ def _wrap_result(result, dtype="float64"):
     """将原始 ndarray 结果包装到 ndarray 类中。"""
     if hasattr(result, '__class__') and result.__class__.__name__ == 'ndarray':
         return ndarray._wrap(result, _dtype=dtype)
+    if isinstance(result, float) and dtype == "int64":
+        return int(result)
     return result
 
 
@@ -783,6 +928,29 @@ def _format_float_repr_1d(values):
     max_w = builtins.max(len(f) for f in fmt) if fmt else 0
     parts = [f.rjust(max_w) for f in fmt]
     return "[" + ", ".join(parts) + "]"
+
+
+def _format_complex_repr_1d(values):
+    """格式化 1D complex128 数组的 repr。"""
+    parts = [_format_complex_scalar(v) for v in values]
+    return "[" + ", ".join(parts) + "]"
+
+
+def _format_complex_scalar(val):
+    """格式化单个复数为字符串（如 1.+0.j, 2.+6.j）。"""
+    real = val.real
+    imag = val.imag
+    if real == int(real) and abs(real) < 1e16:
+        real_s = f"{int(real)}."
+    else:
+        real_s = f"{real}"
+    if imag == int(imag) and abs(imag) < 1e16:
+        imag_s = f"{int(imag)}."
+    else:
+        imag_s = f"{imag}"
+    if imag >= 0:
+        return f"{real_s}+{imag_s}j"
+    return f"{real_s}{imag_s}j"
 
 
 def format_float_scalar(val):
@@ -1014,6 +1182,14 @@ complex128 = type('complex128', (), {})
 
 # ========== 构造/工厂函数 ==========
 
+def _has_complex(data):
+    """检查数据中是否包含复数。"""
+    for item in _flatten_data(data):
+        if isinstance(item, complex):
+            return True
+    return False
+
+
 def _flatten_data(data):
     """展平嵌套的可迭代对象为扁平列表。"""
     flat = []
@@ -1025,6 +1201,19 @@ def _flatten_data(data):
         else:
             flat.append(item)
     return flat
+
+
+def _shape_of_nested(data):
+    """计算嵌套列表的形状。"""
+    shape = []
+    obj = data
+    while isinstance(obj, (list, tuple)):
+        shape.append(len(obj))
+        if obj:
+            obj = obj[0]
+        else:
+            break
+    return tuple(shape)
 
 
 def _is_rectangular(data):
@@ -1049,9 +1238,12 @@ def _is_rectangular(data):
 def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
     """创建数组。"""
     if dtype is None:
-        # 从数据推断 dtype：纯整数用 int64，否则 float64
+        # 从数据推断 dtype
         flat = _flatten_data(data)
-        _dtype = _infer_int_dtype(*flat)
+        if _has_complex(data):
+            _dtype = "complex128"
+        else:
+            _dtype = _infer_int_dtype(*flat)
     else:
         _dtype = _resolve_dtype(dtype)
     _fields = None
@@ -1479,6 +1671,19 @@ def isfinite(x):
     """逐元素检测是否为有限值。"""
     arr = ndarray(x)
     return ndarray(_core.isfinite(arr._array))
+
+
+def iscomplex(x):
+    """逐元素检测元素的虚部是否非零。"""
+    arr = ndarray(x)
+    cpx = getattr(arr, '_complex_data', None)
+    if cpx is not None:
+        # 从 _complex_data 检测虚部
+        mask = [1.0 if abs(v.imag) > 1e-12 else 0.0 for v in cpx]
+        return ndarray(mask)
+    # 不是复数数组 → 全零
+    shape = arr.shape
+    return ndarray(_core.zeros(shape))
 
 
 # 数组操作函数

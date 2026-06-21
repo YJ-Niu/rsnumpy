@@ -2067,6 +2067,13 @@ fn isfinite(x: &NdArray) -> NdArray {
 }
 
 #[pyfunction]
+fn invert(x: &NdArray) -> NdArray {
+    NdArray {
+        data: x.data.mapv(|v| if v == 0.0 { 1.0 } else { 0.0 }),
+    }
+}
+
+#[pyfunction]
 fn maximum(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
     let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| a.max(b))?;
     Ok(NdArray { data: result })
@@ -3917,6 +3924,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(isnan, m)?)?;
     m.add_function(wrap_pyfunction!(isinf, m)?)?;
     m.add_function(wrap_pyfunction!(isfinite, m)?)?;
+    m.add_function(wrap_pyfunction!(invert, m)?)?;
     m.add_function(wrap_pyfunction!(maximum, m)?)?;
     m.add_function(wrap_pyfunction!(minimum, m)?)?;
     m.add_function(wrap_pyfunction!(allclose, m)?)?;
