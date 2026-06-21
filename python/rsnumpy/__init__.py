@@ -266,18 +266,43 @@ class ndarray:
                         dim_lists.append([int(k)])
 
                 if not has_slice_in_fancy:
-                    # 纯花式索引：逐元素配对（如 x[[0,1,2], [0,1,0]]）
-                    n = len(dim_lists[0])
-                    result_vals = []
-                    for i in range(n):
-                        cur = self._array
-                        for d in range(len(dim_lists)):
-                            cur = cur[dim_lists[d][i]]
-                        result_vals.append(cur)
-                    result = _core.ndarray(result_vals)
-                    if fancy_shape and len(fancy_shape) > 1:
-                        result = result.reshape(fancy_shape)
-                    return _wrap_result(result, self._dtype)
+                    # 检查是否为 ix_ 风格（ndarray ndim > 1 → 笛卡尔积）
+                    ix_style = builtins.any(
+                        hasattr(k, '__class__') and k.__class__.__name__ == 'ndarray' and k.ndim > 1
+                        for k in key
+                    )
+                    if ix_style:
+                        # ix_ 风格索引：笛卡尔积
+                        result_vals = []
+
+                        def _gen_ix(d, coords):
+                            if d == len(dim_lists):
+                                cur = self._array
+                                for c in coords:
+                                    cur = cur[c]
+                                result_vals.append(cur)
+                                return
+                            for val in dim_lists[d]:
+                                _gen_ix(d + 1, coords + [val])
+                        _gen_ix(0, [])
+                        out_shape = tuple(len(dl) for dl in dim_lists)
+                        result = _core.ndarray(result_vals)
+                        if len(out_shape) > 1:
+                            result = result.reshape(out_shape)
+                        return _wrap_result(result, self._dtype)
+                    else:
+                        # 纯花式索引：逐元素配对（如 x[[0,1,2], [0,1,0]]）
+                        n = len(dim_lists[0])
+                        result_vals = []
+                        for i in range(n):
+                            cur = self._array
+                            for d in range(len(dim_lists)):
+                                cur = cur[dim_lists[d][i]]
+                            result_vals.append(cur)
+                        result = _core.ndarray(result_vals)
+                        if fancy_shape and len(fancy_shape) > 1:
+                            result = result.reshape(fancy_shape)
+                        return _wrap_result(result, self._dtype)
                 else:
                     # 混合索引（slice + list）：笛卡尔积
                     result_vals = []
@@ -358,10 +383,15 @@ class ndarray:
             # 布尔 / 花式索引：把包装的 ndarray 转换为底层 _array
             return _wrap_result(self._array[key._array], self._dtype)
         elif isinstance(key, (list, tuple)) and all(isinstance(x, (int, builtins.bool)) for x in _flatten_data(key)):
-            # 整数列表索引（花式索引，如 x[[0, 6]]）
+            # 整数列表索引（花式索引，如 x[[0, 6]] 或 x[[4, 2, 1, 7]]）
             flat = [int(x) for x in _flatten_data(key)]
             result_vals = [self._array[idx] for idx in flat]
-            return _wrap_result(_core.ndarray(result_vals), self._dtype)
+            if self.ndim == 1:
+                # 1D 数组：每个元素是标量
+                return _wrap_result(_core.ndarray(result_vals), self._dtype)
+            else:
+                # 多维数组：每行是一个 Rust ndarray，用 stack 组合
+                return _wrap_result(_core.stack(result_vals, 0), self._dtype)
         elif isinstance(key, (list, tuple)) and any(isinstance(x, bool) for x in key):
             # 布尔列表索引
             return _wrap_result(self._array[key], self._dtype)
@@ -1481,6 +1511,26 @@ def geomspace(start, stop, num=50, endpoint=True, dtype=None, axis=0):
 
 
 # ========== 索引函数 ==========
+
+def ix_(*args):
+    """从多个序列构造开放网格，用于笛卡尔积花式索引。
+
+    返回 ndarray 元组，每个数组沿对应维度广播。
+
+    示例:
+        >>> x = np.arange(32).reshape((8, 4))
+        >>> x[np.ix_([1,5,7,2], [0,3,1,2])]
+    """
+    ndim = len(args)
+    result = []
+    for i, arr in enumerate(args):
+        a = ndarray(arr)
+        shape = [1] * ndim
+        shape[i] = a.size
+        reshaped = a.reshape(tuple(shape))
+        result.append(reshaped)
+    return tuple(result)
+
 
 def where(condition, x=None, y=None):
     """根据条件返回元素或索引。"""
