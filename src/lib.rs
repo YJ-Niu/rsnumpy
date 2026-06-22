@@ -2822,14 +2822,45 @@ fn flatnonzero(a: &NdArray) -> PyResult<NdArray> {
 }
 
 #[pyfunction]
-fn ptp(a: &NdArray) -> PyResult<NdArray> {
-    let (min_val, max_val) = a.data.iter().cloned().fold(
-        (f64::INFINITY, f64::NEG_INFINITY),
-        |(min, max), v| (min.min(v), max.max(v)),
-    );
-    Ok(NdArray {
-        data: Array::from_elem(IxDyn(&[]), max_val - min_val),
-    })
+#[pyo3(signature = (x, axis=None))]
+fn ptp(x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
+    match axis {
+        None => {
+            let (min_val, max_val) = x.data.iter().cloned().fold(
+                (f64::INFINITY, f64::NEG_INFINITY),
+                |(min, max), v| (min.min(v), max.max(v)),
+            );
+            Ok(NdArray {
+                data: Array::from_elem(IxDyn(&[]), max_val - min_val),
+            })
+        }
+        Some(ax) => {
+            let ndim = x.data.ndim();
+            let ax = if ax < 0 { (ndim as isize + ax) as usize } else { ax as usize };
+            let min_vals: Array<f64, IxDyn> = x
+                .data
+                .fold_axis(Axis(ax), f64::INFINITY, |acc, &v| {
+                    let a = *acc;
+                    if v < a { v } else { a }
+                })
+                .into_dyn();
+            let max_vals: Array<f64, IxDyn> = x
+                .data
+                .fold_axis(Axis(ax), f64::NEG_INFINITY, |acc, &v| {
+                    let a = *acc;
+                    if v > a { v } else { a }
+                })
+                .into_dyn();
+            let result: Vec<f64> = min_vals
+                .iter()
+                .zip(max_vals.iter())
+                .map(|(min_val, max_val)| max_val - min_val)
+                .collect();
+            let result_arr = Array::from_shape_vec(IxDyn(min_vals.shape()), result)
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            Ok(NdArray { data: result_arr })
+        }
+    }
 }
 
 #[pyfunction]

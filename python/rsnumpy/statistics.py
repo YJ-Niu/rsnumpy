@@ -73,7 +73,7 @@ amax = max  # max 的别名，计算数组中的最大值
 def ptp(a, axis=None, out=None, keepdims=False):
     """计算数组元素的峰-峰值（最大值-最小值）。"""
     _ = out, keepdims
-    raw_result = _core.ptp(_ensure_raw(a))
+    raw_result = _core.ptp(_ensure_raw(a), axis)
     arr_dtype = getattr(a, '_dtype', 'float64') if hasattr(a, '_dtype') else 'float64'
     return _nd()(raw_result, _dtype=arr_dtype)
 
