@@ -210,7 +210,7 @@ class ndarray:
 
     def __invert__(self):
         """逐元素取反（~ 运算符），用于布尔数组。"""
-        return _wrap_result(_core.invert(self._array), self._dtype)
+        return bitwise_not(self)
 
     def __getitem__(self, key):
         # 结构化数组的字段访问：a['age']
@@ -348,33 +348,23 @@ class ndarray:
 
     def __and__(self, other):
         """按位与（& 运算符）。"""
-        if _is_ndarray(other):
-            return _wrap_result(_core.bitwise_and(self._array, other._array), self._dtype)
-        return _wrap_result(_core.bitwise_and(self._array, _ensure(other)), self._dtype)
+        return bitwise_and(self, other)
 
     def __or__(self, other):
         """按位或（| 运算符）。"""
-        if _is_ndarray(other):
-            return _wrap_result(_core.bitwise_or(self._array, other._array), self._dtype)
-        return _wrap_result(_core.bitwise_or(self._array, _ensure(other)), self._dtype)
+        return bitwise_or(self, other)
 
     def __xor__(self, other):
         """按位异或（^ 运算符）。"""
-        if _is_ndarray(other):
-            return _wrap_result(_core.bitwise_xor(self._array, other._array), self._dtype)
-        return _wrap_result(_core.bitwise_xor(self._array, _ensure(other)), self._dtype)
+        return bitwise_xor(self, other)
 
     def __lshift__(self, other):
         """左移（<< 运算符）。"""
-        if _is_ndarray(other):
-            return _wrap_result(_core.left_shift(self._array, other._array), self._dtype)
-        return _wrap_result(_core.left_shift(self._array, _ensure(other)), self._dtype)
+        return left_shift(self, other)
 
     def __rshift__(self, other):
         """右移（>> 运算符）。"""
-        if _is_ndarray(other):
-            return _wrap_result(_core.right_shift(self._array, other._array), self._dtype)
-        return _wrap_result(_core.right_shift(self._array, _ensure(other)), self._dtype)
+        return right_shift(self, other)
 
     # ========== 属性 ==========
 
@@ -1944,45 +1934,51 @@ unique = _array_ops_module.unique
 resize = _array_ops_module.resize
 
 # 位运算
+def _to_raw(a):
+    """将输入转为 Rust ndarray。"""
+    if hasattr(a, '_array'):
+        return a._array, getattr(a, '_dtype', 'float64')
+    return _core.ndarray(a), 'float64'
+
 def bitwise_and(x1, x2):
     """按位与"""
-    a1 = x1 if hasattr(x1, '_array') else _core.ndarray(x1)
-    a2 = x2 if hasattr(x2, '_array') else _core.ndarray(x2)
-    return _wrap_result(_core.bitwise_and(a1._array, a2._array), a1._dtype)
+    r1, dt = _to_raw(x1)
+    r2, _ = _to_raw(x2)
+    return _wrap_result(_core.bitwise_and(r1, r2), dt)
 
 def bitwise_or(x1, x2):
     """按位或"""
-    a1 = x1 if hasattr(x1, '_array') else _core.ndarray(x1)
-    a2 = x2 if hasattr(x2, '_array') else _core.ndarray(x2)
-    return _wrap_result(_core.bitwise_or(a1._array, a2._array), a1._dtype)
+    r1, dt = _to_raw(x1)
+    r2, _ = _to_raw(x2)
+    return _wrap_result(_core.bitwise_or(r1, r2), dt)
 
 def bitwise_xor(x1, x2):
     """按位异或"""
-    a1 = x1 if hasattr(x1, '_array') else _core.ndarray(x1)
-    a2 = x2 if hasattr(x2, '_array') else _core.ndarray(x2)
-    return _wrap_result(_core.bitwise_xor(a1._array, a2._array), a1._dtype)
+    r1, dt = _to_raw(x1)
+    r2, _ = _to_raw(x2)
+    return _wrap_result(_core.bitwise_xor(r1, r2), dt)
 
 def bitwise_not(x):
     """按位取反"""
-    a = x if hasattr(x, '_array') else _core.ndarray(x)
-    return _wrap_result(_core.bitwise_not(a._array), a._dtype)
+    r, dt = _to_raw(x)
+    return _wrap_result(_core.bitwise_not(r), dt)
 
 def invert(x):
     """逻辑取反（0→1, 1→0）"""
-    a = x if hasattr(x, '_array') else _core.ndarray(x)
-    return _wrap_result(_core.invert(a._array), a._dtype)
+    r, dt = _to_raw(x)
+    return _wrap_result(_core.invert(r), dt)
 
 def left_shift(x1, x2):
     """左移"""
-    a1 = x1 if hasattr(x1, '_array') else _core.ndarray(x1)
-    a2 = x2 if hasattr(x2, '_array') else _core.ndarray(x2)
-    return _wrap_result(_core.left_shift(a1._array, a2._array), a1._dtype)
+    r1, dt = _to_raw(x1)
+    r2, _ = _to_raw(x2)
+    return _wrap_result(_core.left_shift(r1, r2), dt)
 
 def right_shift(x1, x2):
     """右移"""
-    a1 = x1 if hasattr(x1, '_array') else _core.ndarray(x1)
-    a2 = x2 if hasattr(x2, '_array') else _core.ndarray(x2)
-    return _wrap_result(_core.right_shift(a1._array, a2._array), a1._dtype)
+    r1, dt = _to_raw(x1)
+    r2, _ = _to_raw(x2)
+    return _wrap_result(_core.right_shift(r1, r2), dt)
 
 # 数学函数
 sin = _math_functions_module.sin

@@ -2297,8 +2297,8 @@ fn invert(x: &NdArray) -> NdArray {
 #[pyfunction]
 fn bitwise_and(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
     let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| {
-        let bits = a.to_bits() as i64 & b.to_bits() as i64;
-        f64::from_bits(bits as u64)
+        let bits = (a as i64) & (b as i64);
+        bits as f64
     })?;
     Ok(NdArray { data: result })
 }
@@ -2306,8 +2306,8 @@ fn bitwise_and(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
 #[pyfunction]
 fn bitwise_or(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
     let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| {
-        let bits = a.to_bits() as i64 | b.to_bits() as i64;
-        f64::from_bits(bits as u64)
+        let bits = (a as i64) | (b as i64);
+        bits as f64
     })?;
     Ok(NdArray { data: result })
 }
@@ -2315,8 +2315,8 @@ fn bitwise_or(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
 #[pyfunction]
 fn bitwise_xor(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
     let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| {
-        let bits = a.to_bits() as i64 ^ b.to_bits() as i64;
-        f64::from_bits(bits as u64)
+        let bits = (a as i64) ^ (b as i64);
+        bits as f64
     })?;
     Ok(NdArray { data: result })
 }
@@ -2324,8 +2324,8 @@ fn bitwise_xor(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
 #[pyfunction]
 fn left_shift(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
     let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| {
-        let bits = (a.to_bits() as i64) << (b as i64);
-        f64::from_bits(bits as u64)
+        let bits = (a as i64) << (b as i64);
+        bits as f64
     })?;
     Ok(NdArray { data: result })
 }
@@ -2333,8 +2333,8 @@ fn left_shift(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
 #[pyfunction]
 fn right_shift(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
     let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| {
-        let bits = (a.to_bits() as i64) >> (b as i64);
-        f64::from_bits(bits as u64)
+        let bits = (a as i64) >> (b as i64);
+        bits as f64
     })?;
     Ok(NdArray { data: result })
 }
@@ -2343,8 +2343,8 @@ fn right_shift(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
 fn bitwise_not(x: &NdArray) -> NdArray {
     NdArray {
         data: x.data.mapv(|v| {
-            let bits = !(v.to_bits() as i64);
-            f64::from_bits(bits as u64)
+            let bits = !(v as i64);
+            bits as f64
         }),
     }
 }
