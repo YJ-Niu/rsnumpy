@@ -173,10 +173,16 @@ class ndarray:
         if cpx is not None:
             inner = _format_complex_repr_1d(cpx)
             return inner
-        if getattr(self, '_dtype', "float64") == "int64":
+        if getattr(self, '_dtype', "float64") in ("int64", "uint8", "uint16", "uint32", "uint64"):
             if getattr(self, '_is_empty', False):
                 return _core._format_int_str(self._array)
             return _core._format_int_val_str(self._array)
+        if getattr(self, '_dtype', "float64") == "bool":
+            raw = self._array.tolist()
+            val_strs = []
+            for v in raw:
+                val_strs.append("True" if v else "False")
+            return "[" + " ".join(val_strs) + "]"
         return _core._format_float_str(self._array)
 
     def __len__(self):
@@ -201,6 +207,8 @@ class ndarray:
             return _convert_nested(raw_list, int)
         if dt == 'bool':
             return _convert_nested(raw_list, bool)
+        if dt in ('uint8', 'uint16', 'uint32', 'uint64'):
+            return _convert_nested(raw_list, int)
         return raw_list
 
     def __bool__(self):
@@ -209,7 +217,7 @@ class ndarray:
         raise ValueError("The truth value of an array with more than one element is ambiguous.")
 
     def __invert__(self):
-        """逐元素取反（~ 运算符），用于布尔数组。"""
+        """逐元素取反（~ 运算符）。"""
         return bitwise_not(self)
 
     def __getitem__(self, key):
@@ -1214,8 +1222,10 @@ def _resolve_dtype(dtype):
     dt_str = dtype if isinstance(dtype, str) else dtype.__name__
     if dt_str in ("complex", "complex128", "complex64", "cfloat", "cdouble"):
         return "complex128"
-    if dt_str in ("int", "int8", "int16", "int32", "int64", "intp", "int_", "intc", "uint", "uint8", "uint16", "uint32", "uint64"):
+    if dt_str in ("int", "int8", "int16", "int32", "int64", "intp", "int_", "intc"):
         return "int64"
+    if dt_str in ("uint", "uint8", "uint16", "uint32", "uint64"):
+        return dt_str
     if dt_str in ("bool", "bool_"):
         return "bool"
     return "float64"
@@ -1768,6 +1778,16 @@ def isnan(x):
     return ndarray(_core.isnan(arr._array))
 
 
+def binary_repr(num, width=None):
+    """返回整数的二进制表示字符串。"""
+    if width is None:
+        width = num.bit_length() or 1
+    if num >= 0:
+        return format(num, 'b').zfill(width)
+    # 负数：补码表示
+    return format((1 << width) + num, 'b').zfill(width)
+
+
 def isinf(x):
     """逐元素检测是否为无穷大。"""
     arr = ndarray(x)
@@ -1935,10 +1955,13 @@ resize = _array_ops_module.resize
 
 # 位运算
 def _to_raw(a):
-    """将输入转为 Rust ndarray。"""
+    """将输入转为 Rust ndarray，返回 (ndarray, dtype) 元组。"""
     if hasattr(a, '_array'):
         return a._array, getattr(a, '_dtype', 'float64')
-    return _core.ndarray(a), 'float64'
+    raw = _core.ndarray(a)
+    if isinstance(a, int) and not isinstance(a, bool):
+        return raw, 'int64'
+    return raw, 'float64'
 
 def bitwise_and(x1, x2):
     """按位与"""
@@ -1959,14 +1982,30 @@ def bitwise_xor(x1, x2):
     return _wrap_result(_core.bitwise_xor(r1, r2), dt)
 
 def bitwise_not(x):
-    """按位取反"""
+    """按位取反（对布尔数组使用逻辑取反）"""
     r, dt = _to_raw(x)
-    return _wrap_result(_core.bitwise_not(r), dt)
+    if dt == 'bool':
+        r = _core.invert(r)
+    elif dt == 'uint8':
+        raw = _core.bitwise_not(r)
+        r = _core.bitwise_and(raw, _core.ndarray([255]))
+        dt = 'uint8'
+    else:
+        r = _core.bitwise_not(r)
+    return _wrap_result(r, dt)
 
 def invert(x):
-    """逻辑取反（0→1, 1→0）"""
+    """按位取反（等效于 ~ 运算符，对布尔数组使用逻辑取反）"""
     r, dt = _to_raw(x)
-    return _wrap_result(_core.invert(r), dt)
+    if dt == 'bool':
+        r = _core.invert(r)
+    elif dt == 'uint8':
+        raw = _core.bitwise_not(r)
+        r = _core.bitwise_and(raw, _core.ndarray([255]))
+        dt = 'uint8'
+    else:
+        r = _core.bitwise_not(r)
+    return _wrap_result(r, dt)
 
 def left_shift(x1, x2):
     """左移"""
@@ -1979,6 +2018,7 @@ def right_shift(x1, x2):
     r1, dt = _to_raw(x1)
     r2, _ = _to_raw(x2)
     return _wrap_result(_core.right_shift(r1, r2), dt)
+
 
 # 数学函数
 sin = _math_functions_module.sin
@@ -2068,9 +2108,8 @@ random = _random_module()
 __all__ = [
     'ndarray', 'NdArrayIter',
     'array', 'asarray', 'asanyarray', 'copy',
-    'zeros', 'ones', 'empty', 'full',
-    'zeros_like', 'ones_like', 'empty_like', 'full_like',
-    'eye', 'identity',
+    'zeros', 'zeros_like', 'ones', 'ones_like', 'full', 'full_like',
+    'empty', 'empty_like', 'eye', 'identity',
     'arange', 'linspace', 'logspace', 'geomspace',
     'fromfunction', 'frombuffer', 'r_', 's_', 'mgrid', 'ogrid',
     'reshape', 'ravel', 'moveaxis', 'rollaxis', 'broadcast_to',
@@ -2081,6 +2120,7 @@ __all__ = [
     'flip', 'fliplr', 'flipud', 'roll', 'rot90',
     'append', 'insert', 'delete', 'unique', 'resize',
     'where', 'take', 'put', 'select', 'nonzero', 'argwhere', 'flatnonzero',
+    'binary_repr',
     'sin', 'cos', 'tan', 'arcsin', 'arccos', 'arctan', 'arctan2',
     'deg2rad', 'rad2deg',
     'sinh', 'cosh', 'tanh', 'asinh', 'acosh', 'atanh',
