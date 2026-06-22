@@ -1468,6 +1468,15 @@ class _RClass:
 r_ = _RClass()
 
 
+class _SClass:
+    """切片辅助类，模拟 np.s_。"""
+    def __getitem__(self, item):
+        return item
+
+
+s_ = _SClass()
+
+
 def mgrid(*ranges):
     """密集网格索引，返回密集网格数组。"""
     arrays = []
@@ -1898,6 +1907,11 @@ fliplr = _array_ops_module.fliplr
 flipud = _array_ops_module.flipud
 roll = _array_ops_module.roll
 rot90 = _array_ops_module.rot90
+append = _array_ops_module.append
+insert = _array_ops_module.insert
+delete = _array_ops_module.delete
+unique = _array_ops_module.unique
+resize = _array_ops_module.resize
 
 # 数学函数
 sin = _math_functions_module.sin
@@ -1991,13 +2005,14 @@ __all__ = [
     'zeros_like', 'ones_like', 'empty_like', 'full_like',
     'eye', 'identity',
     'arange', 'linspace', 'logspace', 'geomspace',
-    'fromfunction', 'frombuffer', 'r_', 'mgrid', 'ogrid',
+    'fromfunction', 'frombuffer', 'r_', 's_', 'mgrid', 'ogrid',
     'reshape', 'ravel', 'moveaxis', 'rollaxis', 'broadcast_to',
     'transpose', 'swapaxes', 'expand_dims', 'squeeze',
     'concatenate', 'stack', 'vstack', 'hstack', 'dstack', 'column_stack',
     'split', 'hsplit', 'vsplit', 'dsplit',
     'tile', 'repeat',
     'flip', 'fliplr', 'flipud', 'roll', 'rot90',
+    'append', 'insert', 'delete', 'unique', 'resize',
     'where', 'take', 'put', 'select', 'nonzero', 'argwhere', 'flatnonzero',
     'sin', 'cos', 'tan', 'arcsin', 'arccos', 'arctan', 'arctan2',
     'deg2rad', 'rad2deg',
