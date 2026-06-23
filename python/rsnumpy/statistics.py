@@ -86,7 +86,6 @@ def median(a, axis=None, out=None, keepdims=False):
 
 def average(a, axis=None, weights=None, returned=False):
     """计算数组的加权平均值。"""
-    _ = axis
     if weights is not None:
         weights = _ensure_raw(weights)
     raw_result = _core.average(_ensure_raw(a), axis, weights, returned)
@@ -95,9 +94,18 @@ def average(a, axis=None, weights=None, returned=False):
             result_list = raw_result.tolist()
         else:
             result_list = list(raw_result)
-        avg_val = float(result_list[0])
-        sum_weights = float(result_list[1])
-        return avg_val, sum_weights
+        if axis is None:
+            avg_val = float(result_list[0])
+            sum_weights = float(result_list[1])
+            return avg_val, sum_weights
+        else:
+            if isinstance(result_list[0], (list, tuple)):
+                avg_vals = [item[0] for item in result_list]
+                sum_ws = [item[1] for item in result_list]
+            else:
+                avg_vals = result_list[0]
+                sum_ws = result_list[1]
+            return _nd()(avg_vals, _dtype='float64'), _nd()(sum_ws, _dtype='float64')
     return _wrap(raw_result)
 
 

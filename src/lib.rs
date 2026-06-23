@@ -1951,51 +1951,125 @@ fn median(x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
 #[pyfunction]
 #[pyo3(signature = (a, axis=None, weights=None, returned=false))]
 fn average(a: &NdArray, axis: Option<isize>, weights: Option<&NdArray>, returned: bool) -> PyResult<NdArray> {
-    if axis.is_some() {
-        return Err(PyValueError::new_err("axis parameter not yet supported"));
-    }
-    
-    let values: Vec<f64> = a.data.iter().copied().collect();
-    
-    let (result_val, sum_weights): (f64, f64) = match weights {
+    match axis {
         None => {
-            let sum: f64 = values.iter().sum();
-            let avg = sum / values.len() as f64;
+            let values: Vec<f64> = a.data.iter().copied().collect();
+            
+            let (result_val, sum_weights): (f64, f64) = match weights {
+                None => {
+                    let sum: f64 = values.iter().sum();
+                    let avg = sum / values.len() as f64;
+                    if returned {
+                        (avg, values.len() as f64)
+                    } else {
+                        (avg, 0.0)
+                    }
+                }
+                Some(w) => {
+                    let w_values: Vec<f64> = w.data.iter().copied().collect();
+                    if values.len() != w_values.len() {
+                        return Err(PyValueError::new_err("weights must have the same length as data"));
+                    }
+                    let weighted_sum: f64 = values.iter().zip(w_values.iter()).map(|(v, w)| v * w).sum();
+                    let sum_w: f64 = w_values.iter().sum();
+                    if sum_w == 0.0 {
+                        return Err(PyValueError::new_err("sum of weights must not be zero"));
+                    }
+                    let avg = weighted_sum / sum_w;
+                    if returned {
+                        (avg, sum_w)
+                    } else {
+                        (avg, 0.0)
+                    }
+                }
+            };
+            
             if returned {
-                (avg, values.len() as f64)
+                let data = vec![result_val, sum_weights];
+                Ok(NdArray {
+                    data: Array::from_shape_vec(IxDyn(&[2]), data)
+                        .map_err(|e| PyValueError::new_err(e.to_string()))?,
+                })
             } else {
-                (avg, 0.0)
+                Ok(NdArray {
+                    data: Array::from_elem(IxDyn(&[]), result_val),
+                })
             }
         }
-        Some(w) => {
-            let w_values: Vec<f64> = w.data.iter().copied().collect();
-            if values.len() != w_values.len() {
-                return Err(PyValueError::new_err("weights must have the same length as data"));
+        Some(ax) => {
+            let ndim = a.data.ndim();
+            let ax = if ax < 0 { (ndim as isize + ax) as usize } else { ax as usize };
+            
+            let w_values: Option<Vec<f64>> = weights.map(|w| w.data.iter().copied().collect());
+            
+            let axis_len = a.data.shape()[ax];
+            let other_dims: Vec<usize> = a.data.shape().iter().enumerate()
+                .filter(|(i, _)| *i != ax)
+                .map(|(_, &s)| s)
+                .collect();
+            let num_other: usize = other_dims.iter().product();
+            
+            let mut avg_results: Vec<f64> = Vec::with_capacity(num_other);
+            let mut sum_w_results: Vec<f64> = Vec::with_capacity(num_other);
+            
+            for idx in 0..num_other {
+                let mut indices: Vec<usize> = Vec::with_capacity(ndim);
+                let mut temp = idx;
+                for &dim in other_dims.iter().rev() {
+                    indices.push(temp % dim);
+                    temp /= dim;
+                }
+                indices.reverse();
+                
+                let mut values: Vec<f64> = Vec::with_capacity(axis_len);
+                for i in 0..axis_len {
+                    let mut full_indices = indices.clone();
+                    full_indices.insert(ax, i);
+                    values.push(a.data[full_indices.as_slice()]);
+                }
+                
+                let (avg, sum_w) = match &w_values {
+                    None => {
+                        let sum: f64 = values.iter().sum();
+                        (sum / values.len() as f64, values.len() as f64)
+                    }
+                    Some(w) => {
+                        if values.len() != w.len() {
+                            return Err(PyValueError::new_err("weights must have the same length as the axis dimension"));
+                        }
+                        let weighted_sum: f64 = values.iter().zip(w.iter()).map(|(v, w)| v * w).sum();
+                        let sum_w_val: f64 = w.iter().sum();
+                        if sum_w_val == 0.0 {
+                            return Err(PyValueError::new_err("sum of weights must not be zero"));
+                        }
+                        (weighted_sum / sum_w_val, sum_w_val)
+                    }
+                };
+                
+                avg_results.push(avg);
+                sum_w_results.push(sum_w);
             }
-            let weighted_sum: f64 = values.iter().zip(w_values.iter()).map(|(v, w)| v * w).sum();
-            let sum_w: f64 = w_values.iter().sum();
-            if sum_w == 0.0 {
-                return Err(PyValueError::new_err("sum of weights must not be zero"));
-            }
-            let avg = weighted_sum / sum_w;
+            
             if returned {
-                (avg, sum_w)
+                let combined_len = avg_results.len() * 2;
+                let mut combined: Vec<f64> = Vec::with_capacity(combined_len);
+                for i in 0..avg_results.len() {
+                    combined.push(avg_results[i]);
+                    combined.push(sum_w_results[i]);
+                }
+                let mut result_shape = other_dims.clone();
+                result_shape.push(2);
+                Ok(NdArray {
+                    data: Array::from_shape_vec(IxDyn(&result_shape), combined)
+                        .map_err(|e| PyValueError::new_err(e.to_string()))?,
+                })
             } else {
-                (avg, 0.0)
+                Ok(NdArray {
+                    data: Array::from_shape_vec(IxDyn(&other_dims), avg_results)
+                        .map_err(|e| PyValueError::new_err(e.to_string()))?,
+                })
             }
         }
-    };
-    
-    if returned {
-        let data = vec![result_val, sum_weights];
-        Ok(NdArray {
-            data: Array::from_shape_vec(IxDyn(&[2]), data)
-                .map_err(|e| PyValueError::new_err(e.to_string()))?,
-        })
-    } else {
-        Ok(NdArray {
-            data: Array::from_elem(IxDyn(&[]), result_val),
-        })
     }
 }
 
