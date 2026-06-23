@@ -152,7 +152,10 @@ def argmin(a, axis=None, out=None, keepdims=False):
 def argsort(a, axis=-1, kind=None, order=None):
     """返回数组排序后的索引。"""
     _ = kind, order
-    return _wrap(_core.argsort(_ensure_raw(a), axis))
+    result = _wrap(_core.argsort(_ensure_raw(a), axis))
+    result_list = result.tolist()
+    int_list = [int(v) for v in result_list]
+    return _nd()(int_list, _dtype='int64')
 
 
 def sort(a, axis=-1, kind=None, order=None):

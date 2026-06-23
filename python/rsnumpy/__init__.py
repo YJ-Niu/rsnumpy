@@ -235,6 +235,9 @@ class ndarray:
                 return list(raw)
         return raw_list
 
+    def __iter__(self):
+        return iter(self.tolist())
+
     def __bool__(self):
         if self.ndim == 0:
             return bool(self.tolist())
