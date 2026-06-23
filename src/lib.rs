@@ -182,7 +182,7 @@ fn format_float_scalar(val: f64) -> String {
     if val_rounded == val_rounded.floor() && val_rounded.is_finite() && val_rounded.abs() < 1e16 {
         let v = val_rounded as i64;
         if v as f64 == val_rounded {
-            return format!("{}.", v);
+            return format!("{}", v);
         }
     }
     if val_rounded.abs() >= 1e10 {
@@ -3868,6 +3868,24 @@ fn load_npy(filename: &str) -> PyResult<NdArray> {
     Ok(NdArray { data: arr })
 }
 
+fn format_value(fmt: &str, v: f64) -> String {
+    if fmt.contains("%d") {
+        format!("{}", v as i64)
+    } else if fmt.contains("%i") {
+        format!("{}", v as i64)
+    } else if fmt.contains("%f") {
+        format!("{}", v)
+    } else if fmt.contains("%e") || fmt.contains("%E") {
+        format!("{}", v)
+    } else if fmt.contains("%g") || fmt.contains("%G") {
+        format!("{}", v)
+    } else if fmt.contains("%s") {
+        format!("{}", v)
+    } else {
+        format!("{}", v)
+    }
+}
+
 // ========== I/O: 保存为文本文件 ==========
 #[pyfunction]
 #[pyo3(signature = (filename, a, fmt="%.18e", delimiter=" "))]
@@ -3882,20 +3900,20 @@ fn save_text(filename: &str, a: &NdArray, fmt: &str, delimiter: &str) -> PyResul
         .map_err(|e| PyValueError::new_err(format!("Failed to create file: {}", e)))?;
 
     if shape.len() == 1 {
-        let line: Vec<String> = data_vec.iter().map(|v| format!("{}", v)).collect();
+        let line: Vec<String> = data_vec.iter().map(|v| format_value(fmt, *v)).collect();
         writeln!(file, "{}", line.join(delimiter))
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
     } else if shape.len() == 2 {
         for i in 0..shape[0] {
             let line: Vec<String> = (0..shape[1])
-                .map(|j| format!("{}", data_vec[i * shape[1] + j]))
+                .map(|j| format_value(fmt, data_vec[i * shape[1] + j]))
                 .collect();
             writeln!(file, "{}", line.join(delimiter))
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
         }
     } else {
         for &v in &data_vec {
-            writeln!(file, "{}", v)
+            writeln!(file, "{}", format_value(fmt, v))
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
         }
     }

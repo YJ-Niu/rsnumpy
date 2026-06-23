@@ -59,8 +59,12 @@ def loadtxt(fname, dtype=float, comments='#', delimiter=None, converters=None,
         delimiter = ""
     result = _wrap(_core.load_text(fname, delimiter, skiprows))
     if dtype == int:
-        result = result.astype(int)
-    elif dtype != float:
+        result = result.astype("int")
+    elif dtype == float:
+        pass
+    elif isinstance(dtype, type):
+        result = result.astype(dtype.__name__)
+    else:
         result = result.astype(dtype)
     if len(result) == 1:
         return result[0]
