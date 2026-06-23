@@ -8,6 +8,10 @@ def _nd():
     return _n
 
 
+def _is_ndarray(obj):
+    return hasattr(obj, '_array')
+
+
 def _wrap(result):
     if hasattr(result, 'ndim') and result.ndim == 0:
         return result.tolist()
@@ -153,7 +157,18 @@ def argsort(a, axis=-1, kind=None, order=None):
 
 def sort(a, axis=-1, kind=None, order=None):
     """对数组进行排序。"""
-    _ = kind, order
+    _ = kind
+    arr = _nd()(a) if not _is_ndarray(a) else a
+    fields = getattr(arr, '_fields', None)
+    if fields and order is not None:
+        field_names = [f[0] for f in fields]
+        if order not in field_names:
+            raise ValueError(f"field {order!r} not found in dtype")
+        field_idx = field_names.index(order)
+        raw_data = getattr(arr, '_raw_data', None)
+        if raw_data is not None:
+            sorted_data = sorted(raw_data, key=lambda x: x[field_idx])
+            return _nd()(sorted_data, _dtype=arr._dtype, _fields=fields, _raw_data=sorted_data)
     return _wrap(_core.sort(_ensure_raw(a), axis))
 
 
