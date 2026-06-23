@@ -177,6 +177,9 @@ fn format_float_scalar(val: f64) -> String {
     if val.is_infinite() {
         return if val > 0.0 { "inf".to_string() } else { "-inf".to_string() };
     }
+    if val != 0.0 && val.abs() < 1e-10 {
+        return format!("{:.10e}", val);
+    }
     let val_rounded = (val * 1e10).round() / 1e10;
     if val_rounded == val_rounded.floor() && val_rounded.is_finite() && val_rounded.abs() < 1e16 {
         let v = val_rounded as i64;
@@ -184,7 +187,7 @@ fn format_float_scalar(val: f64) -> String {
             return format!("{}.", v);
         }
     }
-    if val_rounded.abs() >= 1e10 || (val_rounded.abs() < 1e-10 && val_rounded != 0.0) {
+    if val_rounded.abs() >= 1e10 {
         return format!("{:.10e}", val_rounded);
     }
     let s = format!("{:.10}", val_rounded);
