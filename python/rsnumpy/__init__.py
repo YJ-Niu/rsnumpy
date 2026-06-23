@@ -2279,12 +2279,18 @@ linalg = _linalg_module()
 random = _random_module()
 matlib = _matlib_module
 
+dot = linalg.dot
+vdot = linalg.vdot
+inner = linalg.inner
+matmul = linalg.matmul
+
 
 # ========== 导出列表 ==========
 __all__ = [
     'ndarray', 'NdArrayIter',
     'array', 'asarray', 'asanyarray', 'copy',
     'matrix', 'asmatrix', 'bmat', 'repmat',
+    'dot', 'vdot', 'inner', 'matmul',
     'zeros', 'zeros_like', 'ones', 'ones_like', 'full', 'full_like',
     'empty', 'empty_like', 'eye', 'identity',
     'arange', 'linspace', 'logspace', 'geomspace',

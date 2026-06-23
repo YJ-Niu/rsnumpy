@@ -102,6 +102,76 @@ fn dot(a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
     )))
 }
 
+/// 向量点积（展开为一维）
+#[pyfunction]
+fn vdot(a: &NdArray, b: &NdArray) -> PyResult<f64> {
+    let a_flat: Vec<f64> = a.data.iter().copied().collect();
+    let b_flat: Vec<f64> = b.data.iter().copied().collect();
+    if a_flat.len() != b_flat.len() {
+        return Err(PyValueError::new_err(format!(
+            "vdot requires same number of elements: {} vs {}",
+            a_flat.len(),
+            b_flat.len()
+        )));
+    }
+    let result: f64 = a_flat.iter().zip(b_flat.iter()).map(|(x, y)| x * y).sum();
+    Ok(result)
+}
+
+/// 内积
+#[pyfunction]
+fn inner(a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
+    let a_data = &a.data;
+    let b_data = &b.data;
+    let a_shape = a_data.shape().to_vec();
+    let b_shape = b_data.shape().to_vec();
+
+    if a_shape.len() == 1 && b_shape.len() == 1 {
+        if a_shape[0] != b_shape[0] {
+            return Err(PyValueError::new_err(format!(
+                "Incompatible shapes for inner product: {:?} and {:?}",
+                a_shape, b_shape
+            )));
+        }
+        let result: f64 = a_data.iter().zip(b_data.iter()).map(|(x, y)| x * y).sum();
+        return Ok(NdArray {
+            data: Array::from_elem(IxDyn(&[]), result),
+        });
+    }
+
+    if a_shape.len() == 2 && b_shape.len() == 2 {
+        if a_shape[1] != b_shape[1] {
+            return Err(PyValueError::new_err(format!(
+                "Incompatible shapes for inner product: {:?} and {:?}",
+                a_shape, b_shape
+            )));
+        }
+        let m = a_shape[0];
+        let n = a_shape[1];
+        let p = b_shape[0];
+        let mut result = vec![0.0_f64; m * p];
+        for i in 0..m {
+            for j in 0..p {
+                let mut sum = 0.0;
+                for k in 0..n {
+                    sum += a_data[[i, k]] * b_data[[j, k]];
+                }
+                result[i * p + j] = sum;
+            }
+        }
+        let arr = Array::from_shape_vec((m, p), result)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        return Ok(NdArray {
+            data: arr.into_dyn(),
+        });
+    }
+
+    Err(PyValueError::new_err(format!(
+        "Unsupported shapes for inner product: {:?} and {:?}",
+        a_shape, b_shape
+    )))
+}
+
 /// 矩阵乘法
 #[pyfunction]
 fn matmul(a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
@@ -110,36 +180,133 @@ fn matmul(a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
     let a_shape = a_data.shape().to_vec();
     let b_shape = b_data.shape().to_vec();
 
-    if a_shape.len() != 2 || b_shape.len() != 2 {
-        return Err(PyValueError::new_err(
-            "matmul requires 2D arrays",
-        ));
-    }
-    if a_shape[1] != b_shape[0] {
-        return Err(PyValueError::new_err(format!(
-            "Incompatible shapes for matmul: {:?} and {:?}",
-            a_shape, b_shape
-        )));
+    if a_shape.len() == 1 && b_shape.len() == 1 {
+        if a_shape[0] != b_shape[0] {
+            return Err(PyValueError::new_err(format!(
+                "Incompatible shapes for matmul: {:?} and {:?}",
+                a_shape, b_shape
+            )));
+        }
+        let result: f64 = a_data.iter().zip(b_data.iter()).map(|(x, y)| x * y).sum();
+        return Ok(NdArray {
+            data: Array::from_elem(IxDyn(&[]), result),
+        });
     }
 
-    let m = a_shape[0];
-    let n = a_shape[1];
-    let p = b_shape[1];
-    let mut result = vec![0.0_f64; m * p];
-    for i in 0..m {
+    if a_shape.len() == 2 && b_shape.len() == 1 {
+        if a_shape[1] != b_shape[0] {
+            return Err(PyValueError::new_err(format!(
+                "Incompatible shapes for matmul: {:?} and {:?}",
+                a_shape, b_shape
+            )));
+        }
+        let m = a_shape[0];
+        let n = a_shape[1];
+        let mut result = vec![0.0_f64; m];
+        for i in 0..m {
+            let mut sum = 0.0;
+            for k in 0..n {
+                sum += a_data[[i, k]] * b_data[k];
+            }
+            result[i] = sum;
+        }
+        let arr = Array::from_shape_vec(IxDyn(&[m]), result)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        return Ok(NdArray { data: arr });
+    }
+
+    if a_shape.len() == 1 && b_shape.len() == 2 {
+        if a_shape[0] != b_shape[0] {
+            return Err(PyValueError::new_err(format!(
+                "Incompatible shapes for matmul: {:?} and {:?}",
+                a_shape, b_shape
+            )));
+        }
+        let n = a_shape[0];
+        let p = b_shape[1];
+        let mut result = vec![0.0_f64; p];
         for j in 0..p {
             let mut sum = 0.0;
             for k in 0..n {
-                sum += a_data[[i, k]] * b_data[[k, j]];
+                sum += a_data[k] * b_data[[k, j]];
             }
-            result[i * p + j] = sum;
+            result[j] = sum;
         }
+        let arr = Array::from_shape_vec(IxDyn(&[p]), result)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        return Ok(NdArray { data: arr });
     }
-    let arr = Array::from_shape_vec((m, p), result)
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray {
-        data: arr.into_dyn(),
-    })
+
+    if a_shape.len() == 2 && b_shape.len() == 2 {
+        if a_shape[1] != b_shape[0] {
+            return Err(PyValueError::new_err(format!(
+                "Incompatible shapes for matmul: {:?} and {:?}",
+                a_shape, b_shape
+            )));
+        }
+        let m = a_shape[0];
+        let n = a_shape[1];
+        let p = b_shape[1];
+        let mut result = vec![0.0_f64; m * p];
+        for i in 0..m {
+            for j in 0..p {
+                let mut sum = 0.0;
+                for k in 0..n {
+                    sum += a_data[[i, k]] * b_data[[k, j]];
+                }
+                result[i * p + j] = sum;
+            }
+        }
+        let arr = Array::from_shape_vec((m, p), result)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        return Ok(NdArray {
+            data: arr.into_dyn(),
+        });
+    }
+
+    if a_shape.len() >= 3 && b_shape.len() == 2 {
+        let batch_dims: Vec<usize> = a_shape[..a_shape.len() - 2].to_vec();
+        let m = a_shape[a_shape.len() - 2];
+        let n = a_shape[a_shape.len() - 1];
+        let p = b_shape[1];
+        if n != b_shape[0] {
+            return Err(PyValueError::new_err(format!(
+                "Incompatible shapes for matmul: {:?} and {:?}",
+                a_shape, b_shape
+            )));
+        }
+        let batch_size: usize = batch_dims.iter().product();
+        let mut result = vec![0.0_f64; batch_size * m * p];
+        for b_idx in 0..batch_size {
+            for i in 0..m {
+                for j in 0..p {
+                    let mut sum = 0.0;
+                    for k in 0..n {
+                        let a_val = if a_shape.len() == 3 {
+                            a_data[[b_idx, i, k]]
+                        } else {
+                            a_data[[0, b_idx, i, k]]
+                        };
+                        let b_val = b_data[[k, j]];
+                        sum += a_val * b_val;
+                    }
+                    result[b_idx * m * p + i * p + j] = sum;
+                }
+            }
+        }
+        let mut result_shape = batch_dims.clone();
+        result_shape.extend_from_slice(&[m, p]);
+        let arr = Array::from_shape_vec(result_shape, result)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        return Ok(NdArray {
+            data: arr.into_dyn(),
+        });
+    }
+
+    Err(PyValueError::new_err(format!(
+        "Unsupported shapes for matmul: {:?} and {:?}",
+        a_shape, b_shape
+    )))
 }
 
 /// 矩阵求逆 (2x2, 3x3)
@@ -1021,6 +1188,8 @@ fn solve_banded(lower: usize, upper: usize, ab: &NdArray, b: &NdArray) -> PyResu
 
 pub fn init_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(dot, m)?)?;
+    m.add_function(wrap_pyfunction!(vdot, m)?)?;
+    m.add_function(wrap_pyfunction!(inner, m)?)?;
     m.add_function(wrap_pyfunction!(matmul, m)?)?;
     m.add_function(wrap_pyfunction!(inv, m)?)?;
     m.add_function(wrap_pyfunction!(det, m)?)?;

@@ -160,14 +160,12 @@ fn format_scalar(val: f64) -> String {
         return if val > 0.0 { "inf".to_string() } else { "-inf".to_string() };
     }
     if val == val.floor() && val.is_finite() && val.abs() < 1e16 {
-        // 整数值不显示小数点，与 numpy print 输出一致
         let v = val as i64;
         if v as f64 == val {
             return format!("{}", v);
         }
     }
-    let s = format!("{}", val);
-    s
+    format!("{:.8}", val).trim_end_matches('0').trim_end_matches('.').to_string()
 }
 
 fn format_float_scalar(val: f64) -> String {
@@ -1575,16 +1573,21 @@ fn arange(start: f64, stop: f64, step: f64) -> PyResult<NdArray> {
         return Err(PyValueError::new_err("Step cannot be zero"));
     }
     let mut values = Vec::new();
-    let mut val = start;
     if step > 0.0 {
-        while val < stop {
-            values.push(val);
-            val += step;
+        let n = ((stop - start) / step).ceil() as i64;
+        for i in 0..n {
+            let val = start + step * i as f64;
+            if val < stop {
+                values.push(val);
+            }
         }
     } else {
-        while val > stop {
-            values.push(val);
-            val += step;
+        let n = ((start - stop) / (-step)).ceil() as i64;
+        for i in 0..n {
+            let val = start + step * i as f64;
+            if val > stop {
+                values.push(val);
+            }
         }
     }
     let arr = Array::from_shape_vec(IxDyn(&[values.len()]), values)
