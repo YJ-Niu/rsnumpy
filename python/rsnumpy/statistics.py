@@ -175,6 +175,124 @@ def sort(a, axis=-1, kind=None, order=None):
     return _wrap(_core.sort(_ensure_raw(a), axis))
 
 
+def lexsort(keys, axis=-1):
+    """使用多个键进行间接排序。优先按最后一个键排序。"""
+    _ = axis
+    if not isinstance(keys, (tuple, list)):
+        keys = (keys,)
+    key_arrays = []
+    for key in keys:
+        if _is_ndarray(key):
+            key_arrays.append(key.tolist())
+        elif hasattr(key, 'tolist'):
+            key_arrays.append(key.tolist())
+        else:
+            key_arrays.append(list(key))
+    n = len(key_arrays[0]) if key_arrays else 0
+    indices = list(range(n))
+    indices.sort(key=lambda i: tuple(key_arrays[idx][i] for idx in reversed(range(len(key_arrays)))))
+    return _nd()(indices, _dtype='int64')
+
+
+def msort(a):
+    """数组按第一个轴排序，返回排序后的数组副本。"""
+    return sort(a, axis=0)
+
+
+def sort_complex(a):
+    """对复数按照先实部后虚部的顺序进行排序。"""
+    arr = _nd()(a) if not _is_ndarray(a) else a
+    data = arr.tolist()
+    data = [complex(x) for x in data]
+    data.sort(key=lambda x: (x.real, x.imag))
+    return _nd()(data)
+
+
+def partition(a, kth, axis=-1, kind=None, order=None):
+    """指定一个数，对数组进行分区。"""
+    _ = kind, order
+    arr = _nd()(a) if not _is_ndarray(a) else a
+    data = arr.tolist()
+    arr_dtype = getattr(arr, '_dtype', None)
+    
+    def partition_single(arr_list, k, last=False):
+        n = len(arr_list)
+        if k < 0:
+            k = n + k
+        if n == 0 or k < 0 or k >= n:
+            return arr_list
+        sorted_list = sorted(arr_list)
+        pivot = sorted_list[k]
+        left = []
+        mid = []
+        right = []
+        for x in arr_list:
+            if x < pivot:
+                left.append(x)
+            elif x == pivot:
+                mid.append(x)
+            else:
+                right.append(x)
+        
+        if not last and len(left) > 0 and k >= len(left):
+            left = left[1:] + [left[0]]
+        
+        return left + mid + right
+    
+    if isinstance(kth, (tuple, list)):
+        kths = sorted(set(kth))
+        for i, k in enumerate(kths):
+            data = partition_single(data, k, i == len(kths) - 1)
+    else:
+        data = partition_single(data, kth)
+    
+    if arr_dtype is not None:
+        return _nd()(data, _dtype=arr_dtype)
+    return _nd()(data)
+
+
+def argpartition(a, kth, axis=-1, kind=None, order=None):
+    """对数组进行分区并返回索引。"""
+    _ = kind, order
+    arr = _nd()(a) if not _is_ndarray(a) else a
+    data = arr.tolist()
+    indices = list(range(len(data)))
+    
+    def quick_select(arr_list, idx_list, k):
+        if k < 0:
+            k = len(arr_list) + k
+        low = 0
+        high = len(arr_list) - 1
+        while low < high:
+            pivot_idx = (low + high) // 2
+            arr_list[pivot_idx], arr_list[high] = arr_list[high], arr_list[pivot_idx]
+            idx_list[pivot_idx], idx_list[high] = idx_list[high], idx_list[pivot_idx]
+            pivot = arr_list[high]
+            i = low
+            for j in range(low, high):
+                if arr_list[j] < pivot:
+                    arr_list[i], arr_list[j] = arr_list[j], arr_list[i]
+                    idx_list[i], idx_list[j] = idx_list[j], idx_list[i]
+                    i += 1
+            arr_list[i], arr_list[high] = arr_list[high], arr_list[i]
+            idx_list[i], idx_list[high] = idx_list[high], idx_list[i]
+            if i == k:
+                break
+            elif i < k:
+                low = i + 1
+            else:
+                high = i - 1
+    
+    if isinstance(kth, (tuple, list)):
+        kths = sorted(set(kth))
+        for k in kths:
+            quick_select(data, indices, k)
+    else:
+        quick_select(data, indices, kth)
+    
+    return _nd()(indices, _dtype='int64')
+
+
 def searchsorted(a, v, side='left', sorter=None):
     """查找元素在有序数组中的插入位置。"""
     _ = sorter
