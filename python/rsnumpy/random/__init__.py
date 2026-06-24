@@ -9,6 +9,10 @@ class random_module:
     def __init__(self):
         self._random = _core.random
 
+    @property
+    def Generator(self):
+        return _core.random.Generator
+
     def default_rng(self, seed=None):
         """创建默认的随机数生成器（新 API）。
 

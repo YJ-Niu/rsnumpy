@@ -455,6 +455,11 @@ impl NdArray {
     }
 
     #[getter]
+    fn flags<'a>(&self, py: Python<'a>) -> PyResult<Bound<'a, ArrayFlags>> {
+        Bound::new(py, ArrayFlags {})
+    }
+
+    #[getter]
     #[pyo3(name = "T")]
     fn t(&self) -> PyResult<NdArray> {
         if self.data.ndim() <= 1 {
@@ -1491,6 +1496,64 @@ where
         .map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
+/// ArrayFlags - 数组内存布局信息，与 NumPy 的 np.ndarray.flags 兼容
+#[pyclass(name = "ArrayFlags")]
+struct ArrayFlags {}
+
+#[pymethods]
+impl ArrayFlags {
+    #[getter]
+    fn C_CONTIGUOUS(&self) -> bool {
+        true
+    }
+
+    #[getter]
+    fn F_CONTIGUOUS(&self) -> bool {
+        true
+    }
+
+    #[getter]
+    fn OWNDATA(&self) -> bool {
+        true
+    }
+
+    #[getter]
+    fn WRITEABLE(&self) -> bool {
+        true
+    }
+
+    #[getter]
+    fn ALIGNED(&self) -> bool {
+        true
+    }
+
+    #[getter]
+    fn WRITEBACKIFCOPY(&self) -> bool {
+        false
+    }
+
+    #[getter]
+    fn UPDATEIFCOPY(&self) -> bool {
+        false
+    }
+
+    fn __repr__(&self) -> String {
+        self.__str__()
+    }
+
+    fn __str__(&self) -> String {
+        let mut s = String::new();
+        writeln!(s, "  C_CONTIGUOUS : {}", self.C_CONTIGUOUS()).unwrap();
+        writeln!(s, "  F_CONTIGUOUS : {}", self.F_CONTIGUOUS()).unwrap();
+        writeln!(s, "  OWNDATA : {}", self.OWNDATA()).unwrap();
+        writeln!(s, "  WRITEABLE : {}", self.WRITEABLE()).unwrap();
+        writeln!(s, "  ALIGNED : {}", self.ALIGNED()).unwrap();
+        writeln!(s, "  WRITEBACKIFCOPY : {}", self.WRITEBACKIFCOPY()).unwrap();
+        writeln!(s, "  UPDATEIFCOPY : {}", self.UPDATEIFCOPY()).unwrap();
+        s.trim_end().to_string()
+    }
+}
+
 /// ndarray 迭代器
 #[pyclass(name = "ndarray_iter")]
 struct NdArrayIter {
@@ -1718,48 +1781,48 @@ define_math_func!(expm1, |v| v.exp_m1());
 
 #[pyfunction]
 #[pyo3(signature = (x, axis=None))]
-fn sum(x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
-    x.sum(axis)
+fn sum(_py: Python<'_>, x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
+    _py.detach(move || x.sum(axis))
 }
 
 #[pyfunction]
 #[pyo3(signature = (x, axis=None))]
-fn mean(x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
-    x.mean(axis)
+fn mean(_py: Python<'_>, x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
+    _py.detach(move || x.mean(axis))
 }
 
 #[pyfunction]
 #[pyo3(signature = (x, axis=None), name = "std")]
-fn std_dev(x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
-    x.std(axis)
+fn std_dev(_py: Python<'_>, x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
+    _py.detach(move || x.std(axis))
 }
 
 #[pyfunction]
 #[pyo3(signature = (x, axis=None))]
-fn var(x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
-    x.var(axis)
+fn var(_py: Python<'_>, x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
+    _py.detach(move || x.var(axis))
 }
 
 #[pyfunction]
 #[pyo3(signature = (x, axis=None))]
-fn min(x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
-    x.min(axis)
+fn min(_py: Python<'_>, x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
+    _py.detach(move || x.min(axis))
 }
 
 #[pyfunction]
 #[pyo3(signature = (x, axis=None))]
-fn max(x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
-    x.max(axis)
+fn max(_py: Python<'_>, x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
+    _py.detach(move || x.max(axis))
 }
 
 #[pyfunction]
-fn argmin(x: &NdArray) -> PyResult<usize> {
-    x.argmin()
+fn argmin(_py: Python<'_>, x: &NdArray) -> PyResult<usize> {
+    _py.detach(move || x.argmin())
 }
 
 #[pyfunction]
-fn argmax(x: &NdArray) -> PyResult<usize> {
-    x.argmax()
+fn argmax(_py: Python<'_>, x: &NdArray) -> PyResult<usize> {
+    _py.detach(move || x.argmax())
 }
 
 // ===== Array Operations =====
@@ -5280,10 +5343,6 @@ fn init_indexing_and_format(m: &Bound<'_, PyModule>) -> PyResult<()> {
 }
 
 fn init_fft(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(fft::py_fft, m)?)?;
-    m.add_function(wrap_pyfunction!(fft::py_ifft, m)?)?;
-    m.add_function(wrap_pyfunction!(fft::py_rfft, m)?)?;
-    m.add_function(wrap_pyfunction!(fft::py_irfft, m)?)?;
     m.add_function(wrap_pyfunction!(fft::py_fft_ndarray, m)?)?;
     m.add_function(wrap_pyfunction!(fft::py_ifft_ndarray, m)?)?;
     m.add_function(wrap_pyfunction!(fft::py_rfft_ndarray, m)?)?;
