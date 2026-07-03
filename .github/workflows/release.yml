@@ -1,0 +1,132 @@
+name: Build and Publish Wheels
+
+# 触发方式：推送 v* 标签（如 v0.1.8）或在 GitHub 上 Publish 一个 Release。
+# 也可在 Actions 页手动触发（workflow_dispatch）——手动触发只构建、不发布。
+on:
+  push:
+    tags:
+      - "v*"
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------- Linux: x86_64 + aarch64 ----------------
+  # manylinux 容器内含全部 CPython，--find-interpreter 自动为每个版本各产出一个 wheel。
+  linux:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [x86_64, aarch64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build wheels (${{ matrix.target }})
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: auto
+          args: --release --out dist --find-interpreter
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux-${{ matrix.target }}
+          path: dist
+
+  # ---------------- Windows: x64，按 Python 版本矩阵 ----------------
+  windows:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: x64
+
+      - name: Build wheel (py${{ matrix.python-version }})
+        uses: PyO3/maturin-action@v1
+        with:
+          # -i python 指向 setup-python 激活的解释器，确保为当前矩阵版本构建。
+          args: --release --out dist -i python
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-windows-${{ matrix.python-version }}
+          path: dist
+
+  # ---------------- macOS: universal2（Intel + Apple Silicon），按版本矩阵 ----------------
+  # macos-13(Intel) runner 已退役，改在 arm64 runner 上交叉编译 universal2，
+  # 一个 wheel 同时兼容 x86_64 与 arm64，无需 Intel 机器。
+  macos:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Build universal2 wheel (py${{ matrix.python-version }})
+        uses: PyO3/maturin-action@v1
+        with:
+          target: universal2-apple-darwin
+          args: --release --out dist -i python
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-macos-${{ matrix.python-version }}
+          path: dist
+
+  # ---------------- 源码分发（sdist）----------------
+  # 当某平台/版本无预编译 wheel 时，pip 可用 sdist 从源码构建（需目标机器有 Rust）。
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-sdist
+          path: dist
+
+  # ---------------- 发布到 PyPI（仅标签 / Release 触发）----------------
+  publish:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    needs: [linux, windows, macos, sdist]
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'release'
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          path: dist
+          merge-multiple: true
+
+      - name: Publish
+        uses: PyO3/maturin-action@v1
+        env:
+          # 仓库 Settings → Secrets and variables → Actions 中的 secret 名（值为 PyPI token，以 pypi- 开头）。
+          MATURIN_PYPI_TOKEN: ${{ secrets.YJ_NIU }}
+        with:
+          command: upload
+          args: --non-interactive --skip-existing dist/*
