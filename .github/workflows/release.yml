@@ -40,12 +40,12 @@ jobs:
         with:
           target: ${{ matrix.target }}
           manylinux: auto
-          args: --release --out dist --find-interpreter
+          args: --release --out dist/${{ matrix.target }} --find-interpreter
 
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-linux-${{ matrix.target }}
-          path: dist
+          path: dist/${{ matrix.target }}
 
   # ---------------- Windows: x64，按 Python 版本矩阵 ----------------
   windows:
@@ -76,12 +76,12 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           # -i python 指向 setup-python 激活的解释器，确保为当前矩阵版本构建。
-          args: --release --out dist -i python
+          args: --release --out dist/${{ matrix.python-version }} -i python
 
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-windows-${{ matrix.python-version }}
-          path: dist
+          path: dist/${{ matrix.python-version }}
 
   # ---------------- macOS: universal2（Intel + Apple Silicon），按版本矩阵 ----------------
   # macos-13(Intel) runner 已退役，改在 arm64 runner 上交叉编译 universal2，
@@ -113,12 +113,12 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: universal2-apple-darwin
-          args: --release --out dist -i python
+          args: --release --out dist/${{ matrix.python-version }} -i python
 
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-macos-${{ matrix.python-version }}
-          path: dist
+          path: dist/${{ matrix.python-version }}
 
   # ---------------- 源码分发（sdist）----------------
   # 当某平台/版本无预编译 wheel 时，pip 可用 sdist 从源码构建（需目标机器有 Rust）。
@@ -151,8 +151,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: wheels-*
-          path: dist
-          merge-multiple: true
+          path: artifacts
+
+      - name: Collect published files
+        run: |
+          mkdir -p dist
+          find artifacts -type f \( -name '*.whl' -o -name '*.tar.gz' \) -exec cp -n {} dist/ \;
 
       - name: Publish
         uses: PyO3/maturin-action@v1
