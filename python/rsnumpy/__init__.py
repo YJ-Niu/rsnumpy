@@ -29,7 +29,7 @@ from .random import random_module as _random_module
 from . import char as _char_module
 from . import matlib as _matlib_module
 
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 
 class ArrayFlags:
     """数组内存布局信息，与 NumPy 的 np.ndarray.flags 兼容。"""
