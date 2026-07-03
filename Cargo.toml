@@ -28,9 +28,14 @@ blas = ["ndarray/blas"]
 opt-level = 3
 lto = "fat"
 codegen-units = 1
-panic = "abort"
-strip = true
+strip = "symbols"
 
-[profile.bench]
-opt-level = 3
-debug = false
+[profile.dev]
+opt-level = 0
+debug = true
+
+[lints.clippy]
+too_many_arguments = "allow"
+type_complexity = "allow"
+cast_precision_loss = "allow"
+cast_sign_loss = "allow"

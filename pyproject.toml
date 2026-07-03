@@ -30,6 +30,8 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Visualization",
 ]
 
+dependencies = []
+
 [tool.maturin]
 module-name = "rsnumpy._core"
 python-source = "python"
