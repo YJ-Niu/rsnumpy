@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, dev, development]
   pull_request:
-    branches: [main, master]
+    branches: [main, master, dev, development]
 
 # 同一分支/PR 的新推送会取消仍在进行的旧运行，节省 CI 时间。
 concurrency:
@@ -23,20 +23,19 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.10", "3.13", "3.14"]
-        # 补测最低支持版本 3.8；macOS(arm64) 对 3.8 支持不稳定，故仅在 Linux/Windows 上测。
-        include:
-          - os: ubuntu-latest
-            python-version: "3.10"
-          - os: windows-latest
-            python-version: "3.10"
     steps:
       - uses: actions/checkout@v4
 
-      # Linux runner 默认不带字体，plotters 渲染文本会报 FontUnavailable。
-      # DejaVu 会安装到 /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf，正是解析器的 Linux 首选路径。
-      - name: Install fonts (Linux)
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y fonts-dejavu-core
+      - name: Cache Rust build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
       - uses: actions/setup-python@v5
         with:
@@ -53,10 +52,13 @@ jobs:
           sccache: "true"
 
       - name: Install built wheel
-        run: python -m pip install --no-index --find-links dist rsplotlib
+        run: python -m pip install --no-index --find-links dist rsnumpy
+
+      - name: Install test dependencies
+        run: python -m pip install numpy
 
       - name: Run smoke test
-        run: python ci/smoke_test.py
+        run: python test/run_test.py
 
   lint:
     name: Lint (rustfmt + clippy)
