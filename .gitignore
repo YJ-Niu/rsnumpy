@@ -14,7 +14,6 @@ dist/
 build/
 *.egg
 .venv/
-test/
 venv/
 uv.lock
 
@@ -36,8 +35,6 @@ runoob.npz
 outfile2
 push*.sh
 main*.py
-test*.py
-run*.py
 debug*.py
 check*.py
 
