@@ -1,6 +1,6 @@
 [package]
 name = "rsnumpy"
-version = "1.0.3"
+version = "1.0.5"
 edition = "2024"
 
 [lib]
