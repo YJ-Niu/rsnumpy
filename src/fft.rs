@@ -15,15 +15,15 @@ fn fft_1d(a: &[f64]) -> Vec<FftComplex<f64>> {
     if n == 0 {
         return Vec::new();
     }
-    
+
     let mut buffer: Vec<FftComplex<f64>> = Vec::with_capacity(n);
     buffer.extend(a.iter().map(|&x| FftComplex::new(x, 0.0)));
-    
+
     FFT_PLANNER.with(|planner| {
         let fft = planner.borrow_mut().plan_fft_forward(n);
         fft.process(&mut buffer);
     });
-    
+
     buffer
 }
 
@@ -32,19 +32,19 @@ fn ifft_1d(a: &[FftComplex<f64>]) -> Vec<FftComplex<f64>> {
     if n == 0 {
         return Vec::new();
     }
-    
+
     let mut buffer = a.to_vec();
-    
+
     IFFT_PLANNER.with(|planner| {
         let ifft = planner.borrow_mut().plan_fft_inverse(n);
         ifft.process(&mut buffer);
     });
-    
+
     let scale = 1.0 / n as f64;
     buffer.iter_mut().for_each(|c| {
         *c = FftComplex::new(c.re * scale, c.im * scale);
     });
-    
+
     buffer
 }
 
@@ -53,15 +53,15 @@ fn rfft_1d(a: &[f64]) -> Vec<FftComplex<f64>> {
     if n == 0 {
         return Vec::new();
     }
-    
+
     let mut buffer: Vec<FftComplex<f64>> = Vec::with_capacity(n);
     buffer.extend(a.iter().map(|&x| FftComplex::new(x, 0.0)));
-    
+
     FFT_PLANNER.with(|planner| {
         let fft = planner.borrow_mut().plan_fft_forward(n);
         fft.process(&mut buffer);
     });
-    
+
     let output_len = n / 2 + 1;
     buffer.truncate(output_len);
     buffer
@@ -72,11 +72,11 @@ fn irfft_1d(a: &[FftComplex<f64>], n: Option<usize>) -> Vec<f64> {
     if input_len == 0 {
         return Vec::new();
     }
-    
+
     let output_len = n.unwrap_or_else(|| (input_len - 1) * 2);
-    
+
     let mut full_spectrum: Vec<FftComplex<f64>> = Vec::with_capacity(output_len);
-    
+
     for i in 0..output_len {
         if i < input_len {
             full_spectrum.push(a[i]);
@@ -89,12 +89,12 @@ fn irfft_1d(a: &[FftComplex<f64>], n: Option<usize>) -> Vec<f64> {
             }
         }
     }
-    
+
     IFFT_PLANNER.with(|planner| {
         let ifft = planner.borrow_mut().plan_fft_inverse(output_len);
         ifft.process(&mut full_spectrum);
     });
-    
+
     let scale = 1.0 / output_len as f64;
     full_spectrum.into_iter().map(|c| c.re * scale).collect()
 }

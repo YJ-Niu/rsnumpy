@@ -76,41 +76,48 @@ fn make_ndarray_parallel(
     dist: impl rand_distr::Distribution<f64> + Sync + Send + Clone + 'static,
 ) -> NdArray {
     let total: usize = shape.iter().product();
-    
+
     let mut values = Vec::with_capacity(total);
     values.resize(total, 0.0);
-    
+
     let num_chunks = rayon::current_num_threads();
     let chunk_size = total.div_ceil(num_chunks);
-    
+
     let seeds: Vec<u64> = (0..num_chunks).map(|_| rand::random()).collect();
-    
-    values.par_chunks_mut(chunk_size).enumerate().for_each(|(i, chunk)| {
-        let mut local_rng = ::rand::rngs::StdRng::seed_from_u64(seeds[i]);
-        for elem in chunk {
-            *elem = dist.sample(&mut local_rng);
-        }
-    });
-    
+
+    values
+        .par_chunks_mut(chunk_size)
+        .enumerate()
+        .for_each(|(i, chunk)| {
+            let mut local_rng = ::rand::rngs::StdRng::seed_from_u64(seeds[i]);
+            for elem in chunk {
+                *elem = dist.sample(&mut local_rng);
+            }
+        });
+
     let arr = Array::from_shape_vec(IxDyn(shape), values).unwrap();
     NdArray { data: arr }
 }
 
-fn make_ndarray_single(rng: &mut impl rand::Rng, shape: &[usize], dist: impl rand_distr::Distribution<f64>) -> NdArray {
+fn make_ndarray_single(
+    rng: &mut impl rand::Rng,
+    shape: &[usize],
+    dist: impl rand_distr::Distribution<f64>,
+) -> NdArray {
     if shape.is_empty() {
         return NdArray {
             data: Array::from_elem(IxDyn(&[]), dist.sample(rng)),
         };
     }
     let total: usize = shape.iter().product();
-    
+
     let mut values = Vec::with_capacity(total);
     values.resize(total, 0.0);
-    
+
     for elem in values.iter_mut() {
         *elem = dist.sample(rng);
     }
-    
+
     let arr = Array::from_shape_vec(IxDyn(shape), values).unwrap();
     NdArray { data: arr }
 }
@@ -134,7 +141,7 @@ fn random_rand(_py: Python<'_>, args: &Bound<'_, PyTuple>) -> PyResult<NdArray> 
     let shape = parse_shape_from_args(args);
     let dist = ::rand_distr::Uniform::<f64>::new(0.0, 1.0)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    
+
     if shape.is_empty() {
         with_thread_rng(|rng| Ok(make_ndarray_single(rng, &shape, dist)))
     } else {
@@ -146,9 +153,9 @@ fn random_rand(_py: Python<'_>, args: &Bound<'_, PyTuple>) -> PyResult<NdArray> 
 #[pyo3(signature = (*args))]
 fn randn(_py: Python<'_>, args: &Bound<'_, PyTuple>) -> PyResult<NdArray> {
     let shape = parse_shape_from_args(args);
-    let normal = ::rand_distr::Normal::new(0.0, 1.0)
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    
+    let normal =
+        ::rand_distr::Normal::new(0.0, 1.0).map_err(|e| PyValueError::new_err(e.to_string()))?;
+
     if shape.is_empty() {
         with_thread_rng(|rng| Ok(make_ndarray_single(rng, &shape, normal)))
     } else {
@@ -160,8 +167,8 @@ fn randn(_py: Python<'_>, args: &Bound<'_, PyTuple>) -> PyResult<NdArray> {
 #[pyo3(signature = (low, high, size=None), name = "randint")]
 fn random_randint(low: i64, high: i64, size: Option<&Bound<'_, PyAny>>) -> PyResult<NdArray> {
     let shape = parse_size_arg(size)?;
-    let dist = ::rand_distr::Uniform::new(low, high)
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let dist =
+        ::rand_distr::Uniform::new(low, high).map_err(|e| PyValueError::new_err(e.to_string()))?;
     with_thread_rng(|rng| {
         if shape.is_empty() {
             return Ok(NdArray {
@@ -194,7 +201,7 @@ impl PyGenerator {
         let shape = parse_size_arg(size)?;
         let dist = ::rand_distr::Uniform::<f64>::new(0.0, 1.0)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        
+
         if shape.is_empty() {
             let mut rng = new_rng(self.seed);
             Ok(make_ndarray_single(&mut rng, &shape, dist))
@@ -204,11 +211,15 @@ impl PyGenerator {
     }
 
     #[pyo3(signature = (size=None))]
-    fn standard_normal(&self, _py: Python<'_>, size: Option<&Bound<'_, PyAny>>) -> PyResult<NdArray> {
+    fn standard_normal(
+        &self,
+        _py: Python<'_>,
+        size: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<NdArray> {
         let shape = parse_size_arg(size)?;
         let normal = ::rand_distr::Normal::new(0.0, 1.0)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        
+
         if shape.is_empty() {
             let mut rng = new_rng(self.seed);
             Ok(make_ndarray_single(&mut rng, &shape, normal))
@@ -218,7 +229,13 @@ impl PyGenerator {
     }
 
     #[pyo3(signature = (low, high=None, size=None, endpoint=false))]
-    fn integers(&self, low: i64, high: Option<i64>, size: Option<&Bound<'_, PyAny>>, endpoint: bool) -> PyResult<NdArray> {
+    fn integers(
+        &self,
+        low: i64,
+        high: Option<i64>,
+        size: Option<&Bound<'_, PyAny>>,
+        endpoint: bool,
+    ) -> PyResult<NdArray> {
         let hi = high.unwrap_or(low);
         let actual_low = if high.is_some() { low } else { 0 };
         let actual_high = if endpoint { hi + 1 } else { hi };
@@ -242,7 +259,13 @@ impl PyGenerator {
     }
 
     #[pyo3(signature = (a, size=None, replace=true))]
-    fn choice<'py>(&self, py: Python<'py>, a: &Bound<'_, PyAny>, size: Option<usize>, replace: bool) -> PyResult<Bound<'py, PyAny>> {
+    fn choice<'py>(
+        &self,
+        py: Python<'py>,
+        a: &Bound<'_, PyAny>,
+        size: Option<usize>,
+        replace: bool,
+    ) -> PyResult<Bound<'py, PyAny>> {
         let mut rng = new_rng(self.seed);
         let vals: Vec<f64> = if let Ok(arr) = a.extract::<NdArray>() {
             arr.data.iter().copied().collect()
@@ -262,7 +285,9 @@ impl PyGenerator {
 
         let n = size.unwrap_or(1);
         if !replace && n > vals.len() {
-            return Err(PyValueError::new_err("Cannot take a larger sample than population when 'replace=false'"));
+            return Err(PyValueError::new_err(
+                "Cannot take a larger sample than population when 'replace=false'",
+            ));
         }
 
         let dist = ::rand_distr::Uniform::new(0usize, vals.len())
@@ -274,7 +299,7 @@ impl PyGenerator {
             let mut indices: Vec<usize> = (0..vals.len()).collect();
             for i in (1..vals.len()).rev() {
                 let j_dist = ::rand_distr::Uniform::new(0usize, i + 1)
-                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+                    .map_err(|e| PyValueError::new_err(e.to_string()))?;
                 let j = j_dist.sample(&mut rng);
                 indices.swap(i, j);
             }
@@ -313,7 +338,11 @@ impl PyGenerator {
     }
 
     #[pyo3(signature = (a))]
-    fn permutation<'py>(&self, py: Python<'py>, a: &Bound<'_, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    fn permutation<'py>(
+        &self,
+        py: Python<'py>,
+        a: &Bound<'_, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
         let mut rng = new_rng(self.seed);
         if let Ok(n) = a.extract::<usize>() {
             let mut indices: Vec<f64> = (0..n).map(|i| i as f64).collect();
@@ -339,18 +368,30 @@ impl PyGenerator {
             let result: Vec<f64> = indices.into_iter().map(|i| vals[i]).collect();
             let result_arr = Array::from_shape_vec(arr.data.dim(), result)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            Ok(Bound::new(py, NdArray { data: result_arr.into_dyn() })?.into_any())
+            Ok(Bound::new(
+                py,
+                NdArray {
+                    data: result_arr.into_dyn(),
+                },
+            )?
+            .into_any())
         } else {
             Err(PyTypeError::new_err("Expected integer or ndarray"))
         }
     }
 
     #[pyo3(signature = (low=0.0, high=1.0, size=None))]
-    fn uniform(&self, _py: Python<'_>, low: f64, high: f64, size: Option<&Bound<'_, PyAny>>) -> PyResult<NdArray> {
+    fn uniform(
+        &self,
+        _py: Python<'_>,
+        low: f64,
+        high: f64,
+        size: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<NdArray> {
         let shape = parse_size_arg(size)?;
         let dist = ::rand_distr::Uniform::new(low, high)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        
+
         if shape.is_empty() {
             let mut rng = new_rng(self.seed);
             Ok(make_ndarray_single(&mut rng, &shape, dist))
@@ -360,11 +401,17 @@ impl PyGenerator {
     }
 
     #[pyo3(signature = (loc=0.0, scale=1.0, size=None))]
-    fn normal(&self, _py: Python<'_>, loc: f64, scale: f64, size: Option<&Bound<'_, PyAny>>) -> PyResult<NdArray> {
+    fn normal(
+        &self,
+        _py: Python<'_>,
+        loc: f64,
+        scale: f64,
+        size: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<NdArray> {
         let shape = parse_size_arg(size)?;
         let dist = ::rand_distr::Normal::new(loc, scale)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        
+
         if shape.is_empty() {
             let mut rng = new_rng(self.seed);
             Ok(make_ndarray_single(&mut rng, &shape, dist))
@@ -374,11 +421,17 @@ impl PyGenerator {
     }
 
     #[pyo3(signature = (a, b, size=None))]
-    fn beta(&self, _py: Python<'_>, a: f64, b: f64, size: Option<&Bound<'_, PyAny>>) -> PyResult<NdArray> {
+    fn beta(
+        &self,
+        _py: Python<'_>,
+        a: f64,
+        b: f64,
+        size: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<NdArray> {
         let shape = parse_size_arg(size)?;
-        let dist = ::rand_distr::Beta::new(a, b)
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        
+        let dist =
+            ::rand_distr::Beta::new(a, b).map_err(|e| PyValueError::new_err(e.to_string()))?;
+
         if shape.is_empty() {
             let mut rng = new_rng(self.seed);
             Ok(make_ndarray_single(&mut rng, &shape, dist))
@@ -388,11 +441,17 @@ impl PyGenerator {
     }
 
     #[pyo3(signature = (shape_param, scale=1.0, size=None))]
-    fn gamma(&self, _py: Python<'_>, shape_param: f64, scale: f64, size: Option<&Bound<'_, PyAny>>) -> PyResult<NdArray> {
+    fn gamma(
+        &self,
+        _py: Python<'_>,
+        shape_param: f64,
+        scale: f64,
+        size: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<NdArray> {
         let shape = parse_size_arg(size)?;
         let dist = ::rand_distr::Gamma::new(shape_param, scale)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        
+
         if shape.is_empty() {
             let mut rng = new_rng(self.seed);
             Ok(make_ndarray_single(&mut rng, &shape, dist))
@@ -402,11 +461,16 @@ impl PyGenerator {
     }
 
     #[pyo3(signature = (scale=1.0, size=None))]
-    fn exponential(&self, _py: Python<'_>, scale: f64, size: Option<&Bound<'_, PyAny>>) -> PyResult<NdArray> {
+    fn exponential(
+        &self,
+        _py: Python<'_>,
+        scale: f64,
+        size: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<NdArray> {
         let shape = parse_size_arg(size)?;
         let dist = ::rand_distr::Exp::new(1.0 / scale)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        
+
         if shape.is_empty() {
             let mut rng = new_rng(self.seed);
             Ok(make_ndarray_single(&mut rng, &shape, dist))
@@ -418,8 +482,8 @@ impl PyGenerator {
     #[pyo3(signature = (n, p, size=None))]
     fn binomial(&self, n: u64, p: f64, size: Option<&Bound<'_, PyAny>>) -> PyResult<NdArray> {
         let shape = parse_size_arg(size)?;
-        let dist = ::rand_distr::Binomial::new(n, p)
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let dist =
+            ::rand_distr::Binomial::new(n, p).map_err(|e| PyValueError::new_err(e.to_string()))?;
         let mut rng = new_rng(self.seed);
         if shape.is_empty() {
             return Ok(NdArray {
@@ -436,8 +500,8 @@ impl PyGenerator {
     #[pyo3(signature = (lam, size=None))]
     fn poisson(&self, lam: f64, size: Option<&Bound<'_, PyAny>>) -> PyResult<NdArray> {
         let shape = parse_size_arg(size)?;
-        let dist = ::rand_distr::Poisson::new(lam)
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let dist =
+            ::rand_distr::Poisson::new(lam).map_err(|e| PyValueError::new_err(e.to_string()))?;
         let mut rng = new_rng(self.seed);
         if shape.is_empty() {
             return Ok(NdArray {
@@ -452,11 +516,17 @@ impl PyGenerator {
     }
 
     #[pyo3(signature = (a, scale=1.0, size=None))]
-    fn weibull(&self, _py: Python<'_>, a: f64, scale: f64, size: Option<&Bound<'_, PyAny>>) -> PyResult<NdArray> {
+    fn weibull(
+        &self,
+        _py: Python<'_>,
+        a: f64,
+        scale: f64,
+        size: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<NdArray> {
         let shape = parse_size_arg(size)?;
         let dist = ::rand_distr::Weibull::new(a, scale)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        
+
         if shape.is_empty() {
             let mut rng = new_rng(self.seed);
             Ok(make_ndarray_single(&mut rng, &shape, dist))
@@ -479,21 +549,29 @@ impl PyGenerator {
             });
         }
         let total: usize = shape.iter().product();
-        let values: Vec<f64> = (0..total).map(|_| {
-            let u: f64 = uniform.sample(&mut rng);
-            loc + scale * (u / (1.0 - u)).ln()
-        }).collect();
+        let values: Vec<f64> = (0..total)
+            .map(|_| {
+                let u: f64 = uniform.sample(&mut rng);
+                loc + scale * (u / (1.0 - u)).ln()
+            })
+            .collect();
         let arr = Array::from_shape_vec(IxDyn(&shape), values)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
         Ok(NdArray { data: arr })
     }
 
     #[pyo3(signature = (loc=0.0, scale=1.0, size=None))]
-    fn cauchy(&self, _py: Python<'_>, loc: f64, scale: f64, size: Option<&Bound<'_, PyAny>>) -> PyResult<NdArray> {
+    fn cauchy(
+        &self,
+        _py: Python<'_>,
+        loc: f64,
+        scale: f64,
+        size: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<NdArray> {
         let shape = parse_size_arg(size)?;
         let dist = ::rand_distr::Cauchy::new(loc, scale)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        
+
         if shape.is_empty() {
             let mut rng = new_rng(self.seed);
             Ok(make_ndarray_single(&mut rng, &shape, dist))
@@ -520,14 +598,16 @@ impl PyGenerator {
             });
         }
         let total: usize = shape.iter().product();
-        let values: Vec<f64> = (0..total).map(|_| {
-            let u: f64 = uniform.sample(&mut rng);
-            if u < 0.5 {
-                loc + scale * (2.0 * u).ln()
-            } else {
-                loc - scale * (2.0 * (1.0 - u)).ln()
-            }
-        }).collect();
+        let values: Vec<f64> = (0..total)
+            .map(|_| {
+                let u: f64 = uniform.sample(&mut rng);
+                if u < 0.5 {
+                    loc + scale * (2.0 * u).ln()
+                } else {
+                    loc - scale * (2.0 * (1.0 - u)).ln()
+                }
+            })
+            .collect();
         let arr = Array::from_shape_vec(IxDyn(&shape), values)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
         Ok(NdArray { data: arr })
@@ -536,11 +616,16 @@ impl PyGenerator {
 
 #[pyfunction]
 #[pyo3(signature = (low=0.0, high=1.0, size=None))]
-fn uniform(_py: Python<'_>, low: f64, high: f64, size: Option<&Bound<'_, PyAny>>) -> PyResult<NdArray> {
+fn uniform(
+    _py: Python<'_>,
+    low: f64,
+    high: f64,
+    size: Option<&Bound<'_, PyAny>>,
+) -> PyResult<NdArray> {
     let shape = parse_size_arg(size)?;
-    let dist = ::rand_distr::Uniform::new(low, high)
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    
+    let dist =
+        ::rand_distr::Uniform::new(low, high).map_err(|e| PyValueError::new_err(e.to_string()))?;
+
     if shape.is_empty() {
         with_thread_rng(|rng| Ok(make_ndarray_single(rng, &shape, dist)))
     } else {
@@ -550,11 +635,16 @@ fn uniform(_py: Python<'_>, low: f64, high: f64, size: Option<&Bound<'_, PyAny>>
 
 #[pyfunction]
 #[pyo3(signature = (loc=0.0, scale=1.0, size=None))]
-fn normal(_py: Python<'_>, loc: f64, scale: f64, size: Option<&Bound<'_, PyAny>>) -> PyResult<NdArray> {
+fn normal(
+    _py: Python<'_>,
+    loc: f64,
+    scale: f64,
+    size: Option<&Bound<'_, PyAny>>,
+) -> PyResult<NdArray> {
     let shape = parse_size_arg(size)?;
-    let dist = ::rand_distr::Normal::new(loc, scale)
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    
+    let dist =
+        ::rand_distr::Normal::new(loc, scale).map_err(|e| PyValueError::new_err(e.to_string()))?;
+
     if shape.is_empty() {
         with_thread_rng(|rng| Ok(make_ndarray_single(rng, &shape, dist)))
     } else {
@@ -566,9 +656,8 @@ fn normal(_py: Python<'_>, loc: f64, scale: f64, size: Option<&Bound<'_, PyAny>>
 #[pyo3(signature = (a, b, size=None))]
 fn beta(_py: Python<'_>, a: f64, b: f64, size: Option<&Bound<'_, PyAny>>) -> PyResult<NdArray> {
     let shape = parse_size_arg(size)?;
-    let dist = ::rand_distr::Beta::new(a, b)
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    
+    let dist = ::rand_distr::Beta::new(a, b).map_err(|e| PyValueError::new_err(e.to_string()))?;
+
     if shape.is_empty() {
         with_thread_rng(|rng| Ok(make_ndarray_single(rng, &shape, dist)))
     } else {
@@ -578,11 +667,16 @@ fn beta(_py: Python<'_>, a: f64, b: f64, size: Option<&Bound<'_, PyAny>>) -> PyR
 
 #[pyfunction]
 #[pyo3(signature = (shape_param, scale=1.0, size=None))]
-fn gamma(_py: Python<'_>, shape_param: f64, scale: f64, size: Option<&Bound<'_, PyAny>>) -> PyResult<NdArray> {
+fn gamma(
+    _py: Python<'_>,
+    shape_param: f64,
+    scale: f64,
+    size: Option<&Bound<'_, PyAny>>,
+) -> PyResult<NdArray> {
     let shape = parse_size_arg(size)?;
     let dist = ::rand_distr::Gamma::new(shape_param, scale)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    
+
     if shape.is_empty() {
         with_thread_rng(|rng| Ok(make_ndarray_single(rng, &shape, dist)))
     } else {
@@ -594,9 +688,9 @@ fn gamma(_py: Python<'_>, shape_param: f64, scale: f64, size: Option<&Bound<'_, 
 #[pyo3(signature = (scale=1.0, size=None))]
 fn exponential(_py: Python<'_>, scale: f64, size: Option<&Bound<'_, PyAny>>) -> PyResult<NdArray> {
     let shape = parse_size_arg(size)?;
-    let dist = ::rand_distr::Exp::new(1.0 / scale)
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    
+    let dist =
+        ::rand_distr::Exp::new(1.0 / scale).map_err(|e| PyValueError::new_err(e.to_string()))?;
+
     if shape.is_empty() {
         with_thread_rng(|rng| Ok(make_ndarray_single(rng, &shape, dist)))
     } else {
