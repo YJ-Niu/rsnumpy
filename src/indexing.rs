@@ -16,7 +16,11 @@ enum IndexDesc {
 
 fn parse_single_index(item: &Bound<'_, PyAny>, dim_size: isize) -> PyResult<IndexDesc> {
     if let Ok(idx) = item.extract::<isize>() {
-        let actual_idx = if idx < 0 { (dim_size + idx) as usize } else { idx as usize };
+        let actual_idx = if idx < 0 {
+            (dim_size + idx) as usize
+        } else {
+            idx as usize
+        };
         return Ok(IndexDesc::Int(actual_idx));
     }
 
@@ -24,7 +28,6 @@ fn parse_single_index(item: &Bound<'_, PyAny>, dim_size: isize) -> PyResult<Inde
         if list.is_empty() {
             return Ok(IndexDesc::Fancy(vec![]));
         }
-        
         let is_bool = list.iter().all(|e| {
             e.get_type().name().map(|n| n == "bool").unwrap_or(false)
         });
