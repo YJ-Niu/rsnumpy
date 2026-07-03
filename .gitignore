@@ -29,6 +29,8 @@ uv.lock
 Thumbs.db
 
 # Data / plots
+debug.txt
+test_old.txt
 out.txt
 outfile.npy
 runoob.npz
