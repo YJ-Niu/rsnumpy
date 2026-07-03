@@ -38,9 +38,11 @@ jobs:
       - name: Build wheels (${{ matrix.target }})
         uses: PyO3/maturin-action@v1
         with:
+          maturin-version: v1.14.1
+          command: build
           target: ${{ matrix.target }}
           manylinux: auto
-          args: --release --out dist/${{ matrix.target }} --find-interpreter
+          args: --release --compatibility pypi --out dist/${{ matrix.target }} --find-interpreter
 
       - uses: actions/upload-artifact@v4
         with:
@@ -75,8 +77,11 @@ jobs:
       - name: Build wheel (py${{ matrix.python-version }})
         uses: PyO3/maturin-action@v1
         with:
+          maturin-version: v1.14.1
+          command: build
+          sccache: true
           # -i python 指向 setup-python 激活的解释器，确保为当前矩阵版本构建。
-          args: --release --out dist/${{ matrix.python-version }} -i python
+          args: --release --compatibility pypi --out dist/${{ matrix.python-version }} -i python
 
       - uses: actions/upload-artifact@v4
         with:
@@ -112,8 +117,11 @@ jobs:
       - name: Build universal2 wheel (py${{ matrix.python-version }})
         uses: PyO3/maturin-action@v1
         with:
+          maturin-version: v1.14.1
+          command: build
           target: universal2-apple-darwin
-          args: --release --out dist/${{ matrix.python-version }} -i python
+          sccache: true
+          args: --release --compatibility pypi --out dist/${{ matrix.python-version }} -i python
 
       - uses: actions/upload-artifact@v4
         with:
@@ -130,6 +138,7 @@ jobs:
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:
+          maturin-version: v1.14.1
           command: sdist
           args: --out dist
 
@@ -158,11 +167,21 @@ jobs:
           mkdir -p dist
           find artifacts -type f \( -name '*.whl' -o -name '*.tar.gz' \) -exec cp -n {} dist/ \;
 
-      - name: Publish
-        uses: PyO3/maturin-action@v1
+      - name: List downloaded artifacts
+        run: |
+          find artifacts -type f | sort
+          echo '---'
+          ls -l dist
+
+      - name: Install upload tools
+        run: python -m pip install --upgrade pip twine
+
+      - name: Validate wheels
+        run: |
+          python -m zipfile -t dist/*.whl
+
+      - name: Publish packages
         env:
-          # 仓库 Settings → Secrets and variables → Actions 中的 secret 名（值为 PyPI token，以 pypi- 开头）。
-          MATURIN_PYPI_TOKEN: ${{ secrets.YJ_NIU }}
-        with:
-          command: upload
-          args: --non-interactive --skip-existing dist/*
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.YJ_NIU }}
+        run: python -m twine upload --skip-existing dist/*
