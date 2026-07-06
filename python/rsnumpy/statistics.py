@@ -140,34 +140,25 @@ def nanpercentile(a, q, axis=None, out=None, keepdims=False, interpolation='line
 def argmax(a, axis=None, out=None, keepdims=False):
     """返回数组沿指定轴的最大值索引。"""
     _ = out, keepdims
-    result = _wrap(_core.argmax_axis(_ensure_raw(a), axis))
-    if hasattr(result, 'tolist'):
-        result_list = result.tolist()
-        int_list = [int(v) for v in result_list]
-        return _nd()(int_list, _dtype='int64')
-    else:
-        return int(result)
+    raw = _core.argmax_axis(_ensure_raw(a), axis)
+    if axis is None:
+        return int(raw.tolist())
+    return _nd()._wrap(raw, _dtype='int64')
 
 
 def argmin(a, axis=None, out=None, keepdims=False):
     """返回数组沿指定轴的最小值索引。"""
     _ = out, keepdims
-    result = _wrap(_core.argmin_axis(_ensure_raw(a), axis))
-    if hasattr(result, 'tolist'):
-        result_list = result.tolist()
-        int_list = [int(v) for v in result_list]
-        return _nd()(int_list, _dtype='int64')
-    else:
-        return int(result)
+    raw = _core.argmin_axis(_ensure_raw(a), axis)
+    if axis is None:
+        return int(raw.tolist())
+    return _nd()._wrap(raw, _dtype='int64')
 
 
 def argsort(a, axis=-1, kind=None, order=None):
     """返回数组排序后的索引。"""
     _ = kind, order
-    result = _wrap(_core.argsort(_ensure_raw(a), axis))
-    result_list = result.tolist()
-    int_list = [int(v) for v in result_list]
-    return _nd()(int_list, _dtype='int64')
+    return _nd()._wrap(_core.argsort(_ensure_raw(a), axis), _dtype='int64')
 
 
 def sort(a, axis=-1, kind=None, order=None):

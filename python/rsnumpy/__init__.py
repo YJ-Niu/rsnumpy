@@ -128,19 +128,21 @@ class ndarray:
                     # 不规则列表（子列表长度不同），存储为原始数据
                     self._raw_data = data
                     self._array = _core.zeros((len(data),))
-                elif _has_string(data):
-                    # 字符串数据 → 存储为原始 Python 数据
-                    self._raw_data = list(data) if isinstance(data, (list, tuple)) else [data]
-                    self._array = _core.zeros((len(self._raw_data),))
-                    _dtype = "string_"
-                elif _has_complex(data):
-                    # 包含复数 → 存储为 _complex_data
-                    flat = _flatten_data(data)
-                    self._complex_data = [complex(v) for v in flat]
-                    _dtype = "complex128"
-                    self._array = _core.zeros((len(flat),))
                 else:
-                    self._array = _core.ndarray(data)
+                    # 单次遍历同时获取扁平数据与复数/字符串标记
+                    flat, has_c, has_s = _flatten_check(data)
+                    if has_s:
+                        # 字符串数据 → 存储为原始 Python 数据
+                        self._raw_data = list(data) if isinstance(data, (list, tuple)) else [data]
+                        self._array = _core.zeros((len(self._raw_data),))
+                        _dtype = "string_"
+                    elif has_c:
+                        # 包含复数 → 存储为 _complex_data
+                        self._complex_data = [complex(v) for v in flat]
+                        _dtype = "complex128"
+                        self._array = _core.zeros((len(flat),))
+                    else:
+                        self._array = _core.ndarray(data)
             self._dtype = _dtype
             self._fields = _fields
 
@@ -1231,10 +1233,15 @@ unicode_ = type('unicode_', (), {})
 
 # ========== 构造/工厂函数 ==========
 
+# _core.build_array 返回的 dtype 编码 → rsnumpy dtype 名称（与 _infer_int_dtype 一致）
+_BUILD_ARRAY_DTYPES = ('float64', 'int64', 'bool')
+
+
 def _flatten_check(data):
-    """单次遍历：展平数据并检查是否包含复数。"""
+    """单次遍历：展平数据并检查是否包含复数/字符串。"""
     flat = []
     has_complex = False
+    has_string = False
     stack = [data]
     while stack:
         item = stack.pop()
@@ -1244,25 +1251,27 @@ def _flatten_check(data):
             flat.append(item)
             if isinstance(item, complex):
                 has_complex = True
-    return flat, has_complex
+            elif isinstance(item, str):
+                has_string = True
+    return flat, has_complex, has_string
 
 
 def _has_complex(data):
     """检查数据中是否包含复数。"""
-    flat, has_c = _flatten_check(data)
+    _, has_c, _ = _flatten_check(data)
     return has_c
 
 
 def _flatten_data(data):
     """展平嵌套的可迭代对象为扁平列表。"""
-    flat, _ = _flatten_check(data)
+    flat, _, _ = _flatten_check(data)
     return flat
 
 
 def _has_string(data):
     """检查（展平后的）数据中是否包含字符串。"""
-    flat, _ = _flatten_check(data)
-    return any(isinstance(v, str) for v in flat)
+    _, _, has_s = _flatten_check(data)
+    return has_s
 
 
 def _setitem_value(value):
@@ -1342,12 +1351,27 @@ def _is_rectangular(data):
 def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
     """创建数组。"""
     if dtype is None:
-        # 单次遍历：展平 + 推断 dtype
-        flat, has_c = _flatten_check(data)
+        # 数值 list/tuple 快速路径：Rust 单次完成展平 + dtype 推断 + 构造。
+        if isinstance(data, (list, tuple)):
+            try:
+                raw, code = _core.build_array(data)
+            except (ValueError, TypeError):
+                raw = None
+            if raw is not None:
+                _dtype = _BUILD_ARRAY_DTYPES[code]
+                arr = ndarray._wrap(raw, _dtype=_dtype)
+                if ndmin > arr.ndim:
+                    new_shape = (1,) * (ndmin - arr.ndim) + arr.shape
+                    arr = ndarray._wrap(arr._array.reshape(new_shape), _dtype=_dtype)
+                return arr
+        # 回退慢路径：复数/字符串/不规则/标量
+        if isinstance(data, tuple):
+            data = list(data)
+        flat, has_c, has_s = _flatten_check(data)
         if has_c:
             _dtype = "complex128"
         else:
-            _dtype = _infer_int_dtype(*flat)
+            _dtype = _infer_int_dtype(flat)
     else:
         _dtype = _resolve_dtype(dtype)
     _fields = None
@@ -1380,10 +1404,16 @@ def asarray(a, dtype=None, order=None):
         else:
             _dtype = _resolve_dtype(dtype)
     else:
-        # 从数据推断 dtype（单次遍历）
+        # 数值 list/tuple 快速路径：Rust 单次完成展平 + dtype 推断 + 构造。
         if isinstance(a, (list, tuple)):
-            flat, _ = _flatten_check(a)
-            _dtype = _infer_int_dtype(*flat)
+            try:
+                raw, code = _core.build_array(a)
+            except (ValueError, TypeError):
+                raw = None
+            if raw is not None:
+                return ndarray._wrap(raw, _dtype=_BUILD_ARRAY_DTYPES[code])
+            flat, _, _ = _flatten_check(a)
+            _dtype = _infer_int_dtype(flat)
         else:
             _dtype = "float64"
     return ndarray(a, _dtype=_dtype)
@@ -1508,7 +1538,7 @@ def _resolve_dtype(dtype):
     return "float64"
 
 
-def _infer_int_dtype(*args):
+def _infer_int_dtype(args):
     """推断参数中的类型：全 bool→bool，全 int→int64，否则 float64。"""
     has_bool = False
     has_int = False
@@ -1626,7 +1656,7 @@ def arange(start=0, stop=None, step=1, dtype=None):
     if stop is None:
         stop = start
         start = 0
-    _dtype = _resolve_dtype(dtype) if dtype is not None else _infer_int_dtype(start, stop, step)
+    _dtype = _resolve_dtype(dtype) if dtype is not None else _infer_int_dtype((start, stop, step))
     return ndarray(_core.arange(start, stop, step), _dtype=_dtype)
 
 
