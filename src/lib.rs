@@ -1,7 +1,7 @@
 use ndarray::{Array, ArrayViewD, Axis, IxDyn, Slice};
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyFloat, PyList, PySlice, PyTuple};
+use pyo3::types::{PyBytes, PyDict, PyFloat, PyList, PySlice, PyTuple};
 use rayon::prelude::*;
 use std::fmt::Write;
 
@@ -467,6 +467,12 @@ impl NdArray {
         let py = slf.py();
         let s = slf.borrow().data.shape().to_vec();
         Ok(vec_usize_to_pytuple(py, &s).into_any())
+    }
+
+    // NumPy 数组接口协议：底层恒为 f64，暴露为 '<f8' 供真实 numpy/matplotlib 直接消费。
+    #[getter]
+    fn __array_interface__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        build_array_interface(py, &self.data, "<f8")
     }
 
     #[getter]
@@ -5189,6 +5195,78 @@ fn from_buffer_typed(bytes: &[u8], typestr: &str, shape: Vec<usize>) -> PyResult
     Ok(NdArray { data: arr })
 }
 
+// ========== f64 数组 → 指定 dtype 的原始字节（供 __array_interface__ 与 numpy 互操作） ==========
+fn put_scalar_bytes(out: &mut Vec<u8>, le: &[u8], little: bool) {
+    if little {
+        out.extend_from_slice(le);
+    } else {
+        let mut b = le.to_vec();
+        b.reverse();
+        out.extend_from_slice(&b);
+    }
+}
+
+// 底层数据恒为 f64；按 typestr 目标类型逐元素编码（浮点→整数 `as` 转换在越界/NaN 时饱和）。
+fn encode_scalar(out: &mut Vec<u8>, kind: char, itemsize: usize, little: bool, v: f64) -> bool {
+    match (kind, itemsize) {
+        ('f', 8) => put_scalar_bytes(out, &v.to_le_bytes(), little),
+        ('f', 4) => put_scalar_bytes(out, &(v as f32).to_le_bytes(), little),
+        ('i', 8) => put_scalar_bytes(out, &(v as i64).to_le_bytes(), little),
+        ('i', 4) => put_scalar_bytes(out, &(v as i32).to_le_bytes(), little),
+        ('i', 2) => put_scalar_bytes(out, &(v as i16).to_le_bytes(), little),
+        ('i', 1) => out.push((v as i8) as u8),
+        ('u', 8) => put_scalar_bytes(out, &(v as u64).to_le_bytes(), little),
+        ('u', 4) => put_scalar_bytes(out, &(v as u32).to_le_bytes(), little),
+        ('u', 2) => put_scalar_bytes(out, &(v as u16).to_le_bytes(), little),
+        ('u', 1) => out.push(v as u8),
+        ('b', 1) => out.push(if v != 0.0 { 1 } else { 0 }),
+        _ => return false,
+    }
+    true
+}
+
+fn encode_f64_array(data: &Array<f64, IxDyn>, typestr: &str) -> PyResult<Vec<u8>> {
+    let chars: Vec<char> = typestr.chars().collect();
+    let byteorder = chars.first().copied().unwrap_or('|');
+    let kind = *chars
+        .get(1)
+        .ok_or_else(|| PyValueError::new_err("invalid array interface typestr"))?;
+    let itemsize: usize = typestr[2..]
+        .parse()
+        .map_err(|_| PyValueError::new_err("invalid array interface typestr"))?;
+    let little = byteorder != '>';
+    let mut out = Vec::with_capacity(data.len() * itemsize.max(1));
+    for &v in data.iter() {
+        if !encode_scalar(&mut out, kind, itemsize, little, v) {
+            return Err(PyValueError::new_err("unsupported array interface typestr"));
+        }
+    }
+    Ok(out)
+}
+
+fn build_array_interface<'py>(
+    py: Python<'py>,
+    data: &Array<f64, IxDyn>,
+    typestr: &str,
+) -> PyResult<Bound<'py, PyDict>> {
+    let dict = PyDict::new(py);
+    let shape = data.shape().to_vec();
+    dict.set_item("shape", vec_usize_to_pytuple(py, &shape))?;
+    dict.set_item("typestr", typestr)?;
+    let bytes = encode_f64_array(data, typestr)?;
+    dict.set_item("data", PyBytes::new(py, &bytes))?;
+    dict.set_item("version", 3)?;
+    Ok(dict)
+}
+
+// 供 Python 包装层按其追踪的 dtype 构建数组接口（底层 f64 → 目标类型字节）。
+#[pyfunction]
+fn array_interface<'py>(arr: &Bound<'py, NdArray>, typestr: &str) -> PyResult<Bound<'py, PyDict>> {
+    let py = arr.py();
+    let borrowed = arr.borrow();
+    build_array_interface(py, &borrowed.data, typestr)
+}
+
 // ========== 整数序列归约（供 Python 层替代内置 sum/max，避免依赖 builtins 模块） ==========
 #[pyfunction]
 fn isum(values: Vec<i64>) -> i64 {
@@ -6021,6 +6099,7 @@ fn init_io_and_poly(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(load_text, m)?)?;
     m.add_function(wrap_pyfunction!(bytes_to_floats, m)?)?;
     m.add_function(wrap_pyfunction!(from_buffer_typed, m)?)?;
+    m.add_function(wrap_pyfunction!(array_interface, m)?)?;
     m.add_function(wrap_pyfunction!(isum, m)?)?;
     m.add_function(wrap_pyfunction!(imax, m)?)?;
     m.add_function(wrap_pyfunction!(savez_npz, m)?)?;

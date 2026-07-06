@@ -256,6 +256,22 @@ class ndarray:
     def __iter__(self):
         return iter(self.tolist())
 
+    @property
+    def __array_interface__(self):
+        """NumPy 数组接口协议：让真实 numpy/matplotlib 能直接消费 rsnumpy 数组。
+
+        底层数据恒为 f64，按追踪的 _dtype 编码为对应类型字节（在 Rust 层完成）。
+        字符串/复数/不规则数组无法用简单缓冲区表示，抛 AttributeError 交回默认处理。
+        """
+        if getattr(self, '_raw_data', None) is not None:
+            raise AttributeError('__array_interface__')
+        if getattr(self, '_complex_data', None) is not None:
+            raise AttributeError('__array_interface__')
+        typestr = _DTYPE_TO_TYPESTR.get(getattr(self, '_dtype', 'float64'))
+        if typestr is None:
+            raise AttributeError('__array_interface__')
+        return _core.array_interface(self._array, typestr)
+
     def __bool__(self):
         if self.ndim == 0:
             return bool(self.tolist())
@@ -323,36 +339,44 @@ class ndarray:
             self._array[key] = value
 
     def __add__(self, other):
+        dt = _promote_dtype(self._dtype, other)
         if _is_ndarray(other):
-            return _wrap_result(self._array + other._array, self._dtype)
-        return _wrap_result(self._array + other, self._dtype)
+            return _wrap_result(self._array + other._array, dt)
+        return _wrap_result(self._array + other, dt)
 
     def __radd__(self, other):
-        return _wrap_result(other + self._array, self._dtype)
+        dt = _promote_dtype(self._dtype, other)
+        return _wrap_result(other + self._array, dt)
 
     def __sub__(self, other):
+        dt = _promote_dtype(self._dtype, other)
         if _is_ndarray(other):
-            return _wrap_result(self._array - other._array, self._dtype)
-        return _wrap_result(self._array - other, self._dtype)
+            return _wrap_result(self._array - other._array, dt)
+        return _wrap_result(self._array - other, dt)
 
     def __rsub__(self, other):
-        return _wrap_result(other - self._array, self._dtype)
+        dt = _promote_dtype(self._dtype, other)
+        return _wrap_result(other - self._array, dt)
 
     def __mul__(self, other):
+        dt = _promote_dtype(self._dtype, other)
         if _is_ndarray(other):
-            return _wrap_result(self._array * other._array, self._dtype)
-        return _wrap_result(self._array * other, self._dtype)
+            return _wrap_result(self._array * other._array, dt)
+        return _wrap_result(self._array * other, dt)
 
     def __rmul__(self, other):
-        return _wrap_result(other * self._array, self._dtype)
+        dt = _promote_dtype(self._dtype, other)
+        return _wrap_result(other * self._array, dt)
 
     def __truediv__(self, other):
+        dt = _truediv_dtype(self._dtype)
         if _is_ndarray(other):
-            return _wrap_result(self._array / other._array, self._dtype)
-        return _wrap_result(self._array / other, self._dtype)
+            return _wrap_result(self._array / other._array, dt)
+        return _wrap_result(self._array / other, dt)
 
     def __rtruediv__(self, other):
-        return _wrap_result(other / self._array, self._dtype)
+        dt = _truediv_dtype(self._dtype)
+        return _wrap_result(other / self._array, dt)
 
     def __matmul__(self, other):
         if _is_ndarray(other):
@@ -774,6 +798,36 @@ def _ensure(x):
 def _is_ndarray(obj):
     """检查对象是否为 rsnumpy ndarray（用 hasattr 避免类身份不一致问题）。"""
     return hasattr(obj, '_array')
+
+
+_FLOAT_DTYPES = ("float16", "float32", "float64")
+
+
+def _is_float_dtype(dt):
+    return dt in _FLOAT_DTYPES
+
+
+def _operand_is_float(other):
+    """判断算术运算的另一操作数是否为浮点（bool 视为整数，与 numpy 一致）。"""
+    if _is_ndarray(other):
+        return _is_float_dtype(getattr(other, '_dtype', 'float64'))
+    if isinstance(other, bool):
+        return False
+    return isinstance(other, float)
+
+
+def _promote_dtype(self_dtype, other):
+    """按 numpy 规则推导加/减/乘结果 dtype：整数遇到浮点操作数提升为 float64。"""
+    if _is_float_dtype(self_dtype):
+        return self_dtype
+    if _operand_is_float(other):
+        return 'float64'
+    return self_dtype
+
+
+def _truediv_dtype(self_dtype):
+    """真除法结果恒为浮点：整数提升为 float64，浮点保持自身精度。"""
+    return self_dtype if _is_float_dtype(self_dtype) else 'float64'
 
 
 def _convert_nested(data, converter):
@@ -1231,6 +1285,16 @@ _ARRAY_INTERFACE_DTYPE = {
     ('u', 4): 'uint32', ('i', 4): 'int32',
     ('u', 8): 'uint64', ('i', 8): 'int64',
     ('f', 4): 'float32', ('f', 8): 'float64',
+}
+
+# rsnumpy dtype 名称 → 数组接口 typestr（供 __array_interface__ 暴露给真实 numpy）
+_DTYPE_TO_TYPESTR = {
+    'bool': '|b1',
+    'uint8': '|u1', 'int8': '|i1',
+    'uint16': '<u2', 'int16': '<i2',
+    'uint32': '<u4', 'int32': '<i4',
+    'uint64': '<u8', 'int64': '<i8',
+    'float32': '<f4', 'float64': '<f8',
 }
 
 

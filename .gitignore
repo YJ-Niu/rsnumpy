@@ -42,6 +42,7 @@ check*.py
 test2*.py
 map*.jpeg
 *.png
+runtest_matplotlib.py
 
 # Environment
 .venv
