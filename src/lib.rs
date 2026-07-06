@@ -5067,6 +5067,142 @@ fn bytes_to_floats(bytes: &[u8], count: isize) -> PyResult<NdArray> {
     Ok(NdArray { data: arr })
 }
 
+// ========== 从数组接口协议缓冲区创建数组（如 PIL 图像） ==========
+// typestr 形如 "|u1"、"<f8"、">i4"：首字符为字节序，第二字符为类型，其余为字节数。
+fn decode_buffer_scalar(kind: char, chunk: &[u8], little: bool) -> Option<f64> {
+    let val = match (kind, chunk.len()) {
+        ('b', 1) => {
+            if chunk[0] != 0 {
+                1.0
+            } else {
+                0.0
+            }
+        }
+        ('u', 1) => chunk[0] as f64,
+        ('i', 1) => (chunk[0] as i8) as f64,
+        ('u', 2) => {
+            let b = [chunk[0], chunk[1]];
+            (if little {
+                u16::from_le_bytes(b)
+            } else {
+                u16::from_be_bytes(b)
+            }) as f64
+        }
+        ('i', 2) => {
+            let b = [chunk[0], chunk[1]];
+            (if little {
+                i16::from_le_bytes(b)
+            } else {
+                i16::from_be_bytes(b)
+            }) as f64
+        }
+        ('u', 4) => {
+            let b = [chunk[0], chunk[1], chunk[2], chunk[3]];
+            (if little {
+                u32::from_le_bytes(b)
+            } else {
+                u32::from_be_bytes(b)
+            }) as f64
+        }
+        ('i', 4) => {
+            let b = [chunk[0], chunk[1], chunk[2], chunk[3]];
+            (if little {
+                i32::from_le_bytes(b)
+            } else {
+                i32::from_be_bytes(b)
+            }) as f64
+        }
+        ('u', 8) => {
+            let b = [
+                chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5], chunk[6], chunk[7],
+            ];
+            (if little {
+                u64::from_le_bytes(b)
+            } else {
+                u64::from_be_bytes(b)
+            }) as f64
+        }
+        ('i', 8) => {
+            let b = [
+                chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5], chunk[6], chunk[7],
+            ];
+            (if little {
+                i64::from_le_bytes(b)
+            } else {
+                i64::from_be_bytes(b)
+            }) as f64
+        }
+        ('f', 4) => {
+            let b = [chunk[0], chunk[1], chunk[2], chunk[3]];
+            (if little {
+                f32::from_le_bytes(b)
+            } else {
+                f32::from_be_bytes(b)
+            }) as f64
+        }
+        ('f', 8) => {
+            let b = [
+                chunk[0], chunk[1], chunk[2], chunk[3], chunk[4], chunk[5], chunk[6], chunk[7],
+            ];
+            if little {
+                f64::from_le_bytes(b)
+            } else {
+                f64::from_be_bytes(b)
+            }
+        }
+        _ => return None,
+    };
+    Some(val)
+}
+
+#[pyfunction]
+#[pyo3(signature = (bytes, typestr, shape))]
+fn from_buffer_typed(bytes: &[u8], typestr: &str, shape: Vec<usize>) -> PyResult<NdArray> {
+    let chars: Vec<char> = typestr.chars().collect();
+    let byteorder = chars.first().copied().unwrap_or('|');
+    let kind = *chars
+        .get(1)
+        .ok_or_else(|| PyValueError::new_err("invalid array interface typestr"))?;
+    let itemsize: usize = typestr[2..]
+        .parse()
+        .map_err(|_| PyValueError::new_err("invalid array interface typestr"))?;
+    if itemsize == 0 {
+        return Err(PyValueError::new_err("invalid array interface typestr"));
+    }
+    // '>' 为大端；'<'、'|'、'=' 视为小端（构建目标为小端平台）。
+    let little = byteorder != '>';
+
+    let count: usize = shape.iter().product();
+    if count.saturating_mul(itemsize) > bytes.len() {
+        return Err(PyValueError::new_err("buffer smaller than shape requires"));
+    }
+
+    let mut result: Vec<f64> = Vec::with_capacity(count);
+    for chunk in bytes.chunks_exact(itemsize).take(count) {
+        let val = decode_buffer_scalar(kind, chunk, little)
+            .ok_or_else(|| PyValueError::new_err("unsupported array interface typestr"))?;
+        result.push(val);
+    }
+
+    let arr = Array::from_shape_vec(IxDyn(&shape), result)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok(NdArray { data: arr })
+}
+
+// ========== 整数序列归约（供 Python 层替代内置 sum/max，避免依赖 builtins 模块） ==========
+#[pyfunction]
+fn isum(values: Vec<i64>) -> i64 {
+    values.iter().sum()
+}
+
+#[pyfunction]
+fn imax(values: Vec<i64>) -> PyResult<i64> {
+    values
+        .into_iter()
+        .max()
+        .ok_or_else(|| PyValueError::new_err("max() arg is an empty sequence"))
+}
+
 // ========== 多维 tuple 索引（key 为 tuple） ==========
 #[pyfunction]
 #[pyo3(signature = (a, ranges))]
@@ -5884,6 +6020,9 @@ fn init_io_and_poly(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(save_text, m)?)?;
     m.add_function(wrap_pyfunction!(load_text, m)?)?;
     m.add_function(wrap_pyfunction!(bytes_to_floats, m)?)?;
+    m.add_function(wrap_pyfunction!(from_buffer_typed, m)?)?;
+    m.add_function(wrap_pyfunction!(isum, m)?)?;
+    m.add_function(wrap_pyfunction!(imax, m)?)?;
     m.add_function(wrap_pyfunction!(savez_npz, m)?)?;
     m.add_function(wrap_pyfunction!(load_npz, m)?)?;
     m.add_function(wrap_pyfunction!(polyval_rs, m)?)?;
