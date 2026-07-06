@@ -1,7 +1,7 @@
 use ndarray::{Array, ArrayViewD, Axis, IxDyn, Slice};
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyFloat, PyList, PySlice, PyTuple};
+use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PySlice, PyTuple};
 use rayon::prelude::*;
 use std::fmt::Write;
 
@@ -15,11 +15,28 @@ pub(crate) fn parse_py_list_to_flat(data: &Bound<'_, PyAny>) -> PyResult<(Vec<f6
         return Ok((vec![val], vec![]));
     }
     if let Ok(list) = data.cast::<PyList>() {
-        if list.is_empty() {
+        let n = list.len();
+        if n == 0 {
             return Ok((vec![], vec![0]));
         }
-        let mut all_values = Vec::with_capacity(list.len());
-        let mut child_shapes: Vec<Vec<usize>> = Vec::with_capacity(list.len());
+        // 快速路径：扁平标量列表 —— 避免为每个元素分配小 Vec。
+        let mut flat = Vec::with_capacity(n);
+        let mut all_scalar = true;
+        for item in list.iter() {
+            match item.extract::<f64>() {
+                Ok(v) => flat.push(v),
+                Err(_) => {
+                    all_scalar = false;
+                    break;
+                }
+            }
+        }
+        if all_scalar {
+            return Ok((flat, vec![n]));
+        }
+        // 通用路径：嵌套结构。
+        let mut all_values = Vec::with_capacity(n);
+        let mut child_shapes: Vec<Vec<usize>> = Vec::with_capacity(n);
         for item in list.iter() {
             let (vals, shape) = parse_py_list_to_flat(&item)?;
             all_values.extend(vals);
@@ -45,6 +62,146 @@ pub(crate) fn parse_py_list_to_flat(data: &Bound<'_, PyAny>) -> PyResult<(Vec<f6
     } else {
         Err(PyTypeError::new_err("Unsupported data type"))
     }
+}
+
+/// 元素类型标记：跟踪展平数据中出现过的 Python 标量类别。
+#[derive(Clone, Copy, Default)]
+struct TypeFlags {
+    has_float: bool,
+    has_int: bool,
+    has_bool: bool,
+}
+
+impl TypeFlags {
+    fn merge(&mut self, o: TypeFlags) {
+        self.has_float |= o.has_float;
+        self.has_int |= o.has_int;
+        self.has_bool |= o.has_bool;
+    }
+
+    /// 与 Python 侧 `_infer_int_dtype` 语义一致的 dtype 编码：
+    /// 0 = float64，1 = int64，2 = bool。
+    fn dtype_code(&self) -> u8 {
+        if self.has_float {
+            0
+        } else if self.has_bool && !self.has_int {
+            2
+        } else {
+            1
+        }
+    }
+}
+
+/// 递归解析 Python 序列（list/tuple）为扁平 f64 数据、形状和类型标记。
+/// 遇到非数值元素（字符串/复数等）返回 TypeError，遇到不规则嵌套返回 ValueError，
+/// 由 Python 侧回退到通用构造路径。
+fn parse_py_categorized(data: &Bound<'_, PyAny>) -> PyResult<(Vec<f64>, Vec<usize>, TypeFlags)> {
+    // bool 是 int 的子类，必须先判定 bool。
+    if let Ok(b) = data.cast::<PyBool>() {
+        let v = if b.is_true() { 1.0 } else { 0.0 };
+        return Ok((
+            vec![v],
+            vec![],
+            TypeFlags {
+                has_bool: true,
+                ..Default::default()
+            },
+        ));
+    }
+    if data.cast::<PyInt>().is_ok() {
+        let v: f64 = data.extract()?;
+        return Ok((
+            vec![v],
+            vec![],
+            TypeFlags {
+                has_int: true,
+                ..Default::default()
+            },
+        ));
+    }
+    if data.cast::<PyFloat>().is_ok() {
+        let v: f64 = data.extract()?;
+        return Ok((
+            vec![v],
+            vec![],
+            TypeFlags {
+                has_float: true,
+                ..Default::default()
+            },
+        ));
+    }
+    let items: Vec<Bound<'_, PyAny>> = if let Ok(list) = data.cast::<PyList>() {
+        list.iter().collect()
+    } else if let Ok(tuple) = data.cast::<PyTuple>() {
+        tuple.iter().collect()
+    } else {
+        return Err(PyTypeError::new_err("non-numeric element"));
+    };
+    let n = items.len();
+    if n == 0 {
+        return Ok((vec![], vec![0], TypeFlags::default()));
+    }
+    // 快速路径：扁平标量序列。
+    let mut flat = Vec::with_capacity(n);
+    let mut flags = TypeFlags::default();
+    let mut all_scalar = true;
+    for item in &items {
+        if let Ok(b) = item.cast::<PyBool>() {
+            flat.push(if b.is_true() { 1.0 } else { 0.0 });
+            flags.has_bool = true;
+        } else if item.cast::<PyInt>().is_ok() {
+            flat.push(item.extract::<f64>()?);
+            flags.has_int = true;
+        } else if item.cast::<PyFloat>().is_ok() {
+            flat.push(item.extract::<f64>()?);
+            flags.has_float = true;
+        } else {
+            all_scalar = false;
+            break;
+        }
+    }
+    if all_scalar {
+        return Ok((flat, vec![n], flags));
+    }
+    // 通用路径：嵌套序列。
+    let mut all_values = Vec::with_capacity(n);
+    let mut child_shapes: Vec<Vec<usize>> = Vec::with_capacity(n);
+    let mut merged = TypeFlags::default();
+    for item in &items {
+        let (vals, shape, f) = parse_py_categorized(item)?;
+        all_values.extend(vals);
+        child_shapes.push(shape);
+        merged.merge(f);
+    }
+    let first_shape = &child_shapes[0];
+    for shape in &child_shapes {
+        if *shape != *first_shape {
+            return Err(PyValueError::new_err(
+                "All sub-arrays must have the same shape",
+            ));
+        }
+    }
+    let mut shape = vec![n];
+    if !first_shape.is_empty() && first_shape[0] != 0 {
+        shape.extend(first_shape);
+    } else if first_shape.len() == 1 && first_shape[0] == 0 {
+        shape.push(0);
+    }
+    Ok((all_values, shape, merged))
+}
+
+/// 在 Rust 中单次完成展平 + dtype 推断，构造数组并返回 dtype 编码。
+/// 非数值/不规则数据返回错误，由 Python 侧回退。
+#[pyfunction]
+fn build_array(data: &Bound<'_, PyAny>) -> PyResult<(NdArray, u8)> {
+    let (values, shape, flags) = parse_py_categorized(data)?;
+    let arr = if shape.is_empty() {
+        Array::from_shape_vec(IxDyn(&[]), values)
+    } else {
+        Array::from_shape_vec(IxDyn(&shape), values)
+    }
+    .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok((NdArray { data: arr }, flags.dtype_code()))
 }
 
 fn shape_to_vec(shape: &Bound<'_, PyAny>) -> PyResult<Vec<usize>> {
@@ -467,6 +624,12 @@ impl NdArray {
         let py = slf.py();
         let s = slf.borrow().data.shape().to_vec();
         Ok(vec_usize_to_pytuple(py, &s).into_any())
+    }
+
+    // NumPy 数组接口协议：底层恒为 f64，暴露为 '<f8' 供真实 numpy/matplotlib 直接消费。
+    #[getter]
+    fn __array_interface__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        build_array_interface(py, &self.data, "<f8")
     }
 
     #[getter]
@@ -5189,6 +5352,78 @@ fn from_buffer_typed(bytes: &[u8], typestr: &str, shape: Vec<usize>) -> PyResult
     Ok(NdArray { data: arr })
 }
 
+// ========== f64 数组 → 指定 dtype 的原始字节（供 __array_interface__ 与 numpy 互操作） ==========
+fn put_scalar_bytes(out: &mut Vec<u8>, le: &[u8], little: bool) {
+    if little {
+        out.extend_from_slice(le);
+    } else {
+        let mut b = le.to_vec();
+        b.reverse();
+        out.extend_from_slice(&b);
+    }
+}
+
+// 底层数据恒为 f64；按 typestr 目标类型逐元素编码（浮点→整数 `as` 转换在越界/NaN 时饱和）。
+fn encode_scalar(out: &mut Vec<u8>, kind: char, itemsize: usize, little: bool, v: f64) -> bool {
+    match (kind, itemsize) {
+        ('f', 8) => put_scalar_bytes(out, &v.to_le_bytes(), little),
+        ('f', 4) => put_scalar_bytes(out, &(v as f32).to_le_bytes(), little),
+        ('i', 8) => put_scalar_bytes(out, &(v as i64).to_le_bytes(), little),
+        ('i', 4) => put_scalar_bytes(out, &(v as i32).to_le_bytes(), little),
+        ('i', 2) => put_scalar_bytes(out, &(v as i16).to_le_bytes(), little),
+        ('i', 1) => out.push((v as i8) as u8),
+        ('u', 8) => put_scalar_bytes(out, &(v as u64).to_le_bytes(), little),
+        ('u', 4) => put_scalar_bytes(out, &(v as u32).to_le_bytes(), little),
+        ('u', 2) => put_scalar_bytes(out, &(v as u16).to_le_bytes(), little),
+        ('u', 1) => out.push(v as u8),
+        ('b', 1) => out.push(if v != 0.0 { 1 } else { 0 }),
+        _ => return false,
+    }
+    true
+}
+
+fn encode_f64_array(data: &Array<f64, IxDyn>, typestr: &str) -> PyResult<Vec<u8>> {
+    let chars: Vec<char> = typestr.chars().collect();
+    let byteorder = chars.first().copied().unwrap_or('|');
+    let kind = *chars
+        .get(1)
+        .ok_or_else(|| PyValueError::new_err("invalid array interface typestr"))?;
+    let itemsize: usize = typestr[2..]
+        .parse()
+        .map_err(|_| PyValueError::new_err("invalid array interface typestr"))?;
+    let little = byteorder != '>';
+    let mut out = Vec::with_capacity(data.len() * itemsize.max(1));
+    for &v in data.iter() {
+        if !encode_scalar(&mut out, kind, itemsize, little, v) {
+            return Err(PyValueError::new_err("unsupported array interface typestr"));
+        }
+    }
+    Ok(out)
+}
+
+fn build_array_interface<'py>(
+    py: Python<'py>,
+    data: &Array<f64, IxDyn>,
+    typestr: &str,
+) -> PyResult<Bound<'py, PyDict>> {
+    let dict = PyDict::new(py);
+    let shape = data.shape().to_vec();
+    dict.set_item("shape", vec_usize_to_pytuple(py, &shape))?;
+    dict.set_item("typestr", typestr)?;
+    let bytes = encode_f64_array(data, typestr)?;
+    dict.set_item("data", PyBytes::new(py, &bytes))?;
+    dict.set_item("version", 3)?;
+    Ok(dict)
+}
+
+// 供 Python 包装层按其追踪的 dtype 构建数组接口（底层 f64 → 目标类型字节）。
+#[pyfunction]
+fn array_interface<'py>(arr: &Bound<'py, NdArray>, typestr: &str) -> PyResult<Bound<'py, PyDict>> {
+    let py = arr.py();
+    let borrowed = arr.borrow();
+    build_array_interface(py, &borrowed.data, typestr)
+}
+
 // ========== 整数序列归约（供 Python 层替代内置 sum/max，避免依赖 builtins 模块） ==========
 #[pyfunction]
 fn isum(values: Vec<i64>) -> i64 {
@@ -5844,6 +6079,7 @@ fn _format_int_val_str(arr: &NdArray) -> String {
 
 fn init_array_creation(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(array, m)?)?;
+    m.add_function(wrap_pyfunction!(build_array, m)?)?;
     m.add_function(wrap_pyfunction!(zeros, m)?)?;
     m.add_function(wrap_pyfunction!(ones, m)?)?;
     m.add_function(wrap_pyfunction!(eye, m)?)?;
@@ -6021,6 +6257,7 @@ fn init_io_and_poly(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(load_text, m)?)?;
     m.add_function(wrap_pyfunction!(bytes_to_floats, m)?)?;
     m.add_function(wrap_pyfunction!(from_buffer_typed, m)?)?;
+    m.add_function(wrap_pyfunction!(array_interface, m)?)?;
     m.add_function(wrap_pyfunction!(isum, m)?)?;
     m.add_function(wrap_pyfunction!(imax, m)?)?;
     m.add_function(wrap_pyfunction!(savez_npz, m)?)?;
