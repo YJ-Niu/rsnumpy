@@ -318,7 +318,7 @@ class ndarray:
             key = (_ndarray_to_index_list(key)
                    if hasattr(key, '_array') else key,)
         if isinstance(key, tuple):
-            _core.setitem_multi(self._array, key, list(self.shape), value)
+            _core.setitem_multi(self._array, key, list(self.shape), _setitem_value(value))
         else:
             self._array[key] = value
 
@@ -1209,6 +1209,18 @@ def _has_string(data):
     """检查（展平后的）数据中是否包含字符串。"""
     flat, _ = _flatten_check(data)
     return any(isinstance(v, str) for v in flat)
+
+
+def _setitem_value(value):
+    """规范化赋值右值供 Rust setitem_multi 使用：
+    标量原样返回；ndarray 或嵌套列表展平为 C 序浮点列表（逐元素赋值）。"""
+    if _is_ndarray(value):
+        return [float(v) for v in _flatten_data(value._array.tolist())]
+    if value.__class__.__name__ == 'ndarray' and hasattr(value, 'tolist'):
+        return [float(v) for v in _flatten_data(value.tolist())]
+    if isinstance(value, (list, tuple)):
+        return [float(v) for v in _flatten_data(value)]
+    return value
 
 
 # 数组接口协议 typestr 的 (kind, itemsize) → rsnumpy dtype 名称

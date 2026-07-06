@@ -388,22 +388,34 @@ pub fn setitem_multi(
     let dim_lists = build_dim_lists(&filled_indices);
     let strides = compute_strides(&shape);
 
-    let val: f64 = if let Ok(v) = value.extract::<f64>() {
-        v
-    } else if let Ok(v) = value.extract::<i32>() {
-        v as f64
+    // 赋值右值：标量 → 广播到所有目标位置；扁平列表 → 按 C 序逐元素赋值。
+    let values: Vec<f64> = if let Ok(v) = value.extract::<f64>() {
+        vec![v]
     } else if let Ok(v) = value.extract::<bool>() {
-        if v { 1.0 } else { 0.0 }
+        vec![if v { 1.0 } else { 0.0 }]
+    } else if let Ok(v) = value.extract::<Vec<f64>>() {
+        v
     } else {
         return Err(PyTypeError::new_err(
             "Unsupported value type for assignment",
         ));
     };
 
+    let target_count: usize = dim_lists.iter().map(|d| d.len()).product();
+    let broadcast = values.len() == 1;
+    if !broadcast && values.len() != target_count {
+        return Err(PyValueError::new_err(format!(
+            "could not broadcast input array of size {} into selection of size {}",
+            values.len(),
+            target_count
+        )));
+    }
+
     let mut a_borrow = a.borrow_mut();
     let data = a_borrow.data.as_slice_memory_order_mut().unwrap();
 
     let mut indices = vec![0; dim_lists.len()];
+    let mut counter = 0usize;
 
     loop {
         let mut flat_idx = 0;
@@ -411,8 +423,9 @@ pub fn setitem_multi(
             flat_idx += dim_lists[i][idx] * strides[i];
         }
         if flat_idx < data.len() {
-            data[flat_idx] = val;
+            data[flat_idx] = if broadcast { values[0] } else { values[counter] };
         }
+        counter += 1;
 
         let mut i = dim_lists.len() as isize - 1;
         while i >= 0 {
