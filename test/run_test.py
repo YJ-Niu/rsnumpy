@@ -1,5 +1,4 @@
 import rsnumpy as np
-import numpy as np2
 import time
 
 start_time = time.time()
@@ -20,7 +19,6 @@ a = np.array([('abc', 21, 50), ('xyz', 18, 75)], dtype=student)
 print(a)
 
 a = np.arange(15).reshape(3, 5)
-# b = np2.arange(15).reshape(3, 5)
 print(a)
 # print(b)
 # print(np.array_equal(a, b))  # True
@@ -274,7 +272,6 @@ bb = np.tile(b, (4, 1))  # 重复 b 的各个维度
 print(a + bb)
 
 a = np.arange(6).reshape(2, 3)
-# b = np2.arange(6).reshape(2, 3)
 print('原始数组是：')
 print(a)
 print('\n')
@@ -283,9 +280,6 @@ for x in np.nditer(a):
     print(x, end=", ")
 print('\n')
 
-# for x in np2.nditer(b):
-#     print(x, end=", ")
-# print('\n')
 
 c = np.array([1.3, 2.4, 3.5])
 for x in np.nditer(c):
@@ -1440,7 +1434,6 @@ print(np.extract(condition, x))
 
 mark_print()
 a = np.array([1, 256, 8755], dtype=np.int16)
-b = np2.array([1, 256, 8755], dtype=np.int16)
 print('我们的数组是：')
 print(a)
 print('以十六进制表示内存中的数据：')
