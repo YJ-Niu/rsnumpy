@@ -12,7 +12,6 @@ Examples:
     2.0
 """
 
-import builtins
 import rsnumpy._core as _core
 from rsnumpy._core import ndarray_iter as NdArrayIter
 # ========== 子模块导入和函数挂载 ==========
@@ -29,7 +28,7 @@ from .random import random_module as _random_module
 from . import char as _char_module
 from . import matlib as _matlib_module
 
-__version__ = "1.0.3"
+__version__ = "1.0.5"
 
 class ArrayFlags:
     """数组内存布局信息，与 NumPy 的 np.ndarray.flags 兼容。"""
@@ -119,6 +118,9 @@ class ndarray:
             if _raw_data is not None:
                 # 原始数据存储：用一个虚拟 Rust 数组占位
                 self._array = _core.zeros((len(data),) if isinstance(data, (list, tuple)) else (1,))
+            elif not isinstance(data, (list, tuple)) and hasattr(data, '__array_interface__'):
+                # 实现数组接口协议的对象（如 PIL 图像）→ 由 Rust 底层解码缓冲区
+                self._array, _dtype = _from_array_interface(data)
             else:
                 if isinstance(data, tuple):
                     data = list(data)
@@ -126,6 +128,11 @@ class ndarray:
                     # 不规则列表（子列表长度不同），存储为原始数据
                     self._raw_data = data
                     self._array = _core.zeros((len(data),))
+                elif _has_string(data):
+                    # 字符串数据 → 存储为原始 Python 数据
+                    self._raw_data = list(data) if isinstance(data, (list, tuple)) else [data]
+                    self._array = _core.zeros((len(self._raw_data),))
+                    _dtype = "string_"
                 elif _has_complex(data):
                     # 包含复数 → 存储为 _complex_data
                     flat = _flatten_data(data)
@@ -274,7 +281,7 @@ class ndarray:
         # 展开省略号（...），补充完整切片以匹配数组维度
         if isinstance(key, tuple):
             new_key = []
-            ellipsis_count = builtins.sum(1 for k in key if k is Ellipsis)
+            ellipsis_count = _core.isum([1 for k in key if k is Ellipsis])
             if ellipsis_count > 0:
                 non_ellipsis = [k for k in key if k is not Ellipsis]
                 fill = self.ndim - len(non_ellipsis)
@@ -311,7 +318,7 @@ class ndarray:
             key = (_ndarray_to_index_list(key)
                    if hasattr(key, '_array') else key,)
         if isinstance(key, tuple):
-            _core.setitem_multi(self._array, key, list(self.shape), value)
+            _core.setitem_multi(self._array, key, list(self.shape), _setitem_value(value))
         else:
             self._array[key] = value
 
@@ -916,7 +923,7 @@ class _float64:
 def _format_float_repr_1d(values):
     """格式化 1D float64 数组的 repr，带逗号和对齐（匹配 NumPy）。"""
     fmt = [format_float_scalar(v) for v in values]
-    max_w = builtins.max(len(f) for f in fmt) if fmt else 0
+    max_w = _core.imax([len(f) for f in fmt]) if fmt else 0
     parts = [f.rjust(max_w) for f in fmt]
     return "[" + ", ".join(parts) + "]"
 
@@ -1196,6 +1203,57 @@ def _flatten_data(data):
     """展平嵌套的可迭代对象为扁平列表。"""
     flat, _ = _flatten_check(data)
     return flat
+
+
+def _has_string(data):
+    """检查（展平后的）数据中是否包含字符串。"""
+    flat, _ = _flatten_check(data)
+    return any(isinstance(v, str) for v in flat)
+
+
+def _setitem_value(value):
+    """规范化赋值右值供 Rust setitem_multi 使用：
+    标量原样返回；ndarray 或嵌套列表展平为 C 序浮点列表（逐元素赋值）。"""
+    if _is_ndarray(value):
+        return [float(v) for v in _flatten_data(value._array.tolist())]
+    if value.__class__.__name__ == 'ndarray' and hasattr(value, 'tolist'):
+        return [float(v) for v in _flatten_data(value.tolist())]
+    if isinstance(value, (list, tuple)):
+        return [float(v) for v in _flatten_data(value)]
+    return value
+
+
+# 数组接口协议 typestr 的 (kind, itemsize) → rsnumpy dtype 名称
+_ARRAY_INTERFACE_DTYPE = {
+    ('b', 1): 'bool',
+    ('u', 1): 'uint8', ('i', 1): 'int8',
+    ('u', 2): 'uint16', ('i', 2): 'int16',
+    ('u', 4): 'uint32', ('i', 4): 'int32',
+    ('u', 8): 'uint64', ('i', 8): 'int64',
+    ('f', 4): 'float32', ('f', 8): 'float64',
+}
+
+
+def _from_array_interface(obj):
+    """将实现数组接口协议的对象（如 PIL 图像）解码为 (Rust 数组, dtype)。
+
+    缓冲区的字节解码由 Rust 底层 `_core.from_buffer_typed` 完成。
+    """
+    ai = obj.__array_interface__
+    shape = tuple(ai['shape'])
+    typestr = ai['typestr']
+    data = ai['data']
+    if isinstance(data, tuple):
+        # (指针, 只读标志) 形式，无法直接读取 → 退回到 tobytes()
+        data = obj.tobytes()
+    elif not isinstance(data, (bytes, bytearray)):
+        data = bytes(data)
+    kind, itemsize = typestr[1], int(typestr[2:])
+    dtype = _ARRAY_INTERFACE_DTYPE.get((kind, itemsize))
+    if dtype is None:
+        raise TypeError(f"Unsupported array interface type: {typestr}")
+    arr = _core.from_buffer_typed(bytes(data), typestr, list(shape))
+    return arr, dtype
 
 
 def _is_rectangular(data):
@@ -1843,12 +1901,12 @@ def nditer(a, order='C', op_flags=None, flags=None):
         arrays = [ndarray(x) for x in a]
         # 计算广播形状：每个维度取最大值
         all_shapes = [x.shape for x in arrays]
-        max_ndim = builtins.max(len(s) for s in all_shapes)
+        max_ndim = _core.imax([len(s) for s in all_shapes])
         padded = []
         for s in all_shapes:
             pad = [1] * (max_ndim - len(s)) + list(s)
             padded.append(pad)
-        bcast_shape = tuple(builtins.max(p[i] for p in padded) for i in range(max_ndim))
+        bcast_shape = tuple(_core.imax([p[i] for p in padded]) for i in range(max_ndim))
         # 广播每个数组到统一形状
         bcast_arrays = []
         for arr in arrays:
@@ -1909,7 +1967,7 @@ def nditer(a, order='C', op_flags=None, flags=None):
         def _iter_f_order(dim, coords):
             if dim < 0:
                 # coords 是反向顺序 [last_dim, ..., first_dim]，需反转
-                idx = builtins.sum(c * s for c, s in zip(reversed(coords), c_strides))
+                idx = _core.isum([c * s for c, s in zip(reversed(coords), c_strides)])
                 if 0 <= idx < size:
                     val = flat_arr[idx].item()
                     yield _to_val(val, idx)
@@ -1960,7 +2018,7 @@ def iscomplex(x):
 
 def _broadcast_shape(*shapes):
     """计算多个数组的广播形状。"""
-    max_ndim = builtins.max(len(s) for s in shapes)
+    max_ndim = _core.imax([len(s) for s in shapes])
     result = []
     for i in range(max_ndim):
         dims = set()

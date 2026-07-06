@@ -39,6 +39,9 @@ push*.sh
 main*.py
 debug*.py
 check*.py
+test2*.py
+map*.jpeg
+*.png
 
 # Environment
 .venv
