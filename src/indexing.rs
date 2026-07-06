@@ -423,7 +423,11 @@ pub fn setitem_multi(
             flat_idx += dim_lists[i][idx] * strides[i];
         }
         if flat_idx < data.len() {
-            data[flat_idx] = if broadcast { values[0] } else { values[counter] };
+            data[flat_idx] = if broadcast {
+                values[0]
+            } else {
+                values[counter]
+            };
         }
         counter += 1;
 

@@ -103,6 +103,14 @@ else
   exit 1
 fi
 
+# ========== 构建前的 Fmt 静态检查（-check：任何错误都当作错误） ==========
+echo "Running fmt checks (cargo fmt --all -- --check) ..."
+if ! cargo fmt --all -- --check; then
+  echo "Error: fmt checks failed. Fix the warnings above before building." >&2
+  exit 1
+fi
+echo "  -> fmt checks passed."
+
 # ========== 构建前的 Clippy 静态检查（-D warnings：任何告警都当作错误） ==========
 echo "Running clippy checks (cargo clippy --all-targets -- -D warnings) ..."
 if ! cargo clippy --all-targets -- -D warnings; then
