@@ -390,6 +390,18 @@ class ndarray:
             return _wrap_result(_core.power(self._array, other._array), self._dtype)
         return _wrap_result(_core.power(self._array, _core.ndarray([other])), self._dtype)
 
+    def __neg__(self):
+        """逐元素取负（- 运算符）。"""
+        return _wrap_result(self._array * -1, self._dtype)
+
+    def __pos__(self):
+        """一元正号（+ 运算符），返回副本。"""
+        return _wrap_result(self._array.copy(), self._dtype)
+
+    def __abs__(self):
+        """逐元素绝对值（内建 abs() 函数）。"""
+        return _wrap_result(_core.abs(self._array), self._dtype)
+
     def __eq__(self, other):
         if _is_ndarray(other):
             return _wrap_result(self._array.__eq__(other._array), "bool")
