@@ -4129,26 +4129,160 @@ fn bincount(x: &NdArray, minlength: usize) -> NdArray {
 #[pyfunction]
 #[pyo3(signature = (element, test, invert=false))]
 fn isin(element: &NdArray, test: &NdArray, invert: bool) -> NdArray {
-    use ::std::collections::HashSet;
-    let mut set: HashSet<u64> = HashSet::with_capacity(test.data.len());
-    for &v in test.data.iter() {
-        if v.is_nan() {
-            continue;
-        }
-        let key = if v == 0.0 { 0u64 } else { v.to_bits() };
-        set.insert(key);
-    }
+    let mut keys: Vec<f64> = test
+        .data
+        .iter()
+        .filter(|v| !v.is_nan())
+        .map(|&v| if v == 0.0 { 0.0 } else { v })
+        .collect();
+    keys.sort_by(|a, b| a.total_cmp(b));
+    keys.dedup();
+    // 小 test 集：线性 `==` 扫描（缓存友好，避免 total_cmp 位运算），与 numpy 暴力路径一致；
+    // 大集用排序 + 二分查找 O(n log m)。
+    let small = keys.len() <= 16;
     let data = element.data.mapv(|v| {
         let present = if v.is_nan() {
             false
         } else {
-            let key = if v == 0.0 { 0u64 } else { v.to_bits() };
-            set.contains(&key)
+            let nv = if v == 0.0 { 0.0 } else { v };
+            if small {
+                keys.contains(&nv)
+            } else {
+                keys.binary_search_by(|p| p.total_cmp(&nv)).is_ok()
+            }
         };
         let res = if invert { !present } else { present };
         if res { 1.0 } else { 0.0 }
     });
     NdArray { data }
+}
+
+// 升序排序 + 去重（-0.0 归一为 +0.0，NaN 视为相等只保留其一）。
+fn sorted_unique_vec(vals: &[f64]) -> Vec<f64> {
+    let mut v: Vec<f64> = vals
+        .iter()
+        .map(|&x| if x == 0.0 { 0.0 } else { x })
+        .collect();
+    v.sort_by(|a, b| a.total_cmp(b));
+    v.dedup_by(|a, b| a == b || (a.is_nan() && b.is_nan()));
+    v
+}
+
+fn vec_to_1d(vals: Vec<f64>) -> NdArray {
+    let n = vals.len();
+    NdArray {
+        data: Array::from_shape_vec(IxDyn(&[n]), vals).unwrap(),
+    }
+}
+
+#[pyfunction]
+fn intersect1d(ar1: &NdArray, ar2: &NdArray) -> NdArray {
+    let a = sorted_unique_vec(&ar1.data.iter().copied().collect::<Vec<f64>>());
+    let b = sorted_unique_vec(&ar2.data.iter().copied().collect::<Vec<f64>>());
+    let (mut i, mut j) = (0usize, 0usize);
+    let mut out = Vec::new();
+    while i < a.len() && j < b.len() {
+        match a[i].total_cmp(&b[j]) {
+            ::std::cmp::Ordering::Less => i += 1,
+            ::std::cmp::Ordering::Greater => j += 1,
+            ::std::cmp::Ordering::Equal => {
+                out.push(a[i]);
+                i += 1;
+                j += 1;
+            }
+        }
+    }
+    vec_to_1d(out)
+}
+
+#[pyfunction]
+fn union1d(ar1: &NdArray, ar2: &NdArray) -> NdArray {
+    let mut all: Vec<f64> = ar1.data.iter().copied().collect();
+    all.extend(ar2.data.iter().copied());
+    vec_to_1d(sorted_unique_vec(&all))
+}
+
+#[pyfunction]
+fn setdiff1d(ar1: &NdArray, ar2: &NdArray) -> NdArray {
+    let a = sorted_unique_vec(&ar1.data.iter().copied().collect::<Vec<f64>>());
+    let b = sorted_unique_vec(&ar2.data.iter().copied().collect::<Vec<f64>>());
+    let (mut i, mut j) = (0usize, 0usize);
+    let mut out = Vec::new();
+    while i < a.len() {
+        if j >= b.len() {
+            out.push(a[i]);
+            i += 1;
+            continue;
+        }
+        match a[i].total_cmp(&b[j]) {
+            ::std::cmp::Ordering::Less => {
+                out.push(a[i]);
+                i += 1;
+            }
+            ::std::cmp::Ordering::Greater => j += 1,
+            ::std::cmp::Ordering::Equal => {
+                i += 1;
+                j += 1;
+            }
+        }
+    }
+    vec_to_1d(out)
+}
+
+#[pyfunction]
+fn setxor1d(ar1: &NdArray, ar2: &NdArray) -> NdArray {
+    let a = sorted_unique_vec(&ar1.data.iter().copied().collect::<Vec<f64>>());
+    let b = sorted_unique_vec(&ar2.data.iter().copied().collect::<Vec<f64>>());
+    let (mut i, mut j) = (0usize, 0usize);
+    let mut out = Vec::new();
+    while i < a.len() && j < b.len() {
+        match a[i].total_cmp(&b[j]) {
+            ::std::cmp::Ordering::Less => {
+                out.push(a[i]);
+                i += 1;
+            }
+            ::std::cmp::Ordering::Greater => {
+                out.push(b[j]);
+                j += 1;
+            }
+            ::std::cmp::Ordering::Equal => {
+                i += 1;
+                j += 1;
+            }
+        }
+    }
+    out.extend_from_slice(&a[i..]);
+    out.extend_from_slice(&b[j..]);
+    vec_to_1d(out)
+}
+
+// unique 的一次遍历实现：返回 [唯一值, 首次出现索引, 逆索引, 计数]。
+// uniq 已升序，逆索引用二分查找 O(n log u)，避免 unique_full 中 O(n*u) 的线性扫描。
+#[pyfunction]
+fn unique_all_rs(x: &NdArray) -> Vec<NdArray> {
+    let data: Vec<f64> = x
+        .data
+        .iter()
+        .map(|&v| if v == 0.0 { 0.0 } else { v })
+        .collect();
+    let uniq = sorted_unique_vec(&data);
+    let mut counts = vec![0.0f64; uniq.len()];
+    let mut first = vec![-1.0f64; uniq.len()];
+    let mut inverse = Vec::with_capacity(data.len());
+    for (idx, &v) in data.iter().enumerate() {
+        let i = uniq.partition_point(|p| p.total_cmp(&v) == ::std::cmp::Ordering::Less);
+        inverse.push(i as f64);
+        counts[i] += 1.0;
+        if first[i] < 0.0 {
+            first[i] = idx as f64;
+        }
+    }
+    vec![
+        vec_to_1d(uniq),
+        vec_to_1d(first),
+        vec_to_1d(inverse),
+        vec_to_1d(counts),
+    ]
 }
 
 #[pyfunction]
@@ -6242,6 +6376,11 @@ fn init_math_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(spacing, m)?)?;
     m.add_function(wrap_pyfunction!(bincount, m)?)?;
     m.add_function(wrap_pyfunction!(isin, m)?)?;
+    m.add_function(wrap_pyfunction!(intersect1d, m)?)?;
+    m.add_function(wrap_pyfunction!(union1d, m)?)?;
+    m.add_function(wrap_pyfunction!(setdiff1d, m)?)?;
+    m.add_function(wrap_pyfunction!(setxor1d, m)?)?;
+    m.add_function(wrap_pyfunction!(unique_all_rs, m)?)?;
     Ok(())
 }
 

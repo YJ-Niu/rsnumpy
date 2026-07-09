@@ -1,6 +1,6 @@
 import rsnumpy as np
 import time
-
+import math
 
 start_time = time.time()
 
@@ -1671,6 +1671,88 @@ print(b)
 print(np.__version__)
 print('\n')
 
+def run_test():
+    print("\n------------------------")
+
+
+run_test()
+a = np.array([[1, 2, 3],
+              [4, 5, 6]])
+print(a.shape)
+a = np.array([1, 2, 3, 4, 5, 6])
+a[0] = 10
+print("a: ", a)
+print("a[:3]: ", a[:3])
+b = a[3:]
+print("b: ", b)
+b[0] = 40
+print("a: ", a)
+print("b: ", b)
+a = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
+print("a.ndim: ", a.ndim)
+print("a[1, 3]: ", a[1, 3])
+print("a.shape: ", a.shape)
+print("len(a.shape) == a.ndim: ", len(a.shape) == a.ndim)
+print("a.size: ", a.size)
+print("a.size == math.prod(a.shape): ", a.size == math.prod(a.shape))
+print("a.dtype: ", a.dtype)
+print("np.zeros(2): ", np.zeros(2))
+print("np.ones(2): ", np.ones(2))
+print("np.empty(2): ", np.empty(2))
+print("np.arange(4): ", np.arange(4))
+print("np.arange(2, 9, 2): ", np.arange(2, 9, 2))
+print("np.linspace(0, 10, num=5): ", np.linspace(0, 10, num=5))
+x = np.ones(2, dtype=np.int64)
+print("x: ", x)
+arr = np.array([2, 1, 5, 3, 7, 4, 6, 8])
+ss = np.sort(arr)
+print("np.sort(arr): ", ss)
+a = np.array([1, 2, 3, 4])
+b = np.array([5, 6, 7, 8])
+np.concatenate((a, b))
+print("np.concatenate((a, b)): ", np.concatenate((a, b)))
+x = np.array([[1, 2], [3, 4]])
+y = np.array([[5, 6]])
+print("np.concatenate((x, y), axis=0): \n", np.concatenate((x, y), axis=0))
+array_example = np.array([[[0, 1, 2, 3],
+                           [4, 5, 6, 7]],
+                          [[0, 1, 2, 3],
+                           [4, 5, 6, 7]],
+                          [[0, 1, 2, 3],
+                           [4, 5, 6, 7]]])
+print("array_example.ndim: ", array_example.ndim)
+print("array_example.shape: ", array_example.shape)
+print("array_example.size: ", array_example.size)
+print("array_example.dtype: ", array_example.dtype)
+print("array_example: ", array_example)
+a = np.arange(6)
+print("a: ", a)
+b = a.reshape(3, 2)
+print("b: ", b)
+print("np.reshape(a, shape=(1, 6), order='C'): ", np.reshape(a, shape=(1, 6), order='C'))
+a = np.array([1, 2, 3, 4, 5, 6])
+print("a.shape: ", a.shape)
+a2 = a[np.newaxis, :]
+print("a2.shape: ", a2.shape)
+row_vector = a[np.newaxis, :]
+print("row_vector.shape: ", row_vector.shape)
+col_vector = a[:, np.newaxis]
+print("col_vector.shape: ", col_vector.shape)
+a = np.array([1, 2, 3, 4, 5, 6])
+print("a.shape: ", a.shape)
+b = np.expand_dims(a, axis=1)
+print("b.shape: ", b.shape)
+c = np.expand_dims(a, axis=0)
+print("c.shape: ", c.shape)
+data = np.array([1, 2, 3])
+print("data[1]: ", data[1])
+print("data[0:2]: ", data[0:2])
+print("data[1:]: ", data[1:])
+print("data[-2:]: ", data[-2:])
+a = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
+print("a[a < 5]: ", a[a < 5])
+five_up = (a >= 5)
+print("a[five_up]: ", a[five_up])
 end_time = time.time()
 
 print("\n时间：", end_time - start_time)

@@ -41,6 +41,7 @@ debug*.py
 check*.py
 test2*.py
 map*.jpeg
+bench_extra.py
 *.png
 runtest_matplotlib.py
 

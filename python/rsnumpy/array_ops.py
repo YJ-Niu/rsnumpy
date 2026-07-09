@@ -18,15 +18,26 @@ def _ensure_raw(a):
     return _core.ndarray(a)
 
 
-def reshape(a, newshape, order='C'):
-    """改变数组形状而不改变数据。"""
-    if isinstance(newshape, int):
-        newshape = (newshape,)
+def reshape(a, shape=None, order='C', *, newshape=None, copy=None):
+    """改变数组形状而不改变数据。
+
+    shape 为新形状（整数或整数元组）。newshape 为已弃用的旧参数名，
+    order 支持 'C'（行优先）与 'F'（列优先）。
+    """
+    _ = copy
+    if shape is None:
+        shape = newshape
+    if shape is None:
+        raise TypeError("reshape() missing required argument 'shape' (pos 2)")
+    if isinstance(shape, int):
+        shape = (shape,)
+    else:
+        shape = tuple(shape)
     arr = a if hasattr(a, '_array') else _wrap(a)
     if order == 'F':
         flat = arr.ravel(order='F')
-        return _wrap(_core.reshape(flat._array, newshape))
-    return _wrap(_core.reshape(_ensure_raw(a), newshape))
+        return _wrap(_core.reshape(flat._array, shape))
+    return _wrap(_core.reshape(_ensure_raw(a), shape))
 
 
 def ravel(a, order='C'):
