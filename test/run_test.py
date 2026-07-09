@@ -1900,6 +1900,26 @@ a2 = x.ravel()
 a2[0] = 98
 print(x)  # Original array
 print(a2)  # New array
+run_test()
+a1D = np.array([1, 2, 3, 4])
+a2D = np.array([[1, 2], [3, 4]])
+a3D = np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]]])
+a4D = np.array([127, 128, 129], dtype=np.int8)
+print(a4D)
+print(a4D.dtype)
+
+a = np.array([2, 3, 4], dtype=np.uint32)
+b = np.array([5, 6, 7], dtype=np.uint32)
+c_unsigned32 = a - b
+print('unsigned c:', c_unsigned32, c_unsigned32.dtype)
+print(a)
+print(a.astype("int32"))
+c_signed32 = a.astype(np.int32) - b.astype(np.int32)
+print('signed c:', c_signed32, c_signed32.dtype)
+print(np.arange(10))
+print(np.arange(2, 10, dtype=np.float64), np.arange(2, 10, dtype=np.float64).dtype)
+print(np.arange(2, 3, 0.1))
+
 end_time = time.time()
 
 print("\n时间：", end_time - start_time)

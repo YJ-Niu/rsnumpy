@@ -21,7 +21,8 @@ class NdArrayMethods:
     @staticmethod
     def astype(arr, dtype):
         """将数组转换为指定的数据类型。"""
-        return _wrap_result(arr._array.astype(dtype))
+        name = dtype if isinstance(dtype, str) else getattr(dtype, "__name__", str(dtype))
+        return _wrap_result(arr._array.astype(name), dtype=name)
     
     @staticmethod
     def reshape(arr, *shape):
