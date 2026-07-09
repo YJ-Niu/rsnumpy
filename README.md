@@ -27,15 +27,19 @@
 rsnumpy/
 ├── src/                       # Rust 源码
 │   ├── lib.rs                 # 核心 ndarray 与通用函数
+│   ├── indexing.rs            # 多维索引与切片
 │   ├── fft.rs                 # 快速傅里叶变换
 │   ├── linalg.rs              # 线性代数
-│   └── random.rs              # 随机数生成
-├── rsnumpy/                     # Python 薄包装
+│   └── random.rs              # 随机数生成（可复现并行采样）
+├── python/rsnumpy/            # Python 薄包装
 │   ├── __init__.py            # 主模块，整合所有 API
 │   ├── array_methods.py       # ndarray 对象方法
 │   ├── array_ops.py           # 数组操作函数
+│   ├── _extra.py              # 补充 API（别名、nan 系列、集合运算、窗函数等）
 │   ├── math_functions.py      # 数学函数
 │   ├── statistics.py          # 统计函数
+│   ├── char.py                # 字符串数组函数
+│   ├── matlib.py              # 矩阵便捷构造
 │   ├── io.py                  # 文件 I/O
 │   ├── linalg/                # 线性代数子模块
 │   ├── polynomial/            # 多项式子模块
@@ -259,6 +263,8 @@ print(np.random.rand(3).tolist())
 print(np.random.randn(3).tolist())
 ```
 
+> **可复现性**：相同 `seed` 保证生成相同的结果。大数组采样在 Rust 层并行执行，采用固定分块 + `splitmix64` 派生各分块的独立种子，因此**结果与线程数无关**，在不同机器上同样可复现。同一个 `Generator` 每次调用都会推进内部状态，连续调用不会产生重复序列。
+
 #### 5.7 FFT
 
 ```python
@@ -339,6 +345,81 @@ a = np.array([1.0, np.nan, np.inf])
 print(np.isnan(a))     # 逐元素判断
 print(np.isinf(a))
 print(np.isfinite(a))
+```
+
+#### 5.11 日期时间与网格
+
+```python
+import rsnumpy as np
+
+# 日期时间标量（兼容 numpy.datetime64）
+d = np.datetime64('2024-01-01')
+delta = np.timedelta64(7, 'D')          # 7 天
+print(d + delta)                         # numpy.datetime64('2024-01-08')
+print(np.datetime64('2024-01-08') - d)   # numpy.timedelta64(7,'D')
+
+# 用 datetime64/timedelta64 生成日期序列
+days = np.arange(np.datetime64('2024-01-01'),
+                 np.datetime64('2024-01-05'),
+                 np.timedelta64(1, 'D'))
+
+# 坐标网格（默认 'xy' 索引，与 NumPy 一致）
+x = np.array([1, 2, 3])
+y = np.array([10, 20])
+X, Y = np.meshgrid(x, y)
+print(X.tolist())   # [[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]]
+print(Y.tolist())   # [[10.0, 10.0, 10.0], [20.0, 20.0, 20.0]]
+```
+
+#### 5.12 补充 API 覆盖（对齐 NumPy 2.5.1）
+
+在核心 Rust 原语之上，`_extra.py` 补充了约 140 个 NumPy 兼容函数，全部对照 NumPy 2.5.1 逐函数验证通过。计算密集/逐元素部分复用现有 Rust 原语，纯变形与组合类则以薄 Python 包装实现。
+
+```python
+import rsnumpy as np
+
+# 三角/双曲别名（Array API 命名）
+np.acos(1.0); np.asin(0.0); np.atan(1.0); np.atan2(1.0, 1.0)
+np.radians(180.0); np.degrees(np.pi)
+
+# 逐元素数学
+np.hypot(3.0, 4.0)          # 5.0
+np.maximum([1, 5], [3, 2])  # [3, 5]
+np.fmax([np.nan, 2], [1, np.nan])  # 忽略 NaN
+np.logaddexp(0.0, 0.0)      # 数值稳定 log(exp(a)+exp(b))
+np.rint([0.5, 1.5, 2.5])    # 四舍六入五成双 -> [0, 2, 2]
+np.gcd(12, 8); np.lcm(4, 6)
+frac, whole = np.modf([1.5, 2.25])
+
+# nan 系列归约
+a = np.array([1.0, np.nan, 3.0])
+np.nansum(a); np.nanmean(a); np.nanstd(a); np.nanmax(a)
+np.nancumsum(a); np.nanargmax(a)
+np.prod([1, 2, 3, 4])       # 24
+
+# 集合运算
+np.intersect1d([1, 2, 3], [2, 3, 4])  # [2, 3]
+np.union1d([1, 2], [2, 3])            # [1, 2, 3]
+np.setdiff1d([1, 2, 3], [2])          # [1, 3]
+np.isin([1, 2, 5], [1, 5])            # [True, False, True]
+uniq, counts = np.unique_counts([1, 1, 2, 3, 3, 3])
+
+# 变形 / 组合
+np.block([[np.eye(2), np.ones((2, 1))]])
+np.pad([1, 2, 3], (1, 2), mode='reflect')
+np.kron([1, 2], [1, 1])
+np.tensordot(np.ones((2, 3)), np.ones((3, 4)), axes=1)
+
+# 复数
+z = np.array([1 + 2j, 3 - 1j])
+np.real(z); np.imag(z); np.conjugate(z); np.angle(z)
+
+# 信号 / 窗函数 / 插值
+np.convolve([1, 2, 3], [1, 1])
+np.interp(2.5, [1, 2, 3], [10, 20, 30])
+np.hanning(8); np.hamming(8); np.blackman(8); np.bartlett(8)
+np.vander([1, 2, 3], 3)
+np.bincount([0, 1, 1, 2, 2, 2])
 ```
 
 ---
@@ -433,26 +514,32 @@ A: 当前版本仅支持 CPU。
 **Project layout:**
 
 ```
+
 rsnumpy/
-├── src/                       # Rust source
-│   ├── lib.rs                 # Core ndarray & general functions
-│   ├── fft.rs                 # Fast Fourier Transform
-│   ├── linalg.rs              # Linear algebra
-│   └── random.rs              # Random number generation
-├── rsnumpy/                     # Python thin wrappers
-│   ├── __init__.py            # Main module, exports public API
-│   ├── array_methods.py       # ndarray object methods
-│   ├── array_ops.py           # Array manipulation functions
-│   ├── math_functions.py      # Math functions
-│   ├── statistics.py          # Statistics functions
-│   ├── io.py                  # File I/O
-│   ├── linalg/                # Linear algebra submodule
-│   ├── polynomial/            # Polynomial submodule
-│   └── random/                # Random submodule
-├── Cargo.toml                 # Rust dependencies
-├── pyproject.toml             # Python build config
-├── build_wheel.sh             # Build script
-└── README.md                  # This file
+├── src/ # Rust source
+│ ├── lib.rs # Core ndarray & general functions
+│ ├── indexing.rs # Multi-dimensional indexing & slicing
+│ ├── fft.rs # Fast Fourier Transform
+│ ├── linalg.rs # Linear algebra
+│ └── random.rs # Random number generation (reproducible parallel sampling)
+├── python/rsnumpy/ # Python thin wrappers
+│ ├── **init**.py # Main module, exports public API
+│ ├── array_methods.py # ndarray object methods
+│ ├── array_ops.py # Array manipulation functions
+│ ├── _extra.py # Supplementary API (aliases, nan-reductions, set ops, windows, ...)
+│ ├── math_functions.py # Math functions
+│ ├── statistics.py # Statistics functions
+│ ├── char.py # String array functions
+│ ├── matlib.py # Matrix construction helpers
+│ ├── io.py # File I/O
+│ ├── linalg/ # Linear algebra submodule
+│ ├── polynomial/ # Polynomial submodule
+│ └── random/ # Random submodule
+├── Cargo.toml # Rust dependencies
+├── pyproject.toml # Python build config
+├── build_wheel.sh # Build script
+└── README.md # This file
+
 ```
 
 ---
@@ -668,6 +755,8 @@ print(np.random.rand(3).tolist())
 print(np.random.randn(3).tolist())
 ```
 
+> **Reproducibility**: the same `seed` always produces the same result. Large-array sampling runs in parallel on the Rust side using fixed-size chunks with per-chunk seeds derived via `splitmix64`, so results are **independent of the thread count** and reproducible across machines. Each call on a `Generator` advances its internal state, so consecutive calls never repeat the same sequence.
+
 #### 5.7 FFT
 
 ```python
@@ -748,6 +837,81 @@ a = np.array([1.0, np.nan, np.inf])
 print(np.isnan(a))     # element-wise
 print(np.isinf(a))
 print(np.isfinite(a))
+```
+
+#### 5.11 Datetime & meshgrid
+
+```python
+import rsnumpy as np
+
+# Datetime scalars (compatible with numpy.datetime64)
+d = np.datetime64('2024-01-01')
+delta = np.timedelta64(7, 'D')           # 7 days
+print(d + delta)                          # numpy.datetime64('2024-01-08')
+print(np.datetime64('2024-01-08') - d)    # numpy.timedelta64(7,'D')
+
+# Generate a date range with datetime64/timedelta64
+days = np.arange(np.datetime64('2024-01-01'),
+                 np.datetime64('2024-01-05'),
+                 np.timedelta64(1, 'D'))
+
+# Coordinate grids (default 'xy' indexing, matching NumPy)
+x = np.array([1, 2, 3])
+y = np.array([10, 20])
+X, Y = np.meshgrid(x, y)
+print(X.tolist())   # [[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]]
+print(Y.tolist())   # [[10.0, 10.0, 10.0], [20.0, 20.0, 20.0]]
+```
+
+#### 5.12 Supplementary API Coverage (aligned with NumPy 2.5.1)
+
+On top of the core Rust primitives, `_extra.py` adds ~140 NumPy-compatible functions, each verified against NumPy 2.5.1. Compute-heavy / element-wise paths reuse existing Rust primitives, while pure reshaping and composition helpers are implemented as thin Python wrappers.
+
+```python
+import rsnumpy as np
+
+# Trig/hyperbolic aliases (Array API names)
+np.acos(1.0); np.asin(0.0); np.atan(1.0); np.atan2(1.0, 1.0)
+np.radians(180.0); np.degrees(np.pi)
+
+# Element-wise math
+np.hypot(3.0, 4.0)          # 5.0
+np.maximum([1, 5], [3, 2])  # [3, 5]
+np.fmax([np.nan, 2], [1, np.nan])  # NaN-ignoring
+np.logaddexp(0.0, 0.0)      # numerically stable log(exp(a)+exp(b))
+np.rint([0.5, 1.5, 2.5])    # round-half-to-even -> [0, 2, 2]
+np.gcd(12, 8); np.lcm(4, 6)
+frac, whole = np.modf([1.5, 2.25])
+
+# nan-reductions
+a = np.array([1.0, np.nan, 3.0])
+np.nansum(a); np.nanmean(a); np.nanstd(a); np.nanmax(a)
+np.nancumsum(a); np.nanargmax(a)
+np.prod([1, 2, 3, 4])       # 24
+
+# Set operations
+np.intersect1d([1, 2, 3], [2, 3, 4])  # [2, 3]
+np.union1d([1, 2], [2, 3])            # [1, 2, 3]
+np.setdiff1d([1, 2, 3], [2])          # [1, 3]
+np.isin([1, 2, 5], [1, 5])            # [True, False, True]
+uniq, counts = np.unique_counts([1, 1, 2, 3, 3, 3])
+
+# Reshaping / composition
+np.block([[np.eye(2), np.ones((2, 1))]])
+np.pad([1, 2, 3], (1, 2), mode='reflect')
+np.kron([1, 2], [1, 1])
+np.tensordot(np.ones((2, 3)), np.ones((3, 4)), axes=1)
+
+# Complex
+z = np.array([1 + 2j, 3 - 1j])
+np.real(z); np.imag(z); np.conjugate(z); np.angle(z)
+
+# Signal / windows / interpolation
+np.convolve([1, 2, 3], [1, 1])
+np.interp(2.5, [1, 2, 3], [10, 20, 30])
+np.hanning(8); np.hamming(8); np.blackman(8); np.bartlett(8)
+np.vander([1, 2, 3], 3)
+np.bincount([0, 1, 1, 2, 2, 2])
 ```
 
 ---

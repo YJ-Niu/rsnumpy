@@ -1,4 +1,4 @@
-use ndarray::{Array, ArrayViewD, Axis, IxDyn, Slice};
+use ndarray::{Array, ArrayViewD, Axis, IxDyn, Slice, Zip};
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PySlice, PyTuple};
@@ -1730,20 +1730,14 @@ where
     Err(PyTypeError::new_err("Unsupported operand type"))
 }
 
+/// 与 binary_op 行为完全一致：保留独立名字以表达调用方“左右操作数顺序”的语义，
+/// 实际实现直接转发，避免重复代码。
+#[inline]
 fn binary_op_lr<F>(a: &NdArray, b: &Bound<'_, PyAny>, op: F) -> PyResult<NdArray>
 where
     F: Fn(f64, f64) -> f64 + Sync,
 {
-    if let Ok(scalar) = b.extract::<f64>() {
-        return Ok(NdArray {
-            data: a.data.mapv(|x| op(x, scalar)),
-        });
-    }
-    if let Ok(other) = b.extract::<NdArray>() {
-        let result = broadcast_binary_op(&a.data, &other.data, op)?;
-        return Ok(NdArray { data: result });
-    }
-    Err(PyTypeError::new_err("Unsupported operand type"))
+    binary_op(a, b, op)
 }
 
 fn broadcast_binary_op<F>(
@@ -1758,16 +1752,9 @@ where
     let b_shape = b.shape().to_vec();
 
     if a_shape == b_shape {
-        // 并行计算：收集到 Vec 后使用 rayon 并行处理
-        let a_vec: Vec<f64> = a.iter().copied().collect();
-        let b_vec: Vec<f64> = b.iter().copied().collect();
-        let result: Vec<f64> = a_vec
-            .into_par_iter()
-            .zip(b_vec.into_par_iter())
-            .map(|(x, y)| op(x, y))
-            .collect();
-        return Array::from_shape_vec(IxDyn(&a_shape), result)
-            .map_err(|e| PyValueError::new_err(e.to_string()));
+        // 形状一致：用 ndarray::Zip 并行逐元素计算并直接产出结果数组，
+        // 省去把两个输入分别物化成 Vec 的额外分配。
+        return Ok(Zip::from(a).and(b).par_map_collect(|&x, &y| op(x, y)));
     }
 
     let max_ndim = ::std::cmp::max(a_shape.len(), b_shape.len());
@@ -1787,31 +1774,25 @@ where
         out_shape.push(::std::cmp::max(a_padded[i], b_padded[i]));
     }
 
-    let a_broadcast = a
+    // 用带零步长的广播视图直接参与 Zip，避免把广播结果 to_owned 后再逐元素复制。
+    let a_reshaped = a
         .clone()
         .into_shape_with_order(IxDyn(&a_padded))
-        .map_err(|e| PyValueError::new_err(e.to_string()))?
-        .broadcast(IxDyn(&out_shape))
-        .ok_or_else(|| PyValueError::new_err("Broadcasting failed"))?
-        .to_owned();
-    let b_broadcast = b
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let b_reshaped = b
         .clone()
         .into_shape_with_order(IxDyn(&b_padded))
-        .map_err(|e| PyValueError::new_err(e.to_string()))?
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let a_view = a_reshaped
         .broadcast(IxDyn(&out_shape))
-        .ok_or_else(|| PyValueError::new_err("Broadcasting failed"))?
-        .to_owned();
+        .ok_or_else(|| PyValueError::new_err("Broadcasting failed"))?;
+    let b_view = b_reshaped
+        .broadcast(IxDyn(&out_shape))
+        .ok_or_else(|| PyValueError::new_err("Broadcasting failed"))?;
 
-    let a_vec: Vec<f64> = a_broadcast.iter().copied().collect();
-    let b_vec: Vec<f64> = b_broadcast.iter().copied().collect();
-    let result: Vec<f64> = a_vec
-        .into_par_iter()
-        .zip(b_vec.into_par_iter())
-        .map(|(x, y)| op(x, y))
-        .collect();
-
-    Array::from_shape_vec(IxDyn(&out_shape), result)
-        .map_err(|e| PyValueError::new_err(e.to_string()))
+    Ok(Zip::from(a_view)
+        .and(b_view)
+        .par_map_collect(|&x, &y| op(x, y)))
 }
 
 /// ArrayFlags - 数组内存布局信息，与 NumPy 的 np.ndarray.flags 兼容
@@ -2395,6 +2376,161 @@ fn unique_full(
 }
 
 #[pyfunction]
+#[pyo3(signature = (a, axis, return_index=false, return_inverse=false, return_counts=false, sorted=true))]
+fn unique_axis(
+    a: &NdArray,
+    axis: isize,
+    return_index: bool,
+    return_inverse: bool,
+    return_counts: bool,
+    sorted: bool,
+) -> PyResult<Vec<NdArray>> {
+    let ndim = a.data.ndim();
+    if ndim == 0 {
+        return Err(PyValueError::new_err(
+            "axis argument to unique is not supported for 0-d arrays",
+        ));
+    }
+    let ax = if axis < 0 {
+        (ndim as isize + axis) as usize
+    } else {
+        axis as usize
+    };
+    if ax >= ndim {
+        return Err(PyValueError::new_err(format!(
+            "axis {} is out of bounds for array of dimension {}",
+            axis, ndim
+        )));
+    }
+
+    // 将目标轴移到最前，其余轴保持相对顺序
+    let mut perm: Vec<usize> = Vec::with_capacity(ndim);
+    perm.push(ax);
+    for i in 0..ndim {
+        if i != ax {
+            perm.push(i);
+        }
+    }
+
+    let moved = a.data.view().permuted_axes(perm.clone()).to_owned();
+    let n = moved.shape()[0];
+    let rest: Vec<usize> = moved.shape()[1..].to_vec();
+    let block: usize = rest.iter().product::<usize>().max(1);
+    // 按 C 顺序展平（iter 始终按逻辑顺序遍历，与内存布局无关）
+    let flat: Vec<f64> = moved.iter().copied().collect();
+
+    let row = |i: usize| -> &[f64] { &flat[i * block..(i + 1) * block] };
+    // 逐元素精确比较；NaN 与任何值（含 NaN）都不相等
+    let rows_equal = |i: usize, j: usize| -> bool {
+        let (ri, rj) = (row(i), row(j));
+        for k in 0..block {
+            if ri[k].is_nan() || rj[k].is_nan() || ri[k] != rj[k] {
+                return false;
+            }
+        }
+        true
+    };
+
+    // 稳定字典序排序（NaN 视为最大），保证同组内保留原始先后顺序
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_by(|&i, &j| {
+        let (ri, rj) = (row(i), row(j));
+        for k in 0..block {
+            let (av, bv) = (ri[k], rj[k]);
+            let o = match (av.is_nan(), bv.is_nan()) {
+                (true, true) => std::cmp::Ordering::Equal,
+                (true, false) => std::cmp::Ordering::Greater,
+                (false, true) => std::cmp::Ordering::Less,
+                (false, false) => av.partial_cmp(&bv).unwrap_or(std::cmp::Ordering::Equal),
+            };
+            if o != std::cmp::Ordering::Equal {
+                return o;
+            }
+        }
+        std::cmp::Ordering::Equal
+    });
+
+    // 相邻去重：每组代表取组内最小原始下标；同时记录每个原始行的组号
+    let mut uniq_first: Vec<usize> = Vec::new();
+    let mut counts: Vec<usize> = Vec::new();
+    let mut inverse_by_orig: Vec<usize> = vec![0usize; n];
+    let mut cur_group: usize = 0;
+    for pos in 0..n {
+        let oi = order[pos];
+        if pos == 0 || !rows_equal(oi, order[pos - 1]) {
+            if pos != 0 {
+                cur_group += 1;
+            }
+            uniq_first.push(oi);
+            counts.push(1);
+        } else {
+            *counts.last_mut().unwrap() += 1;
+            if oi < *uniq_first.last().unwrap() {
+                *uniq_first.last_mut().unwrap() = oi;
+            }
+        }
+        inverse_by_orig[oi] = cur_group;
+    }
+
+    let m = uniq_first.len();
+    // sorted=false 时按首次出现顺序（代表下标升序）重排各组
+    let mut group_order: Vec<usize> = (0..m).collect();
+    if !sorted {
+        group_order.sort_by_key(|&g| uniq_first[g]);
+    }
+    let mut remap: Vec<usize> = vec![0usize; m];
+    for (new_g, &old_g) in group_order.iter().enumerate() {
+        remap[old_g] = new_g;
+    }
+
+    let mut out_flat: Vec<f64> = Vec::with_capacity(m * block);
+    let mut index_out: Vec<f64> = Vec::with_capacity(m);
+    let mut counts_out: Vec<f64> = Vec::with_capacity(m);
+    for &g in &group_order {
+        out_flat.extend_from_slice(row(uniq_first[g]));
+        index_out.push(uniq_first[g] as f64);
+        counts_out.push(counts[g] as f64);
+    }
+
+    let mut moved_shape: Vec<usize> = Vec::with_capacity(ndim);
+    moved_shape.push(m);
+    moved_shape.extend_from_slice(&rest);
+    let unique_moved = Array::from_shape_vec(IxDyn(&moved_shape), out_flat)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+
+    // 将轴顺序还原到原始排列
+    let inv_perm: Vec<usize> = (0..ndim)
+        .map(|i| perm.iter().position(|&x| x == i).unwrap())
+        .collect();
+    let unique_arr = unique_moved
+        .view()
+        .permuted_axes(inv_perm)
+        .as_standard_layout()
+        .to_owned();
+
+    let mut results = vec![NdArray { data: unique_arr }];
+
+    if return_index {
+        let arr = Array::from_shape_vec(IxDyn(&[index_out.len()]), index_out)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        results.push(NdArray { data: arr });
+    }
+    if return_inverse {
+        let inv: Vec<f64> = inverse_by_orig.iter().map(|&g| remap[g] as f64).collect();
+        let arr = Array::from_shape_vec(IxDyn(&[inv.len()]), inv)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        results.push(NdArray { data: arr });
+    }
+    if return_counts {
+        let arr = Array::from_shape_vec(IxDyn(&[counts_out.len()]), counts_out)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        results.push(NdArray { data: arr });
+    }
+
+    Ok(results)
+}
+
+#[pyfunction]
 #[pyo3(signature = (a, new_shape))]
 fn resize_rs(a: &NdArray, new_shape: Vec<usize>) -> PyResult<NdArray> {
     let new_size: usize = new_shape.iter().product();
@@ -2844,15 +2980,6 @@ fn extract(condition: &NdArray, a: &NdArray) -> PyResult<NdArray> {
     let arr = Array::from_shape_vec(IxDyn(&[result.len()]), result)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(NdArray { data: arr })
-}
-
-#[allow(unused)]
-fn compute_strides(shape: &[usize]) -> Vec<usize> {
-    let mut strides = vec![1; shape.len()];
-    for i in (0..shape.len() - 1).rev() {
-        strides[i] = strides[i + 1] * shape[i + 1];
-    }
-    strides
 }
 
 fn introselect(arr: &mut [f64], k: usize) -> f64 {
@@ -4047,6 +4174,270 @@ fn rad2deg(x: &NdArray) -> NdArray {
 fn hypot(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
     let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| a.hypot(b))?;
     Ok(NdArray { data: result })
+}
+
+fn gcd_i64(a: i64, b: i64) -> i64 {
+    let (mut a, mut b) = (a.abs(), b.abs());
+    while b != 0 {
+        let t = b;
+        b = a % b;
+        a = t;
+    }
+    a
+}
+
+#[pyfunction]
+fn gcd(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
+    let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| {
+        gcd_i64(a as i64, b as i64) as f64
+    })?;
+    Ok(NdArray { data: result })
+}
+
+#[pyfunction]
+fn lcm(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
+    let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| {
+        let (ai, bi) = (a as i64, b as i64);
+        if ai == 0 || bi == 0 {
+            0.0
+        } else {
+            ((ai / gcd_i64(ai, bi)) * bi).abs() as f64
+        }
+    })?;
+    Ok(NdArray { data: result })
+}
+
+#[pyfunction]
+fn nextafter(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
+    let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| {
+        if a.is_nan() || b.is_nan() {
+            f64::NAN
+        } else if a < b {
+            a.next_up()
+        } else if a > b {
+            a.next_down()
+        } else {
+            b
+        }
+    })?;
+    Ok(NdArray { data: result })
+}
+
+#[pyfunction]
+fn copysign(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
+    let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| a.copysign(b))?;
+    Ok(NdArray { data: result })
+}
+
+#[pyfunction]
+fn ldexp(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
+    let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| a * (2.0_f64).powi(b as i32))?;
+    Ok(NdArray { data: result })
+}
+
+#[pyfunction]
+fn signbit(x: &NdArray) -> NdArray {
+    NdArray {
+        data: x
+            .data
+            .mapv(|v| if v.is_sign_negative() { 1.0 } else { 0.0 }),
+    }
+}
+
+#[pyfunction]
+fn rint(x: &NdArray) -> NdArray {
+    NdArray {
+        data: x.data.mapv(|v| v.round_ties_even()),
+    }
+}
+
+#[pyfunction]
+fn spacing(x: &NdArray) -> NdArray {
+    NdArray {
+        data: x.data.mapv(|v| v.next_up() - v),
+    }
+}
+
+#[pyfunction]
+#[pyo3(signature = (x, minlength=0))]
+fn bincount(x: &NdArray, minlength: usize) -> NdArray {
+    let mut max_val: i64 = -1;
+    for &v in x.data.iter() {
+        let iv = v as i64;
+        if iv > max_val {
+            max_val = iv;
+        }
+    }
+    let n = ::std::cmp::max(minlength as i64, max_val + 1).max(0) as usize;
+    let mut counts = vec![0.0f64; n];
+    for &v in x.data.iter() {
+        let iv = v as i64;
+        if iv >= 0 && (iv as usize) < n {
+            counts[iv as usize] += 1.0;
+        }
+    }
+    NdArray {
+        data: Array::from_shape_vec(IxDyn(&[n]), counts).unwrap(),
+    }
+}
+
+#[pyfunction]
+#[pyo3(signature = (element, test, invert=false))]
+fn isin(element: &NdArray, test: &NdArray, invert: bool) -> NdArray {
+    let mut keys: Vec<f64> = test
+        .data
+        .iter()
+        .filter(|v| !v.is_nan())
+        .map(|&v| if v == 0.0 { 0.0 } else { v })
+        .collect();
+    keys.sort_by(|a, b| a.total_cmp(b));
+    keys.dedup();
+    // 小 test 集：线性 `==` 扫描（缓存友好，避免 total_cmp 位运算），与 numpy 暴力路径一致；
+    // 大集用排序 + 二分查找 O(n log m)。
+    let small = keys.len() <= 16;
+    let data = element.data.mapv(|v| {
+        let present = if v.is_nan() {
+            false
+        } else {
+            let nv = if v == 0.0 { 0.0 } else { v };
+            if small {
+                keys.contains(&nv)
+            } else {
+                keys.binary_search_by(|p| p.total_cmp(&nv)).is_ok()
+            }
+        };
+        let res = if invert { !present } else { present };
+        if res { 1.0 } else { 0.0 }
+    });
+    NdArray { data }
+}
+
+// 升序排序 + 去重（-0.0 归一为 +0.0，NaN 视为相等只保留其一）。
+fn sorted_unique_vec(vals: &[f64]) -> Vec<f64> {
+    let mut v: Vec<f64> = vals
+        .iter()
+        .map(|&x| if x == 0.0 { 0.0 } else { x })
+        .collect();
+    v.sort_by(|a, b| a.total_cmp(b));
+    v.dedup_by(|a, b| a == b || (a.is_nan() && b.is_nan()));
+    v
+}
+
+fn vec_to_1d(vals: Vec<f64>) -> NdArray {
+    let n = vals.len();
+    NdArray {
+        data: Array::from_shape_vec(IxDyn(&[n]), vals).unwrap(),
+    }
+}
+
+#[pyfunction]
+fn intersect1d(ar1: &NdArray, ar2: &NdArray) -> NdArray {
+    let a = sorted_unique_vec(&ar1.data.iter().copied().collect::<Vec<f64>>());
+    let b = sorted_unique_vec(&ar2.data.iter().copied().collect::<Vec<f64>>());
+    let (mut i, mut j) = (0usize, 0usize);
+    let mut out = Vec::new();
+    while i < a.len() && j < b.len() {
+        match a[i].total_cmp(&b[j]) {
+            ::std::cmp::Ordering::Less => i += 1,
+            ::std::cmp::Ordering::Greater => j += 1,
+            ::std::cmp::Ordering::Equal => {
+                out.push(a[i]);
+                i += 1;
+                j += 1;
+            }
+        }
+    }
+    vec_to_1d(out)
+}
+
+#[pyfunction]
+fn union1d(ar1: &NdArray, ar2: &NdArray) -> NdArray {
+    let mut all: Vec<f64> = ar1.data.iter().copied().collect();
+    all.extend(ar2.data.iter().copied());
+    vec_to_1d(sorted_unique_vec(&all))
+}
+
+#[pyfunction]
+fn setdiff1d(ar1: &NdArray, ar2: &NdArray) -> NdArray {
+    let a = sorted_unique_vec(&ar1.data.iter().copied().collect::<Vec<f64>>());
+    let b = sorted_unique_vec(&ar2.data.iter().copied().collect::<Vec<f64>>());
+    let (mut i, mut j) = (0usize, 0usize);
+    let mut out = Vec::new();
+    while i < a.len() {
+        if j >= b.len() {
+            out.push(a[i]);
+            i += 1;
+            continue;
+        }
+        match a[i].total_cmp(&b[j]) {
+            ::std::cmp::Ordering::Less => {
+                out.push(a[i]);
+                i += 1;
+            }
+            ::std::cmp::Ordering::Greater => j += 1,
+            ::std::cmp::Ordering::Equal => {
+                i += 1;
+                j += 1;
+            }
+        }
+    }
+    vec_to_1d(out)
+}
+
+#[pyfunction]
+fn setxor1d(ar1: &NdArray, ar2: &NdArray) -> NdArray {
+    let a = sorted_unique_vec(&ar1.data.iter().copied().collect::<Vec<f64>>());
+    let b = sorted_unique_vec(&ar2.data.iter().copied().collect::<Vec<f64>>());
+    let (mut i, mut j) = (0usize, 0usize);
+    let mut out = Vec::new();
+    while i < a.len() && j < b.len() {
+        match a[i].total_cmp(&b[j]) {
+            ::std::cmp::Ordering::Less => {
+                out.push(a[i]);
+                i += 1;
+            }
+            ::std::cmp::Ordering::Greater => {
+                out.push(b[j]);
+                j += 1;
+            }
+            ::std::cmp::Ordering::Equal => {
+                i += 1;
+                j += 1;
+            }
+        }
+    }
+    out.extend_from_slice(&a[i..]);
+    out.extend_from_slice(&b[j..]);
+    vec_to_1d(out)
+}
+
+// unique 的一次遍历实现：返回 [唯一值, 首次出现索引, 逆索引, 计数]。
+// uniq 已升序，逆索引用二分查找 O(n log u)，避免 unique_full 中 O(n*u) 的线性扫描。
+#[pyfunction]
+fn unique_all_rs(x: &NdArray) -> Vec<NdArray> {
+    let data: Vec<f64> = x
+        .data
+        .iter()
+        .map(|&v| if v == 0.0 { 0.0 } else { v })
+        .collect();
+    let uniq = sorted_unique_vec(&data);
+    let mut counts = vec![0.0f64; uniq.len()];
+    let mut first = vec![-1.0f64; uniq.len()];
+    let mut inverse = Vec::with_capacity(data.len());
+    for (idx, &v) in data.iter().enumerate() {
+        let i = uniq.partition_point(|p| p.total_cmp(&v) == ::std::cmp::Ordering::Less);
+        inverse.push(i as f64);
+        counts[i] += 1.0;
+        if first[i] < 0.0 {
+            first[i] = idx as f64;
+        }
+    }
+    vec![
+        vec_to_1d(uniq),
+        vec_to_1d(first),
+        vec_to_1d(inverse),
+        vec_to_1d(counts),
+    ]
 }
 
 #[pyfunction]
@@ -6130,6 +6521,21 @@ fn init_math_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(hypot, m)?)?;
     m.add_function(wrap_pyfunction!(sinc, m)?)?;
     m.add_function(wrap_pyfunction!(heaviside, m)?)?;
+    m.add_function(wrap_pyfunction!(gcd, m)?)?;
+    m.add_function(wrap_pyfunction!(lcm, m)?)?;
+    m.add_function(wrap_pyfunction!(nextafter, m)?)?;
+    m.add_function(wrap_pyfunction!(copysign, m)?)?;
+    m.add_function(wrap_pyfunction!(ldexp, m)?)?;
+    m.add_function(wrap_pyfunction!(signbit, m)?)?;
+    m.add_function(wrap_pyfunction!(rint, m)?)?;
+    m.add_function(wrap_pyfunction!(spacing, m)?)?;
+    m.add_function(wrap_pyfunction!(bincount, m)?)?;
+    m.add_function(wrap_pyfunction!(isin, m)?)?;
+    m.add_function(wrap_pyfunction!(intersect1d, m)?)?;
+    m.add_function(wrap_pyfunction!(union1d, m)?)?;
+    m.add_function(wrap_pyfunction!(setdiff1d, m)?)?;
+    m.add_function(wrap_pyfunction!(setxor1d, m)?)?;
+    m.add_function(wrap_pyfunction!(unique_all_rs, m)?)?;
     Ok(())
 }
 
@@ -6165,6 +6571,7 @@ fn init_misc_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(clip, m)?)?;
     m.add_function(wrap_pyfunction!(unique, m)?)?;
     m.add_function(wrap_pyfunction!(unique_full, m)?)?;
+    m.add_function(wrap_pyfunction!(unique_axis, m)?)?;
     m.add_function(wrap_pyfunction!(resize_rs, m)?)?;
     m.add_function(wrap_pyfunction!(delete_rs, m)?)?;
     m.add_function(wrap_pyfunction!(insert_rs, m)?)?;

@@ -18,10 +18,10 @@ sed -i.bak "s/^version = \".*\"/version = \"$VERSION\"/" pyproject.toml
 rm -f pyproject.toml.bak
 echo "  -> pyproject.toml version updated to $VERSION"
 
-# ========== 同步版本到 python/rsplotlib/__init__.py ==========
-sed -i.bak "s/^__version__ = \".*\"/__version__ = \"$VERSION\"/" python/rsplotlib/__init__.py 2>/dev/null || true
-rm -f python/rsplotlib/__init__.py.bak
-echo "  -> python/rsplotlib/__init__.py __version__ updated to $VERSION"
+# ========== 同步版本到 python/rsnumpy/__init__.py ==========
+sed -i.bak "s/^__version__ = \".*\"/__version__ = \"$VERSION\"/" python/rsnumpy/__init__.py 2>/dev/null || true
+rm -f python/rsnumpy/__init__.py.bak
+echo "  -> python/rsnumpy/__init__.py __version__ updated to $VERSION"
 
 # ========== 检查 cargo 是否可用（maturin 构建需要） ==========
 if ! command -v cargo >/dev/null 2>&1; then

@@ -12,6 +12,10 @@ Examples:
     2.0
 """
 
+import datetime as _datetime
+import sys as _sys
+from . import _extra as _extra_module
+
 import rsnumpy._core as _core
 from rsnumpy._core import ndarray_iter as NdArrayIter
 # ========== 子模块导入和函数挂载 ==========
@@ -28,7 +32,14 @@ from .random import random_module as _random_module
 from . import char as _char_module
 from . import matlib as _matlib_module
 
-__version__ = "1.0.5"
+__version__ = "1.1.2"
+
+# 捕获内建函数别名：_extra 挂载会向本模块 globals 注入同名的 numpy 函数
+# （all/any/round），会遮蔽内建函数。以下别名保证本文件内部逻辑始终使用内建实现。
+_py_round = round
+_py_all = all
+_py_any = any
+
 
 class ArrayFlags:
     """数组内存布局信息，与 NumPy 的 np.ndarray.flags 兼容。"""
@@ -256,7 +267,11 @@ class ndarray:
         return raw_list
 
     def __iter__(self):
-        return iter(self.tolist())
+        # 一维（及标量）按元素迭代产生 Python 标量；高维按首轴迭代产生子数组，
+        # 与 NumPy 行为一致（如 a, b = np.random.randn(2, n) 得到两个数组）。
+        if self.ndim <= 1:
+            return iter(self.tolist())
+        return (self[i] for i in range(self.shape[0]))
 
     @property
     def __array_interface__(self):
@@ -296,6 +311,51 @@ class ndarray:
             mask = key.tolist()
             filtered = [v for v, m in zip(cpx, mask) if m > 0.5]
             return ndarray(filtered)
+        # 布尔掩码索引：a[bool_mask]。掩码形状需与 self 的前若干维一致，
+        # 返回被掩码选中的元素（按 C 序展开），剩余维度保留。
+        if (_is_ndarray(key) and getattr(key, '_dtype', None) == 'bool' and key.ndim >= 1):
+            mask_shape = tuple(key.shape)
+            self_shape = tuple(self.shape)
+            k = len(mask_shape)
+            if mask_shape == self_shape[:k]:
+                mask_flat = key.ravel().tolist()
+                data_flat = self.ravel().tolist()
+                rest = self_shape[k:]
+                block = 1
+                for s in rest:
+                    block *= s
+                out = []
+                for i, m in enumerate(mask_flat):
+                    if m:
+                        out.extend(data_flat[i * block:(i + 1) * block])
+                result = ndarray(out, _dtype=self._dtype)
+                if rest:
+                    return result.reshape((len(out) // block,) + rest)
+                return result
+        # np.newaxis (None) 支持：a[np.newaxis, :] / a[:, np.newaxis]
+        # 先用去掉 None 的键做常规索引，再在结果的相应输出位置插入 size-1 维度。
+        _key_seq = key if isinstance(key, tuple) else (key,)
+        if _py_any(k is None for k in _key_seq):
+            newaxis_positions = []
+            base_key = []
+            out_pos = 0
+            for k in _key_seq:
+                if k is None:
+                    newaxis_positions.append(out_pos)
+                    out_pos += 1
+                elif isinstance(k, bool):
+                    base_key.append(k)
+                    out_pos += 1
+                elif isinstance(k, int):
+                    base_key.append(k)  # 整数索引消耗输入轴但不产生输出维度
+                else:
+                    base_key.append(k)
+                    out_pos += 1
+            base = self[tuple(base_key)]
+            new_shape = list(base.shape)
+            for p in newaxis_positions:
+                new_shape.insert(p, 1)
+            return base.reshape(tuple(new_shape))
         # 展开省略号（...），补充完整切片以匹配数组维度
         if isinstance(key, tuple):
             new_key = []
@@ -380,6 +440,14 @@ class ndarray:
         dt = _truediv_dtype(self._dtype)
         return _wrap_result(other / self._array, dt)
 
+    def __mod__(self, other):
+        """逐元素取模（% 运算符）。"""
+        return mod(self, other)
+
+    def __rmod__(self, other):
+        """逐元素取模（右操作数，% 运算符）。"""
+        return mod(other, self)
+
     def __matmul__(self, other):
         if _is_ndarray(other):
             return _wrap_result(_core.linalg.matmul(self._array, other._array), self._dtype)
@@ -389,6 +457,23 @@ class ndarray:
         if _is_ndarray(other):
             return _wrap_result(_core.power(self._array, other._array), self._dtype)
         return _wrap_result(_core.power(self._array, _core.ndarray([other])), self._dtype)
+
+    def __rpow__(self, other):
+        if _is_ndarray(other):
+            return _wrap_result(_core.power(other._array, self._array), self._dtype)
+        return _wrap_result(_core.power(_core.ndarray([other]), self._array), self._dtype)
+
+    def __neg__(self):
+        """逐元素取负（- 运算符）。"""
+        return _wrap_result(self._array * -1, self._dtype)
+
+    def __pos__(self):
+        """一元正号（+ 运算符），返回副本。"""
+        return _wrap_result(self._array.copy(), self._dtype)
+
+    def __abs__(self):
+        """逐元素绝对值（内建 abs() 函数）。"""
+        return _wrap_result(_core.abs(self._array), self._dtype)
 
     def __eq__(self, other):
         if _is_ndarray(other):
@@ -867,12 +952,6 @@ def _wrap_result(result, dtype="float64"):
     return result
 
 
-def _wrap_with_source(result, source):
-    """用源数组的 dtype 包装结果。"""
-    dtype = getattr(source, '_dtype', "float64")
-    return _wrap_result(result, dtype)
-
-
 def _scalar(x):
     """转换为标量。"""
     if hasattr(x, 'tolist'):
@@ -953,7 +1032,7 @@ def _format_nested_iterable(data):
         if not data:
             return "[]"
         items = list(data)
-        has_nested = any(isinstance(x, (list, tuple)) for x in items)
+        has_nested = _py_any(isinstance(x, (list, tuple)) for x in items)
         if not has_nested:
             return "[" + " ".join(str(x) for x in items) + "]"
         parts = [_format_nested_iterable(x) for x in items]
@@ -1015,7 +1094,7 @@ def format_float_scalar(val):
         return "inf"
     if val == float("-inf"):
         return "-inf"
-    val_rounded = round(val, 10)
+    val_rounded = _py_round(val, 10)
     if val_rounded == int(val_rounded) and abs(val_rounded) < 1e16:
         v = int(val_rounded)
         if float(v) == val_rounded:
@@ -1212,23 +1291,511 @@ def dtype(obj):
 
 
 # ========== 标量类型别名 ==========
+# 与 NumPy 一致的标量类型层次结构，使 issubdtype / isinstance 检查按预期工作。
 
-int8 = type('int8', (), {})
-int16 = type('int16', (), {})
-int32 = type('int32', (), {})
-int64 = type('int64', (), {})
-uint8 = type('uint8', (), {})
-uint16 = type('uint16', (), {})
-uint32 = type('uint32', (), {})
-uint64 = type('uint64', (), {})
-float16 = type('float16', (), {})
-float32 = type('float32', (), {})
-float64 = type('float64', (), {})
+class generic:
+    """所有 NumPy 标量类型的抽象基类。"""
+
+
+class number(generic):
+    """数值标量的抽象基类。"""
+
+
+class integer(number):
+    """整数标量的抽象基类。"""
+
+
+class signedinteger(integer):
+    """有符号整数标量的抽象基类。"""
+
+
+class unsignedinteger(integer):
+    """无符号整数标量的抽象基类。"""
+
+
+class inexact(number):
+    """浮点/复数标量的抽象基类。"""
+
+
+class floating(inexact):
+    """浮点标量的抽象基类。"""
+
+
+class complexfloating(inexact):
+    """复数标量的抽象基类。"""
+
+
+class flexible(generic):
+    """可变长度标量（字符串/void）的抽象基类。"""
+
+
+class character(flexible):
+    """字符标量的抽象基类。"""
+
+
+int8 = type('int8', (signedinteger,), {})
+int16 = type('int16', (signedinteger,), {})
+int32 = type('int32', (signedinteger,), {})
+int64 = type('int64', (signedinteger,), {})
+uint8 = type('uint8', (unsignedinteger,), {})
+uint16 = type('uint16', (unsignedinteger,), {})
+uint32 = type('uint32', (unsignedinteger,), {})
+uint64 = type('uint64', (unsignedinteger,), {})
+float16 = type('float16', (floating,), {})
+float32 = type('float32', (floating,), {})
+float64 = type('float64', (floating,), {})
 float_ = float64  # NumPy 别名
-complex64 = type('complex64', (), {})
-complex128 = type('complex128', (), {})
-string_ = type('string_', (), {})
-unicode_ = type('unicode_', (), {})
+complex64 = type('complex64', (complexfloating,), {})
+complex128 = type('complex128', (complexfloating,), {})
+string_ = type('string_', (character,), {})
+unicode_ = type('unicode_', (character,), {})
+bytes_ = string_  # NumPy 中 bytes_ 为字节字符串类型
+str_ = unicode_   # NumPy 中 str_ 为 unicode 字符串类型
+bool_ = type('bool', (generic,), {})
+object_ = type('object_', (generic,), {})
+void = type('void', (flexible,), {})
+
+# C 语言宽度别名（与 NumPy 在 64 位平台上的取值一致）
+byte = int8
+short = int16
+intc = int32
+int_ = int64
+long = int64
+longlong = int64
+intp = int64
+ubyte = uint8
+ushort = uint16
+uintc = uint32
+uint = uint64
+ulong = uint64
+ulonglong = uint64
+uintp = uint64
+half = float16
+single = float32
+double = float64
+longdouble = float64
+csingle = complex64
+cdouble = complex128
+clongdouble = complex128
+
+# 布尔常量与其他特殊常量
+True_ = True
+False_ = False
+little_endian = (_sys.byteorder == 'little')
+
+# 标量类型名 → 类型对象 映射（供 issubdtype / result_type 等使用）
+_SCTYPE_BY_NAME = {
+    'bool': bool_,
+    'int8': int8, 'int16': int16, 'int32': int32, 'int64': int64,
+    'uint8': uint8, 'uint16': uint16, 'uint32': uint32, 'uint64': uint64,
+    'float16': float16, 'float32': float32, 'float64': float64,
+    'complex64': complex64, 'complex128': complex128,
+    'string_': string_, 'unicode_': unicode_, 'bytes': bytes_,
+    'str': str_, 'object': object_, 'void': void,
+}
+
+# NumPy 兼容的 sctypeDict / ScalarType / typecodes
+ScalarType = (int, float, complex, bool, bytes, str,
+              int8, int16, int32, int64, uint8, uint16, uint32, uint64,
+              float16, float32, float64, complex64, complex128)
+
+sctypeDict = {
+    'bool': bool_, 'int8': int8, 'int16': int16, 'int32': int32, 'int64': int64,
+    'uint8': uint8, 'uint16': uint16, 'uint32': uint32, 'uint64': uint64,
+    'float16': float16, 'float32': float32, 'float64': float64,
+    'complex64': complex64, 'complex128': complex128,
+    'i1': int8, 'i2': int16, 'i4': int32, 'i8': int64,
+    'u1': uint8, 'u2': uint16, 'u4': uint32, 'u8': uint64,
+    'f2': float16, 'f4': float32, 'f8': float64,
+    'c8': complex64, 'c16': complex128, '?': bool_,
+}
+
+typecodes = {
+    'Character': 'c',
+    'Integer': 'bhilqp',
+    'UnsignedInteger': 'BHILQP',
+    'Float': 'efdg',
+    'Complex': 'FDG',
+    'AllInteger': 'bBhHiIlLqQpP',
+    'AllFloat': 'efdgFDG',
+    'Datetime': 'Mm',
+    'All': '?bhilqpBHILQPefdgFDGSUVOMm',
+}
+
+
+def _to_scalar_type(x):
+    """将 dtype 类字符串 / 类型 / 数组解析为标量类型对象。"""
+    if isinstance(x, type) and issubclass(x, generic):
+        return x
+    if hasattr(x, '_dtype'):
+        return _SCTYPE_BY_NAME.get(x._dtype, generic)
+    name = _resolve_type_name(x)
+    return _SCTYPE_BY_NAME.get(name, generic)
+
+
+def issubdtype(arg1, arg2):
+    """判断第一个类型是否为第二个类型（含抽象类别）的子类型。"""
+    c1 = _to_scalar_type(arg1)
+    c2 = arg2 if (isinstance(arg2, type) and issubclass(arg2, generic)) else _to_scalar_type(arg2)
+    return issubclass(c1, c2)
+
+
+class finfo:
+    """浮点类型的机器精度信息（兼容 numpy.finfo）。"""
+
+    _DATA = {
+        'float16': dict(bits=16, eps=0.0009765625, epsneg=0.00048828125,
+                        max=65504.0, min=-65504.0, tiny=6.103515625e-05,
+                        resolution=0.001, nmant=10, nexp=5, precision=3),
+        'float32': dict(bits=32, eps=1.1920929e-07, epsneg=5.9604645e-08,
+                        max=3.4028235e+38, min=-3.4028235e+38, tiny=1.1754944e-38,
+                        resolution=1e-06, nmant=23, nexp=8, precision=6),
+        'float64': dict(bits=64, eps=2.220446049250313e-16, epsneg=1.1102230246251565e-16,
+                        max=1.7976931348623157e+308, min=-1.7976931348623157e+308,
+                        tiny=2.2250738585072014e-308, resolution=1e-15,
+                        nmant=52, nexp=11, precision=15),
+    }
+
+    def __init__(self, dtype):
+        name = _resolve_type_name(dtype)
+        if name in ('complex64',):
+            name = 'float32'
+        elif name in ('complex128',):
+            name = 'float64'
+        if name not in self._DATA:
+            raise ValueError(f"data type {dtype!r} not inexact")
+        self._name = name
+        d = self._DATA[name]
+        self.bits = d['bits']
+        self.eps = d['eps']
+        self.epsneg = d['epsneg']
+        self.max = d['max']
+        self.min = d['min']
+        self.tiny = d['tiny']
+        self.smallest_normal = d['tiny']
+        self.resolution = d['resolution']
+        self.nmant = d['nmant']
+        self.nexp = d['nexp']
+        self.precision = d['precision']
+
+    @property
+    def dtype(self):
+        return dtype(self._name)
+
+    def __repr__(self):
+        return (f"finfo(resolution={self.resolution}, min={self.min}, "
+                f"max={self.max}, dtype={self._name})")
+
+
+class iinfo:
+    """整数类型的取值范围信息（兼容 numpy.iinfo）。"""
+
+    _BITS = {
+        'int8': (8, True), 'int16': (16, True), 'int32': (32, True), 'int64': (64, True),
+        'uint8': (8, False), 'uint16': (16, False), 'uint32': (32, False), 'uint64': (64, False),
+    }
+
+    def __init__(self, int_type):
+        name = _resolve_type_name(int_type)
+        if name not in self._BITS:
+            raise ValueError(f"Invalid integer data type {int_type!r}.")
+        self._name = name
+        self.bits, signed = self._BITS[name]
+        self.kind = 'i' if signed else 'u'
+        if signed:
+            self.min = -(1 << (self.bits - 1))
+            self.max = (1 << (self.bits - 1)) - 1
+        else:
+            self.min = 0
+            self.max = (1 << self.bits) - 1
+
+    @property
+    def dtype(self):
+        return dtype(self._name)
+
+    def __repr__(self):
+        return f"iinfo(min={self.min}, max={self.max}, dtype={self._name})"
+
+
+class ndindex:
+    """按 C 顺序遍历给定形状的多维索引（兼容 numpy.ndindex）。"""
+
+    def __init__(self, *shape):
+        if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
+            shape = tuple(shape[0])
+        self._shape = tuple(int(s) for s in shape)
+
+    def __iter__(self):
+        import itertools as _it
+        if not self._shape:
+            yield ()
+            return
+        yield from _it.product(*[range(s) for s in self._shape])
+
+
+class ndenumerate:
+    """同时给出多维索引与元素值的迭代器（兼容 numpy.ndenumerate）。"""
+
+    def __init__(self, arr):
+        self._arr = asarray(arr)
+
+    def __iter__(self):
+        shape = self._arr.shape
+        flat = _flatten_to_list(self._arr.tolist())
+        import itertools as _it
+        coords = _it.product(*[range(s) for s in shape]) if shape else [()]
+        for c, v in zip(coords, flat):
+            yield c, v
+
+
+def _flatten_to_list(data):
+    out = []
+    stack = [data]
+    while stack:
+        v = stack.pop()
+        if isinstance(v, list):
+            stack.extend(reversed(v))
+        else:
+            out.append(v)
+    return out
+
+
+class index_exp_class:
+    """构造索引元组：index_exp[1:3, 2] -> (slice(1,3), 2)。"""
+
+    def __getitem__(self, item):
+        if isinstance(item, tuple):
+            return item
+        return (item,)
+
+
+index_exp = index_exp_class()
+
+
+# ========== 日期时间类型 ==========
+# 内部统一以“自 1970-01-01 (UTC) 起的天数”存储，与 matplotlib/rsplotlib 的日期约定
+# 一致，从而可直接参与绘图并被 ConciseDateFormatter 正确格式化为刻度标签。
+
+_DT_EPOCH = _datetime.datetime(1970, 1, 1)
+
+# 时间单位 → 天数换算（Y/M 因日历长度可变，取近似值）
+_TD_UNIT_DAYS = {
+    'W': 7.0,
+    'D': 1.0,
+    'h': 1.0 / 24.0,
+    'm': 1.0 / 1440.0,
+    's': 1.0 / 86400.0,
+    'ms': 1.0 / 86400.0e3,
+    'us': 1.0 / 86400.0e6,
+    'ns': 1.0 / 86400.0e9,
+    'Y': 365.0,
+    'M': 30.0,
+}
+
+
+def _parse_datetime_string(s, unit=None):
+    """解析 ISO 日期字符串为 (自纪元起天数, 推断出的单位)。"""
+    s = s.strip()
+    date_part, time_part = s, None
+    if 'T' in s:
+        date_part, time_part = s.split('T', 1)
+    elif ':' in s and ' ' in s:
+        date_part, time_part = s.split(' ', 1)
+    ymd = date_part.split('-')
+    year = int(ymd[0])
+    month = int(ymd[1]) if len(ymd) > 1 else 1
+    day = int(ymd[2]) if len(ymd) > 2 else 1
+    resolved = 'D' if len(ymd) >= 3 else ('M' if len(ymd) == 2 else 'Y')
+    hour = minute = second = micro = 0
+    if time_part:
+        tparts = time_part.split(':')
+        hour = int(tparts[0])
+        resolved = 'h'
+        if len(tparts) > 1:
+            minute = int(tparts[1])
+            resolved = 'm'
+        if len(tparts) > 2:
+            sec = tparts[2]
+            if '.' in sec:
+                sec_i, frac = sec.split('.', 1)
+                second = int(sec_i)
+                micro = int(_py_round(float('0.' + frac) * 1e6))
+                resolved = 'us'
+            else:
+                second = int(sec)
+                resolved = 's'
+    dt = _datetime.datetime(year, month, day, hour, minute, second, micro)
+    days = (dt - _DT_EPOCH).total_seconds() / 86400.0
+    return days, (unit or resolved)
+
+
+def _parse_datetime_to_days(value, unit=None):
+    """将 datetime64 的各种输入统一解析为 (自纪元起天数, 单位)。"""
+    if isinstance(value, datetime64):
+        return value._days, (unit or value._unit)
+    if isinstance(value, _datetime.datetime):
+        return (value - _DT_EPOCH).total_seconds() / 86400.0, (unit or 'us')
+    if isinstance(value, _datetime.date):
+        dt = _datetime.datetime(value.year, value.month, value.day)
+        return (dt - _DT_EPOCH).total_seconds() / 86400.0, (unit or 'D')
+    if isinstance(value, str):
+        return _parse_datetime_string(value, unit)
+    # 数值 + 单位：表示纪元之后的偏移量
+    u = unit or 'us'
+    return float(value) * _TD_UNIT_DAYS.get(u, _TD_UNIT_DAYS['us']), u
+
+
+class timedelta64:
+    """时间间隔标量，内部以天数存储，兼容 numpy.timedelta64 的常用构造与运算。"""
+
+    def __init__(self, value=0, unit=None):
+        if isinstance(value, timedelta64):
+            self._days = value._days
+            self._unit = unit or value._unit
+            return
+        u = unit or 'us'
+        self._unit = u
+        self._days = float(value) * _TD_UNIT_DAYS.get(u, _TD_UNIT_DAYS['us'])
+
+    @classmethod
+    def _from_days(cls, days, unit='us'):
+        obj = cls.__new__(cls)
+        obj._days = float(days)
+        obj._unit = unit
+        return obj
+
+    def _value_in_unit(self):
+        return self._days / _TD_UNIT_DAYS.get(self._unit, 1.0)
+
+    def __float__(self):
+        return self._days
+
+    def __int__(self):
+        return int(self._value_in_unit())
+
+    def __add__(self, other):
+        if isinstance(other, datetime64):
+            return datetime64._from_days(self._days + other._days, other._unit)
+        if isinstance(other, timedelta64):
+            return timedelta64._from_days(self._days + other._days, self._unit)
+        return timedelta64._from_days(self._days + float(other), self._unit)
+    __radd__ = __add__
+
+    def __sub__(self, other):
+        d = other._days if isinstance(other, timedelta64) else float(other)
+        return timedelta64._from_days(self._days - d, self._unit)
+
+    def __mul__(self, other):
+        return timedelta64._from_days(self._days * float(other), self._unit)
+    __rmul__ = __mul__
+
+    def __truediv__(self, other):
+        if isinstance(other, timedelta64):
+            return self._days / other._days
+        return timedelta64._from_days(self._days / float(other), self._unit)
+
+    def __eq__(self, other):
+        if isinstance(other, timedelta64):
+            return self._days == other._days
+        return NotImplemented
+
+    def __hash__(self):
+        return hash(self._days)
+
+    def __lt__(self, other):
+        return self._days < float(other)
+
+    def __le__(self, other):
+        return self._days <= float(other)
+
+    def __gt__(self, other):
+        return self._days > float(other)
+
+    def __ge__(self, other):
+        return self._days >= float(other)
+
+    def __repr__(self):
+        v = self._value_in_unit()
+        vi = int(_py_round(v))
+        vout = vi if abs(v - vi) < 1e-9 else v
+        return "numpy.timedelta64(%r,'%s')" % (vout, self._unit)
+
+
+class datetime64:
+    """日期时间标量，内部以“自 1970-01-01 起的天数”存储，兼容 numpy.datetime64 的常用用法。"""
+
+    def __init__(self, value=None, unit=None):
+        if value is None:
+            self._days = 0.0
+            self._unit = unit or 'D'
+            return
+        self._days, self._unit = _parse_datetime_to_days(value, unit)
+
+    @classmethod
+    def _from_days(cls, days, unit='D'):
+        obj = cls.__new__(cls)
+        obj._days = float(days)
+        obj._unit = unit
+        return obj
+
+    def to_datetime(self):
+        return _DT_EPOCH + _datetime.timedelta(days=self._days)
+
+    def __float__(self):
+        return self._days
+
+    def __int__(self):
+        return int(self._days)
+
+    def __add__(self, other):
+        if isinstance(other, timedelta64):
+            return datetime64._from_days(self._days + other._days, self._unit)
+        return datetime64._from_days(self._days + float(other), self._unit)
+    __radd__ = __add__
+
+    def __sub__(self, other):
+        if isinstance(other, datetime64):
+            return timedelta64._from_days(self._days - other._days, self._unit)
+        if isinstance(other, timedelta64):
+            return datetime64._from_days(self._days - other._days, self._unit)
+        return datetime64._from_days(self._days - float(other), self._unit)
+
+    def __eq__(self, other):
+        if isinstance(other, datetime64):
+            return self._days == other._days
+        return NotImplemented
+
+    def __hash__(self):
+        return hash(self._days)
+
+    def __lt__(self, other):
+        return self._days < float(other)
+
+    def __le__(self, other):
+        return self._days <= float(other)
+
+    def __gt__(self, other):
+        return self._days > float(other)
+
+    def __ge__(self, other):
+        return self._days >= float(other)
+
+    def __repr__(self):
+        dt = self.to_datetime()
+        u = self._unit
+        if u == 'Y':
+            s = dt.strftime('%Y')
+        elif u == 'M':
+            s = dt.strftime('%Y-%m')
+        elif u == 'D':
+            s = dt.strftime('%Y-%m-%d')
+        elif u in ('h', 'm'):
+            s = dt.strftime('%Y-%m-%dT%H:%M')
+        elif u == 's':
+            s = dt.strftime('%Y-%m-%dT%H:%M:%S')
+        else:
+            s = dt.isoformat()
+        return "numpy.datetime64('%s')" % s
 
 
 # ========== 构造/工厂函数 ==========
@@ -1256,22 +1823,10 @@ def _flatten_check(data):
     return flat, has_complex, has_string
 
 
-def _has_complex(data):
-    """检查数据中是否包含复数。"""
-    _, has_c, _ = _flatten_check(data)
-    return has_c
-
-
 def _flatten_data(data):
     """展平嵌套的可迭代对象为扁平列表。"""
     flat, _, _ = _flatten_check(data)
     return flat
-
-
-def _has_string(data):
-    """检查（展平后的）数据中是否包含字符串。"""
-    _, _, has_s = _flatten_check(data)
-    return has_s
 
 
 def _setitem_value(value):
@@ -1379,7 +1934,7 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
     if isinstance(dtype, DType) and dtype._fields:
         _fields = dtype._fields
         # 多字段结构化数据 → 存储原始 Python 数据
-        if len(_fields) > 1 or any(isinstance(row, (list, tuple)) and len(row) > 1 for row in data):
+        if len(_fields) > 1 or _py_any(isinstance(row, (list, tuple)) and len(row) > 1 for row in data):
             _raw_data = list(data)
             data = [tuple(v for v in row) if isinstance(row, (list, tuple)) else row for row in data]
         else:
@@ -1656,8 +2211,29 @@ def arange(start=0, stop=None, step=1, dtype=None):
     if stop is None:
         stop = start
         start = 0
+    if isinstance(start, datetime64) or isinstance(stop, datetime64) \
+            or isinstance(step, timedelta64):
+        return _datetime_arange(start, stop, step)
     _dtype = _resolve_dtype(dtype) if dtype is not None else _infer_int_dtype((start, stop, step))
     return ndarray(_core.arange(start, stop, step), _dtype=_dtype)
+
+
+def _datetime_arange(start, stop, step):
+    """datetime64/timedelta64 版本的 arange：以天数（自纪元起）生成浮点数组。
+
+    产出的数组值遵循 matplotlib/rsplotlib 的日期数值约定，可直接绘图并被
+    ConciseDateFormatter 正确格式化。
+    """
+    if isinstance(step, timedelta64):
+        unit = step._unit
+    elif isinstance(start, datetime64):
+        unit = start._unit
+    elif isinstance(stop, datetime64):
+        unit = stop._unit
+    else:
+        unit = 'D'
+    raw = _core.arange(float(start), float(stop), float(step))
+    return ndarray(raw, _dtype='datetime64[%s]' % unit)
 
 
 def linspace(start, stop, num=50, endpoint=True, retstep=False, dtype=None, axis=0):
@@ -1798,6 +2374,20 @@ class _RClass:
 r_ = _RClass()
 
 
+class _CClass:
+    """列连接辅助类，模拟 np.c_。"""
+    def __getitem__(self, item):
+        if not isinstance(item, tuple):
+            item = (item,)
+        arrays = [ndarray(it) for it in item]
+        if _py_all(a.ndim <= 1 for a in arrays):
+            return column_stack(arrays)
+        return concatenate(arrays, axis=1)
+
+
+c_ = _CClass()
+
+
 class _SClass:
     """切片辅助类，模拟 np.s_。"""
     def __getitem__(self, item):
@@ -1834,6 +2424,16 @@ def ogrid(*ranges):
         else:
             arrays.append(ndarray(r))
     return _core.meshgrid(*arrays, indexing='ij')
+
+
+def meshgrid(*xi, copy=True, sparse=False, indexing='xy'):
+    """从坐标向量返回坐标矩阵。
+
+    默认使用 'xy' 索引（与 NumPy 一致），返回一维输入数组两两组合的网格。
+    """
+    arrays = [_ensure(x) for x in xi]
+    grids = _core.meshgrid(*arrays, indexing=indexing)
+    return [ndarray._wrap(g) for g in grids]
 
 
 # ========== FFT 函数 ==========
@@ -2209,15 +2809,6 @@ class _BroadcastIter:
             return int(val)
         return float(val)
 
-    def _ravel_c(self, *indices):
-        """将多维索引转为扁平索引（C-order）。"""
-        idx = 0
-        stride = 1
-        for i in range(len(self._arr_shape) - 1, -1, -1):
-            idx += indices[i] * stride
-            stride *= self._arr_shape[i]
-        return idx
-
 
 # 数组操作函数
 reshape = _array_ops_module.reshape
@@ -2281,20 +2872,6 @@ def bitwise_xor(x1, x2):
     return _wrap_result(_core.bitwise_xor(r1, r2), dt)
 
 def bitwise_not(x):
-    """按位取反（对布尔数组使用逻辑取反）"""
-    r, dt = _to_raw(x)
-    if dt == 'bool':
-        r = _core.invert(r)
-    elif dt == 'uint8':
-        raw = _core.bitwise_not(r)
-        r = _core.bitwise_and(raw, _core.ndarray([255]))
-        dt = 'uint8'
-    else:
-        r = _core.bitwise_not(r)
-    return _wrap_result(r, dt)
-
-
-def invert(x):
     """按位取反（等效于 ~ 运算符，对布尔数组使用逻辑取反）"""
     r, dt = _to_raw(x)
     if dt == 'bool':
@@ -2306,6 +2883,10 @@ def invert(x):
     else:
         r = _core.bitwise_not(r)
     return _wrap_result(r, dt)
+
+
+# invert 与 bitwise_not 行为完全一致，直接作为别名，避免重复实现。
+invert = bitwise_not
 
 def left_shift(x1, x2):
     """左移"""
@@ -2410,6 +2991,17 @@ histogram2d = _statistics_module.histogram2d
 histogramdd = _statistics_module.histogramdd
 digitize = _statistics_module.digitize
 
+
+def cumsum(a, axis=None):
+    """计算数组元素的累积和。"""
+    return asarray(a).cumsum(axis)
+
+
+def cumprod(a, axis=None):
+    """计算数组元素的累积乘积。"""
+    return asarray(a).cumprod(axis)
+
+
 # 子模块
 
 linalg = _linalg_module()
@@ -2431,7 +3023,7 @@ __all__ = [
     'zeros', 'zeros_like', 'ones', 'ones_like', 'full', 'full_like',
     'empty', 'empty_like', 'eye', 'identity',
     'arange', 'linspace', 'logspace', 'geomspace',
-    'fromfunction', 'frombuffer', 'r_', 's_', 'mgrid', 'ogrid',
+    'fromfunction', 'frombuffer', 'r_', 'c_', 's_', 'mgrid', 'ogrid', 'meshgrid',
     'reshape', 'ravel', 'moveaxis', 'rollaxis', 'broadcast_to',
     'transpose', 'swapaxes', 'expand_dims', 'squeeze',
     'concatenate', 'stack', 'vstack', 'hstack', 'dstack', 'column_stack',
@@ -2447,12 +3039,13 @@ __all__ = [
     'bitwise_and', 'bitwise_or', 'bitwise_xor', 'bitwise_not',
     'invert', 'left_shift', 'right_shift',
     'string_', 'unicode_', 'char',
+    'datetime64', 'timedelta64',
     'exp', 'expm1', 'log', 'log10', 'log2', 'log1p',
     'around', 'floor', 'ceil', 'trunc', 'fix',
     'sqrt', 'square', 'cbrt', 'abs', 'sign', 'reciprocal', 'clip', 'sinc', 'heaviside',
     'add', 'subtract', 'multiply', 'divide', 'power', 'mod', 'remainder',
     'greater', 'less', 'equal', 'logical_and', 'logical_or', 'isclose', 'allclose',
-    'sum', 'mean', 'std', 'var', 'min', 'max', 'amin', 'amax', 'ptp',
+    'sum', 'cumsum', 'cumprod', 'mean', 'std', 'var', 'min', 'max', 'amin', 'amax', 'ptp',
     'median', 'average', 'percentile', 'quantile', 'nanmedian', 'nanpercentile',
     'argmax', 'argmin', 'argsort', 'sort', 'searchsorted', 'extract',
     'cov', 'corrcoef',
@@ -2463,5 +3056,27 @@ __all__ = [
     'isnan', 'isinf', 'isfinite',
     'save', 'load', 'loadtxt', 'savetxt', 'savez',
     'Poly', 'polyval', 'polyfit', 'polyder', 'polyint', 'polyroots',
-    'linalg', 'random', 'matlib', 'load_npz'
+    'linalg', 'random', 'matlib', 'load_npz',
+    # 标量类型层次
+    'generic', 'number', 'integer', 'signedinteger', 'unsignedinteger',
+    'inexact', 'floating', 'complexfloating', 'flexible', 'character',
+    'int8', 'int16', 'int32', 'int64', 'uint8', 'uint16', 'uint32', 'uint64',
+    'float16', 'float32', 'float64', 'float_', 'complex64', 'complex128',
+    'bytes_', 'str_', 'bool_', 'object_', 'void',
+    'byte', 'short', 'intc', 'int_', 'long', 'longlong', 'intp',
+    'ubyte', 'ushort', 'uintc', 'uint', 'ulong', 'ulonglong', 'uintp',
+    'half', 'single', 'double', 'longdouble', 'csingle', 'cdouble', 'clongdouble',
+    'True_', 'False_', 'little_endian', 'ScalarType', 'sctypeDict', 'typecodes',
+    'issubdtype', 'finfo', 'iinfo', 'ndindex', 'ndenumerate', 'index_exp',
+    'dtype', 'DType',
 ]
+
+
+# ========== 补充 API（_extra）挂载 ==========
+# _extra 中的函数均由现有 Rust 原语组合实现；已存在的原生实现（如 iscomplex）优先保留。
+
+for _extra_name in _extra_module.__all__:
+    if _extra_name not in globals():
+        globals()[_extra_name] = getattr(_extra_module, _extra_name)
+        __all__.append(_extra_name)
+del _extra_name

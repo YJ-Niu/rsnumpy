@@ -18,15 +18,26 @@ def _ensure_raw(a):
     return _core.ndarray(a)
 
 
-def reshape(a, newshape, order='C'):
-    """改变数组形状而不改变数据。"""
-    if isinstance(newshape, int):
-        newshape = (newshape,)
+def reshape(a, shape=None, order='C', *, newshape=None, copy=None):
+    """改变数组形状而不改变数据。
+
+    shape 为新形状（整数或整数元组）。newshape 为已弃用的旧参数名，
+    order 支持 'C'（行优先）与 'F'（列优先）。
+    """
+    _ = copy
+    if shape is None:
+        shape = newshape
+    if shape is None:
+        raise TypeError("reshape() missing required argument 'shape' (pos 2)")
+    if isinstance(shape, int):
+        shape = (shape,)
+    else:
+        shape = tuple(shape)
     arr = a if hasattr(a, '_array') else _wrap(a)
     if order == 'F':
         flat = arr.ravel(order='F')
-        return _wrap(_core.reshape(flat._array, newshape))
-    return _wrap(_core.reshape(_ensure_raw(a), newshape))
+        return _wrap(_core.reshape(flat._array, shape))
+    return _wrap(_core.reshape(_ensure_raw(a), shape))
 
 
 def ravel(a, order='C'):
@@ -58,12 +69,27 @@ def broadcast_to(a, shape):
 
 
 def transpose(a, axes=None):
-    """转置数组。"""
+    """转置数组。axes 为 None 时反转所有轴，否则按给定顺序置换。"""
     arr = a if hasattr(a, '_array') else _wrap(a)
     nd = _nd()
     dtype = getattr(arr, '_dtype', "float64")
     fields = getattr(arr, '_fields', None)
     raw_data = getattr(arr, '_raw_data', None)
+    ndim = arr.ndim
+    if axes is not None:
+        axes = [ax % ndim for ax in axes]
+        if axes != list(reversed(range(ndim))) and axes != list(range(ndim)):
+            # 通过交换轴序列达到任意置换（result 轴 i 来自原轴 axes[i]）
+            result = arr
+            cur = list(range(ndim))
+            for i in range(ndim):
+                j = cur.index(axes[i])
+                if j != i:
+                    result = swapaxes(result, i, j)
+                    cur[i], cur[j] = cur[j], cur[i]
+            return result
+        if axes == list(range(ndim)):
+            return nd._wrap(arr._array, _dtype=dtype, _fields=fields, _raw_data=raw_data)
     result = _core.transpose(arr._array)
     return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
 
@@ -331,17 +357,33 @@ def insert(arr, obj, values, axis=None):
     return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
 
 
-def unique(a, return_index=False, return_inverse=False, return_counts=False):
-    """查找数组内的唯一元素。"""
+def unique(a, return_index=False, return_inverse=False, return_counts=False,
+           axis=None, *, equal_nan=True, sorted=True):
+    """查找数组内的唯一元素。
+
+    axis 为 None 时展平后去重；为整数时，将该轴移到最前、其余维度展平，
+    把每个子数组视为一个元素按字典序去重（唯一“行”）。
+    """
+    _ = equal_nan
     arr = a if hasattr(a, '_array') else _wrap(a)
     nd = _nd()
     dtype = getattr(arr, '_dtype', "float64")
     fields = getattr(arr, '_fields', None)
     raw_data = getattr(arr, '_raw_data', None)
 
-    results = _core.unique_full(arr._array, return_index, return_inverse, return_counts)
-    wrapped = [nd._wrap(r, _dtype=dtype, _fields=fields, _raw_data=raw_data) for r in results]
-    
+    if axis is None:
+        results = _core.unique_full(arr._array, return_index, return_inverse, return_counts)
+        wrapped = [nd._wrap(r, _dtype=dtype, _fields=fields, _raw_data=raw_data) for r in results]
+        if not (return_index or return_inverse or return_counts):
+            return wrapped[0]
+        return tuple(wrapped)
+
+    results = _core.unique_axis(
+        arr._array, axis, return_index, return_inverse, return_counts, sorted)
+    unique_arr = nd._wrap(results[0], _dtype=dtype, _fields=fields, _raw_data=raw_data)
     if not (return_index or return_inverse or return_counts):
-        return wrapped[0]
-    return tuple(wrapped)
+        return unique_arr
+    outputs = [unique_arr]
+    for r in results[1:]:
+        outputs.append(nd._wrap(r, _dtype="int64"))
+    return tuple(outputs)
