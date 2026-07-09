@@ -2376,6 +2376,161 @@ fn unique_full(
 }
 
 #[pyfunction]
+#[pyo3(signature = (a, axis, return_index=false, return_inverse=false, return_counts=false, sorted=true))]
+fn unique_axis(
+    a: &NdArray,
+    axis: isize,
+    return_index: bool,
+    return_inverse: bool,
+    return_counts: bool,
+    sorted: bool,
+) -> PyResult<Vec<NdArray>> {
+    let ndim = a.data.ndim();
+    if ndim == 0 {
+        return Err(PyValueError::new_err(
+            "axis argument to unique is not supported for 0-d arrays",
+        ));
+    }
+    let ax = if axis < 0 {
+        (ndim as isize + axis) as usize
+    } else {
+        axis as usize
+    };
+    if ax >= ndim {
+        return Err(PyValueError::new_err(format!(
+            "axis {} is out of bounds for array of dimension {}",
+            axis, ndim
+        )));
+    }
+
+    // 将目标轴移到最前，其余轴保持相对顺序
+    let mut perm: Vec<usize> = Vec::with_capacity(ndim);
+    perm.push(ax);
+    for i in 0..ndim {
+        if i != ax {
+            perm.push(i);
+        }
+    }
+
+    let moved = a.data.view().permuted_axes(perm.clone()).to_owned();
+    let n = moved.shape()[0];
+    let rest: Vec<usize> = moved.shape()[1..].to_vec();
+    let block: usize = rest.iter().product::<usize>().max(1);
+    // 按 C 顺序展平（iter 始终按逻辑顺序遍历，与内存布局无关）
+    let flat: Vec<f64> = moved.iter().copied().collect();
+
+    let row = |i: usize| -> &[f64] { &flat[i * block..(i + 1) * block] };
+    // 逐元素精确比较；NaN 与任何值（含 NaN）都不相等
+    let rows_equal = |i: usize, j: usize| -> bool {
+        let (ri, rj) = (row(i), row(j));
+        for k in 0..block {
+            if ri[k].is_nan() || rj[k].is_nan() || ri[k] != rj[k] {
+                return false;
+            }
+        }
+        true
+    };
+
+    // 稳定字典序排序（NaN 视为最大），保证同组内保留原始先后顺序
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_by(|&i, &j| {
+        let (ri, rj) = (row(i), row(j));
+        for k in 0..block {
+            let (av, bv) = (ri[k], rj[k]);
+            let o = match (av.is_nan(), bv.is_nan()) {
+                (true, true) => std::cmp::Ordering::Equal,
+                (true, false) => std::cmp::Ordering::Greater,
+                (false, true) => std::cmp::Ordering::Less,
+                (false, false) => av.partial_cmp(&bv).unwrap_or(std::cmp::Ordering::Equal),
+            };
+            if o != std::cmp::Ordering::Equal {
+                return o;
+            }
+        }
+        std::cmp::Ordering::Equal
+    });
+
+    // 相邻去重：每组代表取组内最小原始下标；同时记录每个原始行的组号
+    let mut uniq_first: Vec<usize> = Vec::new();
+    let mut counts: Vec<usize> = Vec::new();
+    let mut inverse_by_orig: Vec<usize> = vec![0usize; n];
+    let mut cur_group: usize = 0;
+    for pos in 0..n {
+        let oi = order[pos];
+        if pos == 0 || !rows_equal(oi, order[pos - 1]) {
+            if pos != 0 {
+                cur_group += 1;
+            }
+            uniq_first.push(oi);
+            counts.push(1);
+        } else {
+            *counts.last_mut().unwrap() += 1;
+            if oi < *uniq_first.last().unwrap() {
+                *uniq_first.last_mut().unwrap() = oi;
+            }
+        }
+        inverse_by_orig[oi] = cur_group;
+    }
+
+    let m = uniq_first.len();
+    // sorted=false 时按首次出现顺序（代表下标升序）重排各组
+    let mut group_order: Vec<usize> = (0..m).collect();
+    if !sorted {
+        group_order.sort_by_key(|&g| uniq_first[g]);
+    }
+    let mut remap: Vec<usize> = vec![0usize; m];
+    for (new_g, &old_g) in group_order.iter().enumerate() {
+        remap[old_g] = new_g;
+    }
+
+    let mut out_flat: Vec<f64> = Vec::with_capacity(m * block);
+    let mut index_out: Vec<f64> = Vec::with_capacity(m);
+    let mut counts_out: Vec<f64> = Vec::with_capacity(m);
+    for &g in &group_order {
+        out_flat.extend_from_slice(row(uniq_first[g]));
+        index_out.push(uniq_first[g] as f64);
+        counts_out.push(counts[g] as f64);
+    }
+
+    let mut moved_shape: Vec<usize> = Vec::with_capacity(ndim);
+    moved_shape.push(m);
+    moved_shape.extend_from_slice(&rest);
+    let unique_moved = Array::from_shape_vec(IxDyn(&moved_shape), out_flat)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+
+    // 将轴顺序还原到原始排列
+    let inv_perm: Vec<usize> = (0..ndim)
+        .map(|i| perm.iter().position(|&x| x == i).unwrap())
+        .collect();
+    let unique_arr = unique_moved
+        .view()
+        .permuted_axes(inv_perm)
+        .as_standard_layout()
+        .to_owned();
+
+    let mut results = vec![NdArray { data: unique_arr }];
+
+    if return_index {
+        let arr = Array::from_shape_vec(IxDyn(&[index_out.len()]), index_out)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        results.push(NdArray { data: arr });
+    }
+    if return_inverse {
+        let inv: Vec<f64> = inverse_by_orig.iter().map(|&g| remap[g] as f64).collect();
+        let arr = Array::from_shape_vec(IxDyn(&[inv.len()]), inv)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        results.push(NdArray { data: arr });
+    }
+    if return_counts {
+        let arr = Array::from_shape_vec(IxDyn(&[counts_out.len()]), counts_out)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        results.push(NdArray { data: arr });
+    }
+
+    Ok(results)
+}
+
+#[pyfunction]
 #[pyo3(signature = (a, new_shape))]
 fn resize_rs(a: &NdArray, new_shape: Vec<usize>) -> PyResult<NdArray> {
     let new_size: usize = new_shape.iter().product();
@@ -6416,6 +6571,7 @@ fn init_misc_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(clip, m)?)?;
     m.add_function(wrap_pyfunction!(unique, m)?)?;
     m.add_function(wrap_pyfunction!(unique_full, m)?)?;
+    m.add_function(wrap_pyfunction!(unique_axis, m)?)?;
     m.add_function(wrap_pyfunction!(resize_rs, m)?)?;
     m.add_function(wrap_pyfunction!(delete_rs, m)?)?;
     m.add_function(wrap_pyfunction!(insert_rs, m)?)?;

@@ -357,17 +357,33 @@ def insert(arr, obj, values, axis=None):
     return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
 
 
-def unique(a, return_index=False, return_inverse=False, return_counts=False):
-    """查找数组内的唯一元素。"""
+def unique(a, return_index=False, return_inverse=False, return_counts=False,
+           axis=None, *, equal_nan=True, sorted=True):
+    """查找数组内的唯一元素。
+
+    axis 为 None 时展平后去重；为整数时，将该轴移到最前、其余维度展平，
+    把每个子数组视为一个元素按字典序去重（唯一“行”）。
+    """
+    _ = equal_nan
     arr = a if hasattr(a, '_array') else _wrap(a)
     nd = _nd()
     dtype = getattr(arr, '_dtype', "float64")
     fields = getattr(arr, '_fields', None)
     raw_data = getattr(arr, '_raw_data', None)
 
-    results = _core.unique_full(arr._array, return_index, return_inverse, return_counts)
-    wrapped = [nd._wrap(r, _dtype=dtype, _fields=fields, _raw_data=raw_data) for r in results]
-    
+    if axis is None:
+        results = _core.unique_full(arr._array, return_index, return_inverse, return_counts)
+        wrapped = [nd._wrap(r, _dtype=dtype, _fields=fields, _raw_data=raw_data) for r in results]
+        if not (return_index or return_inverse or return_counts):
+            return wrapped[0]
+        return tuple(wrapped)
+
+    results = _core.unique_axis(
+        arr._array, axis, return_index, return_inverse, return_counts, sorted)
+    unique_arr = nd._wrap(results[0], _dtype=dtype, _fields=fields, _raw_data=raw_data)
     if not (return_index or return_inverse or return_counts):
-        return wrapped[0]
-    return tuple(wrapped)
+        return unique_arr
+    outputs = [unique_arr]
+    for r in results[1:]:
+        outputs.append(nd._wrap(r, _dtype="int64"))
+    return tuple(outputs)

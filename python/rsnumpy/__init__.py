@@ -32,7 +32,7 @@ from .random import random_module as _random_module
 from . import char as _char_module
 from . import matlib as _matlib_module
 
-__version__ = "1.1.1"
+__version__ = "1.1.2"
 
 # 捕获内建函数别名：_extra 挂载会向本模块 globals 注入同名的 numpy 函数
 # （all/any/round），会遮蔽内建函数。以下别名保证本文件内部逻辑始终使用内建实现。
