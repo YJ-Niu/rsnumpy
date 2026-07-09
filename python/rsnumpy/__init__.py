@@ -30,7 +30,7 @@ from .random import random_module as _random_module
 from . import char as _char_module
 from . import matlib as _matlib_module
 
-__version__ = "1.0.5"
+__version__ = "1.1.0"
 
 class ArrayFlags:
     """数组内存布局信息，与 NumPy 的 np.ndarray.flags 兼容。"""
@@ -2720,3 +2720,14 @@ __all__ = [
     'Poly', 'polyval', 'polyfit', 'polyder', 'polyint', 'polyroots',
     'linalg', 'random', 'matlib', 'load_npz'
 ]
+
+
+# ========== 补充 API（_extra）挂载 ==========
+# _extra 中的函数均由现有 Rust 原语组合实现；已存在的原生实现（如 iscomplex）优先保留。
+from . import _extra as _extra_module
+
+for _extra_name in _extra_module.__all__:
+    if _extra_name not in globals():
+        globals()[_extra_name] = getattr(_extra_module, _extra_name)
+        __all__.append(_extra_name)
+del _extra_name

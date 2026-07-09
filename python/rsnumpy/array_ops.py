@@ -58,12 +58,27 @@ def broadcast_to(a, shape):
 
 
 def transpose(a, axes=None):
-    """转置数组。"""
+    """转置数组。axes 为 None 时反转所有轴，否则按给定顺序置换。"""
     arr = a if hasattr(a, '_array') else _wrap(a)
     nd = _nd()
     dtype = getattr(arr, '_dtype', "float64")
     fields = getattr(arr, '_fields', None)
     raw_data = getattr(arr, '_raw_data', None)
+    ndim = arr.ndim
+    if axes is not None:
+        axes = [ax % ndim for ax in axes]
+        if axes != list(reversed(range(ndim))) and axes != list(range(ndim)):
+            # 通过交换轴序列达到任意置换（result 轴 i 来自原轴 axes[i]）
+            result = arr
+            cur = list(range(ndim))
+            for i in range(ndim):
+                j = cur.index(axes[i])
+                if j != i:
+                    result = swapaxes(result, i, j)
+                    cur[i], cur[j] = cur[j], cur[i]
+            return result
+        if axes == list(range(ndim)):
+            return nd._wrap(arr._array, _dtype=dtype, _fields=fields, _raw_data=raw_data)
     result = _core.transpose(arr._array)
     return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
 

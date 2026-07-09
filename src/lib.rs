@@ -4021,6 +4021,136 @@ fn hypot(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
     Ok(NdArray { data: result })
 }
 
+fn gcd_i64(a: i64, b: i64) -> i64 {
+    let (mut a, mut b) = (a.abs(), b.abs());
+    while b != 0 {
+        let t = b;
+        b = a % b;
+        a = t;
+    }
+    a
+}
+
+#[pyfunction]
+fn gcd(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
+    let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| {
+        gcd_i64(a as i64, b as i64) as f64
+    })?;
+    Ok(NdArray { data: result })
+}
+
+#[pyfunction]
+fn lcm(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
+    let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| {
+        let (ai, bi) = (a as i64, b as i64);
+        if ai == 0 || bi == 0 {
+            0.0
+        } else {
+            ((ai / gcd_i64(ai, bi)) * bi).abs() as f64
+        }
+    })?;
+    Ok(NdArray { data: result })
+}
+
+#[pyfunction]
+fn nextafter(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
+    let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| {
+        if a.is_nan() || b.is_nan() {
+            f64::NAN
+        } else if a < b {
+            a.next_up()
+        } else if a > b {
+            a.next_down()
+        } else {
+            b
+        }
+    })?;
+    Ok(NdArray { data: result })
+}
+
+#[pyfunction]
+fn copysign(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
+    let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| a.copysign(b))?;
+    Ok(NdArray { data: result })
+}
+
+#[pyfunction]
+fn ldexp(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
+    let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| a * (2.0_f64).powi(b as i32))?;
+    Ok(NdArray { data: result })
+}
+
+#[pyfunction]
+fn signbit(x: &NdArray) -> NdArray {
+    NdArray {
+        data: x
+            .data
+            .mapv(|v| if v.is_sign_negative() { 1.0 } else { 0.0 }),
+    }
+}
+
+#[pyfunction]
+fn rint(x: &NdArray) -> NdArray {
+    NdArray {
+        data: x.data.mapv(|v| v.round_ties_even()),
+    }
+}
+
+#[pyfunction]
+fn spacing(x: &NdArray) -> NdArray {
+    NdArray {
+        data: x.data.mapv(|v| v.next_up() - v),
+    }
+}
+
+#[pyfunction]
+#[pyo3(signature = (x, minlength=0))]
+fn bincount(x: &NdArray, minlength: usize) -> NdArray {
+    let mut max_val: i64 = -1;
+    for &v in x.data.iter() {
+        let iv = v as i64;
+        if iv > max_val {
+            max_val = iv;
+        }
+    }
+    let n = ::std::cmp::max(minlength as i64, max_val + 1).max(0) as usize;
+    let mut counts = vec![0.0f64; n];
+    for &v in x.data.iter() {
+        let iv = v as i64;
+        if iv >= 0 && (iv as usize) < n {
+            counts[iv as usize] += 1.0;
+        }
+    }
+    NdArray {
+        data: Array::from_shape_vec(IxDyn(&[n]), counts).unwrap(),
+    }
+}
+
+#[pyfunction]
+#[pyo3(signature = (element, test, invert=false))]
+fn isin(element: &NdArray, test: &NdArray, invert: bool) -> NdArray {
+    use ::std::collections::HashSet;
+    let mut set: HashSet<u64> = HashSet::with_capacity(test.data.len());
+    for &v in test.data.iter() {
+        if v.is_nan() {
+            continue;
+        }
+        let key = if v == 0.0 { 0u64 } else { v.to_bits() };
+        set.insert(key);
+    }
+    let data = element.data.mapv(|v| {
+        let present = if v.is_nan() {
+            false
+        } else {
+            let key = if v == 0.0 { 0u64 } else { v.to_bits() };
+            set.contains(&key)
+        };
+        let res = if invert { !present } else { present };
+        if res { 1.0 } else { 0.0 }
+    });
+    NdArray { data }
+}
+
 #[pyfunction]
 fn sinc(x: &NdArray) -> NdArray {
     let pi = std::f64::consts::PI;
@@ -6102,6 +6232,16 @@ fn init_math_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(hypot, m)?)?;
     m.add_function(wrap_pyfunction!(sinc, m)?)?;
     m.add_function(wrap_pyfunction!(heaviside, m)?)?;
+    m.add_function(wrap_pyfunction!(gcd, m)?)?;
+    m.add_function(wrap_pyfunction!(lcm, m)?)?;
+    m.add_function(wrap_pyfunction!(nextafter, m)?)?;
+    m.add_function(wrap_pyfunction!(copysign, m)?)?;
+    m.add_function(wrap_pyfunction!(ldexp, m)?)?;
+    m.add_function(wrap_pyfunction!(signbit, m)?)?;
+    m.add_function(wrap_pyfunction!(rint, m)?)?;
+    m.add_function(wrap_pyfunction!(spacing, m)?)?;
+    m.add_function(wrap_pyfunction!(bincount, m)?)?;
+    m.add_function(wrap_pyfunction!(isin, m)?)?;
     Ok(())
 }
 
