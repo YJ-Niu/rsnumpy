@@ -12,6 +12,8 @@ Examples:
     2.0
 """
 
+import datetime as _datetime
+
 import rsnumpy._core as _core
 from rsnumpy._core import ndarray_iter as NdArrayIter
 # ========== 子模块导入和函数挂载 ==========
@@ -256,7 +258,11 @@ class ndarray:
         return raw_list
 
     def __iter__(self):
-        return iter(self.tolist())
+        # 一维（及标量）按元素迭代产生 Python 标量；高维按首轴迭代产生子数组，
+        # 与 NumPy 行为一致（如 a, b = np.random.randn(2, n) 得到两个数组）。
+        if self.ndim <= 1:
+            return iter(self.tolist())
+        return (self[i] for i in range(self.shape[0]))
 
     @property
     def __array_interface__(self):
@@ -389,6 +395,11 @@ class ndarray:
         if _is_ndarray(other):
             return _wrap_result(_core.power(self._array, other._array), self._dtype)
         return _wrap_result(_core.power(self._array, _core.ndarray([other])), self._dtype)
+
+    def __rpow__(self, other):
+        if _is_ndarray(other):
+            return _wrap_result(_core.power(other._array, self._array), self._dtype)
+        return _wrap_result(_core.power(_core.ndarray([other]), self._array), self._dtype)
 
     def __neg__(self):
         """逐元素取负（- 运算符）。"""
@@ -1243,6 +1254,232 @@ string_ = type('string_', (), {})
 unicode_ = type('unicode_', (), {})
 
 
+# ========== 日期时间类型 ==========
+# 内部统一以“自 1970-01-01 (UTC) 起的天数”存储，与 matplotlib/rsplotlib 的日期约定
+# 一致，从而可直接参与绘图并被 ConciseDateFormatter 正确格式化为刻度标签。
+
+_DT_EPOCH = _datetime.datetime(1970, 1, 1)
+
+# 时间单位 → 天数换算（Y/M 因日历长度可变，取近似值）
+_TD_UNIT_DAYS = {
+    'W': 7.0,
+    'D': 1.0,
+    'h': 1.0 / 24.0,
+    'm': 1.0 / 1440.0,
+    's': 1.0 / 86400.0,
+    'ms': 1.0 / 86400.0e3,
+    'us': 1.0 / 86400.0e6,
+    'ns': 1.0 / 86400.0e9,
+    'Y': 365.0,
+    'M': 30.0,
+}
+
+
+def _parse_datetime_string(s, unit=None):
+    """解析 ISO 日期字符串为 (自纪元起天数, 推断出的单位)。"""
+    s = s.strip()
+    date_part, time_part = s, None
+    if 'T' in s:
+        date_part, time_part = s.split('T', 1)
+    elif ':' in s and ' ' in s:
+        date_part, time_part = s.split(' ', 1)
+    ymd = date_part.split('-')
+    year = int(ymd[0])
+    month = int(ymd[1]) if len(ymd) > 1 else 1
+    day = int(ymd[2]) if len(ymd) > 2 else 1
+    resolved = 'D' if len(ymd) >= 3 else ('M' if len(ymd) == 2 else 'Y')
+    hour = minute = second = micro = 0
+    if time_part:
+        tparts = time_part.split(':')
+        hour = int(tparts[0])
+        resolved = 'h'
+        if len(tparts) > 1:
+            minute = int(tparts[1])
+            resolved = 'm'
+        if len(tparts) > 2:
+            sec = tparts[2]
+            if '.' in sec:
+                sec_i, frac = sec.split('.', 1)
+                second = int(sec_i)
+                micro = int(round(float('0.' + frac) * 1e6))
+                resolved = 'us'
+            else:
+                second = int(sec)
+                resolved = 's'
+    dt = _datetime.datetime(year, month, day, hour, minute, second, micro)
+    days = (dt - _DT_EPOCH).total_seconds() / 86400.0
+    return days, (unit or resolved)
+
+
+def _parse_datetime_to_days(value, unit=None):
+    """将 datetime64 的各种输入统一解析为 (自纪元起天数, 单位)。"""
+    if isinstance(value, datetime64):
+        return value._days, (unit or value._unit)
+    if isinstance(value, _datetime.datetime):
+        return (value - _DT_EPOCH).total_seconds() / 86400.0, (unit or 'us')
+    if isinstance(value, _datetime.date):
+        dt = _datetime.datetime(value.year, value.month, value.day)
+        return (dt - _DT_EPOCH).total_seconds() / 86400.0, (unit or 'D')
+    if isinstance(value, str):
+        return _parse_datetime_string(value, unit)
+    # 数值 + 单位：表示纪元之后的偏移量
+    u = unit or 'us'
+    return float(value) * _TD_UNIT_DAYS.get(u, _TD_UNIT_DAYS['us']), u
+
+
+class timedelta64:
+    """时间间隔标量，内部以天数存储，兼容 numpy.timedelta64 的常用构造与运算。"""
+
+    def __init__(self, value=0, unit=None):
+        if isinstance(value, timedelta64):
+            self._days = value._days
+            self._unit = unit or value._unit
+            return
+        u = unit or 'us'
+        self._unit = u
+        self._days = float(value) * _TD_UNIT_DAYS.get(u, _TD_UNIT_DAYS['us'])
+
+    @classmethod
+    def _from_days(cls, days, unit='us'):
+        obj = cls.__new__(cls)
+        obj._days = float(days)
+        obj._unit = unit
+        return obj
+
+    def _value_in_unit(self):
+        return self._days / _TD_UNIT_DAYS.get(self._unit, 1.0)
+
+    def __float__(self):
+        return self._days
+
+    def __int__(self):
+        return int(self._value_in_unit())
+
+    def __add__(self, other):
+        if isinstance(other, datetime64):
+            return datetime64._from_days(self._days + other._days, other._unit)
+        if isinstance(other, timedelta64):
+            return timedelta64._from_days(self._days + other._days, self._unit)
+        return timedelta64._from_days(self._days + float(other), self._unit)
+    __radd__ = __add__
+
+    def __sub__(self, other):
+        d = other._days if isinstance(other, timedelta64) else float(other)
+        return timedelta64._from_days(self._days - d, self._unit)
+
+    def __mul__(self, other):
+        return timedelta64._from_days(self._days * float(other), self._unit)
+    __rmul__ = __mul__
+
+    def __truediv__(self, other):
+        if isinstance(other, timedelta64):
+            return self._days / other._days
+        return timedelta64._from_days(self._days / float(other), self._unit)
+
+    def __eq__(self, other):
+        if isinstance(other, timedelta64):
+            return self._days == other._days
+        return NotImplemented
+
+    def __hash__(self):
+        return hash(self._days)
+
+    def __lt__(self, other):
+        return self._days < float(other)
+
+    def __le__(self, other):
+        return self._days <= float(other)
+
+    def __gt__(self, other):
+        return self._days > float(other)
+
+    def __ge__(self, other):
+        return self._days >= float(other)
+
+    def __repr__(self):
+        v = self._value_in_unit()
+        vi = int(round(v))
+        vout = vi if abs(v - vi) < 1e-9 else v
+        return "numpy.timedelta64(%r,'%s')" % (vout, self._unit)
+
+
+class datetime64:
+    """日期时间标量，内部以“自 1970-01-01 起的天数”存储，兼容 numpy.datetime64 的常用用法。"""
+
+    def __init__(self, value=None, unit=None):
+        if value is None:
+            self._days = 0.0
+            self._unit = unit or 'D'
+            return
+        self._days, self._unit = _parse_datetime_to_days(value, unit)
+
+    @classmethod
+    def _from_days(cls, days, unit='D'):
+        obj = cls.__new__(cls)
+        obj._days = float(days)
+        obj._unit = unit
+        return obj
+
+    def to_datetime(self):
+        return _DT_EPOCH + _datetime.timedelta(days=self._days)
+
+    def __float__(self):
+        return self._days
+
+    def __int__(self):
+        return int(self._days)
+
+    def __add__(self, other):
+        if isinstance(other, timedelta64):
+            return datetime64._from_days(self._days + other._days, self._unit)
+        return datetime64._from_days(self._days + float(other), self._unit)
+    __radd__ = __add__
+
+    def __sub__(self, other):
+        if isinstance(other, datetime64):
+            return timedelta64._from_days(self._days - other._days, self._unit)
+        if isinstance(other, timedelta64):
+            return datetime64._from_days(self._days - other._days, self._unit)
+        return datetime64._from_days(self._days - float(other), self._unit)
+
+    def __eq__(self, other):
+        if isinstance(other, datetime64):
+            return self._days == other._days
+        return NotImplemented
+
+    def __hash__(self):
+        return hash(self._days)
+
+    def __lt__(self, other):
+        return self._days < float(other)
+
+    def __le__(self, other):
+        return self._days <= float(other)
+
+    def __gt__(self, other):
+        return self._days > float(other)
+
+    def __ge__(self, other):
+        return self._days >= float(other)
+
+    def __repr__(self):
+        dt = self.to_datetime()
+        u = self._unit
+        if u == 'Y':
+            s = dt.strftime('%Y')
+        elif u == 'M':
+            s = dt.strftime('%Y-%m')
+        elif u == 'D':
+            s = dt.strftime('%Y-%m-%d')
+        elif u in ('h', 'm'):
+            s = dt.strftime('%Y-%m-%dT%H:%M')
+        elif u == 's':
+            s = dt.strftime('%Y-%m-%dT%H:%M:%S')
+        else:
+            s = dt.isoformat()
+        return "numpy.datetime64('%s')" % s
+
+
 # ========== 构造/工厂函数 ==========
 
 # _core.build_array 返回的 dtype 编码 → rsnumpy dtype 名称（与 _infer_int_dtype 一致）
@@ -1668,8 +1905,29 @@ def arange(start=0, stop=None, step=1, dtype=None):
     if stop is None:
         stop = start
         start = 0
+    if isinstance(start, datetime64) or isinstance(stop, datetime64) \
+            or isinstance(step, timedelta64):
+        return _datetime_arange(start, stop, step)
     _dtype = _resolve_dtype(dtype) if dtype is not None else _infer_int_dtype((start, stop, step))
     return ndarray(_core.arange(start, stop, step), _dtype=_dtype)
+
+
+def _datetime_arange(start, stop, step):
+    """datetime64/timedelta64 版本的 arange：以天数（自纪元起）生成浮点数组。
+
+    产出的数组值遵循 matplotlib/rsplotlib 的日期数值约定，可直接绘图并被
+    ConciseDateFormatter 正确格式化。
+    """
+    if isinstance(step, timedelta64):
+        unit = step._unit
+    elif isinstance(start, datetime64):
+        unit = start._unit
+    elif isinstance(stop, datetime64):
+        unit = stop._unit
+    else:
+        unit = 'D'
+    raw = _core.arange(float(start), float(stop), float(step))
+    return ndarray(raw, _dtype='datetime64[%s]' % unit)
 
 
 def linspace(start, stop, num=50, endpoint=True, retstep=False, dtype=None, axis=0):
@@ -1846,6 +2104,16 @@ def ogrid(*ranges):
         else:
             arrays.append(ndarray(r))
     return _core.meshgrid(*arrays, indexing='ij')
+
+
+def meshgrid(*xi, copy=True, sparse=False, indexing='xy'):
+    """从坐标向量返回坐标矩阵。
+
+    默认使用 'xy' 索引（与 NumPy 一致），返回一维输入数组两两组合的网格。
+    """
+    arrays = [_ensure(x) for x in xi]
+    grids = _core.meshgrid(*arrays, indexing=indexing)
+    return [ndarray._wrap(g) for g in grids]
 
 
 # ========== FFT 函数 ==========
@@ -2422,6 +2690,17 @@ histogram2d = _statistics_module.histogram2d
 histogramdd = _statistics_module.histogramdd
 digitize = _statistics_module.digitize
 
+
+def cumsum(a, axis=None):
+    """计算数组元素的累积和。"""
+    return asarray(a).cumsum(axis)
+
+
+def cumprod(a, axis=None):
+    """计算数组元素的累积乘积。"""
+    return asarray(a).cumprod(axis)
+
+
 # 子模块
 
 linalg = _linalg_module()
@@ -2443,7 +2722,7 @@ __all__ = [
     'zeros', 'zeros_like', 'ones', 'ones_like', 'full', 'full_like',
     'empty', 'empty_like', 'eye', 'identity',
     'arange', 'linspace', 'logspace', 'geomspace',
-    'fromfunction', 'frombuffer', 'r_', 's_', 'mgrid', 'ogrid',
+    'fromfunction', 'frombuffer', 'r_', 's_', 'mgrid', 'ogrid', 'meshgrid',
     'reshape', 'ravel', 'moveaxis', 'rollaxis', 'broadcast_to',
     'transpose', 'swapaxes', 'expand_dims', 'squeeze',
     'concatenate', 'stack', 'vstack', 'hstack', 'dstack', 'column_stack',
@@ -2459,12 +2738,13 @@ __all__ = [
     'bitwise_and', 'bitwise_or', 'bitwise_xor', 'bitwise_not',
     'invert', 'left_shift', 'right_shift',
     'string_', 'unicode_', 'char',
+    'datetime64', 'timedelta64',
     'exp', 'expm1', 'log', 'log10', 'log2', 'log1p',
     'around', 'floor', 'ceil', 'trunc', 'fix',
     'sqrt', 'square', 'cbrt', 'abs', 'sign', 'reciprocal', 'clip', 'sinc', 'heaviside',
     'add', 'subtract', 'multiply', 'divide', 'power', 'mod', 'remainder',
     'greater', 'less', 'equal', 'logical_and', 'logical_or', 'isclose', 'allclose',
-    'sum', 'mean', 'std', 'var', 'min', 'max', 'amin', 'amax', 'ptp',
+    'sum', 'cumsum', 'cumprod', 'mean', 'std', 'var', 'min', 'max', 'amin', 'amax', 'ptp',
     'median', 'average', 'percentile', 'quantile', 'nanmedian', 'nanpercentile',
     'argmax', 'argmin', 'argsort', 'sort', 'searchsorted', 'extract',
     'cov', 'corrcoef',

@@ -30,27 +30,32 @@ class random_module:
     
     def rand(self, *args):
         """生成均匀分布的随机数。"""
+        from ..__init__ import ndarray
         if len(args) == 0:
-            return self._random.rand(1)
-        return self._random.rand(*args)
+            return ndarray(self._random.rand(1))
+        return ndarray(self._random.rand(*args))
     
     def randn(self, *args):
         """生成标准正态分布的随机数。"""
+        from ..__init__ import ndarray
         if len(args) == 0:
-            return self._random.randn(1)
-        return self._random.randn(*args)
+            return ndarray(self._random.randn(1))
+        return ndarray(self._random.randn(*args))
     
     def randint(self, low, high=None, size=None):
         """生成整数随机数。"""
-        return self._random.randint(low, high, size)
+        from ..__init__ import ndarray
+        return ndarray._wrap(self._random.randint(low, high, size), "int64")
     
     def uniform(self, low=0.0, high=1.0, size=None):
         """生成均匀分布的随机数。"""
-        return self._random.uniform(low, high, size)
+        from ..__init__ import ndarray
+        return ndarray(self._random.uniform(low, high, size))
     
     def random(self, size=None):
         """生成 [0.0, 1.0) 区间均匀分布的随机数。"""
-        return self._random.uniform(0.0, 1.0, size)
+        from ..__init__ import ndarray
+        return ndarray(self._random.uniform(0.0, 1.0, size))
     
     def normal(self, loc=0.0, scale=1.0, size=None):
         """生成正态分布的随机数。"""
