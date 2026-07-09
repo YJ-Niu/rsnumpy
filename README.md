@@ -27,15 +27,18 @@
 rsnumpy/
 ├── src/                       # Rust 源码
 │   ├── lib.rs                 # 核心 ndarray 与通用函数
+│   ├── indexing.rs            # 多维索引与切片
 │   ├── fft.rs                 # 快速傅里叶变换
 │   ├── linalg.rs              # 线性代数
-│   └── random.rs              # 随机数生成
-├── rsnumpy/                     # Python 薄包装
+│   └── random.rs              # 随机数生成（可复现并行采样）
+├── python/rsnumpy/            # Python 薄包装
 │   ├── __init__.py            # 主模块，整合所有 API
 │   ├── array_methods.py       # ndarray 对象方法
 │   ├── array_ops.py           # 数组操作函数
 │   ├── math_functions.py      # 数学函数
 │   ├── statistics.py          # 统计函数
+│   ├── char.py                # 字符串数组函数
+│   ├── matlib.py              # 矩阵便捷构造
 │   ├── io.py                  # 文件 I/O
 │   ├── linalg/                # 线性代数子模块
 │   ├── polynomial/            # 多项式子模块
@@ -259,6 +262,8 @@ print(np.random.rand(3).tolist())
 print(np.random.randn(3).tolist())
 ```
 
+> **可复现性**：相同 `seed` 保证生成相同的结果。大数组采样在 Rust 层并行执行，采用固定分块 + `splitmix64` 派生各分块的独立种子，因此**结果与线程数无关**，在不同机器上同样可复现。同一个 `Generator` 每次调用都会推进内部状态，连续调用不会产生重复序列。
+
 #### 5.7 FFT
 
 ```python
@@ -339,6 +344,30 @@ a = np.array([1.0, np.nan, np.inf])
 print(np.isnan(a))     # 逐元素判断
 print(np.isinf(a))
 print(np.isfinite(a))
+```
+
+#### 5.11 日期时间与网格
+
+```python
+import rsnumpy as np
+
+# 日期时间标量（兼容 numpy.datetime64）
+d = np.datetime64('2024-01-01')
+delta = np.timedelta64(7, 'D')          # 7 天
+print(d + delta)                         # numpy.datetime64('2024-01-08')
+print(np.datetime64('2024-01-08') - d)   # numpy.timedelta64(7,'D')
+
+# 用 datetime64/timedelta64 生成日期序列
+days = np.arange(np.datetime64('2024-01-01'),
+                 np.datetime64('2024-01-05'),
+                 np.timedelta64(1, 'D'))
+
+# 坐标网格（默认 'xy' 索引，与 NumPy 一致）
+x = np.array([1, 2, 3])
+y = np.array([10, 20])
+X, Y = np.meshgrid(x, y)
+print(X.tolist())   # [[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]]
+print(Y.tolist())   # [[10.0, 10.0, 10.0], [20.0, 20.0, 20.0]]
 ```
 
 ---
@@ -436,15 +465,18 @@ A: 当前版本仅支持 CPU。
 rsnumpy/
 ├── src/                       # Rust source
 │   ├── lib.rs                 # Core ndarray & general functions
+│   ├── indexing.rs            # Multi-dimensional indexing & slicing
 │   ├── fft.rs                 # Fast Fourier Transform
 │   ├── linalg.rs              # Linear algebra
-│   └── random.rs              # Random number generation
-├── rsnumpy/                     # Python thin wrappers
+│   └── random.rs              # Random number generation (reproducible parallel sampling)
+├── python/rsnumpy/            # Python thin wrappers
 │   ├── __init__.py            # Main module, exports public API
 │   ├── array_methods.py       # ndarray object methods
 │   ├── array_ops.py           # Array manipulation functions
 │   ├── math_functions.py      # Math functions
 │   ├── statistics.py          # Statistics functions
+│   ├── char.py                # String array functions
+│   ├── matlib.py              # Matrix construction helpers
 │   ├── io.py                  # File I/O
 │   ├── linalg/                # Linear algebra submodule
 │   ├── polynomial/            # Polynomial submodule
@@ -668,6 +700,8 @@ print(np.random.rand(3).tolist())
 print(np.random.randn(3).tolist())
 ```
 
+> **Reproducibility**: the same `seed` always produces the same result. Large-array sampling runs in parallel on the Rust side using fixed-size chunks with per-chunk seeds derived via `splitmix64`, so results are **independent of the thread count** and reproducible across machines. Each call on a `Generator` advances its internal state, so consecutive calls never repeat the same sequence.
+
 #### 5.7 FFT
 
 ```python
@@ -748,6 +782,30 @@ a = np.array([1.0, np.nan, np.inf])
 print(np.isnan(a))     # element-wise
 print(np.isinf(a))
 print(np.isfinite(a))
+```
+
+#### 5.11 Datetime & meshgrid
+
+```python
+import rsnumpy as np
+
+# Datetime scalars (compatible with numpy.datetime64)
+d = np.datetime64('2024-01-01')
+delta = np.timedelta64(7, 'D')           # 7 days
+print(d + delta)                          # numpy.datetime64('2024-01-08')
+print(np.datetime64('2024-01-08') - d)    # numpy.timedelta64(7,'D')
+
+# Generate a date range with datetime64/timedelta64
+days = np.arange(np.datetime64('2024-01-01'),
+                 np.datetime64('2024-01-05'),
+                 np.timedelta64(1, 'D'))
+
+# Coordinate grids (default 'xy' indexing, matching NumPy)
+x = np.array([1, 2, 3])
+y = np.array([10, 20])
+X, Y = np.meshgrid(x, y)
+print(X.tolist())   # [[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]]
+print(Y.tolist())   # [[10.0, 10.0, 10.0], [20.0, 20.0, 20.0]]
 ```
 
 ---

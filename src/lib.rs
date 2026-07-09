@@ -1,4 +1,4 @@
-use ndarray::{Array, ArrayViewD, Axis, IxDyn, Slice};
+use ndarray::{Array, ArrayViewD, Axis, IxDyn, Slice, Zip};
 use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PySlice, PyTuple};
@@ -1730,20 +1730,14 @@ where
     Err(PyTypeError::new_err("Unsupported operand type"))
 }
 
+/// 与 binary_op 行为完全一致：保留独立名字以表达调用方“左右操作数顺序”的语义，
+/// 实际实现直接转发，避免重复代码。
+#[inline]
 fn binary_op_lr<F>(a: &NdArray, b: &Bound<'_, PyAny>, op: F) -> PyResult<NdArray>
 where
     F: Fn(f64, f64) -> f64 + Sync,
 {
-    if let Ok(scalar) = b.extract::<f64>() {
-        return Ok(NdArray {
-            data: a.data.mapv(|x| op(x, scalar)),
-        });
-    }
-    if let Ok(other) = b.extract::<NdArray>() {
-        let result = broadcast_binary_op(&a.data, &other.data, op)?;
-        return Ok(NdArray { data: result });
-    }
-    Err(PyTypeError::new_err("Unsupported operand type"))
+    binary_op(a, b, op)
 }
 
 fn broadcast_binary_op<F>(
@@ -1758,16 +1752,9 @@ where
     let b_shape = b.shape().to_vec();
 
     if a_shape == b_shape {
-        // 并行计算：收集到 Vec 后使用 rayon 并行处理
-        let a_vec: Vec<f64> = a.iter().copied().collect();
-        let b_vec: Vec<f64> = b.iter().copied().collect();
-        let result: Vec<f64> = a_vec
-            .into_par_iter()
-            .zip(b_vec.into_par_iter())
-            .map(|(x, y)| op(x, y))
-            .collect();
-        return Array::from_shape_vec(IxDyn(&a_shape), result)
-            .map_err(|e| PyValueError::new_err(e.to_string()));
+        // 形状一致：用 ndarray::Zip 并行逐元素计算并直接产出结果数组，
+        // 省去把两个输入分别物化成 Vec 的额外分配。
+        return Ok(Zip::from(a).and(b).par_map_collect(|&x, &y| op(x, y)));
     }
 
     let max_ndim = ::std::cmp::max(a_shape.len(), b_shape.len());
@@ -1787,31 +1774,25 @@ where
         out_shape.push(::std::cmp::max(a_padded[i], b_padded[i]));
     }
 
-    let a_broadcast = a
+    // 用带零步长的广播视图直接参与 Zip，避免把广播结果 to_owned 后再逐元素复制。
+    let a_reshaped = a
         .clone()
         .into_shape_with_order(IxDyn(&a_padded))
-        .map_err(|e| PyValueError::new_err(e.to_string()))?
-        .broadcast(IxDyn(&out_shape))
-        .ok_or_else(|| PyValueError::new_err("Broadcasting failed"))?
-        .to_owned();
-    let b_broadcast = b
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let b_reshaped = b
         .clone()
         .into_shape_with_order(IxDyn(&b_padded))
-        .map_err(|e| PyValueError::new_err(e.to_string()))?
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let a_view = a_reshaped
         .broadcast(IxDyn(&out_shape))
-        .ok_or_else(|| PyValueError::new_err("Broadcasting failed"))?
-        .to_owned();
+        .ok_or_else(|| PyValueError::new_err("Broadcasting failed"))?;
+    let b_view = b_reshaped
+        .broadcast(IxDyn(&out_shape))
+        .ok_or_else(|| PyValueError::new_err("Broadcasting failed"))?;
 
-    let a_vec: Vec<f64> = a_broadcast.iter().copied().collect();
-    let b_vec: Vec<f64> = b_broadcast.iter().copied().collect();
-    let result: Vec<f64> = a_vec
-        .into_par_iter()
-        .zip(b_vec.into_par_iter())
-        .map(|(x, y)| op(x, y))
-        .collect();
-
-    Array::from_shape_vec(IxDyn(&out_shape), result)
-        .map_err(|e| PyValueError::new_err(e.to_string()))
+    Ok(Zip::from(a_view)
+        .and(b_view)
+        .par_map_collect(|&x, &y| op(x, y)))
 }
 
 /// ArrayFlags - 数组内存布局信息，与 NumPy 的 np.ndarray.flags 兼容
@@ -2844,15 +2825,6 @@ fn extract(condition: &NdArray, a: &NdArray) -> PyResult<NdArray> {
     let arr = Array::from_shape_vec(IxDyn(&[result.len()]), result)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(NdArray { data: arr })
-}
-
-#[allow(unused)]
-fn compute_strides(shape: &[usize]) -> Vec<usize> {
-    let mut strides = vec![1; shape.len()];
-    for i in (0..shape.len() - 1).rev() {
-        strides[i] = strides[i + 1] * shape[i + 1];
-    }
-    strides
 }
 
 fn introselect(arr: &mut [f64], k: usize) -> f64 {

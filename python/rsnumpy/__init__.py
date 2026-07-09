@@ -890,12 +890,6 @@ def _wrap_result(result, dtype="float64"):
     return result
 
 
-def _wrap_with_source(result, source):
-    """用源数组的 dtype 包装结果。"""
-    dtype = getattr(source, '_dtype', "float64")
-    return _wrap_result(result, dtype)
-
-
 def _scalar(x):
     """转换为标量。"""
     if hasattr(x, 'tolist'):
@@ -1505,22 +1499,10 @@ def _flatten_check(data):
     return flat, has_complex, has_string
 
 
-def _has_complex(data):
-    """检查数据中是否包含复数。"""
-    _, has_c, _ = _flatten_check(data)
-    return has_c
-
-
 def _flatten_data(data):
     """展平嵌套的可迭代对象为扁平列表。"""
     flat, _, _ = _flatten_check(data)
     return flat
-
-
-def _has_string(data):
-    """检查（展平后的）数据中是否包含字符串。"""
-    _, _, has_s = _flatten_check(data)
-    return has_s
 
 
 def _setitem_value(value):
@@ -2489,15 +2471,6 @@ class _BroadcastIter:
             return int(val)
         return float(val)
 
-    def _ravel_c(self, *indices):
-        """将多维索引转为扁平索引（C-order）。"""
-        idx = 0
-        stride = 1
-        for i in range(len(self._arr_shape) - 1, -1, -1):
-            idx += indices[i] * stride
-            stride *= self._arr_shape[i]
-        return idx
-
 
 # 数组操作函数
 reshape = _array_ops_module.reshape
@@ -2561,20 +2534,6 @@ def bitwise_xor(x1, x2):
     return _wrap_result(_core.bitwise_xor(r1, r2), dt)
 
 def bitwise_not(x):
-    """按位取反（对布尔数组使用逻辑取反）"""
-    r, dt = _to_raw(x)
-    if dt == 'bool':
-        r = _core.invert(r)
-    elif dt == 'uint8':
-        raw = _core.bitwise_not(r)
-        r = _core.bitwise_and(raw, _core.ndarray([255]))
-        dt = 'uint8'
-    else:
-        r = _core.bitwise_not(r)
-    return _wrap_result(r, dt)
-
-
-def invert(x):
     """按位取反（等效于 ~ 运算符，对布尔数组使用逻辑取反）"""
     r, dt = _to_raw(x)
     if dt == 'bool':
@@ -2586,6 +2545,10 @@ def invert(x):
     else:
         r = _core.bitwise_not(r)
     return _wrap_result(r, dt)
+
+
+# invert 与 bitwise_not 行为完全一致，直接作为别名，避免重复实现。
+invert = bitwise_not
 
 def left_shift(x1, x2):
     """左移"""

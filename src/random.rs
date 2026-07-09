@@ -2,10 +2,11 @@ use ndarray::{Array, IxDyn};
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyTuple;
-use rand::SeedableRng;
+use rand::{Rng, SeedableRng};
 use rand_distr::Distribution;
 use rayon::prelude::*;
 use std::hash::{Hash, Hasher};
+use std::sync::Mutex;
 
 use crate::NdArray;
 
@@ -30,10 +31,6 @@ where
         }
         f(rng.as_mut().unwrap())
     })
-}
-
-fn new_rng(seed: Option<u64>) -> ::rand::rngs::StdRng {
-    ::rand::rngs::StdRng::seed_from_u64(seed.unwrap_or_else(rand::random))
 }
 
 fn parse_shape_from_args(args: &Bound<'_, PyTuple>) -> Vec<usize> {
@@ -71,25 +68,33 @@ fn parse_size_arg(size: Option<&Bound<'_, PyAny>>) -> PyResult<Vec<usize>> {
     }
 }
 
+/// splitmix64：把一个 64 位种子快速扩散成新的 64 位种子，
+/// 用于从一个基种子派生出互不相关的分块种子。
+fn splitmix64(seed: u64) -> u64 {
+    let mut z = seed.wrapping_add(0x9e3779b97f4a7c15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94d049bb133111eb);
+    z ^ (z >> 31)
+}
+
 fn make_ndarray_parallel(
     shape: &[usize],
+    base_seed: u64,
     dist: impl rand_distr::Distribution<f64> + Sync + Send + Clone + 'static,
 ) -> NdArray {
+    // 固定分块大小：让分块边界（以及每块派生的种子）与线程数无关，
+    // 从而保证相同 base_seed 得到完全一致、可复现的结果。
+    const CHUNK: usize = 1 << 16;
     let total: usize = shape.iter().product();
 
-    let mut values = Vec::with_capacity(total);
-    values.resize(total, 0.0);
-
-    let num_chunks = rayon::current_num_threads();
-    let chunk_size = total.div_ceil(num_chunks);
-
-    let seeds: Vec<u64> = (0..num_chunks).map(|_| rand::random()).collect();
+    let mut values = vec![0.0f64; total];
 
     values
-        .par_chunks_mut(chunk_size)
+        .par_chunks_mut(CHUNK)
         .enumerate()
         .for_each(|(i, chunk)| {
-            let mut local_rng = ::rand::rngs::StdRng::seed_from_u64(seeds[i]);
+            let seed = splitmix64(base_seed ^ (i as u64).wrapping_mul(0x9e3779b97f4a7c15));
+            let mut local_rng = ::rand::rngs::StdRng::seed_from_u64(seed);
             for elem in chunk {
                 *elem = dist.sample(&mut local_rng);
             }
@@ -145,7 +150,8 @@ fn random_rand(_py: Python<'_>, args: &Bound<'_, PyTuple>) -> PyResult<NdArray> 
     if shape.is_empty() {
         with_thread_rng(|rng| Ok(make_ndarray_single(rng, &shape, dist)))
     } else {
-        Ok(_py.detach(move || make_ndarray_parallel(&shape, dist)))
+        let base = with_thread_rng(|rng| rng.next_u64());
+        Ok(_py.detach(move || make_ndarray_parallel(&shape, base, dist)))
     }
 }
 
@@ -159,7 +165,8 @@ fn randn(_py: Python<'_>, args: &Bound<'_, PyTuple>) -> PyResult<NdArray> {
     if shape.is_empty() {
         with_thread_rng(|rng| Ok(make_ndarray_single(rng, &shape, normal)))
     } else {
-        Ok(_py.detach(move || make_ndarray_parallel(&shape, normal)))
+        let base = with_thread_rng(|rng| rng.next_u64());
+        Ok(_py.detach(move || make_ndarray_parallel(&shape, base, normal)))
     }
 }
 
@@ -183,17 +190,28 @@ fn random_randint(low: i64, high: i64, size: Option<&Bound<'_, PyAny>>) -> PyRes
     })
 }
 
-#[pyclass(name = "Generator", from_py_object)]
-#[derive(Clone)]
+#[pyclass(name = "Generator")]
 struct PyGenerator {
-    seed: Option<u64>,
+    rng: Mutex<::rand::rngs::StdRng>,
+}
+
+impl PyGenerator {
+    /// 从内部 RNG 抽取一个 u64 派生出一个独立的 StdRng；
+    /// 每次调用都会推进内部状态，保证同一 Generator 的连续调用不产生重复序列。
+    fn spawn(&self) -> ::rand::rngs::StdRng {
+        ::rand::rngs::StdRng::seed_from_u64(self.rng.lock().unwrap().next_u64())
+    }
 }
 
 #[pymethods]
 impl PyGenerator {
     #[new]
     fn new(seed: Option<u64>) -> Self {
-        PyGenerator { seed }
+        PyGenerator {
+            rng: Mutex::new(::rand::rngs::StdRng::seed_from_u64(
+                seed.unwrap_or_else(rand::random),
+            )),
+        }
     }
 
     #[pyo3(signature = (size=None))]
@@ -203,10 +221,11 @@ impl PyGenerator {
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
         if shape.is_empty() {
-            let mut rng = new_rng(self.seed);
+            let mut rng = self.spawn();
             Ok(make_ndarray_single(&mut rng, &shape, dist))
         } else {
-            Ok(_py.detach(move || make_ndarray_parallel(&shape, dist)))
+            let base = self.rng.lock().unwrap().next_u64();
+            Ok(_py.detach(move || make_ndarray_parallel(&shape, base, dist)))
         }
     }
 
@@ -221,10 +240,11 @@ impl PyGenerator {
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
         if shape.is_empty() {
-            let mut rng = new_rng(self.seed);
+            let mut rng = self.spawn();
             Ok(make_ndarray_single(&mut rng, &shape, normal))
         } else {
-            Ok(_py.detach(move || make_ndarray_parallel(&shape, normal)))
+            let base = self.rng.lock().unwrap().next_u64();
+            Ok(_py.detach(move || make_ndarray_parallel(&shape, base, normal)))
         }
     }
 
@@ -245,7 +265,7 @@ impl PyGenerator {
         let shape = parse_size_arg(size)?;
         let dist = ::rand_distr::Uniform::new(actual_low, actual_high)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let mut rng = new_rng(self.seed);
+        let mut rng = self.spawn();
         if shape.is_empty() {
             return Ok(NdArray {
                 data: Array::from_elem(IxDyn(&[]), dist.sample(&mut rng) as f64),
@@ -266,7 +286,7 @@ impl PyGenerator {
         size: Option<usize>,
         replace: bool,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let mut rng = new_rng(self.seed);
+        let mut rng = self.spawn();
         let vals: Vec<f64> = if let Ok(arr) = a.extract::<NdArray>() {
             arr.data.iter().copied().collect()
         } else if let Ok(list) = a.cast::<pyo3::types::PyList>() {
@@ -317,7 +337,7 @@ impl PyGenerator {
     }
 
     fn shuffle(&self, a: &Bound<'_, PyAny>) -> PyResult<()> {
-        let mut rng = new_rng(self.seed);
+        let mut rng = self.spawn();
         if let Ok(mut arr) = a.extract::<NdArray>() {
             if arr.data.ndim() != 1 {
                 return Err(PyValueError::new_err("shuffle only works for 1D arrays"));
@@ -343,7 +363,7 @@ impl PyGenerator {
         py: Python<'py>,
         a: &Bound<'_, PyAny>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let mut rng = new_rng(self.seed);
+        let mut rng = self.spawn();
         if let Ok(n) = a.extract::<usize>() {
             let mut indices: Vec<f64> = (0..n).map(|i| i as f64).collect();
             for i in (1..n).rev() {
@@ -393,10 +413,11 @@ impl PyGenerator {
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
         if shape.is_empty() {
-            let mut rng = new_rng(self.seed);
+            let mut rng = self.spawn();
             Ok(make_ndarray_single(&mut rng, &shape, dist))
         } else {
-            Ok(_py.detach(move || make_ndarray_parallel(&shape, dist)))
+            let base = self.rng.lock().unwrap().next_u64();
+            Ok(_py.detach(move || make_ndarray_parallel(&shape, base, dist)))
         }
     }
 
@@ -413,10 +434,11 @@ impl PyGenerator {
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
         if shape.is_empty() {
-            let mut rng = new_rng(self.seed);
+            let mut rng = self.spawn();
             Ok(make_ndarray_single(&mut rng, &shape, dist))
         } else {
-            Ok(_py.detach(move || make_ndarray_parallel(&shape, dist)))
+            let base = self.rng.lock().unwrap().next_u64();
+            Ok(_py.detach(move || make_ndarray_parallel(&shape, base, dist)))
         }
     }
 
@@ -433,10 +455,11 @@ impl PyGenerator {
             ::rand_distr::Beta::new(a, b).map_err(|e| PyValueError::new_err(e.to_string()))?;
 
         if shape.is_empty() {
-            let mut rng = new_rng(self.seed);
+            let mut rng = self.spawn();
             Ok(make_ndarray_single(&mut rng, &shape, dist))
         } else {
-            Ok(_py.detach(move || make_ndarray_parallel(&shape, dist)))
+            let base = self.rng.lock().unwrap().next_u64();
+            Ok(_py.detach(move || make_ndarray_parallel(&shape, base, dist)))
         }
     }
 
@@ -453,10 +476,11 @@ impl PyGenerator {
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
         if shape.is_empty() {
-            let mut rng = new_rng(self.seed);
+            let mut rng = self.spawn();
             Ok(make_ndarray_single(&mut rng, &shape, dist))
         } else {
-            Ok(_py.detach(move || make_ndarray_parallel(&shape, dist)))
+            let base = self.rng.lock().unwrap().next_u64();
+            Ok(_py.detach(move || make_ndarray_parallel(&shape, base, dist)))
         }
     }
 
@@ -472,10 +496,11 @@ impl PyGenerator {
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
         if shape.is_empty() {
-            let mut rng = new_rng(self.seed);
+            let mut rng = self.spawn();
             Ok(make_ndarray_single(&mut rng, &shape, dist))
         } else {
-            Ok(_py.detach(move || make_ndarray_parallel(&shape, dist)))
+            let base = self.rng.lock().unwrap().next_u64();
+            Ok(_py.detach(move || make_ndarray_parallel(&shape, base, dist)))
         }
     }
 
@@ -484,7 +509,7 @@ impl PyGenerator {
         let shape = parse_size_arg(size)?;
         let dist =
             ::rand_distr::Binomial::new(n, p).map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let mut rng = new_rng(self.seed);
+        let mut rng = self.spawn();
         if shape.is_empty() {
             return Ok(NdArray {
                 data: Array::from_elem(IxDyn(&[]), dist.sample(&mut rng) as f64),
@@ -502,7 +527,7 @@ impl PyGenerator {
         let shape = parse_size_arg(size)?;
         let dist =
             ::rand_distr::Poisson::new(lam).map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let mut rng = new_rng(self.seed);
+        let mut rng = self.spawn();
         if shape.is_empty() {
             return Ok(NdArray {
                 data: Array::from_elem(IxDyn(&[]), dist.sample(&mut rng)),
@@ -528,10 +553,11 @@ impl PyGenerator {
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
         if shape.is_empty() {
-            let mut rng = new_rng(self.seed);
+            let mut rng = self.spawn();
             Ok(make_ndarray_single(&mut rng, &shape, dist))
         } else {
-            Ok(_py.detach(move || make_ndarray_parallel(&shape, dist)))
+            let base = self.rng.lock().unwrap().next_u64();
+            Ok(_py.detach(move || make_ndarray_parallel(&shape, base, dist)))
         }
     }
 
@@ -540,7 +566,7 @@ impl PyGenerator {
         let shape = parse_size_arg(size)?;
         let uniform = ::rand_distr::Uniform::new(0.0, 1.0)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let mut rng = new_rng(self.seed);
+        let mut rng = self.spawn();
         if shape.is_empty() {
             let u: f64 = uniform.sample(&mut rng);
             let val = loc + scale * (u / (1.0 - u)).ln();
@@ -573,10 +599,11 @@ impl PyGenerator {
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
         if shape.is_empty() {
-            let mut rng = new_rng(self.seed);
+            let mut rng = self.spawn();
             Ok(make_ndarray_single(&mut rng, &shape, dist))
         } else {
-            Ok(_py.detach(move || make_ndarray_parallel(&shape, dist)))
+            let base = self.rng.lock().unwrap().next_u64();
+            Ok(_py.detach(move || make_ndarray_parallel(&shape, base, dist)))
         }
     }
 
@@ -585,7 +612,7 @@ impl PyGenerator {
         let shape = parse_size_arg(size)?;
         let uniform = ::rand_distr::Uniform::new(0.0, 1.0)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let mut rng = new_rng(self.seed);
+        let mut rng = self.spawn();
         if shape.is_empty() {
             let u: f64 = uniform.sample(&mut rng);
             let val = if u < 0.5 {
@@ -629,7 +656,8 @@ fn uniform(
     if shape.is_empty() {
         with_thread_rng(|rng| Ok(make_ndarray_single(rng, &shape, dist)))
     } else {
-        Ok(_py.detach(move || make_ndarray_parallel(&shape, dist)))
+        let base = with_thread_rng(|rng| rng.next_u64());
+        Ok(_py.detach(move || make_ndarray_parallel(&shape, base, dist)))
     }
 }
 
@@ -648,7 +676,8 @@ fn normal(
     if shape.is_empty() {
         with_thread_rng(|rng| Ok(make_ndarray_single(rng, &shape, dist)))
     } else {
-        Ok(_py.detach(move || make_ndarray_parallel(&shape, dist)))
+        let base = with_thread_rng(|rng| rng.next_u64());
+        Ok(_py.detach(move || make_ndarray_parallel(&shape, base, dist)))
     }
 }
 
@@ -661,7 +690,8 @@ fn beta(_py: Python<'_>, a: f64, b: f64, size: Option<&Bound<'_, PyAny>>) -> PyR
     if shape.is_empty() {
         with_thread_rng(|rng| Ok(make_ndarray_single(rng, &shape, dist)))
     } else {
-        Ok(_py.detach(move || make_ndarray_parallel(&shape, dist)))
+        let base = with_thread_rng(|rng| rng.next_u64());
+        Ok(_py.detach(move || make_ndarray_parallel(&shape, base, dist)))
     }
 }
 
@@ -680,7 +710,8 @@ fn gamma(
     if shape.is_empty() {
         with_thread_rng(|rng| Ok(make_ndarray_single(rng, &shape, dist)))
     } else {
-        Ok(_py.detach(move || make_ndarray_parallel(&shape, dist)))
+        let base = with_thread_rng(|rng| rng.next_u64());
+        Ok(_py.detach(move || make_ndarray_parallel(&shape, base, dist)))
     }
 }
 
@@ -694,7 +725,8 @@ fn exponential(_py: Python<'_>, scale: f64, size: Option<&Bound<'_, PyAny>>) -> 
     if shape.is_empty() {
         with_thread_rng(|rng| Ok(make_ndarray_single(rng, &shape, dist)))
     } else {
-        Ok(_py.detach(move || make_ndarray_parallel(&shape, dist)))
+        let base = with_thread_rng(|rng| rng.next_u64());
+        Ok(_py.detach(move || make_ndarray_parallel(&shape, base, dist)))
     }
 }
 
