@@ -311,6 +311,27 @@ class ndarray:
             mask = key.tolist()
             filtered = [v for v, m in zip(cpx, mask) if m > 0.5]
             return ndarray(filtered)
+        # 布尔掩码索引：a[bool_mask]。掩码形状需与 self 的前若干维一致，
+        # 返回被掩码选中的元素（按 C 序展开），剩余维度保留。
+        if (_is_ndarray(key) and getattr(key, '_dtype', None) == 'bool' and key.ndim >= 1):
+            mask_shape = tuple(key.shape)
+            self_shape = tuple(self.shape)
+            k = len(mask_shape)
+            if mask_shape == self_shape[:k]:
+                mask_flat = key.ravel().tolist()
+                data_flat = self.ravel().tolist()
+                rest = self_shape[k:]
+                block = 1
+                for s in rest:
+                    block *= s
+                out = []
+                for i, m in enumerate(mask_flat):
+                    if m:
+                        out.extend(data_flat[i * block:(i + 1) * block])
+                result = ndarray(out, _dtype=self._dtype)
+                if rest:
+                    return result.reshape((len(out) // block,) + rest)
+                return result
         # np.newaxis (None) 支持：a[np.newaxis, :] / a[:, np.newaxis]
         # 先用去掉 None 的键做常规索引，再在结果的相应输出位置插入 size-1 维度。
         _key_seq = key if isinstance(key, tuple) else (key,)
@@ -418,6 +439,14 @@ class ndarray:
     def __rtruediv__(self, other):
         dt = _truediv_dtype(self._dtype)
         return _wrap_result(other / self._array, dt)
+
+    def __mod__(self, other):
+        """逐元素取模（% 运算符）。"""
+        return mod(self, other)
+
+    def __rmod__(self, other):
+        """逐元素取模（右操作数，% 运算符）。"""
+        return mod(other, self)
 
     def __matmul__(self, other):
         if _is_ndarray(other):
