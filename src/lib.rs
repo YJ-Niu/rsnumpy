@@ -1714,18 +1714,34 @@ impl NdArray {
     }
 }
 
+/// 逐元素并行阈值：元素数达到该值才用 rayon 并行，
+/// 更小的数组走串行以避免线程调度开销主导（小数组上并行反而更慢）。
+pub(crate) const PAR_THRESHOLD: usize = 32_768;
+
 fn binary_op<F>(a: &NdArray, b: &Bound<'_, PyAny>, op: F) -> PyResult<NdArray>
 where
-    F: Fn(f64, f64) -> f64 + Sync,
+    F: Fn(f64, f64) -> f64 + Sync + Send,
 {
+    let py = b.py();
     if let Ok(scalar) = b.extract::<f64>() {
-        return Ok(NdArray {
-            data: a.data.mapv(|x| op(x, scalar)),
+        let data = &a.data;
+        // 纯计算，主动释放 GIL 让其它 Python 线程可并行推进。
+        let out = py.detach(|| {
+            if data.len() >= PAR_THRESHOLD {
+                Zip::from(data).par_map_collect(|&x| op(x, scalar))
+            } else {
+                data.mapv(|x| op(x, scalar))
+            }
         });
+        return Ok(NdArray { data: out });
     }
     if let Ok(other) = b.extract::<NdArray>() {
-        let result = broadcast_binary_op(&a.data, &other.data, op)?;
-        return Ok(NdArray { data: result });
+        let a_data = &a.data;
+        let other_data = &other.data;
+        let out = py
+            .detach(|| broadcast_binary_compute(a_data, other_data, op))
+            .map_err(PyValueError::new_err)?;
+        return Ok(NdArray { data: out });
     }
     Err(PyTypeError::new_err("Unsupported operand type"))
 }
@@ -1735,16 +1751,18 @@ where
 #[inline]
 fn binary_op_lr<F>(a: &NdArray, b: &Bound<'_, PyAny>, op: F) -> PyResult<NdArray>
 where
-    F: Fn(f64, f64) -> f64 + Sync,
+    F: Fn(f64, f64) -> f64 + Sync + Send,
 {
     binary_op(a, b, op)
 }
 
-fn broadcast_binary_op<F>(
+/// 广播逐元素计算的核心实现。错误以 `String` 返回（`Send`，可跨 `allow_threads` 边界），
+/// 由 `broadcast_binary_op` 包装成 `PyErr`。
+fn broadcast_binary_compute<F>(
     a: &Array<f64, IxDyn>,
     b: &Array<f64, IxDyn>,
     op: F,
-) -> PyResult<Array<f64, IxDyn>>
+) -> Result<Array<f64, IxDyn>, String>
 where
     F: Fn(f64, f64) -> f64 + Sync,
 {
@@ -1752,9 +1770,14 @@ where
     let b_shape = b.shape().to_vec();
 
     if a_shape == b_shape {
-        // 形状一致：用 ndarray::Zip 并行逐元素计算并直接产出结果数组，
+        // 形状一致：用 ndarray::Zip 逐元素计算并直接产出结果数组，
         // 省去把两个输入分别物化成 Vec 的额外分配。
-        return Ok(Zip::from(a).and(b).par_map_collect(|&x, &y| op(x, y)));
+        let z = Zip::from(a).and(b);
+        return Ok(if a.len() >= PAR_THRESHOLD {
+            z.par_map_collect(|&x, &y| op(x, y))
+        } else {
+            z.map_collect(|&x, &y| op(x, y))
+        });
     }
 
     let max_ndim = ::std::cmp::max(a_shape.len(), b_shape.len());
@@ -1766,10 +1789,10 @@ where
     let mut out_shape = Vec::with_capacity(max_ndim);
     for i in 0..max_ndim {
         if a_padded[i] != b_padded[i] && a_padded[i] != 1 && b_padded[i] != 1 {
-            return Err(PyValueError::new_err(format!(
+            return Err(format!(
                 "Incompatible shapes for broadcasting: {:?} and {:?}",
                 a_shape, b_shape
-            )));
+            ));
         }
         out_shape.push(::std::cmp::max(a_padded[i], b_padded[i]));
     }
@@ -1778,21 +1801,36 @@ where
     let a_reshaped = a
         .clone()
         .into_shape_with_order(IxDyn(&a_padded))
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        .map_err(|e| e.to_string())?;
     let b_reshaped = b
         .clone()
         .into_shape_with_order(IxDyn(&b_padded))
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        .map_err(|e| e.to_string())?;
     let a_view = a_reshaped
         .broadcast(IxDyn(&out_shape))
-        .ok_or_else(|| PyValueError::new_err("Broadcasting failed"))?;
+        .ok_or_else(|| "Broadcasting failed".to_string())?;
     let b_view = b_reshaped
         .broadcast(IxDyn(&out_shape))
-        .ok_or_else(|| PyValueError::new_err("Broadcasting failed"))?;
+        .ok_or_else(|| "Broadcasting failed".to_string())?;
 
-    Ok(Zip::from(a_view)
-        .and(b_view)
-        .par_map_collect(|&x, &y| op(x, y)))
+    let out_len: usize = out_shape.iter().product();
+    let z = Zip::from(a_view).and(b_view);
+    Ok(if out_len >= PAR_THRESHOLD {
+        z.par_map_collect(|&x, &y| op(x, y))
+    } else {
+        z.map_collect(|&x, &y| op(x, y))
+    })
+}
+
+fn broadcast_binary_op<F>(
+    a: &Array<f64, IxDyn>,
+    b: &Array<f64, IxDyn>,
+    op: F,
+) -> PyResult<Array<f64, IxDyn>>
+where
+    F: Fn(f64, f64) -> f64 + Sync,
+{
+    broadcast_binary_compute(a, b, op).map_err(PyValueError::new_err)
 }
 
 /// ArrayFlags - 数组内存布局信息，与 NumPy 的 np.ndarray.flags 兼容

@@ -1,19 +1,23 @@
 use crate::*;
 
-fn unary_math_op(x: &NdArray, op: fn(f64) -> f64) -> NdArray {
-    let data = x.data.clone();
-    let result_vec: Vec<f64> = data.into_par_iter().map(|v| op(*v)).collect();
-    NdArray {
-        data: Array::from_shape_vec(IxDyn(x.data.shape()), result_vec)
-            .unwrap_or_else(|_| x.data.mapv(op)),
-    }
+fn unary_math_op(py: Python<'_>, x: &NdArray, op: fn(f64) -> f64) -> NdArray {
+    let data = &x.data;
+    // 纯计算，主动释放 GIL；小数组走串行避免线程调度开销。
+    let out = py.detach(|| {
+        if data.len() >= PAR_THRESHOLD {
+            Zip::from(data).par_map_collect(|&v| op(v))
+        } else {
+            data.mapv(op)
+        }
+    });
+    NdArray { data: out }
 }
 
 macro_rules! define_math_func {
     ($name:ident, $op:expr) => {
         #[pyfunction]
-        fn $name(x: &NdArray) -> PyResult<NdArray> {
-            Ok(unary_math_op(x, $op))
+        fn $name(py: Python<'_>, x: &NdArray) -> PyResult<NdArray> {
+            Ok(unary_math_op(py, x, $op))
         }
     };
 }
@@ -83,13 +87,13 @@ fn cross(a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
 }
 
 #[pyfunction]
-fn floor(x: &NdArray) -> NdArray {
-    unary_math_op(x, |v| v.floor())
+fn floor(py: Python<'_>, x: &NdArray) -> NdArray {
+    unary_math_op(py, x, |v| v.floor())
 }
 
 #[pyfunction]
-fn ceil(x: &NdArray) -> NdArray {
-    unary_math_op(x, |v| v.ceil())
+fn ceil(py: Python<'_>, x: &NdArray) -> NdArray {
+    unary_math_op(py, x, |v| v.ceil())
 }
 
 #[pyfunction]
@@ -129,13 +133,13 @@ fn arctan2(y: &NdArray, x: &NdArray) -> PyResult<NdArray> {
 }
 
 #[pyfunction]
-fn deg2rad(x: &NdArray) -> NdArray {
-    unary_math_op(x, |v| v.to_radians())
+fn deg2rad(py: Python<'_>, x: &NdArray) -> NdArray {
+    unary_math_op(py, x, |v| v.to_radians())
 }
 
 #[pyfunction]
-fn rad2deg(x: &NdArray) -> NdArray {
-    unary_math_op(x, |v| v.to_degrees())
+fn rad2deg(py: Python<'_>, x: &NdArray) -> NdArray {
+    unary_math_op(py, x, |v| v.to_degrees())
 }
 
 #[pyfunction]
