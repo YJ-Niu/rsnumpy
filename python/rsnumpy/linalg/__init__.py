@@ -52,7 +52,6 @@ class linalg_module:
         """计算两个数组的点积。"""
         from ..__init__ import ndarray
         result = _core.linalg.dot(_ensure(a), _ensure(b))
-        result = _round_array(result)
         a_dtype = getattr(a, '_dtype', 'float64')
         b_dtype = getattr(b, '_dtype', 'float64')
         if a_dtype in ('float64', 'float32', 'float16') or b_dtype in ('float64', 'float32', 'float16'):
@@ -68,12 +67,24 @@ class linalg_module:
     @staticmethod
     def inner(a, b):
         """计算两个数组的内积。"""
-        return _wrap(_core.linalg.inner(_ensure(a), _ensure(b)))
+        from ..__init__ import ndarray
+        result = _core.linalg.inner(_ensure(a), _ensure(b))
+        a_dtype = getattr(a, '_dtype', 'float64')
+        b_dtype = getattr(b, '_dtype', 'float64')
+        if a_dtype in ('float64', 'float32', 'float16') or b_dtype in ('float64', 'float32', 'float16'):
+            return ndarray._wrap(result, _dtype='float64')
+        return ndarray._wrap(result, _dtype='int64')
 
     @staticmethod
     def matmul(a, b):
         """计算两个数组的矩阵乘积。"""
-        return _wrap(_core.linalg.matmul(_ensure(a), _ensure(b)))
+        from ..__init__ import ndarray
+        result = _core.linalg.matmul(_ensure(a), _ensure(b))
+        a_dtype = getattr(a, '_dtype', 'float64')
+        b_dtype = getattr(b, '_dtype', 'float64')
+        if a_dtype in ('float64', 'float32', 'float16') or b_dtype in ('float64', 'float32', 'float16'):
+            return ndarray._wrap(result, _dtype='float64')
+        return ndarray._wrap(result, _dtype='int64')
 
     @staticmethod
     def inv(a):

@@ -5,6 +5,10 @@ pub(crate) use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, Py
 pub(crate) use rayon::prelude::*;
 use std::fmt::Write;
 
+// macOS：强制链接 Accelerate BLAS 后端（否则符号会被优化掉）。
+#[cfg(target_os = "macos")]
+use blas_src as _;
+
 mod arithmetic;
 mod bitwise;
 mod buffer;

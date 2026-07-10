@@ -1,8 +1,7 @@
 use ndarray::linalg::Dot;
-use ndarray::{Array, IxDyn};
+use ndarray::{Array, Ix2, IxDyn};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use rayon::prelude::*;
 
 use crate::NdArray;
 
@@ -12,83 +11,32 @@ fn dot(_py: Python<'_>, a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
     _py.detach(move || {
         let a_data = &a.data;
         let b_data = &b.data;
-        let a_shape = a_data.shape().to_vec();
-        let b_shape = b_data.shape().to_vec();
+        let a_shape = a_data.shape();
+        let b_shape = b_data.shape();
 
-        if a_shape.len() == 1 && b_shape.len() == 1 {
-            if a_shape[0] != b_shape[0] {
+        // 形状校验（避免底层内核 panic），随后交给 ndarray 的 Dot：
+        // 其 IxDyn 实现会把 1D/2D 组合分派到优化的 gemv/gemm 内核。
+        let compatible = match (a_shape.len(), b_shape.len()) {
+            (1, 1) => a_shape[0] == b_shape[0],
+            (2, 2) => a_shape[1] == b_shape[0],
+            (1, 2) => a_shape[0] == b_shape[0],
+            (2, 1) => a_shape[1] == b_shape[0],
+            _ => {
                 return Err(PyValueError::new_err(format!(
-                    "Incompatible shapes for dot product: {:?} and {:?}",
+                    "Unsupported shapes for dot product: {:?} and {:?}",
                     a_shape, b_shape
                 )));
             }
-            let result: f64 = a_data.iter().zip(b_data.iter()).map(|(x, y)| x * y).sum();
-            return Ok(NdArray {
-                data: Array::from_elem(IxDyn(&[]), result),
-            });
+        };
+        if !compatible {
+            return Err(PyValueError::new_err(format!(
+                "Incompatible shapes for dot product: {:?} and {:?}",
+                a_shape, b_shape
+            )));
         }
-
-        if a_shape.len() == 2 && b_shape.len() == 2 {
-            if a_shape[1] != b_shape[0] {
-                return Err(PyValueError::new_err(format!(
-                    "Incompatible shapes for dot product: {:?} and {:?}",
-                    a_shape, b_shape
-                )));
-            }
-            let result = a_data.dot(b_data);
-            return Ok(NdArray {
-                data: result.into_dyn(),
-            });
-        }
-
-        if a_shape.len() == 1 && b_shape.len() == 2 {
-            if a_shape[0] != b_shape[0] {
-                return Err(PyValueError::new_err(format!(
-                    "Incompatible shapes for dot product: {:?} and {:?}",
-                    a_shape, b_shape
-                )));
-            }
-            let n = a_shape[0];
-            let p = b_shape[1];
-            let mut result = vec![0.0_f64; p];
-            for j in 0..p {
-                let mut sum = 0.0;
-                for k in 0..n {
-                    sum += a_data[k] * b_data[[k, j]];
-                }
-                result[j] = sum;
-            }
-            let arr = Array::from_shape_vec(IxDyn(&[p]), result)
-                .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            return Ok(NdArray { data: arr });
-        }
-
-        if a_shape.len() == 2 && b_shape.len() == 1 {
-            if a_shape[1] != b_shape[0] {
-                return Err(PyValueError::new_err(format!(
-                    "Incompatible shapes for dot product: {:?} and {:?}",
-                    a_shape, b_shape
-                )));
-            }
-            let m = a_shape[0];
-            let n = a_shape[1];
-            let mut result = vec![0.0_f64; m];
-            for i in 0..m {
-                let mut sum = 0.0;
-                for k in 0..n {
-                    sum += a_data[[i, k]] * b_data[k];
-                }
-                result[i] = sum;
-            }
-            let arr = Array::from_shape_vec(IxDyn(&[m]), result)
-                .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            return Ok(NdArray { data: arr });
-        }
-
-        Err(PyValueError::new_err(format!(
-            "Unsupported shapes for dot product: {:?} and {:?}",
-            a_shape, b_shape
-        )))
+        Ok(NdArray {
+            data: a_data.dot(b_data),
+        })
     })
 }
 
@@ -139,24 +87,18 @@ fn inner(_py: Python<'_>, a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
                     a_shape, b_shape
                 )));
             }
-            let m = a_shape[0];
-            let n = a_shape[1];
-            let p = b_shape[0];
-            let mut result = vec![0.0_f64; m * p];
-            for i in 0..m {
-                for j in 0..p {
-                    let mut sum = 0.0;
-                    for k in 0..n {
-                        sum += a_data[[i, k]] * b_data[[j, k]];
-                    }
-                    result[i * p + j] = sum;
-                }
-            }
-            let arr = Array::from_shape_vec((m, p), result)
+            // inner(a, b)[i, j] = Σ_k a[i,k]·b[j,k] = a · bᵀ。
+            // 交给 ndarray 的 Dot（f64 时走 BLAS gemm），而非朴素三重循环。
+            let a2 = a_data
+                .view()
+                .into_dimensionality::<Ix2>()
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            return Ok(NdArray {
-                data: arr.into_dyn(),
-            });
+            let b2 = b_data
+                .view()
+                .into_dimensionality::<Ix2>()
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            let c = a2.dot(&b2.t());
+            return Ok(NdArray { data: c.into_dyn() });
         }
 
         Err(PyValueError::new_err(format!(
@@ -175,74 +117,21 @@ fn matmul(_py: Python<'_>, a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
         let a_shape = a_data.shape().to_vec();
         let b_shape = b_data.shape().to_vec();
 
-        if a_shape.len() == 1 && b_shape.len() == 1 {
-            if a_shape[0] != b_shape[0] {
-                return Err(PyValueError::new_err(format!(
-                    "Incompatible shapes for matmul: {:?} and {:?}",
-                    a_shape, b_shape
-                )));
-            }
-            let result: f64 = a_data.iter().zip(b_data.iter()).map(|(x, y)| x * y).sum();
-            return Ok(NdArray {
-                data: Array::from_elem(IxDyn(&[]), result),
-            });
-        }
-
-        if a_shape.len() == 2 && b_shape.len() == 1 {
-            if a_shape[1] != b_shape[0] {
-                return Err(PyValueError::new_err(format!(
-                    "Incompatible shapes for matmul: {:?} and {:?}",
-                    a_shape, b_shape
-                )));
-            }
-            let m = a_shape[0];
-            let n = a_shape[1];
-            let mut result = vec![0.0_f64; m];
-            for i in 0..m {
-                let mut sum = 0.0;
-                for k in 0..n {
-                    sum += a_data[[i, k]] * b_data[k];
+        // 1D/2D 组合：形状校验后直接交给 ndarray 的优化 gemv/gemm 内核。
+        match (a_shape.len(), b_shape.len()) {
+            (1, 1) | (2, 2) | (2, 1) | (1, 2) => {
+                // 收缩维：a 的最后一维应等于 b 的第 0 维（四种组合皆如此）。
+                if *a_shape.last().unwrap() != b_shape[0] {
+                    return Err(PyValueError::new_err(format!(
+                        "Incompatible shapes for matmul: {:?} and {:?}",
+                        a_shape, b_shape
+                    )));
                 }
-                result[i] = sum;
+                return Ok(NdArray {
+                    data: a_data.dot(b_data),
+                });
             }
-            let arr = Array::from_shape_vec(IxDyn(&[m]), result)
-                .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            return Ok(NdArray { data: arr });
-        }
-
-        if a_shape.len() == 1 && b_shape.len() == 2 {
-            if a_shape[0] != b_shape[0] {
-                return Err(PyValueError::new_err(format!(
-                    "Incompatible shapes for matmul: {:?} and {:?}",
-                    a_shape, b_shape
-                )));
-            }
-            let n = a_shape[0];
-            let p = b_shape[1];
-            let mut result = vec![0.0_f64; p];
-            for j in 0..p {
-                let mut sum = 0.0;
-                for k in 0..n {
-                    sum += a_data[k] * b_data[[k, j]];
-                }
-                result[j] = sum;
-            }
-            let arr = Array::from_shape_vec(IxDyn(&[p]), result)
-                .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            return Ok(NdArray { data: arr });
-        }
-
-        if a_shape.len() == 2 && b_shape.len() == 2 {
-            if a_shape[1] != b_shape[0] {
-                return Err(PyValueError::new_err(format!(
-                    "Incompatible shapes for matmul: {:?} and {:?}",
-                    a_shape, b_shape
-                )));
-            }
-            let result = a_data.dot(b_data);
-            return Ok(NdArray {
-                data: result.into_dyn(),
-            });
+            _ => {}
         }
 
         if a_shape.len() >= 3 && b_shape.len() == 2 {
@@ -257,38 +146,21 @@ fn matmul(_py: Python<'_>, a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
                 )));
             }
             let batch_size: usize = batch_dims.iter().product();
-            let mut result = vec![0.0_f64; batch_size * m * p];
-
-            result
-                .par_chunks_mut(m * p)
-                .enumerate()
-                .for_each(|(b_idx, chunk)| {
-                    let mut row = vec![0.0_f64; p];
-                    for i in 0..m {
-                        for j in 0..p {
-                            let mut sum = 0.0;
-                            for k in 0..n {
-                                let a_val = if a_shape.len() == 3 {
-                                    a_data[[b_idx, i, k]]
-                                } else {
-                                    a_data[[0, b_idx, i, k]]
-                                };
-                                let b_val = b_data[[k, j]];
-                                sum += a_val * b_val;
-                            }
-                            row[j] = sum;
-                        }
-                        chunk[i * p..(i + 1) * p].copy_from_slice(&row);
-                    }
-                });
-
-            let mut result_shape = batch_dims.clone();
-            result_shape.extend_from_slice(&[m, p]);
-            let arr = Array::from_shape_vec(result_shape, result)
+            // b 在所有批次间共享：把批次维展平成 (batch*m, n)，与 b(n,p) 做单次大 GEMM，
+            // 再还原成 batch_dims + [m, p]。避免逐元素动态索引的朴素三重循环。
+            let a2 = a_data
+                .to_shape((batch_size * m, n))
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            return Ok(NdArray {
-                data: arr.into_dyn(),
-            });
+            let b2 = b_data
+                .to_shape((n, p))
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            let c = a2.dot(&b2);
+            let mut result_shape = batch_dims;
+            result_shape.extend_from_slice(&[m, p]);
+            let arr = c
+                .into_shape_with_order(result_shape)
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            return Ok(NdArray { data: arr });
         }
 
         Err(PyValueError::new_err(format!(
