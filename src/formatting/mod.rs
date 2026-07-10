@@ -23,7 +23,7 @@ fn format_complex_scalar(val: f64) -> String {
     format!("{}+0.j", real_str)
 }
 
-fn format_complex_array_inner(arr: &Array<f64, IxDyn>, pad_width: usize) -> String {
+fn format_complex_array_inner(arr: &Array<f64, IxDyn>, pad_width: usize, indent: usize) -> String {
     if arr.ndim() == 0 {
         return format_complex_scalar(arr.iter().next().copied().unwrap_or(0.0_f64));
     }
@@ -43,14 +43,15 @@ fn format_complex_array_inner(arr: &Array<f64, IxDyn>, pad_width: usize) -> Stri
         s.push(']');
         return s;
     }
+    let ndim = arr.ndim();
     let mut s = String::from("[");
     let n = arr.shape()[0];
     for i in 0..n {
         if i > 0 {
-            s.push_str("\n ");
+            push_nd_separator(&mut s, ndim, indent);
         }
         let sub = arr.index_axis(Axis(0), i).to_owned().into_dyn();
-        let row_str = format_complex_array_inner(&sub, pad_width);
+        let row_str = format_complex_array_inner(&sub, pad_width, indent + 1);
         s.push_str(&row_str);
     }
     s.push(']');
@@ -66,7 +67,7 @@ fn format_complex_array(arr: &Array<f64, IxDyn>) -> String {
     } else {
         0
     };
-    format_complex_array_inner(arr, pad_width)
+    format_complex_array_inner(arr, pad_width, 0)
 }
 
 #[pyfunction]
@@ -87,7 +88,7 @@ fn format_int_scalar(val: f64) -> String {
     format!("{}", int_val)
 }
 
-fn format_int_array_inner(arr: &Array<f64, IxDyn>, pad_width: usize) -> String {
+fn format_int_array_inner(arr: &Array<f64, IxDyn>, pad_width: usize, indent: usize) -> String {
     if arr.ndim() == 0 {
         return format_int_scalar(arr.iter().next().copied().unwrap_or(0.0_f64));
     }
@@ -107,14 +108,15 @@ fn format_int_array_inner(arr: &Array<f64, IxDyn>, pad_width: usize) -> String {
         s.push(']');
         return s;
     }
+    let ndim = arr.ndim();
     let mut s = String::from("[");
     let n = arr.shape()[0];
     for i in 0..n {
         if i > 0 {
-            s.push_str("\n ");
+            push_nd_separator(&mut s, ndim, indent);
         }
         let sub = arr.index_axis(Axis(0), i).to_owned().into_dyn();
-        let row_str = format_int_array_inner(&sub, pad_width);
+        let row_str = format_int_array_inner(&sub, pad_width, indent + 1);
         s.push_str(&row_str);
     }
     s.push(']');
@@ -130,7 +132,7 @@ fn format_int_array(arr: &Array<f64, IxDyn>) -> String {
     } else {
         0
     };
-    format_int_array_inner(arr, pad_width)
+    format_int_array_inner(arr, pad_width, 0)
 }
 
 #[pyfunction]
@@ -151,7 +153,7 @@ fn compute_max_width_float(arr: &Array<f64, IxDyn>) -> usize {
         .unwrap_or(1)
 }
 
-fn format_float_array_inner(arr: &Array<f64, IxDyn>, pad_width: usize) -> String {
+fn format_float_array_inner(arr: &Array<f64, IxDyn>, pad_width: usize, indent: usize) -> String {
     if arr.ndim() == 0 {
         return format_float_scalar(arr.iter().next().copied().unwrap_or(0.0_f64));
     }
@@ -171,14 +173,15 @@ fn format_float_array_inner(arr: &Array<f64, IxDyn>, pad_width: usize) -> String
         s.push(']');
         return s;
     }
+    let ndim = arr.ndim();
     let mut s = String::from("[");
     let n = arr.shape()[0];
     for i in 0..n {
         if i > 0 {
-            s.push_str("\n ");
+            push_nd_separator(&mut s, ndim, indent);
         }
         let sub = arr.index_axis(Axis(0), i).to_owned().into_dyn();
-        let row_str = format_float_array_inner(&sub, pad_width);
+        let row_str = format_float_array_inner(&sub, pad_width, indent + 1);
         s.push_str(&row_str);
     }
     s.push(']');
@@ -191,7 +194,7 @@ fn format_float_array(arr: &Array<f64, IxDyn>) -> String {
     } else {
         0
     };
-    format_float_array_inner(arr, pad_width)
+    format_float_array_inner(arr, pad_width, 0)
 }
 
 #[pyfunction]

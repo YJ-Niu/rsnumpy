@@ -276,7 +276,24 @@ fn compute_max_width(arr: &Array<f64, IxDyn>) -> usize {
         .unwrap_or(1)
 }
 
-fn format_array_repr_inner(arr: &Array<f64, IxDyn>, _prefix: &str, pad_width: usize) -> String {
+/// 在多维数组的相邻子块之间写入 numpy 风格的分隔符：
+/// `ndim - 1` 个换行（外层维度间空行更多），再加 `indent + 1` 个缩进空格
+/// （使每个嵌套层级的 `[` 依次右移一格对齐）。
+pub(crate) fn push_nd_separator(s: &mut String, ndim: usize, indent: usize) {
+    for _ in 0..ndim.saturating_sub(1) {
+        s.push('\n');
+    }
+    for _ in 0..(indent + 1) {
+        s.push(' ');
+    }
+}
+
+fn format_array_repr_inner(
+    arr: &Array<f64, IxDyn>,
+    _prefix: &str,
+    pad_width: usize,
+    indent: usize,
+) -> String {
     if arr.ndim() == 0 {
         return format!("{}", arr.iter().next().copied().unwrap_or(0.0_f64));
     }
@@ -300,6 +317,7 @@ fn format_array_repr_inner(arr: &Array<f64, IxDyn>, _prefix: &str, pad_width: us
         s.push(']');
         return s;
     }
+    let ndim = arr.ndim();
     let n = arr.shape()[0];
     // 粗略估计字符串大小
     let estimated = 2 + n * 20; // 每行约 20 字符
@@ -307,10 +325,10 @@ fn format_array_repr_inner(arr: &Array<f64, IxDyn>, _prefix: &str, pad_width: us
     s.push('[');
     for i in 0..n {
         if i > 0 {
-            s.push_str("\n ");
+            push_nd_separator(&mut s, ndim, indent);
         }
         let sub = arr.index_axis(Axis(0), i).to_owned().into_dyn();
-        let row_str = format_array_repr_inner(&sub, "", pad_width);
+        let row_str = format_array_repr_inner(&sub, "", pad_width, indent + 1);
         s.push_str(&row_str);
     }
     s.push(']');
@@ -324,7 +342,7 @@ fn format_array_repr(arr: &Array<f64, IxDyn>, _prefix: &str) -> String {
     } else {
         0
     };
-    format_array_repr_inner(arr, _prefix, pad_width)
+    format_array_repr_inner(arr, _prefix, pad_width, 0)
 }
 
 fn format_scalar(val: f64) -> String {

@@ -2048,6 +2048,20 @@ print(x['a'].shape)
 print(x['a'].dtype)
 print(x['b'].shape)
 print(x['b'].dtype)
+run_test()
+x = np.arange(10)
+x[2:7] = 1
+x[2:7] = np.arange(5)
+x[1] = 1.2
+print(x[1])
+print(x)
+x = np.arange(0, 50, 10)
+print(x)
+x[np.array([1, 1, 3, 1])] += 1
+print(x)
+z = np.arange(81).reshape(3, 3, 3, 3)
+indices = (1, 1, 1, 1)
+print(z[indices])
 end_time = time.time()
 
 print("\n时间：", end_time - start_time)
