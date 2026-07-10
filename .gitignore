@@ -1,5 +1,6 @@
 # Rust
 target/
+_split_tool/
 wheelhouse/
 Cargo.lock
 rsnum*.whl

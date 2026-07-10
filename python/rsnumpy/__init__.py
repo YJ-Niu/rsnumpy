@@ -32,7 +32,7 @@ from .random import random_module as _random_module
 from . import char as _char_module
 from . import matlib as _matlib_module
 
-__version__ = "1.1.2"
+__version__ = "1.1.3"
 
 # 捕获内建函数别名：_extra 挂载会向本模块 globals 注入同名的 numpy 函数
 # （all/any/round），会遮蔽内建函数。以下别名保证本文件内部逻辑始终使用内建实现。
@@ -2273,7 +2273,18 @@ def ix_(*args):
         >>> x = np.arange(32).reshape((8, 4))
         >>> x[np.ix_([1,5,7,2], [0,3,1,2])]
     """
-    raw = _core.ix_rs(args)
+    # Rust 层的 ix_rs 只解析 Python list/tuple，故先把 ndarray 等参数
+    # 归一化为一维下标列表；布尔序列按 numpy 语义取 True 位置的下标。
+    prepared = []
+    for a in args:
+        dtype = getattr(a, '_dtype', None)
+        seq = a.tolist() if hasattr(a, 'tolist') else list(a)
+        if dtype == 'bool' or (len(seq) > 0 and _py_all(isinstance(v, bool) for v in seq)):
+            seq = [i for i, v in enumerate(seq) if v]
+        else:
+            seq = [int(v) for v in seq]
+        prepared.append(seq)
+    raw = _core.ix_rs(tuple(prepared))
     return tuple(ndarray._wrap(r) for r in raw)
 
 

@@ -24,7 +24,7 @@ rm -f python/rsnumpy/__init__.py.bak
 echo "  -> python/rsnumpy/__init__.py __version__ updated to $VERSION"
 
 # ========== 检查 cargo 是否可用（maturin 构建需要） ==========
-if ! command -v cargo >/dev/null 2>&1; then
+if ! command -v cargo; then
   echo "Error: 'cargo' not found in PATH." >&2
   echo "Please install Rust and Cargo from https://rustup.rs/" >&2
   echo "After installation, run: source \$HOME/.cargo/env" >&2
@@ -38,10 +38,10 @@ if [[ -f rust-toolchain.toml ]]; then
   RUST_CHANNEL=$(grep -m1 '^channel *= *' rust-toolchain.toml | sed -E 's/.*"([^"]+)".*/\1/')
   if [[ -n "${RUST_CHANNEL:-}" ]]; then
     echo "Pinned Rust toolchain (rust-toolchain.toml): $RUST_CHANNEL"
-    if command -v rustup >/dev/null 2>&1; then
+    if command -v rustup; then
       # 幂等：已安装则为空操作；离线且缺失时失败被忽略，交由后续 clippy 步骤明确报错。
-      rustup toolchain install "$RUST_CHANNEL" >/dev/null 2>&1 || true
-      rustup component add clippy --toolchain "$RUST_CHANNEL" >/dev/null 2>&1 || true
+      rustup toolchain install "$RUST_CHANNEL" || true
+      rustup component add clippy --toolchain "$RUST_CHANNEL" || true
     else
       echo "  -> rustup not found; using the cargo/clippy already on PATH." >&2
     fi
@@ -88,15 +88,15 @@ if [[ -f "$VENV_PY" && -z "$PYTHON_EXEC_SET" ]]; then
 fi
 
 # Ensure chosen Python executable exists or is runnable
-if ! command -v "$PYTHON_EXEC" >/dev/null 2>&1 && [[ ! -x "$PYTHON_EXEC" && ! -f "$PYTHON_EXEC" ]]; then
+if ! command -v "$PYTHON_EXEC" && [[ ! -x "$PYTHON_EXEC" && ! -f "$PYTHON_EXEC" ]]; then
   echo "Error: Python executable '$PYTHON_EXEC' not found or not executable." >&2
   exit 1
 fi
 
 # Prefer a maturin on PATH, otherwise try running maturin via the chosen Python
-if command -v maturin >/dev/null 2>&1; then
+if command -v maturin; then
   MATURIN_MODE="path"
-elif "$PYTHON_EXEC" -c "import maturin" >/dev/null 2>&1; then
+elif "$PYTHON_EXEC" -c "import maturin"; then
   MATURIN_MODE="python-module"
 else
   echo "Error: maturin not found. Install it in your chosen Python (e.g. '$PYTHON_EXEC -m pip install maturin')." >&2
@@ -139,7 +139,7 @@ if [[ -n "$WHEEL" && -f "$WHEEL" ]]; then
     echo "Installing into .venv ..."
     # --no-deps：本地 wheel 已含全部绑定代码，无需重新解析依赖。
     # 优先用 uv（显式 --python 指向本 venv，避免依赖是否已 activate）；无 uv 时回退到 pip。
-    if command -v uv >/dev/null 2>&1; then
+    if command -v uv; then
       uv pip install --python "$VENV_PY" --reinstall --no-deps "$WHEEL"
     else
       "$VENV_PY" -m pip install --force-reinstall --no-deps "$WHEEL"

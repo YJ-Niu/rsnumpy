@@ -77,37 +77,86 @@ fn parse_single_index(item: &Bound<'_, PyAny>, dim_size: isize) -> PyResult<Inde
     }
 
     if let Ok(slice_obj) = item.cast::<PySlice>() {
-        let start = slice_obj
-            .getattr("start")?
-            .extract::<Option<isize>>()?
-            .unwrap_or(0);
-        let stop = slice_obj
-            .getattr("stop")?
-            .extract::<Option<isize>>()?
-            .unwrap_or(dim_size);
-        let step = slice_obj
-            .getattr("step")?
-            .extract::<Option<isize>>()?
-            .unwrap_or(1);
-
-        let actual_start = if start < 0 {
-            (dim_size + start).max(0)
-        } else {
-            start.min(dim_size)
-        };
-        let actual_stop = if stop < 0 {
-            (dim_size + stop).max(0)
-        } else {
-            stop.min(dim_size)
-        };
-
-        return Ok(IndexDesc::Slice(actual_start, actual_stop, step));
+        let start = slice_obj.getattr("start")?.extract::<Option<isize>>()?;
+        let stop = slice_obj.getattr("stop")?.extract::<Option<isize>>()?;
+        let step = slice_obj.getattr("step")?.extract::<Option<isize>>()?;
+        let (start, stop, step) = normalize_slice(start, stop, step, dim_size)?;
+        return Ok(IndexDesc::Slice(start, stop, step));
     }
 
     Err(PyTypeError::new_err(format!(
         "Unsupported index type: {}",
         item.get_type().name()?
     )))
+}
+
+/// 按 CPython `slice.indices(length)` 语义归一化切片，正确处理负步长：
+/// 步长为负时缺省起点为末元素、缺省终点越过 0；负索引按 length 折算并夹紧到合法边界。
+fn normalize_slice(
+    start: Option<isize>,
+    stop: Option<isize>,
+    step: Option<isize>,
+    length: isize,
+) -> PyResult<(isize, isize, isize)> {
+    let step = step.unwrap_or(1);
+    if step == 0 {
+        return Err(PyValueError::new_err("slice step cannot be zero"));
+    }
+    // 起点夹紧区间 [lower, upper]；负步长时下界为 -1（可越过 0 到达末端反向）。
+    let (lower, upper) = if step < 0 {
+        (-1, length - 1)
+    } else {
+        (0, length)
+    };
+    let start = match start {
+        Some(mut s) => {
+            if s < 0 {
+                s += length;
+            }
+            s.clamp(lower, upper)
+        }
+        None => {
+            if step < 0 {
+                upper
+            } else {
+                lower
+            }
+        }
+    };
+    let stop = match stop {
+        Some(mut s) => {
+            if s < 0 {
+                s += length;
+            }
+            s.clamp(lower, upper)
+        }
+        None => {
+            if step < 0 {
+                lower
+            } else {
+                upper
+            }
+        }
+    };
+    Ok((start, stop, step))
+}
+
+/// 依据归一化后的 (start, stop, step) 枚举实际下标（含负步长的反向遍历）。
+fn slice_indices_vec(start: isize, stop: isize, step: isize) -> Vec<usize> {
+    let mut out = Vec::new();
+    let mut i = start;
+    if step > 0 {
+        while i < stop {
+            out.push(i as usize);
+            i += step;
+        }
+    } else if step < 0 {
+        while i > stop {
+            out.push(i as usize);
+            i += step;
+        }
+    }
+    out
 }
 
 fn ndarray_to_index_desc(arr: &NdArray, dim_size: isize) -> IndexDesc {
@@ -172,22 +221,7 @@ fn build_dim_lists(indices: &[IndexDesc]) -> Vec<Vec<usize>> {
         .iter()
         .map(|idx| match idx {
             IndexDesc::Fancy(v) | IndexDesc::FancyMulti(v) => v.clone(),
-            IndexDesc::Slice(start, stop, step) => {
-                if *step > 0 {
-                    (*start..*stop)
-                        .step_by(*step as usize)
-                        .map(|i| i as usize)
-                        .collect()
-                } else if *step < 0 {
-                    (*start..*stop)
-                        .rev()
-                        .step_by((-*step) as usize)
-                        .map(|i| i as usize)
-                        .collect()
-                } else {
-                    vec![]
-                }
-            }
+            IndexDesc::Slice(start, stop, step) => slice_indices_vec(*start, *stop, *step),
             IndexDesc::Int(idx) => vec![*idx],
         })
         .collect()
@@ -260,13 +294,20 @@ fn slice_and_int_index(
     for (dim, idx) in indices.iter().enumerate().rev() {
         match idx {
             IndexDesc::Slice(start, stop, step) => {
-                let s = Slice {
-                    start: *start,
-                    end: Some(*stop),
-                    step: *step,
-                };
                 let dim_axis = ndarray::Axis(dim);
-                cur = cur.slice_axis(dim_axis, s).into_owned().into_dyn();
+                if *step > 0 {
+                    let s = Slice {
+                        start: *start,
+                        end: Some(*stop),
+                        step: *step,
+                    };
+                    cur = cur.slice_axis(dim_axis, s).into_owned().into_dyn();
+                } else {
+                    // 负步长：ndarray 的 Slice 会翻转 [start, end) 区间而非按
+                    // numpy 语义反向步进，故用显式下标 select 保证结果正确。
+                    let idxs = slice_indices_vec(*start, *stop, *step);
+                    cur = cur.select(dim_axis, &idxs).into_dyn();
+                }
             }
             IndexDesc::Int(i) => {
                 let cur_ndim = cur.ndim();
