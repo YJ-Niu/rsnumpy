@@ -32,7 +32,7 @@ from .random import random_module as _random_module
 from . import char as _char_module
 from . import matlib as _matlib_module
 
-__version__ = "1.1.4"
+__version__ = "1.1.5"
 
 # 捕获内建函数别名：_extra 挂载会向本模块 globals 注入同名的 numpy 函数
 # （all/any/round），会遮蔽内建函数。以下别名保证本文件内部逻辑始终使用内建实现。
@@ -207,6 +207,16 @@ class ndarray:
         if getattr(self, '_dtype', "float64") == "string_":
             raw_data = getattr(self, '_raw_data', None)
             if raw_data is not None:
+                sd = getattr(self, '_str_dtype', None)
+                if sd is not None and sd[0] == 'V':
+                    _, width = sd
+                    parts = []
+                    for v in raw_data:
+                        bs = bytes(v) if isinstance(v, (bytes, bytearray)) else str(v).encode('latin-1')
+                        if width:
+                            bs = bs[:width].ljust(width, b'\x00')
+                        parts.append(_void_repr(bs))
+                    return "[" + " ".join(parts) + "]"
                 nested = isinstance(raw_data, list) and len(raw_data) > 0
                 if nested and isinstance(raw_data[0], list):
                     lines = []
@@ -275,6 +285,18 @@ class ndarray:
                 return list(raw)
         return raw_list
 
+    def tobytes(self, order='C'):
+        """返回数组原始字节（与 numpy.ndarray.tobytes 兼容）。
+
+        字符串数组（S/U/V dtype）按 itemsize 补零对齐；数值数组按 dtype
+        字节布局编码（小端）。
+        """
+        raw = getattr(self, '_raw_data', None)
+        sd = getattr(self, '_str_dtype', None)
+        if raw is not None and sd is not None:
+            return _string_array_tobytes(_flatten_data(raw), sd)
+        return _numeric_tobytes(self)
+
     def __iter__(self):
         # 一维（及标量）按元素迭代产生 Python 标量；高维按首轴迭代产生子数组，
         # 与 NumPy 行为一致（如 a, b = np.random.randn(2, n) 得到两个数组）。
@@ -318,6 +340,13 @@ class ndarray:
         if fields and isinstance(key, list) and key:
             if _py_all(isinstance(k, str) for k in key):
                 return _structured_multifield_view(self, key)
+        # 字符串/字节/void（S/U/V）dtype 数组的整数索引：返回标量。
+        # S→去尾零 bytes，U→去尾零 str，V→void。
+        sd = getattr(self, '_str_dtype', None)
+        raw = getattr(self, '_raw_data', None)
+        if sd is not None and raw is not None and isinstance(key, int) and not isinstance(key, bool):
+            flat = _flatten_data(raw)
+            return _str_scalar(flat[key], sd)
         # 复数数组的布尔索引
         cpx = getattr(self, '_complex_data', None)
         if _is_ndarray(key) and cpx is not None:
@@ -595,6 +624,11 @@ class ndarray:
     def flags(self):
         """返回数组的内存布局信息，与 NumPy 的 ndarray.flags 兼容。"""
         return ArrayFlags(self)
+
+    @property
+    def base(self):
+        """若数组是另一数组的视图则返回其基数组，否则返回 None。"""
+        return getattr(self, '_base', None)
 
     @property
     def ndim(self):
@@ -1537,7 +1571,49 @@ bytes_ = string_  # NumPy 中 bytes_ 为字节字符串类型
 str_ = unicode_   # NumPy 中 str_ 为 unicode 字符串类型
 bool_ = type('bool', (generic,), {})
 object_ = type('object_', (generic,), {})
-void = type('void', (flexible,), {})
+
+
+def _void_repr(bs):
+    """void 标量的显示：每字节 \\xHH（大写十六进制）。"""
+    return "b'" + ''.join('\\x%02X' % b for b in bs) + "'"
+
+
+class void(flexible):
+    """void 标量：存储原始字节，支持按字节相等比较（兼容 numpy.void）。"""
+
+    def __init__(self, data):
+        if isinstance(data, (bytes, bytearray)):
+            self._bytes = bytes(data)
+        elif isinstance(data, int):
+            self._bytes = b'\x00' * data
+        else:
+            self._bytes = bytes(data)
+
+    def tobytes(self):
+        return self._bytes
+
+    def __eq__(self, other):
+        if isinstance(other, void):
+            return self._bytes == other._bytes
+        if isinstance(other, (bytes, bytearray)):
+            return self._bytes == bytes(other)
+        return NotImplemented
+
+    def __ne__(self, other):
+        result = self.__eq__(other)
+        if result is NotImplemented:
+            return result
+        return not result
+
+    def __hash__(self):
+        return hash(self._bytes)
+
+    def __repr__(self):
+        return _void_repr(self._bytes)
+
+    def __str__(self):
+        return _void_repr(self._bytes)
+
 
 # C 语言宽度别名（与 NumPy 在 64 位平台上的取值一致）
 byte = int8
@@ -1699,6 +1775,16 @@ class iinfo:
 
     def __repr__(self):
         return f"iinfo(min={self.min}, max={self.max}, dtype={self._name})"
+
+    def __str__(self):
+        dashes = '-' * 63
+        return (
+            f"Machine parameters for {self._name}\n"
+            f"{dashes}\n"
+            f"min = {self.min}\n"
+            f"max = {self.max}\n"
+            f"{dashes}\n"
+        )
 
 
 class ndindex:
@@ -2133,6 +2219,14 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
             _dtype = _infer_int_dtype(flat)
     else:
         _dtype = _resolve_dtype(dtype)
+    # 字符串/字节/void dtype（S/U/V）：存为原始 Python 数据，避免数值化。
+    if dtype is not None:
+        sd = _parse_str_dtype(dtype)
+        if sd is not None:
+            flat = _flatten_data(data) if isinstance(data, (list, tuple)) else [data]
+            arr = ndarray._wrap(_core.zeros((len(flat),)), _dtype='string_', _raw_data=list(flat))
+            arr._str_dtype = sd
+            return arr
     _fields = None
     _raw_data = None
     if isinstance(dtype, DType) and dtype._fields:
@@ -2273,6 +2367,95 @@ def array_equal(a, b):
 def copy(a, order='K'):
     """返回数组的副本。"""
     return ndarray(a).copy(order=order)
+
+
+def _parse_str_dtype(dtype):
+    """解析字符串类 dtype，返回 (kind, width)；非字符串 dtype 返回 None。
+
+    kind: 'S'（字节串，1 字节/元素）、'U'（Unicode，4 字节/元素）、
+    'V'（原始字节）。width 为元素长度（字符数），未指定为 0。
+    """
+    if dtype is bytes:
+        return ('S', 0)
+    if dtype is str:
+        return ('U', 0)
+    if not isinstance(dtype, str):
+        return None
+    s = dtype.lstrip('<>=|')
+    if not s:
+        return None
+    k = s[0]
+    if k in ('S', 'U', 'V', 'a'):
+        kind = 'S' if k == 'a' else k
+        rest = s[1:]
+        width = int(rest) if rest.isdigit() else 0
+        return (kind, width)
+    return None
+
+
+def _string_array_tobytes(items, str_dtype):
+    """将字符串/字节元素列表按 (kind, width) 编码为定宽补零字节串。"""
+    kind, width = str_dtype
+    out = bytearray()
+    for v in items:
+        if kind == 'U':
+            if isinstance(v, (bytes, bytearray)):
+                v = bytes(v).decode('latin-1')
+            enc = str(v).encode('utf-32-le')
+            size = width * 4 if width else len(enc)
+        else:
+            if isinstance(v, (bytes, bytearray)):
+                enc = bytes(v)
+            else:
+                enc = str(v).encode('latin-1')
+            size = width if width else len(enc)
+        enc = enc[:size].ljust(size, b'\x00')
+        out += enc
+    return bytes(out)
+
+
+def _str_scalar(v, str_dtype):
+    """按 (kind, width) 将单个原始元素转换为标量：
+    S→截断到 width 并去尾零的 bytes；U→去尾零的 str；V→定宽补零的 void。
+    """
+    kind, width = str_dtype
+    if kind == 'U':
+        s = bytes(v).decode('latin-1') if isinstance(v, (bytes, bytearray)) else str(v)
+        if width:
+            s = s[:width]
+        return s.rstrip('\x00')
+    bs = bytes(v) if isinstance(v, (bytes, bytearray)) else str(v).encode('latin-1')
+    if kind == 'V':
+        if width:
+            bs = bs[:width].ljust(width, b'\x00')
+        return void(bs)
+    # kind == 'S'
+    if width:
+        bs = bs[:width]
+    return bs.rstrip(b'\x00')
+
+
+_TOBYTES_STRUCT = {
+    'float64': 'd', 'float32': 'f',
+    'int64': 'q', 'int32': 'i', 'int16': 'h', 'int8': 'b',
+    'uint64': 'Q', 'uint32': 'I', 'uint16': 'H', 'uint8': 'B',
+    'bool': '?',
+}
+
+
+def _numeric_tobytes(arr):
+    """将数值数组按 dtype 小端布局编码为字节串。"""
+    import struct
+    dt = getattr(arr, '_dtype', 'float64')
+    fmt = _TOBYTES_STRUCT.get(dt, 'd')
+    flat = _flatten_data(arr.tolist())
+    if fmt == '?':
+        return bytes(1 if v else 0 for v in flat)
+    if fmt in ('d', 'f'):
+        vals = [float(v) for v in flat]
+    else:
+        vals = [int(v) for v in flat]
+    return struct.pack('<%d%s' % (len(vals), fmt), *vals)
 
 
 def _resolve_dtype(dtype):

@@ -2,6 +2,7 @@ import rsnumpy as np
 import time
 import math
 from io import StringIO
+from rsnumpy import array, argmin, sqrt, sum
 
 start_time = time.time()
 
@@ -2165,6 +2166,61 @@ np.power(100, 100, dtype=np.float64)
 print(0.3 - 0.2 - 0.1)
 np.isclose(0.3 - 0.2 - 0.1, 0, rtol=1e-05)  # Check for closeness to 0
 run_test()
+def pprint(x):
+    mark_print()
+    print(x)
+
+
+a = np.array([1.0, 2.0, 3.0])
+b = np.array([2.0, 2.0, 2.0])
+print(a * b)
+a = np.array([1.0, 2.0, 3.0])
+b = 2.0
+print(a * b)
+mark_print()
+
+a = np.array([[0.0, 0.0, 0.0],
+              [10.0, 10.0, 10.0],
+              [20.0, 20.0, 20.0],
+              [30.0, 30.0, 30.0]])
+b = np.array([1.0, 2.0, 3.0])
+print(a + b)
+mark_print()
+a = np.array([0.0, 10.0, 20.0, 30.0])
+b = np.array([1.0, 2.0, 3.0])
+print(a[:, np.newaxis] + b)
+
+mark_print()
+observation = array([111.0, 188.0])
+codes = array([[102.0, 203.0],
+               [132.0, 193.0],
+               [45.0, 155.0],
+               [57.0, 173.0]])
+diff = codes - observation    # the broadcast happens here
+dist = sqrt(sum(diff**2, axis=-1))
+print(argmin(dist))
+x = np.arange(10)
+pprint(x)
+y = x[1:3]  # creates a view
+pprint(y)
+x[1:3] = [10, 11]
+pprint(x)
+pprint(y)
+
+x = np.arange(9).reshape(3, 3)
+pprint(x)
+y = x[[1, 2]]
+pprint(y)
+pprint(y.base is None)
+
+x = np.arange(9)
+pprint(x)
+y = x.reshape(3, 3)
+pprint(y)
+y.base  # .reshape() creates a view
+z = y[[2, 1]]
+pprint(z)
+pprint(z.base is None)  # advanced indexing creates a copy
 end_time = time.time()
 
 print("\n时间：", end_time - start_time)
