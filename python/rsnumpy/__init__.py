@@ -32,7 +32,7 @@ from .random import random_module as _random_module
 from . import char as _char_module
 from . import matlib as _matlib_module
 
-__version__ = "1.1.3"
+__version__ = "1.1.4"
 
 # 捕获内建函数别名：_extra 挂载会向本模块 globals 注入同名的 numpy 函数
 # （all/any/round），会遮蔽内建函数。以下别名保证本文件内部逻辑始终使用内建实现。
@@ -304,7 +304,11 @@ class ndarray:
         if fields and isinstance(key, str):
             field_names = [f[0] for f in fields]
             if key in field_names:
-                return ndarray._wrap(self._array, self._dtype, _fields=None)
+                return _structured_field_view(self, key)
+        # 多字段索引：a[['f1', 'f2']] 返回仅含所选字段的视图
+        if fields and isinstance(key, list) and key:
+            if _py_all(isinstance(k, str) for k in key):
+                return _structured_multifield_view(self, key)
         # 复数数组的布尔索引
         cpx = getattr(self, '_complex_data', None)
         if _is_ndarray(key) and cpx is not None:
@@ -939,6 +943,82 @@ def _ndarray_to_index_list(k):
     return _convert(raw)
 
 
+def _normalize_field(item):
+    """归一化结构化字段规格：子数组字段保留形状为 (name, type, subshape)。"""
+    if len(item) >= 3 and item[2]:
+        sub = item[2] if isinstance(item[2], (list, tuple)) else (item[2],)
+        return (item[0], item[1], tuple(sub))
+    return (item[0], item[1])
+
+
+def _field_subshape(fspec):
+    """返回字段的子数组形状（标量字段为空元组）。"""
+    if len(fspec) >= 3 and fspec[2]:
+        return tuple(fspec[2])
+    return ()
+
+
+def _nested_zeros(shape):
+    """生成给定形状的嵌套零列表（标量形状返回 0）。"""
+    if not shape:
+        return 0
+    return [_nested_zeros(shape[1:]) for _ in range(shape[0])]
+
+
+def _field_dtype_name(ftype):
+    """将字段类型规格解析为本库 dtype 名称（字符串字段归一为 string_）。"""
+    name = _resolve_type_name(ftype)
+    if isinstance(name, str) and name and name[0] in ('S', 'a', 'U'):
+        return 'string_'
+    return name
+
+
+def _extract_field(data, fi, depth):
+    """从嵌套结构化 raw_data 中递归抽取第 fi 个字段。depth 为外层维度数。"""
+    if depth <= 0:
+        return data[fi]
+    return [_extract_field(row, fi, depth - 1) for row in data]
+
+
+def _select_fields(data, idxs, depth):
+    """从嵌套结构化 raw_data 中递归保留 idxs 指定的若干字段。"""
+    if depth <= 0:
+        return tuple(data[i] for i in idxs)
+    return [_select_fields(row, idxs, depth - 1) for row in data]
+
+
+def _structured_field_view(arr, name):
+    """结构化数组的单字段访问：返回与 arr 同形（子数组字段追加子形状）的字段数组。"""
+    fields = arr._fields
+    names = [f[0] for f in fields]
+    fi = names.index(name)
+    fspec = fields[fi]
+    dt = _field_dtype_name(fspec[1])
+    raw = getattr(arr, '_raw_data', None)
+    if raw is None:
+        # 单字段数组：数据已展平进底层 _array
+        if dt == 'string_':
+            return ndarray._wrap(arr._array, _dtype=dt, _raw_data=getattr(arr, '_raw_data', None))
+        return ndarray._wrap(arr._array, _dtype=dt)
+    extracted = _extract_field(raw, fi, arr.ndim)
+    if dt == 'string_':
+        return ndarray(extracted)
+    return ndarray(extracted, _dtype=dt)
+
+
+def _structured_multifield_view(arr, keys):
+    """结构化数组的多字段访问 x[['f1','f2']]：返回仅含所选字段的新结构化数组。"""
+    fields = arr._fields
+    names = [f[0] for f in fields]
+    idxs = [names.index(k) for k in keys]
+    new_fields = [fields[i] for i in idxs]
+    raw = getattr(arr, '_raw_data', None)
+    if raw is None:
+        return ndarray._wrap(arr._array, _dtype='void', _fields=new_fields)
+    new_raw = _select_fields(raw, idxs, arr.ndim)
+    return ndarray._wrap(arr._array, _dtype='void', _fields=new_fields, _raw_data=new_raw)
+
+
 def _wrap_result(result, dtype="float64"):
     """将原始 ndarray 结果包装到 ndarray 类中。"""
     if hasattr(result, '__class__') and result.__class__.__name__ == 'ndarray':
@@ -1283,7 +1363,7 @@ def dtype(obj):
         fields = []
         for item in obj:
             if isinstance(item, (list, tuple)) and len(item) >= 2:
-                fields.append((item[0], item[1]))
+                fields.append(_normalize_field(item))
         if fields:
             return DType("void", fields=fields)
     name = _resolve_type_name(obj)
@@ -2110,8 +2190,8 @@ def _infer_int_dtype(args):
 
 
 def _make_structured_zeros(shape, fields):
-    """为结构化 dtype 生成零填充的原始数据。"""
-    elem = tuple(0 for _ in fields)
+    """为结构化 dtype 生成零填充的原始数据（子数组字段填充嵌套零）。"""
+    elem = tuple(_nested_zeros(_field_subshape(f)) for f in fields)
     if isinstance(shape, int):
         total = shape
     else:
@@ -2135,7 +2215,7 @@ def zeros(shape, dtype=None, order='C'):
     _fields = None
     _raw_data = None
     if isinstance(dtype, (list, tuple)):
-        _fields = [(item[0], item[1]) for item in dtype]
+        _fields = [_normalize_field(item) for item in dtype]
         _raw_data = _make_structured_zeros(shape, _fields)
         _dtype = "void"
     elif isinstance(dtype, DType) and dtype._fields:
@@ -2690,7 +2770,7 @@ def nditer(a, order='C', op_flags=None, flags=None):
 def isnan(x):
     """逐元素检测是否为 NaN。"""
     arr = ndarray(x)
-    return ndarray(_core.isnan(arr._array))
+    return ndarray._wrap(_core.isnan(arr._array), _dtype="bool")
 
 
 def binary_repr(num, width=None):
@@ -2701,13 +2781,13 @@ def binary_repr(num, width=None):
 def isinf(x):
     """逐元素检测是否为无穷大。"""
     arr = ndarray(x)
-    return ndarray(_core.isinf(arr._array))
+    return ndarray._wrap(_core.isinf(arr._array), _dtype="bool")
 
 
 def isfinite(x):
     """逐元素检测是否为有限值。"""
     arr = ndarray(x)
-    return ndarray(_core.isfinite(arr._array))
+    return ndarray._wrap(_core.isfinite(arr._array), _dtype="bool")
 
 
 def iscomplex(x):

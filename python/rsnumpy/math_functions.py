@@ -12,6 +12,11 @@ def _wrap(result):
     return _nd()(result)
 
 
+def _wrap_bool(result):
+    """比较/逻辑运算结果按布尔数组返回（与 numpy 一致，可直接用作掩码索引）。"""
+    return _nd()._wrap(result, _dtype="bool")
+
+
 def _ensure_raw(a):
     if hasattr(a, '_array'):
         return a._array
@@ -240,52 +245,52 @@ remainder = mod  # mod 的别名
 # ========== 比较运算 ==========
 def greater(x1, x2):
     """逐元素大于比较。"""
-    return _wrap(_core.greater(_ensure_raw(x1), _ensure_raw(x2)))
+    return _wrap_bool(_core.greater(_ensure_raw(x1), _ensure_raw(x2)))
 
 
 def less(x1, x2):
     """逐元素小于比较。"""
-    return _wrap(_core.less(_ensure_raw(x1), _ensure_raw(x2)))
+    return _wrap_bool(_core.less(_ensure_raw(x1), _ensure_raw(x2)))
 
 
 def equal(x1, x2):
     """逐元素相等比较。"""
-    return _wrap(_core.equal(_ensure_raw(x1), _ensure_raw(x2)))
+    return _wrap_bool(_core.equal(_ensure_raw(x1), _ensure_raw(x2)))
 
 
 def not_equal(x1, x2):
     """逐元素不相等比较。"""
-    return _wrap(_core.not_equal(_ensure_raw(x1), _ensure_raw(x2)))
+    return _wrap_bool(_core.not_equal(_ensure_raw(x1), _ensure_raw(x2)))
 
 
 def greater_equal(x1, x2):
     """逐元素大于等于比较。"""
-    return _wrap(_core.greater_equal(_ensure_raw(x1), _ensure_raw(x2)))
+    return _wrap_bool(_core.greater_equal(_ensure_raw(x1), _ensure_raw(x2)))
 
 
 def less_equal(x1, x2):
     """逐元素小于等于比较。"""
-    return _wrap(_core.less_equal(_ensure_raw(x1), _ensure_raw(x2)))
+    return _wrap_bool(_core.less_equal(_ensure_raw(x1), _ensure_raw(x2)))
 
 
 def logical_and(x1, x2):
     """逐元素逻辑与。"""
-    return _wrap(_core.logical_and(_ensure_raw(x1), _ensure_raw(x2)))
+    return _wrap_bool(_core.logical_and(_ensure_raw(x1), _ensure_raw(x2)))
 
 
 def logical_or(x1, x2):
     """逐元素逻辑或。"""
-    return _wrap(_core.logical_or(_ensure_raw(x1), _ensure_raw(x2)))
+    return _wrap_bool(_core.logical_or(_ensure_raw(x1), _ensure_raw(x2)))
 
 
 def logical_xor(x1, x2):
     """逐元素逻辑异或。"""
-    return _wrap(_core.logical_xor(_ensure_raw(x1), _ensure_raw(x2)))
+    return _wrap_bool(_core.logical_xor(_ensure_raw(x1), _ensure_raw(x2)))
 
 
 def isclose(a, b, rtol=1e-05, atol=1e-08):
     """逐元素判断是否接近。"""
-    return _wrap(_core.isclose(_ensure_raw(a), _ensure_raw(b), rtol, atol))
+    return _wrap_bool(_core.isclose(_ensure_raw(a), _ensure_raw(b), rtol, atol))
 
 
 def allclose(a, b, rtol=1e-05, atol=1e-08):

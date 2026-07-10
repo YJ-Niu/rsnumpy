@@ -2004,7 +2004,50 @@ rows[:, np.newaxis]
 print(x[rows[:, np.newaxis], columns])
 print(x[np.ix_(rows, columns)])
 
-
+print(x[rows, columns])
+x = np.array([[1., 2.], [np.nan, 3.], [np.nan, np.nan]])
+print(x[~np.isnan(x)])
+x = np.array([1., -1., -2., 3])
+x[x < 0] += 20
+print(x)
+x = np.arange(35).reshape(5, 7)
+b = x > 20
+print(b[:, 5])
+print(x[b[:, 5]])
+x = np.array([[0, 1], [1, 1], [2, 2]])
+rowsum = x.sum(-1)
+print(x[rowsum <= 2, :])
+x = np.array([[0, 1, 2],
+              [3, 4, 5],
+              [6, 7, 8],
+              [9, 10, 11]])
+rows = (x.sum(-1) % 2) == 0
+rows
+columns = [0, 2]
+print(x[np.ix_(rows, columns)])
+rows = rows.nonzero()[0]
+print(x[rows[:, np.newaxis], columns])
+x = np.arange(30).reshape(2, 3, 5)
+print(x)
+b = np.array([[True, True, False], [False, True, True]])
+print(x[b])
+y = np.arange(35).reshape(5, 7)
+print(y[np.array([0, 2, 4]), 1:3])
+x = np.array([[0, 1, 2],
+              [3, 4, 5],
+              [6, 7, 8],
+              [9, 10, 11]])
+print(x[1:2, 1:3])
+print(x[1:2, [1, 2]])
+x = np.arange(35).reshape(5, 7)
+b = x > 20
+print(b)
+print(x[b[:, 5], 1:3])
+x = np.zeros((2, 2), dtype=[('a', np.int32), ('b', np.float64, (3, 3))])
+print(x['a'].shape)
+print(x['a'].dtype)
+print(x['b'].shape)
+print(x['b'].dtype)
 end_time = time.time()
 
 print("\n时间：", end_time - start_time)
