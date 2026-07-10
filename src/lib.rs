@@ -276,73 +276,16 @@ fn compute_max_width(arr: &Array<f64, IxDyn>) -> usize {
         .unwrap_or(1)
 }
 
-/// 在多维数组的相邻子块之间写入 numpy 风格的分隔符：
-/// `ndim - 1` 个换行（外层维度间空行更多），再加 `indent + 1` 个缩进空格
-/// （使每个嵌套层级的 `[` 依次右移一格对齐）。
-pub(crate) fn push_nd_separator(s: &mut String, ndim: usize, indent: usize) {
-    for _ in 0..ndim.saturating_sub(1) {
-        s.push('\n');
-    }
-    for _ in 0..(indent + 1) {
-        s.push(' ');
-    }
-}
-
-fn format_array_repr_inner(
-    arr: &Array<f64, IxDyn>,
-    _prefix: &str,
-    pad_width: usize,
-    indent: usize,
-) -> String {
-    if arr.ndim() == 0 {
-        return format!("{}", arr.iter().next().copied().unwrap_or(0.0_f64));
-    }
-    if arr.ndim() == 1 {
-        let n = arr.len();
-        // 预分配：每个数字 pad_width + 1（空格）
-        let estimated = 2 + n * (pad_width.max(1) + 1);
-        let mut s = String::with_capacity(estimated);
-        s.push('[');
-        for (i, val) in arr.iter().enumerate() {
-            if i > 0 {
-                s.push(' ');
-            }
-            let val_str = format_scalar(*val);
-            if pad_width > 0 {
-                let _ = write!(s, "{:>width$}", val_str, width = pad_width);
-            } else {
-                s.push_str(&val_str);
-            }
-        }
-        s.push(']');
-        return s;
-    }
-    let ndim = arr.ndim();
-    let n = arr.shape()[0];
-    // 粗略估计字符串大小
-    let estimated = 2 + n * 20; // 每行约 20 字符
-    let mut s = String::with_capacity(estimated);
-    s.push('[');
-    for i in 0..n {
-        if i > 0 {
-            push_nd_separator(&mut s, ndim, indent);
-        }
-        let sub = arr.index_axis(Axis(0), i).to_owned().into_dyn();
-        let row_str = format_array_repr_inner(&sub, "", pad_width, indent + 1);
-        s.push_str(&row_str);
-    }
-    s.push(']');
-    s
-}
-
 fn format_array_repr(arr: &Array<f64, IxDyn>, _prefix: &str) -> String {
-    // 对 2D+ 数组计算最大宽度并右对齐填充，与 numpy 风格一致
-    let pad_width = if arr.ndim() >= 2 {
-        compute_max_width(arr)
-    } else {
-        0
+    if arr.ndim() == 0 {
+        return format_scalar(arr.iter().next().copied().unwrap_or(0.0_f64));
+    }
+    let pad_width = compute_max_width(arr);
+    let render = move |v: f64| {
+        let s = format_scalar(v);
+        format!("{s:>pad_width$}")
     };
-    format_array_repr_inner(arr, _prefix, pad_width, 0)
+    crate::formatting::wrap_recurse(arr, " ", crate::formatting::LINE_WIDTH, &render, " ")
 }
 
 fn format_scalar(val: f64) -> String {
@@ -379,10 +322,18 @@ fn format_float_scalar(val: f64) -> String {
             "-inf".to_string()
         };
     }
+    if val == 0.0 {
+        // 保留负零符号，与 numpy 一致（例如 [-0.  0.  1.]）。
+        return if val.is_sign_negative() {
+            "-0.".to_string()
+        } else {
+            "0.".to_string()
+        };
+    }
     if val != 0.0 && val.abs() < 1e-10 {
         return format!("{:.10e}", val);
     }
-    let val_rounded = (val * 1e10).round() / 1e10;
+    let val_rounded = (val * 1e8).round() / 1e8;
     if val_rounded == val_rounded.floor() && val_rounded.is_finite() && val_rounded.abs() < 1e16 {
         let v = val_rounded as i64;
         if v as f64 == val_rounded {
@@ -392,7 +343,7 @@ fn format_float_scalar(val: f64) -> String {
     if val_rounded.abs() >= 1e10 {
         return format!("{:.10e}", val_rounded);
     }
-    let s = format!("{:.10}", val_rounded);
+    let s = format!("{:.8}", val_rounded);
     if let Some(pos) = s.find('.') {
         s[..pos + 1 + s[pos + 1..].trim_end_matches('0').len()].to_string()
     } else {
@@ -2026,6 +1977,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(indexing::getitem_scalar, m)?)?;
     m.add_function(wrap_pyfunction!(indexing::setitem_multi, m)?)?;
     m.add_function(wrap_pyfunction!(indexing::iscomplex_cpx, m)?)?;
+    m.add_function(wrap_pyfunction!(indexing::masked_select, m)?)?;
     m.add_function(wrap_pyfunction!(fft::py_fft_ndarray, m)?)?;
     m.add_function(wrap_pyfunction!(fft::py_ifft_ndarray, m)?)?;
     m.add_function(wrap_pyfunction!(fft::py_rfft_ndarray, m)?)?;

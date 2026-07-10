@@ -33,9 +33,9 @@ Thumbs.db
 debug.txt
 test_old.txt
 out.txt
-outfile.npy
+outfile*.npy
 runoob.npz
-outfile2
+outfile*
 push*.sh
 main*.py
 debug*.py

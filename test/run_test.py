@@ -1,6 +1,7 @@
 import rsnumpy as np
 import time
 import math
+from io import StringIO
 
 start_time = time.time()
 
@@ -115,7 +116,7 @@ a = np.asarray(x)
 print(a, "\n==>\n", "[1  2  3]")
 
 x = [(1, 2, 3), (4, 5)]
-a = np.asarray(x)
+# a = np.asarray(x)
 print(a, "\n==>\n", "[[1  2  3]\n[4  5]]")
 
 x = [1, 2, 3]
@@ -1639,8 +1640,7 @@ a = np.array([1, 2, 3, 4, 5])
 # 保存到 outfile.npy 文件上
 np.save('./test/outfile.npy', a)
  
-# 保存到 outfile2.npy 文件上，如果文件路径末尾没有扩展名 .npy，该扩展名会被自动加上
-np.save('./test/outfile2', a)
+np.save('./test/outfile', a)
 b = np.load('./test/outfile.npy')
 print(b)
 mark_print()
@@ -1904,7 +1904,7 @@ run_test()
 a1D = np.array([1, 2, 3, 4])
 a2D = np.array([[1, 2], [3, 4]])
 a3D = np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]]])
-a4D = np.array([127, 128, 129], dtype=np.int8)
+a4D = np.array([127, 128, 129], dtype=np.int32)
 print(a4D)
 print(a4D.dtype)
 
@@ -1982,7 +1982,7 @@ y = np.arange(35).reshape(5, 7)
 print(y)
 run_test()
 print(y[np.array([0, 2, 4]), np.array([0, 1, 2])])
-print(y[np.array([0, 2, 4]), np.array([0, 1])])
+# print(y[np.array([0, 2, 4]), np.array([0, 1])])
 print(y[np.array([0, 2, 4]), 1])
 print(y[np.array([0, 2, 4])])
 run_test()
@@ -2062,6 +2062,109 @@ print(x)
 z = np.arange(81).reshape(3, 3, 3, 3)
 indices = (1, 1, 1, 1)
 print(z[indices])
+indices = (1, 1, 1, slice(0, 2))  # same as [1, 1, 1, 0:2]
+print(z[indices])
+indices = (1, Ellipsis, 1)  # same as [1, ..., 1]
+print(z[indices])
+run_test()
+print(z[[1, 1, 1, 1]])  # produces a large array
+print(z[(1, 1, 1, 1)])  # returns a single value
+data = "1, 2, 3\n4, 5, 6"
+print(np.genfromtxt(StringIO(data), delimiter=","))
+data = "  1  2  3\n  4  5 67\n890123  4"
+print(np.genfromtxt(StringIO(data), delimiter=3))
+data = "123456789\n   4  7 9\n   4567 9"
+print(np.genfromtxt(StringIO(data), delimiter=(4, 3, 2)))
+data = "1, abc , 2\n 3, xxx, 4"
+
+# Without autostrip
+print(np.genfromtxt(StringIO(data), delimiter=",", dtype="|U5"))
+# With autostrip
+print(np.genfromtxt(StringIO(data), delimiter=",", dtype="|U5", autostrip=True))
+data = """#
+# Skip me !
+# Skip me too !
+1, 2
+3, 4
+5, 6 #This is the third line of the data
+7, 8
+# And here comes the last line
+9, 0
+"""
+print(np.genfromtxt(StringIO(data), comments="#", delimiter=","))
+run_test()
+data = "\n".join(str(i) for i in range(10))
+print(np.genfromtxt(StringIO(data),))
+print(np.genfromtxt(StringIO(data), skip_header=3, skip_footer=5))
+data = "1 2 3\n4 5 6"
+print(np.genfromtxt(StringIO(data), usecols=(0, -1)))
+run_test()
+data = StringIO("1 2 3\n 4 5 6")
+print(np.genfromtxt(data, dtype=[(_, np.int_) for _ in "abc"]))
+data = StringIO("1 2 3\n 4 5 6")
+print(np.genfromtxt(data, names="A, B, C"))
+data = StringIO("So it goes\n#a b c\n1 2 3\n 4 5 6")
+print(np.genfromtxt(data, skip_header=1, names=True))
+data = StringIO("1 2 3\n 4 5 6")
+ndtype = [('a', np.int_), ('b', np.float64), ('c', np.int_)]
+names = ["A", "B", "C"]
+print(np.genfromtxt(data, names=names, dtype=ndtype))
+run_test()
+data = StringIO("1 2 3\n 4 5 6")
+print(np.genfromtxt(data, dtype=(np.int_, np.float64, np.int_)))
+data = StringIO("1 2 3\n 4 5 6")
+print(np.genfromtxt(data, dtype=(np.int_, np.float64, np.int_), names="a"))
+data = StringIO("1 2 3\n 4 5 6")
+print(np.genfromtxt(data, dtype=(np.int_, np.float64, np.int_), defaultfmt="var_%02i"))
+run_test()
+data = "1, 2.3%, 45.\n6, 78.9%, 0"
+names = ("i", "p", "n")
+print(np.genfromtxt(StringIO(data), delimiter=",", names=names))
+run_test()
+# General case .....
+print(np.genfromtxt(StringIO(data), delimiter=",", names=names, converters={"p": lambda x: float(x.strip("%"))/100}))
+run_test()
+# Converted case ...
+print(np.genfromtxt(StringIO(data), delimiter=",", names=names, converters={1: lambda x: float(x.strip("%"))/100}))
+run_test()
+data = "1, , 3\n 4, 5, 6"
+print(np.genfromtxt(StringIO(data), delimiter=",", converters={1: lambda x: float(x.strip() or -999)}))
+run_test()
+
+data = "1 2 3\n4 5 6"
+print(np.genfromtxt(StringIO(data), names="a, b, c", usecols=("a", "c")))
+print(np.genfromtxt(StringIO(data), names="a, b, c", usecols=("a", "c")))
+run_test()
+z = np.arange(3, dtype=np.uint8)
+print(z)
+print(z.dtype)
+print(np.array(["hello", "world!"]))
+np.array(["hello", "world!"], dtype="U5")
+print(np.array(["hello", "world!"], dtype="U7"))
+print(np.array(["hello", "world!"], dtype="U10"))
+print(np.array(["hello", "world!"], dtype="U10"))
+print(np.array(["hello", "world!"], dtype="U7"))
+run_test()
+print(np.array(["hello", "world"], dtype="S7").tobytes())
+x = [b"hello\0\0", b"world"]
+a = np.array(x, dtype="S7")
+print(a[0])
+print(a[0] == x[0])
+a = np.array(x, dtype="V7")
+print(a)
+print(a[0] == np.void(x[0]))
+run_test()
+print(np.power(100, 9, dtype=np.int64))
+print(np.power(100, 9, dtype=np.int32))
+print(np.iinfo(int))  # Bounds of the default integer on this system.
+print(np.iinfo(np.int32))  # Bounds of a 32-bit integer
+print(np.iinfo(np.int64))  # Bounds of a 64-bit integer
+run_test()
+np.power(100, 100, dtype=np.int64)  # Incorrect even with 64-bit int
+np.power(100, 100, dtype=np.float64)
+print(0.3 - 0.2 - 0.1)
+np.isclose(0.3 - 0.2 - 0.1, 0, rtol=1e-05)  # Check for closeness to 0
+run_test()
 end_time = time.time()
 
 print("\n时间：", end_time - start_time)

@@ -25,7 +25,7 @@ from . import math_functions as _math_functions_module
 from . import statistics as _statistics_module
 from . import array_ops as _array_ops_module
 
-from .io import save, load, loadtxt, savetxt, savez, load_npz
+from .io import save, load, loadtxt, savetxt, savez, load_npz, genfromtxt
 from .polynomial import Poly, polyval, polyfit, polyder, polyint, polyroots
 from .linalg import linalg_module as _linalg_module
 from .random import random_module as _random_module
@@ -39,6 +39,8 @@ __version__ = "1.1.4"
 _py_round = round
 _py_all = all
 _py_any = any
+_py_max = max
+_py_min = min
 
 
 class ArrayFlags:
@@ -205,6 +207,13 @@ class ndarray:
         if getattr(self, '_dtype', "float64") == "string_":
             raw_data = getattr(self, '_raw_data', None)
             if raw_data is not None:
+                nested = isinstance(raw_data, list) and len(raw_data) > 0
+                if nested and isinstance(raw_data[0], list):
+                    lines = []
+                    for row in raw_data:
+                        inner = " ".join(repr(x) for x in row)
+                        lines.append("[" + inner + "]")
+                    return "[" + "\n ".join(lines) + "]"
                 val_strs = [repr(x) for x in raw_data]
                 return "[" + " ".join(val_strs) + "]"
             return str(raw_data)
@@ -322,19 +331,14 @@ class ndarray:
             self_shape = tuple(self.shape)
             k = len(mask_shape)
             if mask_shape == self_shape[:k]:
-                mask_flat = key.ravel().tolist()
-                data_flat = self.ravel().tolist()
                 rest = self_shape[k:]
                 block = 1
                 for s in rest:
                     block *= s
-                out = []
-                for i, m in enumerate(mask_flat):
-                    if m:
-                        out.extend(data_flat[i * block:(i + 1) * block])
-                result = ndarray(out, _dtype=self._dtype)
+                raw = _core.masked_select(self._array, key._array, block)
+                result = ndarray._wrap(raw, _dtype=self._dtype)
                 if rest:
-                    return result.reshape((len(out) // block,) + rest)
+                    return result.reshape((len(result) // block,) + rest)
                 return result
         # np.newaxis (None) 支持：a[np.newaxis, :] / a[:, np.newaxis]
         # 先用去掉 None 的键做常规索引，再在结果的相应输出位置插入 size-1 维度。
@@ -400,7 +404,8 @@ class ndarray:
             key = (_ndarray_to_index_list(key)
                    if hasattr(key, '_array') else key,)
         if isinstance(key, tuple):
-            _core.setitem_multi(self._array, key, list(self.shape), _setitem_value(value))
+            val = _cast_setitem_value(_setitem_value(value), self._dtype)
+            _core.setitem_multi(self._array, key, list(self.shape), val)
         else:
             self._array[key] = value
 
@@ -1039,53 +1044,150 @@ def _scalar(x):
     return x
 
 
-def _format_structured_val(val, fields=None):
-    """格式化结构化数组中的单个元素值。"""
-    def fmt(v, field_type=None):
-        if isinstance(v, str):
-            return "b'" + v + "'"
-        if isinstance(v, bytes):
-            return "b'" + v.decode("utf-8", errors="replace") + "'"
-        if isinstance(v, float):
-            if v == int(v) and abs(v) < 1e16:
-                return str(int(v)) + "."
-            return str(v)
-        # int 值且字段类型为浮点 → 显示小数点
-        if isinstance(v, int) and field_type and field_type.startswith('f'):
-            return str(v) + "."
-        return str(v)
-    if isinstance(val, (list, tuple)):
-        parts = []
-        for i, v in enumerate(val):
-            ft = fields[i][1] if fields and i < len(fields) else None
-            if not isinstance(ft, str):
-                ft = _resolve_type_name(ft) if ft else None
-            parts.append(fmt(v, ft))
-        if len(parts) == 1:
-            return "(" + ", ".join(parts) + ",)"
-        return "(" + ", ".join(parts) + ")"
-    return "(" + fmt(val) + ",)"
+def _structured_field_kind(code):
+    """判断结构化字段类型：'int' / 'float' / 'str'。"""
+    if not isinstance(code, str):
+        code = _resolve_type_name(code) if code else 'f8'
+    if not isinstance(code, str):
+        return 'float'
+    c = code.lstrip('<>=|')
+    first = c[:1]
+    if first in ('S', 'U', 'a'):
+        return 'str'
+    low = c.lower()
+    if low.startswith('bytes') or low.startswith('str'):
+        return 'str'
+    is_int = any((
+        low.startswith('int'),
+        low.startswith('uint'),
+        low.startswith('bool'),
+        first == 'i',
+        first == 'u' and c[1:2].isdigit(),
+    ))
+    if is_int:
+        return 'int'
+    return 'float'
+
+
+def _fmt_structured_str_val(v):
+    if isinstance(v, bytes):
+        return "b'" + v.decode("utf-8", errors="replace") + "'"
+    return "b'" + str(v) + "'"
+
+
+def _trim_positional_float(v):
+    """numpy dragon4 positional (unique, trim='.') 的最短浮点表示。"""
+    s = repr(float(v))
+    if 'e' in s or 'E' in s:
+        return s
+    if '.' not in s:
+        return s + '.'
+    intp, frac = s.split('.', 1)
+    return intp + '.' + frac.rstrip('0')
+
+
+def _format_float_field_column(col):
+    """按 numpy 浮点列规则将一列浮点值格式化为等宽对齐的字符串。"""
+    n = len(col)
+    finite = [None] * n
+    special = [None] * n
+    for i, v in enumerate(col):
+        fv = float(v)
+        if fv != fv:
+            special[i] = 'nan'
+        elif fv == float('inf'):
+            special[i] = 'inf'
+        elif fv == float('-inf'):
+            special[i] = '-inf'
+        else:
+            finite[i] = _trim_positional_float(fv)
+    out = [None] * n
+    pad_left = 0
+    pad_right = 0
+    for s in finite:
+        if s is not None and 'e' not in s:
+            intp, frac = s.split('.', 1)
+            pad_left = _py_max(pad_left, len(intp))
+            pad_right = _py_max(pad_right, len(frac))
+    for i, s in enumerate(finite):
+        if s is None or 'e' in s:
+            continue
+        intp, frac = s.split('.', 1)
+        out[i] = intp.rjust(pad_left) + '.' + frac.ljust(pad_right)
+    width = 0
+    for i in range(n):
+        s = out[i] if out[i] is not None else (finite[i] if finite[i] is not None else special[i])
+        if s is not None:
+            width = _py_max(width, len(s))
+    for i in range(n):
+        if out[i] is None:
+            out[i] = (finite[i] if finite[i] is not None else special[i])
+        out[i] = out[i].rjust(width)
+    return out
+
+
+def _format_int_field_column(col):
+    strs = [str(v) if isinstance(v, str) else str(int(_py_round(float(v)))) for v in col]
+    width = _py_max((len(s) for s in strs), default=0)
+    return [s.rjust(width) for s in strs]
+
+
+def _format_structured_field_column(col, code):
+    kind = _structured_field_kind(code)
+    if kind == 'str':
+        return [_fmt_structured_str_val(v) for v in col]
+    if kind == 'int':
+        return _format_int_field_column(col)
+    return _format_float_field_column(col)
 
 
 def _format_structured_str(arr):
-    """__str__ 用于结构化数组。"""
+    """__str__ 用于结构化数组：逐字段列对齐（匹配 numpy）。"""
     fields = getattr(arr, '_fields', None)
-    flat = arr.tolist()
-    if arr.ndim == 1:
-        parts = [_format_structured_val(v, fields) for v in flat]
-        return "[" + " ".join(parts) + "]"
-    # 高维：递归格式化
-    return _format_structured_recursive(flat, arr.ndim, fields)
+    data = arr.tolist()
+    ndim = arr.ndim
+    nfields = len(fields)
+    codes = [f[1] for f in fields]
 
+    leaves = []
+    if ndim <= 1:
+        leaves = list(data)
+    else:
+        def _collect(d, depth):
+            if depth == ndim - 1:
+                leaves.extend(d)
+            else:
+                for sub in d:
+                    _collect(sub, depth + 1)
+        _collect(data, 0)
+    norm = [t if isinstance(t, (list, tuple)) else (t,) for t in leaves]
 
-def _format_structured_recursive(data, ndim, fields=None):
-    if ndim == 1:
-        parts = [_format_structured_val(v, fields) for v in data]
-        return "[" + " ".join(parts) + "]"
-    parts = []
-    for row in data:
-        parts.append(_format_structured_recursive(row, ndim - 1, fields))
-    return "[" + "\n ".join(parts) + "]"
+    col_strs = []
+    for j in range(nfields):
+        col_strs.append(_format_structured_field_column([r[j] for r in norm], codes[j]))
+
+    tuple_strs = []
+    for i in range(len(norm)):
+        parts = [col_strs[j][i] for j in range(nfields)]
+        if nfields == 1:
+            tuple_strs.append("(" + parts[0] + ",)")
+        else:
+            tuple_strs.append("(" + ", ".join(parts) + ")")
+
+    if ndim <= 1:
+        return "[" + " ".join(tuple_strs) + "]"
+
+    shape = arr.shape
+    pos = [0]
+
+    def _build(dim):
+        if dim == ndim - 1:
+            chunk = tuple_strs[pos[0]:pos[0] + shape[dim]]
+            pos[0] += shape[dim]
+            return "[" + " ".join(chunk) + "]"
+        return "[" + "\n ".join(_build(dim + 1) for _ in range(shape[dim])) + "]"
+
+    return _build(0)
 
 
 def _format_structured_repr(arr):
@@ -1174,14 +1276,16 @@ def format_float_scalar(val):
         return "inf"
     if val == float("-inf"):
         return "-inf"
-    val_rounded = _py_round(val, 10)
+    if val == 0:
+        return "-0." if str(val)[0] == '-' else "0."
+    val_rounded = _py_round(val, 8)
     if val_rounded == int(val_rounded) and abs(val_rounded) < 1e16:
         v = int(val_rounded)
         if float(v) == val_rounded:
             return f"{v}."
     if abs(val_rounded) >= 1e10 or (abs(val_rounded) < 1e-10 and val_rounded != 0):
         return f"{val_rounded:.10e}"
-    s = f"{val_rounded:.10f}"
+    s = f"{val_rounded:.8f}"
     if '.' in s:
         s = s.rstrip('0').rstrip('.')
     return s
@@ -1918,6 +2022,26 @@ def _setitem_value(value):
         return [float(v) for v in _flatten_data(value.tolist())]
     if isinstance(value, (list, tuple)):
         return [float(v) for v in _flatten_data(value)]
+    return value
+
+
+_INTEGER_DTYPES = frozenset((
+    "int8", "int16", "int32", "int64",
+    "uint8", "uint16", "uint32", "uint64",
+))
+
+
+def _cast_setitem_value(value, dtype):
+    """按目标数组 dtype 转换赋值右值：整数类型向零截断，bool 类型布尔化，
+    与 numpy 赋值时的隐式类型转换一致（底层仍存 f64）。"""
+    if dtype in _INTEGER_DTYPES:
+        if isinstance(value, list):
+            return [float(int(v)) for v in value]
+        return float(int(value))
+    if dtype == "bool":
+        if isinstance(value, list):
+            return [1.0 if v else 0.0 for v in value]
+        return 1.0 if value else 0.0
     return value
 
 
@@ -3145,7 +3269,7 @@ __all__ = [
     'pi', 'e', 'euler_gamma', 'inf', 'nan', 'newaxis',
     'nditer',
     'isnan', 'isinf', 'isfinite',
-    'save', 'load', 'loadtxt', 'savetxt', 'savez',
+    'save', 'load', 'loadtxt', 'savetxt', 'savez', 'genfromtxt',
     'Poly', 'polyval', 'polyfit', 'polyder', 'polyint', 'polyroots',
     'linalg', 'random', 'matlib', 'load_npz',
     # 标量类型层次
