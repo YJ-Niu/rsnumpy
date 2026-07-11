@@ -31,6 +31,10 @@ from .linalg import linalg_module as _linalg_module
 from .random import random_module as _random_module
 from . import char as _char_module
 from . import matlib as _matlib_module
+from ._dtypes import (
+    DType, dtype, _make_flexible, _make_subarray,
+    _build_struct, _scalar_typestr_short,
+)
 
 __version__ = "1.1.5"
 
@@ -330,16 +334,11 @@ class ndarray:
         return bitwise_not(self)
 
     def __getitem__(self, key):
-        # 结构化数组的字段访问：a['age']
-        fields = getattr(self, '_fields', None)
-        if fields and isinstance(key, str):
-            field_names = [f[0] for f in fields]
-            if key in field_names:
-                return _structured_field_view(self, key)
-        # 多字段索引：a[['f1', 'f2']] 返回仅含所选字段的视图
-        if fields and isinstance(key, list) and key:
-            if _py_all(isinstance(k, str) for k in key):
-                return _structured_multifield_view(self, key)
+        # 结构化数组索引：字段 / 多字段 / 记录标量 / 子结构切片
+        if getattr(self, '_dtype_obj', None) is not None:
+            handled, res = _struct_getitem(self, key)
+            if handled:
+                return res
         # 字符串/字节/void（S/U/V）dtype 数组的整数索引：返回标量。
         # S→去尾零 bytes，U→去尾零 str，V→void。
         sd = getattr(self, '_str_dtype', None)
@@ -422,6 +421,10 @@ class ndarray:
         return _wrap_result(result, self._dtype)
 
     def __setitem__(self, key, value):
+        # 结构化数组赋值：字段 / 多字段 / 记录 / 切片
+        if getattr(self, '_dtype_obj', None) is not None:
+            if _struct_setitem(self, key, value):
+                return
         if isinstance(key, tuple):
             # 将 Python ndarray 索引展平为 list
             key = tuple(
@@ -514,6 +517,9 @@ class ndarray:
         return _wrap_result(_core.abs(self._array), self._dtype)
 
     def __eq__(self, other):
+        if getattr(self, '_dtype_obj', None) is not None and \
+                _is_ndarray(other) and getattr(other, '_dtype_obj', None) is not None:
+            return _struct_eq(self, other)
         if _is_ndarray(other):
             return _wrap_result(self._array.__eq__(other._array), "bool")
         return _wrap_result(self._array.__eq__(other), "bool")
@@ -653,12 +659,34 @@ class ndarray:
     @property
     def dtype(self):
         """返回元素数据类型。"""
+        dobj = getattr(self, '_dtype_obj', None)
+        if dobj is not None:
+            return dobj
+        sd = getattr(self, '_str_dtype', None)
+        if sd is not None:
+            kind, width = sd
+            return _make_flexible(kind, width, None)
         return DType(getattr(self, '_dtype', "float64"))
 
     @property
     def itemsize(self):
         """每个元素的字节大小。"""
-        return 8  # f64
+        try:
+            return self.dtype.itemsize
+        except Exception:
+            return 8
+
+    @property
+    def strides(self):
+        """C 连续布局下各维度的字节步长。"""
+        itemsize = self.itemsize
+        shape = self.shape
+        strides = []
+        acc = itemsize
+        for s in reversed(shape):
+            strides.append(acc)
+            acc *= s
+        return tuple(reversed(strides))
 
     @property
     def nbytes(self):
@@ -909,9 +937,36 @@ class ndarray:
         else:
             return ndarray(swapped, _dtype=dtype)
 
-    def view(self, dtype=None):
+    def view(self, dtype=None, type=None):
         """创建一个新的数组对象，共享相同的数据但拥有不同的视图。"""
+        _ = type
+        if dtype is not None:
+            return _view_dtype(self, dtype)
         return ndarray(self._array, _dtype=getattr(self, '_dtype', 'float64'))
+
+
+class recarray(ndarray):
+    """结构化数组，支持以属性方式访问字段（numpy.recarray 兼容子集）。"""
+
+    def __getattr__(self, name):
+        dt = self.__dict__.get('_dtype_obj')
+        if dt is not None and dt._names and name in dt._names:
+            return self[name]
+        raise AttributeError(
+            "'recarray' object has no attribute %r" % name)
+
+    def __getitem__(self, key):
+        res = ndarray.__getitem__(self, key)
+        if (isinstance(res, ndarray) and res.__class__ is ndarray and getattr(res, '_dtype_obj', None) is not None):
+            res.__class__ = recarray
+        return res
+
+
+def _as_recarray(arr):
+    """将结构化 ndarray 就地提升为 recarray。"""
+    if isinstance(arr, ndarray) and getattr(arr, '_dtype_obj', None) is not None:
+        arr.__class__ = recarray
+    return arr
 
 
 def _ensure(x):
@@ -1176,7 +1231,24 @@ def _format_structured_field_column(col, code):
 
 
 def _format_structured_str(arr):
-    """__str__ 用于结构化数组：逐字段列对齐（匹配 numpy）。"""
+    """__str__ 用于结构化数组：基于富 DType 递归格式化，支持嵌套/子数组。"""
+    dt = getattr(arr, '_dtype_obj', None)
+    if dt is None:
+        return _format_structured_str_legacy(arr)
+
+    def build(o):
+        if isinstance(o, tuple):
+            return _fmt_record(o, dt)
+        return "[" + " ".join(build(x) for x in o) + "]"
+
+    raw = arr._raw_data
+    if arr.ndim == 0:
+        return _fmt_record(raw, dt)
+    return build(raw)
+
+
+def _format_structured_str_legacy(arr):
+    """旧版结构化数组格式化（基于 _fields codes），保留作回退。"""
     fields = getattr(arr, '_fields', None)
     data = arr.tolist()
     ndim = arr.ndim
@@ -1388,7 +1460,6 @@ _numpy_type_names = {}
 
 def _init_numpy_types():
     """尝试导入 numpy 并注册其标量类型名称。"""
-    global _numpy_type_names
     try:
         import numpy
     except ImportError:
@@ -1437,75 +1508,750 @@ for _code, _name in _RS_DTYPE_CODES.items():
         _RS_NAME_TO_CODE[_name] = _code
 
 
-class DType:
-    """表示元素数据类型。"""
-
-    def __init__(self, name, fields=None):
-        self._name = name
-        self._fields = fields  # [(field_name, type_code), ...] 或 None
-
-    @property
-    def name(self):
-        return self._name
-
-    def _field_to_code(self, tp):
-        """将字段类型转换为短类型码。"""
-        if isinstance(tp, str):
-            return _RS_NAME_TO_CODE.get(_resolve_type_name(tp), tp)
-        resolved = _resolve_type_name(tp)
-        return _RS_NAME_TO_CODE.get(resolved, resolved)
-
-    def __str__(self):
-        if self._fields:
-            parts = [f"('{f[0]}', '{self._field_to_code(f[1])}')" for f in self._fields]
-            return "[" + ", ".join(parts) + "]"
-        return self._name
-
-    def __repr__(self):
-        if self._fields:
-            parts = [f"('{f[0]}', '{self._field_to_code(f[1])}')" for f in self._fields]
-            return "dtype([" + ", ".join(parts) + "])"
-        return f"dtype('{self._name}')"
-
-    def __eq__(self, other):
-        if isinstance(other, DType):
-            if self._fields is not None or other._fields is not None:
-                return self._fields == other._fields
-            return self._name == other._name
-        if isinstance(other, str):
-            return self._name == other
-        # 对外部类型（如 numpy dtype）通过字符串比较
-        try:
-            return self._name == str(other)
-        except Exception:
-            return NotImplemented
-
-
 # 立即初始化 numpy 类型名称
 _init_numpy_types()
 
 
-def dtype(obj):
-    """创建 dtype 对象。
+def _legacy_fields_from_dtype(dt):
+    """从富 DType 结构化类型构建旧版 _fields 列表：(name, code[, subshape])。
 
-    >>> dt = dtype('i4')
-    >>> print(dt)
-    int32
-
-    >>> dt = dtype([('age', np.int8)])
-    >>> print(dt)
-    [('age', 'i1')]
+    仅用于与依赖旧格式的模块（io/statistics/array_ops）保持兼容；
+    结构化格式化与索引优先使用 _dtype_obj。嵌套结构字段存 DType 本身。
     """
-    if isinstance(obj, (list, tuple)):
-        # 结构化 dtype
-        fields = []
-        for item in obj:
-            if isinstance(item, (list, tuple)) and len(item) >= 2:
-                fields.append(_normalize_field(item))
-        if fields:
-            return DType("void", fields=fields)
-    name = _resolve_type_name(obj)
-    return DType(name)
+    if dt is None or dt._names is None:
+        return None
+    out = []
+    for n in dt._names:
+        fdt = dt._fields[n][0]
+        if fdt._subdtype is not None:
+            base, shape = fdt._subdtype
+            out.append((n, _scalar_typestr_short(base), tuple(shape)))
+        elif fdt._names is not None:
+            out.append((n, fdt))
+        else:
+            out.append((n, _scalar_typestr_short(fdt)))
+    return out
+
+
+def _struct_dt_of(arr):
+    """返回数组的结构化富 DType：优先 _dtype_obj，否则从旧版 _fields 重建。"""
+    dt = getattr(arr, '_dtype_obj', None)
+    if dt is not None:
+        return dt
+    fields = getattr(arr, '_fields', None)
+    if not fields:
+        return None
+    names, formats = [], []
+    for f in fields:
+        names.append(f[0])
+        typ = f[1]
+        fdt = typ if isinstance(typ, DType) else dtype(typ)
+        if len(f) > 2 and f[2]:
+            sub = f[2] if isinstance(f[2], (list, tuple)) else (f[2],)
+            fdt = _make_subarray(fdt, tuple(sub))
+        formats.append(fdt)
+    return _build_struct(names, formats, None, None, None, False)
+
+
+# ========== 结构化数组统一数据模型 ==========
+# 结构化数组统一存储：_dtype_obj（富 DType，语义真源）、_fields（旧版列表，供
+# 既有格式化/视图代码）、_raw_data（Python 记录嵌套列表）、_array（占位取形状）。
+
+def _struct_shape(raw):
+    """从结构化 raw_data 的嵌套列表推断形状（记录为 tuple，视作叶子）。"""
+    shape = []
+    obj = raw
+    while isinstance(obj, list):
+        shape.append(len(obj))
+        obj = obj[0] if obj else None
+    return tuple(shape)
+
+
+def _zero_scalar_for(fdt):
+    k = fdt._kind
+    if k in ('i', 'u', 'b'):
+        return 0
+    if k == 'f':
+        return 0.0
+    if k == 'c':
+        return 0j
+    if k == 'S':
+        return b''
+    if k == 'U':
+        return ''
+    if k == 'V':
+        return b'\x00' * fdt._itemsize
+    return 0
+
+
+def _one_scalar_for(fdt):
+    k = fdt._kind
+    if k in ('i', 'u', 'b'):
+        return 1
+    if k == 'f':
+        return 1.0
+    if k == 'c':
+        return 1 + 0j
+    if k == 'S':
+        return b'1'
+    if k == 'U':
+        return '1'
+    return _zero_scalar_for(fdt)
+
+
+def _coerce_scalar_by_dt(v, fdt):
+    k = fdt._kind
+    if k in ('i', 'u'):
+        return int(v)
+    if k == 'b':
+        return bool(v)
+    if k == 'f':
+        return float(v)
+    if k == 'c':
+        return complex(v)
+    if k == 'S':
+        if isinstance(v, (bytes, bytearray)):
+            return bytes(v)
+        return str(v).encode('latin-1')
+    if k == 'U':
+        if isinstance(v, (bytes, bytearray)):
+            return bytes(v).decode('latin-1')
+        return str(v)
+    return v
+
+
+def _coerce_field_value(val, fdt):
+    if fdt._names is not None:
+        seq = tuple(val) if isinstance(val, (list, tuple)) else (val,)
+        return tuple(_coerce_field_value(seq[i], fdt._fields[n][0])
+                     for i, n in enumerate(fdt._names))
+    if fdt._subdtype is not None:
+        base, shape = fdt._subdtype
+        return _coerce_subarray(val, base, shape)
+    return _coerce_scalar_by_dt(val, fdt)
+
+
+def _coerce_subarray(val, base, shape):
+    if not shape:
+        return _coerce_field_value(val, base)
+    if not isinstance(val, (list, tuple)):
+        return [_coerce_subarray(val, base, shape[1:]) for _ in range(shape[0])]
+    return [_coerce_subarray(val[i], base, shape[1:]) for i in range(shape[0])]
+
+
+def _coerce_record(rec, dt):
+    seq = tuple(rec) if isinstance(rec, (list, tuple)) else (rec,)
+    return tuple(_coerce_field_value(seq[i], dt._fields[n][0])
+                 for i, n in enumerate(dt._names))
+
+
+def _coerce_struct_data(data, dt):
+    if isinstance(data, tuple):
+        return _coerce_record(data, dt)
+    if isinstance(data, list):
+        return [_coerce_struct_data(x, dt) for x in data]
+    # 标量广播到单字段记录
+    return _coerce_record((data,), dt)
+
+
+def _default_field(fdt, filler):
+    if fdt._names is not None:
+        return tuple(_default_field(fdt._fields[n][0], filler) for n in fdt._names)
+    if fdt._subdtype is not None:
+        base, shape = fdt._subdtype
+        return _default_subarray(base, shape, filler)
+    return filler(fdt)
+
+
+def _default_subarray(base, shape, filler):
+    if not shape:
+        return _default_field(base, filler)
+    return [_default_subarray(base, shape[1:], filler) for _ in range(shape[0])]
+
+
+def _default_record(dt, filler):
+    return tuple(_default_field(dt._fields[n][0], filler) for n in dt._names)
+
+
+def _make_struct_filled(shape, dt, filler):
+    rec = _default_record(dt, filler)
+    if isinstance(shape, int):
+        shape = (shape,)
+    total = 1
+    for s in shape:
+        total *= s
+    flat = [rec for _ in range(total)]
+    if len(shape) <= 1:
+        return flat
+    result = flat
+    for dim in reversed(shape[1:]):
+        result = [result[i:i + dim] for i in range(0, len(result), dim)]
+    return result
+
+
+def _wrap_structured(dt, raw_data):
+    """用富 DType 与已归一的 raw_data 构造结构化 ndarray。"""
+    raw_data = list(raw_data)
+    shape = _struct_shape(raw_data)
+    obj = ndarray.__new__(ndarray)
+    obj._array = _core.zeros(shape if shape else (0,))
+    obj._dtype = 'void'
+    obj._dtype_obj = dt
+    obj._fields = _legacy_fields_from_dtype(dt)
+    obj._raw_data = raw_data
+    return obj
+
+
+def _make_structured_array(data, dt):
+    """从任意输入数据 + 富结构化 DType 构造 ndarray。"""
+    raw = _coerce_struct_data(list(data) if isinstance(data, (list, tuple)) else data, dt)
+    if not isinstance(raw, list):
+        raw = [raw]
+    return _wrap_structured(dt, raw)
+
+
+def _as_struct_dtype(dt):
+    """若 dt 可解析为结构化 DType 则返回富 DType，否则 None。"""
+    if dt is None:
+        return None
+    try:
+        d = dt if isinstance(dt, DType) else dtype(dt)
+    except Exception:
+        return None
+    if isinstance(d, DType) and d._names is not None:
+        return d
+    return None
+
+
+# ========== 结构化数组操作（索引/赋值/视图/比较/格式化） ==========
+
+def _scalar_name_of(fdt):
+    """标量 DType → 内部 dtype 名称（int32/float64/...）。"""
+    if fdt._typename is not None:
+        return fdt._typename
+    return fdt.name
+
+
+def _flatten_records(raw):
+    """将结构化 raw_data（嵌套列表，记录为 tuple 叶子）展平为记录列表（行主序）。"""
+    out = []
+
+    def rec(o):
+        if isinstance(o, tuple):
+            out.append(o)
+        elif isinstance(o, list):
+            for x in o:
+                rec(x)
+        else:
+            out.append(o)
+
+    rec(raw)
+    return out
+
+
+def _reshape_flat(flat, shape):
+    """将扁平列表按 shape 重塑为嵌套列表（叶子视为原子）。"""
+    flat = list(flat)
+    if not shape or len(shape) <= 1:
+        return flat
+    result = flat
+    for dim in reversed(shape[1:]):
+        result = [result[i:i + dim] for i in range(0, len(result), dim)]
+    return result
+
+
+def _flat_to_multi(flat, shape):
+    idx = []
+    for s in reversed(shape):
+        idx.append(flat % s)
+        flat //= s
+    return tuple(reversed(idx))
+
+
+def _get_flat_record(arr, flat):
+    idx = _flat_to_multi(flat, arr.shape)
+    o = arr._raw_data
+    for i in idx:
+        o = o[i]
+    return o
+
+
+def _set_flat_record(arr, flat, new_rec):
+    shape = arr.shape
+    if len(shape) <= 1:
+        arr._raw_data[flat] = new_rec
+        return
+    idx = _flat_to_multi(flat, shape)
+    o = arr._raw_data
+    for i in idx[:-1]:
+        o = o[i]
+    o[idx[-1]] = new_rec
+
+
+def _build_plain_array(nested, base_dt, shape):
+    """从嵌套列表 + 标量基础 DType 构造非结构化 ndarray。"""
+    k = base_dt._kind
+    if k in ('S', 'U', 'V'):
+        flat = _flatten_data(nested) if isinstance(nested, list) else [nested]
+        arr = ndarray._wrap(_core.zeros((len(flat),) if flat else (0,)),
+                            _dtype='string_', _raw_data=list(flat))
+        width = base_dt._itemsize // 4 if k == 'U' else base_dt._itemsize
+        arr._str_dtype = (k, width)
+        return arr
+    name = _scalar_name_of(base_dt)
+    if k == 'c':
+        flat = _flatten_data(nested) if isinstance(nested, list) else [nested]
+        obj = ndarray.__new__(ndarray)
+        obj._array = _core.zeros((len(flat),) if flat else (0,))
+        obj._dtype = 'complex128'
+        obj._complex_data = [complex(v) for v in flat]
+        return obj
+    return ndarray(nested, _dtype=name)
+
+
+def _field_values_to_array(values, fdt, outer):
+    """把每条记录的某字段值列表按字段 DType 组装成 ndarray。"""
+    if fdt._names is not None:
+        return _wrap_structured(fdt, _reshape_flat(values, outer))
+    if fdt._subdtype is not None:
+        base, sub = fdt._subdtype
+        nested = _reshape_flat(values, outer)
+        return _build_plain_array(nested, base, tuple(outer) + tuple(sub))
+    nested = _reshape_flat(values, outer)
+    return _build_plain_array(nested, fdt, tuple(outer))
+
+
+def _get_field(arr, name):
+    """结构化数组的单字段访问 a['f']。"""
+    dt = _struct_dt_of(arr)
+    fi = dt._names.index(name)
+    fdt = dt._fields[name][0]
+    recs = _flatten_records(arr._raw_data)
+    values = [r[fi] for r in recs]
+    return _field_values_to_array(values, fdt, arr.shape)
+
+
+def _get_multifield(arr, keys):
+    """多字段访问 a[['f1','f2']]：返回保留原偏移/itemsize 的结构化视图。"""
+    dt = _struct_dt_of(arr)
+    newdt = dt[list(keys)]
+    idxs = [dt._names.index(k) for k in keys]
+    recs = _flatten_records(arr._raw_data)
+    new_recs = [tuple(r[i] for i in idxs) for r in recs]
+    return _wrap_structured(newdt, _reshape_flat(new_recs, arr.shape))
+
+
+def _field_leaf_to_scalar(v, fdt):
+    """将记录中单个字段值转换为对外标量/数组。"""
+    if fdt._names is not None:
+        return _make_record(v, fdt, None, None)
+    if fdt._subdtype is not None:
+        base, sub = fdt._subdtype
+        return _build_plain_array(v, base, tuple(sub))
+    k = fdt._kind
+    if k == 'S':
+        return _str_scalar(v, ('S', fdt._itemsize))
+    if k == 'U':
+        return _str_scalar(v, ('U', fdt._itemsize // 4))
+    if k == 'V':
+        return _str_scalar(v, ('V', fdt._itemsize))
+    return v
+
+
+def _make_record(values, dt, parent, flat_index):
+    return _Record(list(values), dt, parent, flat_index)
+
+
+def _get_record(arr, key):
+    dt = _struct_dt_of(arr)
+    recs = _flatten_records(arr._raw_data)
+    n = len(recs)
+    k = key + n if key < 0 else key
+    return _make_record(recs[k], dt, arr, k)
+
+
+def _struct_getitem(arr, key):
+    """结构化数组索引分发，返回 (handled, result)。"""
+    dt = _struct_dt_of(arr)
+    if dt is None:
+        return (False, None)
+    if isinstance(key, str):
+        if dt._names and key in dt._names:
+            return (True, _get_field(arr, key))
+        return (False, None)
+    if isinstance(key, list) and key and _py_all(isinstance(k, str) for k in key):
+        return (True, _get_multifield(arr, key))
+    if isinstance(key, int) and not isinstance(key, bool):
+        if arr.ndim <= 1:
+            return (True, _get_record(arr, key))
+        sub = arr._raw_data[key]
+        return (True, _wrap_structured(dt, sub if isinstance(sub, list) else [sub]))
+    if isinstance(key, slice):
+        return (True, _wrap_structured(dt, arr._raw_data[key]))
+    return (False, None)
+
+
+def _broadcast_field_values(value, n):
+    if _is_ndarray(value):
+        value = value.tolist()
+    if isinstance(value, list) and len(value) == n:
+        return value
+    if isinstance(value, tuple) and len(value) == n:
+        return list(value)
+    return [value] * n
+
+
+def _set_field(arr, name, value):
+    dt = _struct_dt_of(arr)
+    fi = dt._names.index(name)
+    fdt = dt._fields[name][0]
+    recs = _flatten_records(arr._raw_data)
+    vals = _broadcast_field_values(value, len(recs))
+    new = []
+    for r, v in zip(recs, vals):
+        lst = list(r)
+        lst[fi] = _coerce_field_value(v, fdt)
+        new.append(tuple(lst))
+    arr._raw_data = _reshape_flat(new, arr.shape)
+
+
+def _set_multifield(arr, keys, value):
+    dt = _struct_dt_of(arr)
+    idxs = [dt._names.index(k) for k in keys]
+    recs = _flatten_records(arr._raw_data)
+    if _is_ndarray(value):
+        value = value.tolist()
+    new = []
+    for r in recs:
+        lst = list(r)
+        for j, k in enumerate(keys):
+            fv = value[j] if isinstance(value, (list, tuple)) else value
+            lst[idxs[j]] = _coerce_field_value(fv, dt._fields[k][0])
+        new.append(tuple(lst))
+    arr._raw_data = _reshape_flat(new, arr.shape)
+
+
+def _set_record(arr, key, value):
+    dt = _struct_dt_of(arr)
+    recs = _flatten_records(arr._raw_data)
+    n = len(recs)
+    k = key + n if key < 0 else key
+    if _is_ndarray(value):
+        value = value.tolist()
+    seq = value if isinstance(value, (list, tuple)) else (value,)
+    _set_flat_record(arr, k, _coerce_record(seq, dt))
+
+
+def _set_slice(arr, key, value):
+    dt = _struct_dt_of(arr)
+    recs = _flatten_records(arr._raw_data)
+    n = len(recs)
+    indices = list(range(*key.indices(n))) if isinstance(key, slice) else list(range(n))
+    names = dt._names
+    if _is_ndarray(value) and getattr(value, '_dtype_obj', None) is not None:
+        vrecs = _flatten_records(value._raw_data)
+        for pos, i in enumerate(indices):
+            src = vrecs[pos % len(vrecs)]
+            recs[i] = tuple(_coerce_field_value(src[j], dt._fields[names[j]][0])
+                            for j in range(len(names)))
+    elif _is_ndarray(value):
+        vals = value.tolist()
+        for pos, i in enumerate(indices):
+            sv = vals[pos % len(vals)]
+            recs[i] = tuple(_coerce_field_value(sv, dt._fields[nm][0]) for nm in names)
+    elif isinstance(value, (list, tuple)) and len(value) == len(names):
+        rec = _coerce_record(value, dt)
+        for i in indices:
+            recs[i] = rec
+    else:
+        for i in indices:
+            recs[i] = tuple(_coerce_field_value(value, dt._fields[nm][0]) for nm in names)
+    arr._raw_data = _reshape_flat(recs, arr.shape)
+
+
+def _struct_setitem(arr, key, value):
+    dt = _struct_dt_of(arr)
+    if dt is None:
+        return False
+    if isinstance(key, str):
+        if dt._names and key in dt._names:
+            _set_field(arr, key, value)
+            return True
+        return False
+    if isinstance(key, list) and key and _py_all(isinstance(k, str) for k in key):
+        _set_multifield(arr, key, value)
+        return True
+    if isinstance(key, int) and not isinstance(key, bool):
+        _set_record(arr, key, value)
+        return True
+    if isinstance(key, slice):
+        _set_slice(arr, key, value)
+        return True
+    return False
+
+
+# ---------- 字节打包/解包（供 view 重解释使用） ----------
+
+def _pack_scalar(buf, off, val, fdt):
+    import struct
+    k = fdt._kind
+    sz = fdt._itemsize
+    if k in ('i', 'u', 'b'):
+        iv = int(val)
+        if k == 'i' and iv < 0:
+            iv &= (1 << (sz * 8)) - 1
+        buf[off:off + sz] = (iv & ((1 << (sz * 8)) - 1)).to_bytes(sz, 'little')
+    elif k == 'f':
+        fmt = {2: 'e', 4: 'f', 8: 'd'}[sz]
+        buf[off:off + sz] = struct.pack('<' + fmt, float(val))
+    elif k == 'c':
+        half = sz // 2
+        fmt = {4: 'f', 8: 'd'}[half]
+        c = complex(val)
+        buf[off:off + half] = struct.pack('<' + fmt, c.real)
+        buf[off + half:off + sz] = struct.pack('<' + fmt, c.imag)
+    elif k in ('S', 'V'):
+        bs = bytes(val) if isinstance(val, (bytes, bytearray)) else (
+            val.tobytes() if isinstance(val, void) else str(val).encode('latin-1'))
+        buf[off:off + sz] = bs[:sz].ljust(sz, b'\x00')
+    elif k == 'U':
+        s = val if isinstance(val, str) else (
+            bytes(val).decode('latin-1') if isinstance(val, (bytes, bytearray)) else str(val))
+        buf[off:off + sz] = s.encode('utf-32-le')[:sz].ljust(sz, b'\x00')
+    else:
+        buf[off:off + sz] = b'\x00' * sz
+
+
+def _pack_field(buf, off, val, fdt):
+    if fdt._names is not None:
+        for i, n in enumerate(fdt._names):
+            _pack_field(buf, off + fdt._fields[n][1], val[i], fdt._fields[n][0])
+    elif fdt._subdtype is not None:
+        base, shape = fdt._subdtype
+        flat = _flatten_data(val)
+        esize = base._itemsize
+        for j, e in enumerate(flat):
+            _pack_field(buf, off + j * esize, e, base)
+    else:
+        _pack_scalar(buf, off, val, fdt)
+
+
+def _pack_record(rec, dt):
+    buf = bytearray(dt._itemsize)
+    for i, n in enumerate(dt._names):
+        _pack_field(buf, dt._fields[n][1], rec[i], dt._fields[n][0])
+    return bytes(buf)
+
+
+def _unpack_scalar(buf, off, fdt):
+    import struct
+    k = fdt._kind
+    sz = fdt._itemsize
+    seg = bytes(buf[off:off + sz])
+    if k in ('i', 'u', 'b'):
+        v = int.from_bytes(seg, 'little', signed=(k == 'i'))
+        return bool(v) if k == 'b' else v
+    if k == 'f':
+        return struct.unpack('<' + {2: 'e', 4: 'f', 8: 'd'}[sz], seg)[0]
+    if k == 'c':
+        half = sz // 2
+        fmt = {4: 'f', 8: 'd'}[half]
+        return complex(struct.unpack('<' + fmt, seg[:half])[0],
+                       struct.unpack('<' + fmt, seg[half:])[0])
+    if k == 'S':
+        return seg.rstrip(b'\x00')
+    if k == 'V':
+        return void(seg)
+    if k == 'U':
+        return seg.decode('utf-32-le').rstrip('\x00')
+    return 0
+
+
+def _unpack_field(buf, off, fdt):
+    if fdt._names is not None:
+        return tuple(_unpack_field(buf, off + fdt._fields[n][1], fdt._fields[n][0])
+                     for n in fdt._names)
+    if fdt._subdtype is not None:
+        base, shape = fdt._subdtype
+        total = 1
+        for s in shape:
+            total *= s
+        esize = base._itemsize
+        flat = [_unpack_field(buf, off + j * esize, base) for j in range(total)]
+        return _reshape_flat(flat, shape)
+    return _unpack_scalar(buf, off, fdt)
+
+
+def _unpack_record(buf, off, dt):
+    return tuple(_unpack_field(buf, off + dt._fields[n][1], dt._fields[n][0])
+                 for n in dt._names)
+
+
+def _struct_to_bytes(arr):
+    dt = _struct_dt_of(arr)
+    recs = _flatten_records(arr._raw_data)
+    return b''.join(_pack_record(r, dt) for r in recs), len(recs)
+
+
+def _view_dtype(arr, target):
+    """按目标 dtype 重解释数组字节。"""
+    tdt = target if isinstance(target, DType) else dtype(target)
+    src_dt = getattr(arr, '_dtype_obj', None)
+    if src_dt is not None:
+        raw, _ = _struct_to_bytes(arr)
+    else:
+        raw = arr.tobytes()
+    tsize = tdt._itemsize
+    if tsize == 0:
+        raise ValueError("cannot view with zero-width dtype")
+    count = len(raw) // tsize
+    if tdt._names is not None:
+        records = [_unpack_record(raw, i * tsize, tdt) for i in range(count)]
+        return _wrap_structured(tdt, records)
+    vals = [_unpack_field(raw, i * tsize, tdt) for i in range(count)]
+    return _build_plain_array(vals, tdt, (count,))
+
+
+# ---------- 比较 ----------
+
+def _leaf_eq(x, y):
+    if isinstance(x, void) or isinstance(y, void):
+        return bytes(x.tobytes() if isinstance(x, void) else x) == \
+            bytes(y.tobytes() if isinstance(y, void) else y)
+    return x == y
+
+
+def _struct_eq(a, b):
+    ra = _flatten_records(a._raw_data)
+    rb = _flatten_records(b._raw_data)
+    out = []
+    for x, y in zip(ra, rb):
+        out.append(_py_all(_leaf_eq(x[i], y[i]) for i in range(_py_min(len(x), len(y)))))
+    res = _reshape_flat(out, a.shape)
+    return ndarray(res, _dtype='bool')
+
+
+# ---------- 格式化 ----------
+
+def _fmt_scalar_value(v, kind):
+    if kind == 'b':
+        return 'True' if v else 'False'
+    if kind in ('i', 'u'):
+        return str(int(v))
+    if kind == 'f':
+        return _trim_positional_float(float(v))
+    if kind == 'c':
+        return _format_complex_scalar(complex(v))
+    if kind == 'S':
+        b = bytes(v) if isinstance(v, (bytes, bytearray)) else str(v).encode('latin-1')
+        return repr(b)
+    if kind == 'U':
+        return repr(v if isinstance(v, str) else str(v))
+    if kind == 'V':
+        return _void_repr(v.tobytes() if isinstance(v, void) else bytes(v))
+    return repr(v)
+
+
+def _fmt_sublist(v, base):
+    if isinstance(v, (list, tuple)):
+        return "[" + ", ".join(_fmt_sublist(x, base) for x in v) + "]"
+    return _fmt_scalar_value(v, base._kind)
+
+
+def _fmt_field(v, fdt):
+    if fdt._names is not None:
+        return _fmt_record(v, fdt)
+    if fdt._subdtype is not None:
+        base, shape = fdt._subdtype
+        return _fmt_sublist(v, base)
+    return _fmt_scalar_value(v, fdt._kind)
+
+
+def _fmt_record(rec, dt):
+    parts = [_fmt_field(rec[i], dt._fields[n][0]) for i, n in enumerate(dt._names)]
+    if len(parts) == 1:
+        return "(" + parts[0] + ",)"
+    return "(" + ", ".join(parts) + ")"
+
+
+class _Record:
+    """结构化数组的记录标量（对应 numpy.void 记录），支持字段名/整数索引读写。"""
+
+    def __init__(self, values, dt, parent=None, flat_index=None):
+        self._values = list(values)
+        self._dtype_obj = dt
+        self._parent = parent
+        self._flat_index = flat_index
+
+    @property
+    def dtype(self):
+        return self._dtype_obj
+
+    def __getitem__(self, key):
+        dt = self._dtype_obj
+        if isinstance(key, str):
+            i = dt._names.index(key)
+            return _field_leaf_to_scalar(self._values[i], dt._fields[key][0])
+        if isinstance(key, int):
+            n = dt._names[key]
+            return _field_leaf_to_scalar(self._values[key], dt._fields[n][0])
+        raise KeyError(key)
+
+    def __setitem__(self, key, value):
+        dt = self._dtype_obj
+        if isinstance(key, str):
+            i = dt._names.index(key)
+            fdt = dt._fields[key][0]
+        elif isinstance(key, int):
+            i = key
+            fdt = dt._fields[dt._names[key]][0]
+        else:
+            raise KeyError(key)
+        self._values[i] = _coerce_field_value(value, fdt)
+        if self._parent is not None and self._flat_index is not None:
+            _set_flat_record(self._parent, self._flat_index, tuple(self._values))
+
+    def __getattr__(self, name):
+        try:
+            dt = self.__dict__['_dtype_obj']
+        except KeyError:
+            raise AttributeError(name)
+        if dt is not None and dt._names and name in dt._names:
+            i = dt._names.index(name)
+            return _field_leaf_to_scalar(self.__dict__['_values'][i], dt._fields[name][0])
+        raise AttributeError(name)
+
+    def item(self):
+        return _record_to_pytuple(tuple(self._values), self._dtype_obj)
+
+    def tolist(self):
+        return self.item()
+
+    def __len__(self):
+        return len(self._dtype_obj._names)
+
+    def __eq__(self, other):
+        if isinstance(other, _Record):
+            return tuple(self._values) == tuple(other._values)
+        return NotImplemented
+
+    def __repr__(self):
+        return _fmt_record(tuple(self._values), self._dtype_obj)
+
+    def __str__(self):
+        return _fmt_record(tuple(self._values), self._dtype_obj)
+
+
+def _record_to_pytuple(rec, dt):
+    out = []
+    for i, n in enumerate(dt._names):
+        fdt = dt._fields[n][0]
+        v = rec[i]
+        if fdt._names is not None:
+            out.append(_record_to_pytuple(v, fdt))
+        else:
+            out.append(v)
+    return tuple(out)
 
 
 # ========== 标量类型别名 ==========
@@ -2227,22 +2973,14 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
             arr = ndarray._wrap(_core.zeros((len(flat),)), _dtype='string_', _raw_data=list(flat))
             arr._str_dtype = sd
             return arr
-    _fields = None
-    _raw_data = None
-    if isinstance(dtype, DType) and dtype._fields:
-        _fields = dtype._fields
-        # 多字段结构化数据 → 存储原始 Python 数据
-        if len(_fields) > 1 or _py_any(isinstance(row, (list, tuple)) and len(row) > 1 for row in data):
-            _raw_data = list(data)
-            data = [tuple(v for v in row) if isinstance(row, (list, tuple)) else row for row in data]
-        else:
-            # 单字段：展平数值
-            flat_data = [row[0] if isinstance(row, (list, tuple)) and len(row) == 1 else row for row in data]
-            data = flat_data
-    arr = ndarray(data, _dtype=_dtype, _fields=_fields, _raw_data=_raw_data)
+        # 结构化 dtype：统一走富 DType 模型
+        _dt_obj = _as_struct_dtype(dtype)
+        if _dt_obj is not None:
+            return _make_structured_array(data, _dt_obj)
+    arr = ndarray(data, _dtype=_dtype)
     if ndmin > arr.ndim:
         new_shape = (1,) * (ndmin - arr.ndim) + arr.shape
-        arr = ndarray._wrap(arr._array.reshape(new_shape), _dtype=_dtype, _fields=_fields, _raw_data=_raw_data)
+        arr = ndarray._wrap(arr._array.reshape(new_shape), _dtype=_dtype)
     return arr
 
 
@@ -2519,29 +3257,27 @@ def _make_structured_zeros(shape, fields):
 
 def zeros(shape, dtype=None, order='C'):
     """返回指定形状的零数组。"""
-    _fields = None
-    _raw_data = None
-    if isinstance(dtype, (list, tuple)):
-        _fields = [_normalize_field(item) for item in dtype]
-        _raw_data = _make_structured_zeros(shape, _fields)
-        _dtype = "void"
-    elif isinstance(dtype, DType) and dtype._fields:
-        _fields = dtype._fields
-        _raw_data = _make_structured_zeros(shape, _fields)
-        _dtype = "void"
-    else:
-        _dtype = _resolve_dtype(dtype)
-    return ndarray(_core.zeros(shape), _dtype=_dtype, _fields=_fields, _raw_data=_raw_data)
+    dt_obj = _as_struct_dtype(dtype)
+    if dt_obj is not None:
+        return _wrap_structured(dt_obj, _make_struct_filled(shape, dt_obj, _zero_scalar_for))
+    _dtype = _resolve_dtype(dtype)
+    return ndarray(_core.zeros(shape), _dtype=_dtype)
 
 
 def ones(shape, dtype=None, order='C'):
     """返回指定形状的1数组。"""
+    dt_obj = _as_struct_dtype(dtype)
+    if dt_obj is not None:
+        return _wrap_structured(dt_obj, _make_struct_filled(shape, dt_obj, _one_scalar_for))
     _dtype = _resolve_dtype(dtype)
     return ndarray(_core.ones(shape), _dtype=_dtype)
 
 
 def empty(shape, dtype=None, order='C'):
     """返回指定形状的空数组。"""
+    dt_obj = _as_struct_dtype(dtype)
+    if dt_obj is not None:
+        return _wrap_structured(dt_obj, _make_struct_filled(shape, dt_obj, _zero_scalar_for))
     _dtype = _resolve_dtype(dtype)
     arr = ndarray(_core.empty(shape), _dtype=_dtype)
     arr._is_empty = True
@@ -3478,3 +4214,39 @@ for _extra_name in _extra_module.__all__:
         globals()[_extra_name] = getattr(_extra_module, _extra_name)
         __all__.append(_extra_name)
 del _extra_name
+
+
+# ========== ufunc 归约方法（reduce/accumulate） ==========
+def _make_ufunc_reduce(reducer):
+    def reduce(a, axis=0, dtype=None, out=None, keepdims=False):
+        _ = keepdims
+        res = reducer(a, axis)
+        if not hasattr(res, '_array'):
+            res = array(res)
+        if dtype is not None:
+            res = res.astype(dtype)
+        if out is not None:
+            out[:] = res
+            return out
+        return res
+    return reduce
+
+
+def _make_ufunc_accumulate(accumulator):
+    def accumulate(a, axis=0, dtype=None, out=None):
+        _ = dtype, out
+        return accumulator(a, axis)
+    return accumulate
+
+
+add.reduce = _make_ufunc_reduce(lambda a, ax: sum(a, ax))
+multiply.reduce = _make_ufunc_reduce(lambda a, ax: _extra_module.prod(a, ax))
+add.accumulate = _make_ufunc_accumulate(lambda a, ax: cumsum(a, ax))
+multiply.accumulate = _make_ufunc_accumulate(lambda a, ax: cumprod(a, ax))
+
+
+# ========== rec / ma 子模块（在顶层完全初始化后导入以避免循环依赖） ==========
+from . import ma as ma  # noqa: E402
+from . import rec as rec  # noqa: E402
+
+__all__ += ['rec', 'ma', 'recarray']

@@ -1882,12 +1882,20 @@ def result_type(*arrays_and_dtypes):
 
 def can_cast(from_, to, casting='safe'):
     """判断能否按给定规则从一个类型转换到另一个类型。"""
-    fn = _canon_dt(from_)
-    tn = _canon_dt_type(to)
+    try:
+        fn = _canon_dt(from_)
+        tn = _canon_dt_type(to)
+    except Exception:
+        return False
+    if fn == tn:
+        return True
     if casting in ('no', 'equiv'):
-        return fn == tn
+        return False
     if casting == 'unsafe':
         return True
+    # 非数值类型（字符串/void/object/datetime 等）无通用提升规则，仅同名可转换
+    if fn not in _DT_INFO or tn not in _DT_INFO:
+        return False
     prom = _promote2(fn, tn)
     if casting == 'safe':
         return prom == tn
