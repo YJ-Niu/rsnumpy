@@ -36,7 +36,7 @@ from ._dtypes import (
     _build_struct, _scalar_typestr_short,
 )
 
-__version__ = "1.1.5"
+__version__ = "1.1.6"
 
 # 捕获内建函数别名：_extra 挂载会向本模块 globals 注入同名的 numpy 函数
 # （all/any/round），会遮蔽内建函数。以下别名保证本文件内部逻辑始终使用内建实现。
