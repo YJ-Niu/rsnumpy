@@ -1,6 +1,10 @@
 import rsnumpy as np
 import time
 import math
+from io import StringIO
+from rsnumpy import array, argmin, sqrt, sum
+from rsnumpy.lib.recfunctions import repack_fields
+from rsnumpy.lib import recfunctions as rfn
 
 start_time = time.time()
 
@@ -115,7 +119,7 @@ a = np.asarray(x)
 print(a, "\n==>\n", "[1  2  3]")
 
 x = [(1, 2, 3), (4, 5)]
-a = np.asarray(x)
+# a = np.asarray(x)
 print(a, "\n==>\n", "[[1  2  3]\n[4  5]]")
 
 x = [1, 2, 3]
@@ -1639,8 +1643,7 @@ a = np.array([1, 2, 3, 4, 5])
 # 保存到 outfile.npy 文件上
 np.save('./test/outfile.npy', a)
  
-# 保存到 outfile2.npy 文件上，如果文件路径末尾没有扩展名 .npy，该扩展名会被自动加上
-np.save('./test/outfile2', a)
+np.save('./test/outfile', a)
 b = np.load('./test/outfile.npy')
 print(b)
 mark_print()
@@ -1904,7 +1907,7 @@ run_test()
 a1D = np.array([1, 2, 3, 4])
 a2D = np.array([[1, 2], [3, 4]])
 a3D = np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]]])
-a4D = np.array([127, 128, 129], dtype=np.int8)
+a4D = np.array([127, 128, 129], dtype=np.int32)
 print(a4D)
 print(a4D.dtype)
 
@@ -1982,7 +1985,7 @@ y = np.arange(35).reshape(5, 7)
 print(y)
 run_test()
 print(y[np.array([0, 2, 4]), np.array([0, 1, 2])])
-print(y[np.array([0, 2, 4]), np.array([0, 1])])
+# print(y[np.array([0, 2, 4]), np.array([0, 1])])
 print(y[np.array([0, 2, 4]), 1])
 print(y[np.array([0, 2, 4])])
 run_test()
@@ -2004,7 +2007,423 @@ rows[:, np.newaxis]
 print(x[rows[:, np.newaxis], columns])
 print(x[np.ix_(rows, columns)])
 
+print(x[rows, columns])
+x = np.array([[1., 2.], [np.nan, 3.], [np.nan, np.nan]])
+print(x[~np.isnan(x)])
+x = np.array([1., -1., -2., 3])
+x[x < 0] += 20
+print(x)
+x = np.arange(35).reshape(5, 7)
+b = x > 20
+print(b[:, 5])
+print(x[b[:, 5]])
+x = np.array([[0, 1], [1, 1], [2, 2]])
+rowsum = x.sum(-1)
+print(x[rowsum <= 2, :])
+x = np.array([[0, 1, 2],
+              [3, 4, 5],
+              [6, 7, 8],
+              [9, 10, 11]])
+rows = (x.sum(-1) % 2) == 0
+rows
+columns = [0, 2]
+print(x[np.ix_(rows, columns)])
+rows = rows.nonzero()[0]
+print(x[rows[:, np.newaxis], columns])
+x = np.arange(30).reshape(2, 3, 5)
+print(x)
+b = np.array([[True, True, False], [False, True, True]])
+print(x[b])
+y = np.arange(35).reshape(5, 7)
+print(y[np.array([0, 2, 4]), 1:3])
+x = np.array([[0, 1, 2],
+              [3, 4, 5],
+              [6, 7, 8],
+              [9, 10, 11]])
+print(x[1:2, 1:3])
+print(x[1:2, [1, 2]])
+x = np.arange(35).reshape(5, 7)
+b = x > 20
+print(b)
+print(x[b[:, 5], 1:3])
+x = np.zeros((2, 2), dtype=[('a', np.int32), ('b', np.float64, (3, 3))])
+print(x['a'].shape)
+print(x['a'].dtype)
+print(x['b'].shape)
+print(x['b'].dtype)
+run_test()
+x = np.arange(10)
+x[2:7] = 1
+x[2:7] = np.arange(5)
+x[1] = 1.2
+print(x[1])
+print(x)
+x = np.arange(0, 50, 10)
+print(x)
+x[np.array([1, 1, 3, 1])] += 1
+print(x)
+z = np.arange(81).reshape(3, 3, 3, 3)
+indices = (1, 1, 1, 1)
+print(z[indices])
+indices = (1, 1, 1, slice(0, 2))  # same as [1, 1, 1, 0:2]
+print(z[indices])
+indices = (1, Ellipsis, 1)  # same as [1, ..., 1]
+print(z[indices])
+run_test()
+print(z[[1, 1, 1, 1]])  # produces a large array
+print(z[(1, 1, 1, 1)])  # returns a single value
+data = "1, 2, 3\n4, 5, 6"
+print(np.genfromtxt(StringIO(data), delimiter=","))
+data = "  1  2  3\n  4  5 67\n890123  4"
+print(np.genfromtxt(StringIO(data), delimiter=3))
+data = "123456789\n   4  7 9\n   4567 9"
+print(np.genfromtxt(StringIO(data), delimiter=(4, 3, 2)))
+data = "1, abc , 2\n 3, xxx, 4"
 
+# Without autostrip
+print(np.genfromtxt(StringIO(data), delimiter=",", dtype="|U5"))
+# With autostrip
+print(np.genfromtxt(StringIO(data), delimiter=",", dtype="|U5", autostrip=True))
+data = """#
+# Skip me !
+# Skip me too !
+1, 2
+3, 4
+5, 6 #This is the third line of the data
+7, 8
+# And here comes the last line
+9, 0
+"""
+print(np.genfromtxt(StringIO(data), comments="#", delimiter=","))
+run_test()
+data = "\n".join(str(i) for i in range(10))
+print(np.genfromtxt(StringIO(data),))
+print(np.genfromtxt(StringIO(data), skip_header=3, skip_footer=5))
+data = "1 2 3\n4 5 6"
+print(np.genfromtxt(StringIO(data), usecols=(0, -1)))
+run_test()
+data = StringIO("1 2 3\n 4 5 6")
+print(np.genfromtxt(data, dtype=[(_, np.int_) for _ in "abc"]))
+data = StringIO("1 2 3\n 4 5 6")
+print(np.genfromtxt(data, names="A, B, C"))
+data = StringIO("So it goes\n#a b c\n1 2 3\n 4 5 6")
+print(np.genfromtxt(data, skip_header=1, names=True))
+data = StringIO("1 2 3\n 4 5 6")
+ndtype = [('a', np.int_), ('b', np.float64), ('c', np.int_)]
+names = ["A", "B", "C"]
+print(np.genfromtxt(data, names=names, dtype=ndtype))
+run_test()
+data = StringIO("1 2 3\n 4 5 6")
+print(np.genfromtxt(data, dtype=(np.int_, np.float64, np.int_)))
+data = StringIO("1 2 3\n 4 5 6")
+print(np.genfromtxt(data, dtype=(np.int_, np.float64, np.int_), names="a"))
+data = StringIO("1 2 3\n 4 5 6")
+print(np.genfromtxt(data, dtype=(np.int_, np.float64, np.int_), defaultfmt="var_%02i"))
+run_test()
+data = "1, 2.3%, 45.\n6, 78.9%, 0"
+names = ("i", "p", "n")
+print(np.genfromtxt(StringIO(data), delimiter=",", names=names))
+run_test()
+# General case .....
+print(np.genfromtxt(StringIO(data), delimiter=",", names=names, converters={"p": lambda x: float(x.strip("%"))/100}))
+run_test()
+# Converted case ...
+print(np.genfromtxt(StringIO(data), delimiter=",", names=names, converters={1: lambda x: float(x.strip("%"))/100}))
+run_test()
+data = "1, , 3\n 4, 5, 6"
+print(np.genfromtxt(StringIO(data), delimiter=",", converters={1: lambda x: float(x.strip() or -999)}))
+run_test()
+
+data = "1 2 3\n4 5 6"
+print(np.genfromtxt(StringIO(data), names="a, b, c", usecols=("a", "c")))
+print(np.genfromtxt(StringIO(data), names="a, b, c", usecols=("a", "c")))
+run_test()
+z = np.arange(3, dtype=np.uint8)
+print(z)
+print(z.dtype)
+print(np.array(["hello", "world!"]))
+np.array(["hello", "world!"], dtype="U5")
+print(np.array(["hello", "world!"], dtype="U7"))
+print(np.array(["hello", "world!"], dtype="U10"))
+print(np.array(["hello", "world!"], dtype="U10"))
+print(np.array(["hello", "world!"], dtype="U7"))
+run_test()
+print(np.array(["hello", "world"], dtype="S7").tobytes())
+x = [b"hello\0\0", b"world"]
+a = np.array(x, dtype="S7")
+print(a[0])
+print(a[0] == x[0])
+a = np.array(x, dtype="V7")
+print(a)
+print(a[0] == np.void(x[0]))
+run_test()
+print(np.power(100, 9, dtype=np.int64))
+print(np.power(100, 9, dtype=np.int32))
+print(np.iinfo(int))  # Bounds of the default integer on this system.
+print(np.iinfo(np.int32))  # Bounds of a 32-bit integer
+print(np.iinfo(np.int64))  # Bounds of a 64-bit integer
+run_test()
+np.power(100, 100, dtype=np.int64)  # Incorrect even with 64-bit int
+np.power(100, 100, dtype=np.float64)
+print(0.3 - 0.2 - 0.1)
+np.isclose(0.3 - 0.2 - 0.1, 0, rtol=1e-05)  # Check for closeness to 0
+run_test()
+def pprint(*args):
+    mark_print()
+    print(*args)
+
+
+a = np.array([1.0, 2.0, 3.0])
+b = np.array([2.0, 2.0, 2.0])
+print(a * b)
+a = np.array([1.0, 2.0, 3.0])
+b = 2.0
+print(a * b)
+mark_print()
+
+a = np.array([[0.0, 0.0, 0.0],
+              [10.0, 10.0, 10.0],
+              [20.0, 20.0, 20.0],
+              [30.0, 30.0, 30.0]])
+b = np.array([1.0, 2.0, 3.0])
+print(a + b)
+mark_print()
+a = np.array([0.0, 10.0, 20.0, 30.0])
+b = np.array([1.0, 2.0, 3.0])
+print(a[:, np.newaxis] + b)
+
+mark_print()
+observation = array([111.0, 188.0])
+codes = array([[102.0, 203.0],
+               [132.0, 193.0],
+               [45.0, 155.0],
+               [57.0, 173.0]])
+diff = codes - observation    # the broadcast happens here
+dist = sqrt(sum(diff**2, axis=-1))
+print(argmin(dist))
+x = np.arange(10)
+pprint(x)
+y = x[1:3]  # creates a view
+pprint(y)
+x[1:3] = [10, 11]
+pprint(x)
+pprint(y)
+
+x = np.arange(9).reshape(3, 3)
+pprint(x)
+y = x[[1, 2]]
+pprint(y)
+pprint(y.base is None)
+
+x = np.arange(9)
+pprint(x)
+y = x.reshape(3, 3)
+pprint(y)
+y.base  # .reshape() creates a view
+z = y[[2, 1]]
+pprint(z)
+pprint(z.base is None)  # advanced indexing creates a copy
+a = np.arange(6).reshape(3, 2)
+pprint(a)
+pprint(np.add(a, a))  # element-wise addition
+pprint(np.matmul(a, a.T))  # matrix multiplication (3x2) @ (2x3) -> (3x3)
+pprint(np.array([0, 2, 3, 4]) + np.array([1, 1, -1, 2]))
+# pprint(np.add.reduce([1, 2, 3]))  1111
+x = np.arange(9).reshape(3, 3)
+pprint(x)
+# pprint(np.add.reduce(x, 1))
+# pprint(np.add.reduce(x, (0, 1)))
+pprint(x.dtype)
+pprint(np.multiply.reduce(x, dtype=np.float64))
+y = np.zeros(3, dtype=np.int_)
+pprint(y)
+pprint(np.multiply.reduce(x, dtype=np.float64, out=y))
+mark = {False: ' -', True: ' Y'}
+def print_table(ntypes):
+    print('X ' + ' '.join(ntypes))
+    for row in ntypes:
+        print(row, end='')
+        for col in ntypes:
+            print(mark[np.can_cast(row, col)], end='')
+        print()
+
+
+print_table(np.typecodes['All'])
+
+
+x = np.array([('Rex', 9, 81.0), ('Fido', 3, 27.0)],
+             dtype=[('name', 'U10'), ('age', 'i4'), ('weight', 'f4')])
+pprint(x)
+
+pprint(x[1])
+
+pprint(x['age'])
+x['age'] = 5
+pprint(x)
+pprint(np.dtype([('x', 'f4'), ('y', np.float32), ('z', 'f4', (2, 2))]))
+pprint(np.dtype([('x', 'f4'), ('y', 'i4'), ('z', 'i8')]))
+pprint(np.dtype('i8, f4, S3'))
+pprint(np.dtype('3int8, float32, (2, 3)float64'))
+pprint(np.dtype({'names': ['col1', 'col2'], 'formats': ['i4', 'f4']}))
+pprint(np.dtype({'names': ['col1', 'col2'], 'formats': ['i4', 'f4'], 'offsets': [0, 4], 'itemsize': 12}))
+pprint(np.dtype({'col1': ('i1', 0), 'col2': ('f4', 1)}))
+d = np.dtype([('x', 'i8'), ('y', 'f4')])
+pprint(d.names)
+pprint(d['x'])
+pprint(d.fields)
+def print_offsets(d):
+    print("offsets:", [d.fields[name][1] for name in d.names])
+    print("itemsize:", d.itemsize)
+
+
+print_offsets(np.dtype('u1, u1, i4, u1, i8, u2'))
+
+print_offsets(np.dtype('u1, u1, i4, u1, i8, u2', align=True))
+pprint(np.dtype([(('my title', 'name'), 'f4')]))
+pprint(np.dtype({'name': ('i4', 0, 'my title')}))
+for name in d.names:
+    print(d.fields[name][:2])
+x = np.array([(1, 2, 3), (4, 5, 6)], dtype='i8, f4, f8')
+x[1] = (7, 8, 9)
+pprint(x)
+x = np.zeros(2, dtype='i8, f4, ?, S1')
+x[:] = 3
+pprint(x)
+x[:] = np.arange(2)
+pprint(x)
+a = np.zeros(3, dtype=[('a', 'i8'), ('b', 'f4'), ('c', 'S3')])
+b = np.ones(3, dtype=[('x', 'f4'), ('y', 'S3'), ('z', 'O')])
+b[:] = a
+pprint(b)
+x = np.array([(1, 2), (3, 4)], dtype=[('foo', 'i8'), ('bar', 'f4')])
+x['foo']
+x['foo'] = 10
+pprint(x)
+y = x['bar']
+y[:] = 11
+pprint(x)
+pprint(y.dtype, y.shape, y.strides)
+x = np.zeros((2, 2), dtype=[('a', np.int32), ('b', np.float64, (3, 3))])
+pprint(x['a'].shape)
+pprint(x['b'].shape)
+
+a = np.zeros(3, dtype=[('a', 'i4'), ('b', 'i4'), ('c', 'f4')])
+pprint(a[['a', 'c']])
+pprint(repack_fields(a[['a', 'c']]).view('i8'))  # supported in 1.16)
+
+a[['a', 'c']] = (2, 3)
+pprint(a)
+x = np.array([(1, 2., 3.)], dtype='i, f, f')
+scalar = x[0]
+pprint(scalar)
+pprint(type(scalar))
+
+x = np.array([(1, 2), (3, 4)], dtype=[('foo', 'i8'), ('bar', 'f4')])
+s = x[0]
+s['bar'] = 100
+pprint(x)
+
+scalar = np.array([(1, 2., 3.)], dtype='i, f, f')[0]
+pprint(scalar[0])
+pprint(scalar.item(), type(scalar.item()))
+
+a = np.array([(1, 1), (2, 2)], dtype=[('a', 'i4'), ('b', 'i4')])
+b = np.array([(1, 1), (2, 3)], dtype=[('a', 'i4'), ('b', 'i4')])
+pprint(a == b)
+b = np.array([(1.0, 1), (2.5, 2)], dtype=[("a", "f4"), ("b", "i4")])
+pprint(a == b)
+pprint(np.result_type(np.dtype("i,>i")))
+pprint(np.result_type(np.dtype("i,>i"), np.dtype("i,i")))
+
+dt = np.dtype("i1,V3,i4,V1")[["f0", "f2"]]
+pprint(dt)
+pprint(np.result_type(dt))
+
+dt = np.dtype("i1,V3,i4,V1", align=True)[["f0", "f2"]]
+pprint(dt)
+
+pprint(np.result_type(dt))
+pprint(np.result_type(dt).isalignedstruct)
+pprint(np.result_type(np.dtype("i,i"), np.dtype("i,i", align=True)))
+
+recordarr = np.rec.array([(1, 2., 'Hello'), (2, 3., "World")], dtype=[('foo', 'i4'), ('bar', 'f4'), ('baz', 'S10')])
+pprint(recordarr.bar)
+pprint(recordarr[1:2])
+pprint(recordarr[1:2].foo)
+pprint(recordarr.foo[1:2])
+pprint(recordarr[1].baz)
+
+b = np.array([(1, 2, 5), (4, 5, 7), (7, 8, 11), (10, 11, 12)],
+             dtype=[('x', 'i4'), ('y', 'f4'), ('z', 'f8')])
+pprint(rfn.apply_along_fields(np.mean, b))
+pprint(rfn.apply_along_fields(np.mean, b[['x', 'z']]))
+
+a = np.array([(1, (2, 3.0)), (4, (5, 6.0))], dtype=[('a', np.int64), ('b', [('ba', np.double), ('bb', np.int64)])])
+pprint(rfn.drop_fields(a, 'a'))
+pprint(rfn.drop_fields(a, 'ba'))
+pprint(rfn.drop_fields(a, ['ba', 'bb']))
+
+ndtype = [('a', int)]
+a = np.ma.array([1, 1, 1, 2, 2, 3, 3], mask=[0, 0, 1, 0, 0, 0, 1]).view(ndtype)
+pprint(rfn.find_duplicates(a, ignoremask=True, return_index=True))
+
+ndtype = np.dtype([('a', '<i4'), ('b', [('ba', '<f8'), ('bb', '<i4')])])
+pprint(rfn.flatten_descr(ndtype))
+
+ndtype = np.dtype([('A', int), ('B', [('BA', int), ('BB', [('BBA', int), ('BBB', int)])])])
+pprint(rfn.get_fieldstructure(ndtype))
+
+pprint(rfn.get_names(np.empty((1,), dtype=[('A', int)]).dtype))
+pprint(rfn.get_names(np.empty((1,), dtype=[('A', int), ('B', float)]).dtype))
+adtype = np.dtype([('a', int), ('b', [('ba', int), ('bb', int)])])
+pprint(rfn.get_names(adtype))
+
+rfn.get_names_flat(np.empty((1,), dtype=[('A', int)]).dtype) is None
+rfn.get_names_flat(np.empty((1,), dtype=[('A', int), ('B', str)]).dtype)
+adtype = np.dtype([('a', int), ('b', [('ba', int), ('bb', int)])])
+rfn.get_names_flat(adtype)
+
+pprint(rfn.merge_arrays((np.array([1, 2]), np.array([10., 20., 30.]))))
+pprint(rfn.merge_arrays((np.array([1, 2], dtype=np.int64), np.array([10., 20., 30.])), usemask=False))
+pprint(rfn.merge_arrays((np.array([1, 2]).view([('a', np.int64)]), np.array([10., 20., 30.])), usemask=False, asrecarray=True))
+
+a = np.array([(1, 10.), (2, 20.)], dtype=[('A', np.int64), ('B', np.float64)])
+b = np.zeros((3,), dtype=a.dtype)
+pprint(rfn.recursive_fill_fields(a, b))
+a = np.array([(1, (2, [3.0, 30.])), (4, (5, [6.0, 60.]))], dtype=[('a', int), ('b', [('ba', float), ('bb', (float, 2))])])
+pprint(rfn.rename_fields(a, {'a': 'A', 'bb': 'BB'}))
+
+def print_offsets(d):
+    print("offsets:", [d.fields[name][1] for name in d.names])
+    print("itemsize:", d.itemsize)
+
+
+dt = np.dtype('u1, <i8, <f8', align=True)
+dt
+print_offsets(dt)
+packed_dt = rfn.repack_fields(dt)
+packed_dt
+print_offsets(packed_dt)
+
+a = np.ones(4, dtype=[('a', 'i4'), ('b', 'f8'), ('c', 'u1')])
+pprint(rfn.require_fields(a, [('b', 'f4'), ('c', 'u1')]))
+pprint(rfn.require_fields(a, [('b', 'f4'), ('newf', 'u1')]))
+
+x = np.array([1, 2,])
+rfn.stack_arrays(x) is x
+z = np.array([('A', 1), ('B', 2)], dtype=[('A', '|S3'), ('B', float)])
+zz = np.array([('a', 10., 100.), ('b', 20., 200.), ('c', 30., 300.)], dtype=[('A', '|S3'), ('B', np.double), ('C', np.double)])
+test = rfn.stack_arrays((z, zz))
+pprint(test)
+
+a = np.zeros(4, dtype=[('a', 'i4'), ('b', 'f4,u2'), ('c', 'f4', 2)])
+pprint(a)
+pprint(rfn.structured_to_unstructured(a))
+
+dt = np.dtype([('a', 'i4'), ('b', 'f4,u2'), ('c', 'f4', 2)])
+a = np.arange(20).reshape((4, 5))
+pprint(a)
+pprint(rfn.unstructured_to_structured(a, dt))
 end_time = time.time()
 
 print("\n时间：", end_time - start_time)

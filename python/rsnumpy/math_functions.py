@@ -12,6 +12,11 @@ def _wrap(result):
     return _nd()(result)
 
 
+def _wrap_bool(result):
+    """比较/逻辑运算结果按布尔数组返回（与 numpy 一致，可直接用作掩码索引）。"""
+    return _nd()._wrap(result, _dtype="bool")
+
+
 def _ensure_raw(a):
     if hasattr(a, '_array'):
         return a._array
@@ -220,8 +225,46 @@ def divide(x1, x2):
     return _wrap(_core.divide(_ensure_raw(x1), _ensure_raw(x2)))
 
 
-def power(x1, x2):
-    """逐元素幂运算。"""
+_INT_BITS = {
+    'int8': (8, True), 'int16': (16, True), 'int32': (32, True), 'int64': (64, True),
+    'uint8': (8, False), 'uint16': (16, False), 'uint32': (32, False), 'uint64': (64, False),
+}
+
+_FLOAT_NAMES = frozenset(('float16', 'float32', 'float64', 'float', 'half', 'single', 'double'))
+
+
+def _dtype_name(dtype):
+    """将 dtype 类型对象/字符串解析为名称。"""
+    if isinstance(dtype, str):
+        return dtype
+    return getattr(dtype, '__name__', str(dtype))
+
+
+def _is_arr(x):
+    return hasattr(x, '_array') or (hasattr(x, '__class__') and x.__class__.__name__ == 'ndarray')
+
+
+def _wrap_int(val, bits, signed):
+    """按位宽将整数按二补数回绕（模拟定宽整数溢出）。"""
+    val &= (1 << bits) - 1
+    if signed and (val >> (bits - 1)):
+        val -= (1 << bits)
+    return val
+
+
+def power(x1, x2, dtype=None):
+    """逐元素幂运算。
+
+    指定 dtype 且 x1/x2 均为标量时，按目标类型语义计算：整数类型精确幂后
+    按位宽二补数回绕（与 numpy 定宽整数溢出一致），浮点类型返回浮点标量。
+    """
+    if dtype is not None and not _is_arr(x1) and not _is_arr(x2):
+        name = _dtype_name(dtype)
+        if name in _INT_BITS:
+            bits, signed = _INT_BITS[name]
+            return _wrap_int(int(x1) ** int(x2), bits, signed)
+        if name in _FLOAT_NAMES:
+            return float(x1) ** float(x2)
     raw_result = _core.power(_ensure_raw(x1), _ensure_raw(x2))
     dtype = getattr(x1, '_dtype', 'float64') if hasattr(x1, '_dtype') else 'float64'
     return _nd()(raw_result, _dtype=dtype)
@@ -240,52 +283,52 @@ remainder = mod  # mod 的别名
 # ========== 比较运算 ==========
 def greater(x1, x2):
     """逐元素大于比较。"""
-    return _wrap(_core.greater(_ensure_raw(x1), _ensure_raw(x2)))
+    return _wrap_bool(_core.greater(_ensure_raw(x1), _ensure_raw(x2)))
 
 
 def less(x1, x2):
     """逐元素小于比较。"""
-    return _wrap(_core.less(_ensure_raw(x1), _ensure_raw(x2)))
+    return _wrap_bool(_core.less(_ensure_raw(x1), _ensure_raw(x2)))
 
 
 def equal(x1, x2):
     """逐元素相等比较。"""
-    return _wrap(_core.equal(_ensure_raw(x1), _ensure_raw(x2)))
+    return _wrap_bool(_core.equal(_ensure_raw(x1), _ensure_raw(x2)))
 
 
 def not_equal(x1, x2):
     """逐元素不相等比较。"""
-    return _wrap(_core.not_equal(_ensure_raw(x1), _ensure_raw(x2)))
+    return _wrap_bool(_core.not_equal(_ensure_raw(x1), _ensure_raw(x2)))
 
 
 def greater_equal(x1, x2):
     """逐元素大于等于比较。"""
-    return _wrap(_core.greater_equal(_ensure_raw(x1), _ensure_raw(x2)))
+    return _wrap_bool(_core.greater_equal(_ensure_raw(x1), _ensure_raw(x2)))
 
 
 def less_equal(x1, x2):
     """逐元素小于等于比较。"""
-    return _wrap(_core.less_equal(_ensure_raw(x1), _ensure_raw(x2)))
+    return _wrap_bool(_core.less_equal(_ensure_raw(x1), _ensure_raw(x2)))
 
 
 def logical_and(x1, x2):
     """逐元素逻辑与。"""
-    return _wrap(_core.logical_and(_ensure_raw(x1), _ensure_raw(x2)))
+    return _wrap_bool(_core.logical_and(_ensure_raw(x1), _ensure_raw(x2)))
 
 
 def logical_or(x1, x2):
     """逐元素逻辑或。"""
-    return _wrap(_core.logical_or(_ensure_raw(x1), _ensure_raw(x2)))
+    return _wrap_bool(_core.logical_or(_ensure_raw(x1), _ensure_raw(x2)))
 
 
 def logical_xor(x1, x2):
     """逐元素逻辑异或。"""
-    return _wrap(_core.logical_xor(_ensure_raw(x1), _ensure_raw(x2)))
+    return _wrap_bool(_core.logical_xor(_ensure_raw(x1), _ensure_raw(x2)))
 
 
 def isclose(a, b, rtol=1e-05, atol=1e-08):
     """逐元素判断是否接近。"""
-    return _wrap(_core.isclose(_ensure_raw(a), _ensure_raw(b), rtol, atol))
+    return _wrap_bool(_core.isclose(_ensure_raw(a), _ensure_raw(b), rtol, atol))
 
 
 def allclose(a, b, rtol=1e-05, atol=1e-08):

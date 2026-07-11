@@ -32,10 +32,11 @@ Thumbs.db
 # Data / plots
 debug.txt
 test_old.txt
+run_test2.py
 out.txt
-outfile.npy
+outfile*.npy
 runoob.npz
-outfile2
+outfile*
 push*.sh
 main*.py
 debug*.py

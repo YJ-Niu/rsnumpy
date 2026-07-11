@@ -1,10 +1,10 @@
 use crate::*;
 
-fn unary_math_op(py: Python<'_>, x: &NdArray, op: fn(f64) -> f64) -> NdArray {
+fn unary_math_op(py: Python<'_>, x: &NdArray, threshold: usize, op: fn(f64) -> f64) -> NdArray {
     let data = &x.data;
     // 纯计算，主动释放 GIL；小数组走串行避免线程调度开销。
     let out = py.detach(|| {
-        if data.len() >= PAR_THRESHOLD {
+        if data.len() >= threshold {
             Zip::from(data).par_map_collect(|&v| op(v))
         } else {
             data.mapv(op)
@@ -13,11 +13,23 @@ fn unary_math_op(py: Python<'_>, x: &NdArray, op: fn(f64) -> f64) -> NdArray {
     NdArray { data: out }
 }
 
+// 计算密集（transcendental）逐元素函数：每元素工作量大，较低规模并行即可回本。
 macro_rules! define_math_func {
     ($name:ident, $op:expr) => {
         #[pyfunction]
         fn $name(py: Python<'_>, x: &NdArray) -> PyResult<NdArray> {
-            Ok(unary_math_op(py, x, $op))
+            Ok(unary_math_op(py, x, PAR_THRESHOLD, $op))
+        }
+    };
+}
+
+// 访存密集（sqrt/abs/floor…）逐元素函数：每元素工作量极小，
+// 仅在大数组上并行才划算，故用更高阈值避免中等规模被线程开销拖慢。
+macro_rules! define_cheap_math_func {
+    ($name:ident, $op:expr) => {
+        #[pyfunction]
+        fn $name(py: Python<'_>, x: &NdArray) -> PyResult<NdArray> {
+            Ok(unary_math_op(py, x, PAR_THRESHOLD_CHEAP, $op))
         }
     };
 }
@@ -28,7 +40,11 @@ define_math_func!(cos, |v| v.cos());
 
 define_math_func!(tan, |v| v.tan());
 
-define_math_func!(sqrt, |v| v.sqrt());
+// sqrt 比纯加乘略重，用中等阈值：中等规模即可从并行获益，但仍避开小数组的线程开销。
+#[pyfunction]
+fn sqrt(py: Python<'_>, x: &NdArray) -> PyResult<NdArray> {
+    Ok(unary_math_op(py, x, PAR_THRESHOLD_MEDIUM, |v| v.sqrt()))
+}
 
 define_math_func!(exp, |v| v.exp());
 
@@ -40,7 +56,7 @@ define_math_func!(log2, |v| v.log2());
 
 define_math_func!(log1p, |v| v.ln_1p());
 
-define_math_func!(abs, |v| v.abs());
+define_cheap_math_func!(abs, |v| v.abs());
 
 define_math_func!(cosh, |v| v.cosh());
 
@@ -88,12 +104,12 @@ fn cross(a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
 
 #[pyfunction]
 fn floor(py: Python<'_>, x: &NdArray) -> NdArray {
-    unary_math_op(py, x, |v| v.floor())
+    unary_math_op(py, x, PAR_THRESHOLD_CHEAP, |v| v.floor())
 }
 
 #[pyfunction]
 fn ceil(py: Python<'_>, x: &NdArray) -> NdArray {
-    unary_math_op(py, x, |v| v.ceil())
+    unary_math_op(py, x, PAR_THRESHOLD_CHEAP, |v| v.ceil())
 }
 
 #[pyfunction]
@@ -108,15 +124,15 @@ fn round(x: &NdArray, ndigits: Option<i32>) -> NdArray {
     NdArray { data }
 }
 
-define_math_func!(trunc, |v| v.trunc());
+define_cheap_math_func!(trunc, |v| v.trunc());
 
-define_math_func!(fix, |v| v.trunc());
+define_cheap_math_func!(fix, |v| v.trunc());
 
-define_math_func!(square, |v| v * v);
+define_cheap_math_func!(square, |v| v * v);
 
 define_math_func!(cbrt, |v| v.cbrt());
 
-define_math_func!(sign, |v| if v > 0.0 {
+define_cheap_math_func!(sign, |v| if v > 0.0 {
     1.0
 } else if v < 0.0 {
     -1.0
@@ -124,7 +140,7 @@ define_math_func!(sign, |v| if v > 0.0 {
     0.0
 });
 
-define_math_func!(reciprocal, |v| 1.0 / v);
+define_cheap_math_func!(reciprocal, |v| 1.0 / v);
 
 #[pyfunction]
 fn arctan2(y: &NdArray, x: &NdArray) -> PyResult<NdArray> {
@@ -134,12 +150,12 @@ fn arctan2(y: &NdArray, x: &NdArray) -> PyResult<NdArray> {
 
 #[pyfunction]
 fn deg2rad(py: Python<'_>, x: &NdArray) -> NdArray {
-    unary_math_op(py, x, |v| v.to_radians())
+    unary_math_op(py, x, PAR_THRESHOLD_CHEAP, |v| v.to_radians())
 }
 
 #[pyfunction]
 fn rad2deg(py: Python<'_>, x: &NdArray) -> NdArray {
-    unary_math_op(py, x, |v| v.to_degrees())
+    unary_math_op(py, x, PAR_THRESHOLD_CHEAP, |v| v.to_degrees())
 }
 
 #[pyfunction]
@@ -259,6 +275,176 @@ fn heaviside(x: &NdArray, h0: f64) -> NdArray {
     }
 }
 
+/// 拆分为尾数与二进制指数：v = mantissa * 2^exp，且 0.5 <= |mantissa| < 1（或 v 为 0）。
+/// 语义与 C 库 frexp / numpy.frexp 一致。
+fn frexp_f64(v: f64) -> (f64, i64) {
+    if v == 0.0 || v.is_nan() || v.is_infinite() {
+        return (v, 0);
+    }
+    let bits = v.to_bits();
+    let raw_exp = ((bits >> 52) & 0x7ff) as i64;
+    if raw_exp == 0 {
+        // 次正规数：先放大到正规范围再修正指数。
+        let (m, e) = frexp_f64(v * 18446744073709551616.0); // 2^64
+        return (m, e - 64);
+    }
+    let e = raw_exp - 1022;
+    // 将偏置指数改写为 1022，使尾数落入 [0.5, 1)。
+    let m = f64::from_bits((bits & !(0x7ffu64 << 52)) | (1022u64 << 52));
+    (m, e)
+}
+
+/// 逐元素返回 (尾数, 指数)。指数以 f64 承载（Python 侧再包装为 int64），两者均保持输入形状。
+#[pyfunction]
+fn frexp(py: Python<'_>, x: &NdArray) -> (NdArray, NdArray) {
+    let data = &x.data;
+    let (mant, expo) = py.detach(|| {
+        let mut mant = Vec::with_capacity(data.len());
+        let mut expo = Vec::with_capacity(data.len());
+        for &v in data.iter() {
+            let (m, e) = frexp_f64(v);
+            mant.push(m);
+            expo.push(e as f64);
+        }
+        let shape = data.shape();
+        (
+            Array::from_shape_vec(IxDyn(shape), mant).unwrap(),
+            Array::from_shape_vec(IxDyn(shape), expo).unwrap(),
+        )
+    });
+    (NdArray { data: mant }, NdArray { data: expo })
+}
+
+/// 第一类零阶修正贝塞尔函数 I0，级数展开（与 numpy.i0 精度一致）。
+fn bessel_i0(v: f64) -> f64 {
+    let mut total = 1.0_f64;
+    let mut term = 1.0_f64;
+    let half = v / 2.0;
+    for k in 1..40 {
+        let r = half / k as f64;
+        term *= r * r;
+        total += term;
+        if term < 1e-18 * total {
+            break;
+        }
+    }
+    total
+}
+
+#[pyfunction]
+fn i0(py: Python<'_>, x: &NdArray) -> NdArray {
+    let data = &x.data;
+    let out = py.detach(|| {
+        if data.len() >= PAR_THRESHOLD {
+            Zip::from(data).par_map_collect(|&v| bessel_i0(v))
+        } else {
+            data.mapv(bessel_i0)
+        }
+    });
+    NdArray { data: out }
+}
+
+/// 一维线性插值：xp 必须单调递增；越界返回 left/right（默认端点值）。输出与 x 同形状。
+fn interp_one(xi: f64, xp: &[f64], fp: &[f64], lo: f64, hi: f64) -> f64 {
+    if xi <= xp[0] {
+        return lo;
+    }
+    let last = xp.len() - 1;
+    if xi >= xp[last] {
+        return hi;
+    }
+    // xp[j] <= xi < xp[j+1]，用二分定位区间起点。
+    let j = xp.partition_point(|&t| t <= xi) - 1;
+    let (x0, x1) = (xp[j], xp[j + 1]);
+    let (y0, y1) = (fp[j], fp[j + 1]);
+    if x1 == x0 {
+        return y0;
+    }
+    y0 + (y1 - y0) * (xi - x0) / (x1 - x0)
+}
+
+#[pyfunction]
+#[pyo3(signature = (x, xp, fp, left=None, right=None))]
+fn interp(
+    py: Python<'_>,
+    x: &NdArray,
+    xp: &NdArray,
+    fp: &NdArray,
+    left: Option<f64>,
+    right: Option<f64>,
+) -> PyResult<NdArray> {
+    let xpv: Vec<f64> = xp.data.iter().copied().collect();
+    let fpv: Vec<f64> = fp.data.iter().copied().collect();
+    if xpv.is_empty() || fpv.is_empty() {
+        return Err(PyValueError::new_err("array of sample points is empty"));
+    }
+    let lo = left.unwrap_or(fpv[0]);
+    let hi = right.unwrap_or(fpv[fpv.len() - 1]);
+    let data = &x.data;
+    let out = py.detach(|| {
+        if data.len() >= PAR_THRESHOLD {
+            Zip::from(data).par_map_collect(|&xi| interp_one(xi, &xpv, &fpv, lo, hi))
+        } else {
+            data.mapv(|xi| interp_one(xi, &xpv, &fpv, lo, hi))
+        }
+    });
+    Ok(NdArray { data: out })
+}
+
+/// 一维离散卷积（full），再按 mode 截取，语义与 numpy.convolve 一致。
+fn convolve_modes(x: &[f64], h: &[f64], mode: &str) -> Result<Vec<f64>, String> {
+    let (n, m) = (x.len(), h.len());
+    if n == 0 || m == 0 {
+        return Ok(vec![]);
+    }
+    let mut full = vec![0.0_f64; n + m - 1];
+    for (i, &xi) in x.iter().enumerate() {
+        for (j, &hj) in h.iter().enumerate() {
+            full[i + j] += xi * hj;
+        }
+    }
+    match mode {
+        "full" => Ok(full),
+        "same" => {
+            let start = (m - 1) / 2;
+            Ok(full[start..start + n].to_vec())
+        }
+        "valid" => {
+            let length = n.max(m) - n.min(m) + 1;
+            let start = n.min(m) - 1;
+            Ok(full[start..start + length].to_vec())
+        }
+        other => Err(format!("unsupported mode: {other}")),
+    }
+}
+
+#[pyfunction]
+#[pyo3(signature = (a, v, mode="full"))]
+fn convolve(py: Python<'_>, a: &NdArray, v: &NdArray, mode: &str) -> PyResult<NdArray> {
+    let x: Vec<f64> = a.data.iter().copied().collect();
+    let h: Vec<f64> = v.data.iter().copied().collect();
+    let out = py
+        .detach(|| convolve_modes(&x, &h, mode))
+        .map_err(PyValueError::new_err)?;
+    let arr = Array::from_shape_vec(IxDyn(&[out.len()]), out)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok(NdArray { data: arr })
+}
+
+#[pyfunction]
+#[pyo3(signature = (a, v, mode="valid"))]
+fn correlate(py: Python<'_>, a: &NdArray, v: &NdArray, mode: &str) -> PyResult<NdArray> {
+    let x: Vec<f64> = a.data.iter().copied().collect();
+    let mut h: Vec<f64> = v.data.iter().copied().collect();
+    h.reverse();
+    let out = py
+        .detach(|| convolve_modes(&x, &h, mode))
+        .map_err(PyValueError::new_err)?;
+    let arr = Array::from_shape_vec(IxDyn(&[out.len()]), out)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok(NdArray { data: arr })
+}
+
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sin, m)?)?;
     m.add_function(wrap_pyfunction!(cos, m)?)?;
@@ -305,5 +491,10 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(heaviside, m)?)?;
     m.add_function(wrap_pyfunction!(clip, m)?)?;
     m.add_function(wrap_pyfunction!(cross, m)?)?;
+    m.add_function(wrap_pyfunction!(frexp, m)?)?;
+    m.add_function(wrap_pyfunction!(i0, m)?)?;
+    m.add_function(wrap_pyfunction!(interp, m)?)?;
+    m.add_function(wrap_pyfunction!(convolve, m)?)?;
+    m.add_function(wrap_pyfunction!(correlate, m)?)?;
     Ok(())
 }

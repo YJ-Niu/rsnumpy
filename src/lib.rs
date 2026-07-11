@@ -276,55 +276,16 @@ fn compute_max_width(arr: &Array<f64, IxDyn>) -> usize {
         .unwrap_or(1)
 }
 
-fn format_array_repr_inner(arr: &Array<f64, IxDyn>, _prefix: &str, pad_width: usize) -> String {
-    if arr.ndim() == 0 {
-        return format!("{}", arr.iter().next().copied().unwrap_or(0.0_f64));
-    }
-    if arr.ndim() == 1 {
-        let n = arr.len();
-        // 预分配：每个数字 pad_width + 1（空格）
-        let estimated = 2 + n * (pad_width.max(1) + 1);
-        let mut s = String::with_capacity(estimated);
-        s.push('[');
-        for (i, val) in arr.iter().enumerate() {
-            if i > 0 {
-                s.push(' ');
-            }
-            let val_str = format_scalar(*val);
-            if pad_width > 0 {
-                let _ = write!(s, "{:>width$}", val_str, width = pad_width);
-            } else {
-                s.push_str(&val_str);
-            }
-        }
-        s.push(']');
-        return s;
-    }
-    let n = arr.shape()[0];
-    // 粗略估计字符串大小
-    let estimated = 2 + n * 20; // 每行约 20 字符
-    let mut s = String::with_capacity(estimated);
-    s.push('[');
-    for i in 0..n {
-        if i > 0 {
-            s.push_str("\n ");
-        }
-        let sub = arr.index_axis(Axis(0), i).to_owned().into_dyn();
-        let row_str = format_array_repr_inner(&sub, "", pad_width);
-        s.push_str(&row_str);
-    }
-    s.push(']');
-    s
-}
-
 fn format_array_repr(arr: &Array<f64, IxDyn>, _prefix: &str) -> String {
-    // 对 2D+ 数组计算最大宽度并右对齐填充，与 numpy 风格一致
-    let pad_width = if arr.ndim() >= 2 {
-        compute_max_width(arr)
-    } else {
-        0
+    if arr.ndim() == 0 {
+        return format_scalar(arr.iter().next().copied().unwrap_or(0.0_f64));
+    }
+    let pad_width = compute_max_width(arr);
+    let render = move |v: f64| {
+        let s = format_scalar(v);
+        format!("{s:>pad_width$}")
     };
-    format_array_repr_inner(arr, _prefix, pad_width)
+    crate::formatting::wrap_recurse(arr, " ", crate::formatting::LINE_WIDTH, &render, " ")
 }
 
 fn format_scalar(val: f64) -> String {
@@ -361,10 +322,18 @@ fn format_float_scalar(val: f64) -> String {
             "-inf".to_string()
         };
     }
+    if val == 0.0 {
+        // 保留负零符号，与 numpy 一致（例如 [-0.  0.  1.]）。
+        return if val.is_sign_negative() {
+            "-0.".to_string()
+        } else {
+            "0.".to_string()
+        };
+    }
     if val != 0.0 && val.abs() < 1e-10 {
         return format!("{:.10e}", val);
     }
-    let val_rounded = (val * 1e10).round() / 1e10;
+    let val_rounded = (val * 1e8).round() / 1e8;
     if val_rounded == val_rounded.floor() && val_rounded.is_finite() && val_rounded.abs() < 1e16 {
         let v = val_rounded as i64;
         if v as f64 == val_rounded {
@@ -374,7 +343,7 @@ fn format_float_scalar(val: f64) -> String {
     if val_rounded.abs() >= 1e10 {
         return format!("{:.10e}", val_rounded);
     }
-    let s = format!("{:.10}", val_rounded);
+    let s = format!("{:.8}", val_rounded);
     if let Some(pos) = s.find('.') {
         s[..pos + 1 + s[pos + 1..].trim_end_matches('0').len()].to_string()
     } else {
@@ -1008,105 +977,13 @@ impl NdArray {
     }
 
     #[pyo3(signature = (axis=None))]
-    fn cumsum(&self, axis: Option<isize>) -> PyResult<NdArray> {
-        let ndim = self.data.ndim();
-        let ax = match axis {
-            None => return self.flatten().cumsum(Some(0)),
-            Some(ax) => {
-                if ax < 0 {
-                    (ndim as isize + ax) as usize
-                } else {
-                    ax as usize
-                }
-            }
-        };
-        let shape = self.data.shape().to_vec();
-        let axis_size = shape[ax];
-        let pre_size: usize = shape.iter().take(ax).product();
-        let post_size: usize = shape.iter().skip(ax + 1).product();
-        let block_size = axis_size * post_size;
-        let data_vec: Vec<f64> = self.data.iter().copied().collect();
-        // 并行计算每个切片的累积和
-        let n_slices = pre_size * post_size;
-        let slice_results: Vec<Vec<f64>> = (0..n_slices)
-            .into_par_iter()
-            .map(|idx| {
-                let outer = idx / post_size;
-                let inner = idx % post_size;
-                let base = outer * block_size + inner;
-                let mut cum = 0.0_f64;
-                let mut slice = Vec::with_capacity(axis_size);
-                for k in 0..axis_size {
-                    cum += data_vec[base + k * post_size];
-                    slice.push(cum);
-                }
-                slice
-            })
-            .collect();
-        // 按正确内存布局写回
-        let mut result = vec![0.0; data_vec.len()];
-        for (idx, slice) in slice_results.into_iter().enumerate() {
-            let outer = idx / post_size;
-            let inner = idx % post_size;
-            let base = outer * block_size + inner;
-            for (k, val) in slice.into_iter().enumerate() {
-                result[base + k * post_size] = val;
-            }
-        }
-        let arr = Array::from_shape_vec(IxDyn(&shape), result)
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Ok(NdArray { data: arr })
+    fn cumsum(&self, py: Python<'_>, axis: Option<isize>) -> PyResult<NdArray> {
+        cumulative(py, &self.data, axis, 0.0, |acc, x| acc + x)
     }
 
     #[pyo3(signature = (axis=None))]
-    fn cumprod(&self, axis: Option<isize>) -> PyResult<NdArray> {
-        let ndim = self.data.ndim();
-        let ax = match axis {
-            None => return self.flatten().cumprod(Some(0)),
-            Some(ax) => {
-                if ax < 0 {
-                    (ndim as isize + ax) as usize
-                } else {
-                    ax as usize
-                }
-            }
-        };
-        let shape = self.data.shape().to_vec();
-        let axis_size = shape[ax];
-        let pre_size: usize = shape.iter().take(ax).product();
-        let post_size: usize = shape.iter().skip(ax + 1).product();
-        let block_size = axis_size * post_size;
-        let data_vec: Vec<f64> = self.data.iter().copied().collect();
-        // 并行计算每个切片的累积乘积
-        let n_slices = pre_size * post_size;
-        let slice_results: Vec<Vec<f64>> = (0..n_slices)
-            .into_par_iter()
-            .map(|idx| {
-                let outer = idx / post_size;
-                let inner = idx % post_size;
-                let base = outer * block_size + inner;
-                let mut cum = 1.0_f64;
-                let mut slice = Vec::with_capacity(axis_size);
-                for k in 0..axis_size {
-                    cum *= data_vec[base + k * post_size];
-                    slice.push(cum);
-                }
-                slice
-            })
-            .collect();
-        // 按正确内存布局写回
-        let mut result = vec![0.0; data_vec.len()];
-        for (idx, slice) in slice_results.into_iter().enumerate() {
-            let outer = idx / post_size;
-            let inner = idx % post_size;
-            let base = outer * block_size + inner;
-            for (k, val) in slice.into_iter().enumerate() {
-                result[base + k * post_size] = val;
-            }
-        }
-        let arr = Array::from_shape_vec(IxDyn(&shape), result)
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Ok(NdArray { data: arr })
+    fn cumprod(&self, py: Python<'_>, axis: Option<isize>) -> PyResult<NdArray> {
+        cumulative(py, &self.data, axis, 1.0, |acc, x| acc * x)
     }
 
     #[pyo3(signature = (offset=0, axis1=0, axis2=1))]
@@ -1604,7 +1481,7 @@ impl NdArray {
     }
 
     #[pyo3(signature = (axis=-1))]
-    fn sort(&self, axis: isize) -> PyResult<NdArray> {
+    fn sort(&self, py: Python<'_>, axis: isize) -> PyResult<NdArray> {
         let ndim = self.data.ndim();
         let ax = if axis < 0 {
             (ndim as isize + axis) as usize
@@ -1614,50 +1491,54 @@ impl NdArray {
         if ax >= ndim {
             return Err(PyValueError::new_err("Axis out of bounds"));
         }
-        if ndim <= 1 {
-            let mut values: Vec<f64> = self.data.iter().copied().collect();
-            values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-            let arr = Array::from_shape_vec(IxDyn(&[values.len()]), values)
-                .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            return Ok(NdArray { data: arr });
-        }
-        let shape = self.data.shape().to_vec();
-        let mut data_vec: Vec<f64> = self.data.iter().copied().collect();
-        let axis_size = shape[ax];
-        let pre_size: usize = shape.iter().take(ax).product();
-        let post_size: usize = shape.iter().skip(ax + 1).product();
-        let block_size = axis_size * post_size;
-        // 并行排序每个轴切片
-        let n_slices = pre_size * post_size;
-        let sorted_slices: Vec<Vec<f64>> = (0..n_slices)
-            .into_par_iter()
-            .map(|idx| {
-                let outer = idx / post_size;
-                let inner = idx % post_size;
-                let base = outer * block_size + inner;
-                let mut slice: Vec<f64> = (0..axis_size)
-                    .map(|k| data_vec[base + k * post_size])
+        // 排序为纯计算，主动释放 GIL，让其它 Python 线程在排序期间可推进。
+        let data = &self.data;
+        let arr = py
+            .detach(|| -> Result<Array<f64, IxDyn>, String> {
+                if ndim <= 1 {
+                    let mut values: Vec<f64> = data.iter().copied().collect();
+                    values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                    return Array::from_shape_vec(IxDyn(&[values.len()]), values)
+                        .map_err(|e| e.to_string());
+                }
+                let shape = data.shape().to_vec();
+                let mut data_vec: Vec<f64> = data.iter().copied().collect();
+                let axis_size = shape[ax];
+                let pre_size: usize = shape.iter().take(ax).product();
+                let post_size: usize = shape.iter().skip(ax + 1).product();
+                let block_size = axis_size * post_size;
+                // 并行排序每个轴切片
+                let n_slices = pre_size * post_size;
+                let sorted_slices: Vec<Vec<f64>> = (0..n_slices)
+                    .into_par_iter()
+                    .map(|idx| {
+                        let outer = idx / post_size;
+                        let inner = idx % post_size;
+                        let base = outer * block_size + inner;
+                        let mut slice: Vec<f64> = (0..axis_size)
+                            .map(|k| data_vec[base + k * post_size])
+                            .collect();
+                        slice.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                        slice
+                    })
                     .collect();
-                slice.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-                slice
+                // 写回结果（串行，排序已并行完成）
+                for (idx, sorted_slice) in sorted_slices.into_iter().enumerate() {
+                    let outer = idx / post_size;
+                    let inner = idx % post_size;
+                    let base = outer * block_size + inner;
+                    for (k, val) in sorted_slice.into_iter().enumerate() {
+                        data_vec[base + k * post_size] = val;
+                    }
+                }
+                Array::from_shape_vec(IxDyn(&shape), data_vec).map_err(|e| e.to_string())
             })
-            .collect();
-        // 写回结果（串行，排序已并行完成）
-        for (idx, sorted_slice) in sorted_slices.into_iter().enumerate() {
-            let outer = idx / post_size;
-            let inner = idx % post_size;
-            let base = outer * block_size + inner;
-            for (k, val) in sorted_slice.into_iter().enumerate() {
-                data_vec[base + k * post_size] = val;
-            }
-        }
-        let arr = Array::from_shape_vec(IxDyn(&shape), data_vec)
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            .map_err(PyValueError::new_err)?;
         Ok(NdArray { data: arr })
     }
 
     #[pyo3(signature = (axis=-1))]
-    fn argsort(&self, axis: isize) -> PyResult<NdArray> {
+    fn argsort(&self, py: Python<'_>, axis: isize) -> PyResult<NdArray> {
         let ndim = self.data.ndim();
         let ax = if axis < 0 {
             (ndim as isize + axis) as usize
@@ -1667,60 +1548,73 @@ impl NdArray {
         if ax >= ndim {
             return Err(PyValueError::new_err("Axis out of bounds"));
         }
-        if ndim <= 1 {
-            let values: Vec<f64> = self.data.iter().copied().collect();
-            let mut indices: Vec<usize> = (0..values.len()).collect();
-            indices.sort_by(|&a, &b| {
-                values[a]
-                    .partial_cmp(&values[b])
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            });
-            let result: Vec<f64> = indices.into_iter().map(|i| i as f64).collect();
-            let arr = Array::from_shape_vec(IxDyn(&[result.len()]), result)
-                .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            return Ok(NdArray { data: arr });
-        }
-        let shape = self.data.shape().to_vec();
-        let data_vec: Vec<f64> = self.data.iter().copied().collect();
-        let axis_size = shape[ax];
-        let pre_size: usize = shape.iter().take(ax).product();
-        let post_size: usize = shape.iter().skip(ax + 1).product();
-        let block_size = axis_size * post_size;
-        // 并行计算每个轴切片的排序索引
-        let n_slices = pre_size * post_size;
-        let index_results: Vec<Vec<(usize, f64)>> = (0..n_slices)
-            .into_par_iter()
-            .map(|idx| {
-                let outer = idx / post_size;
-                let inner = idx % post_size;
-                let base = outer * block_size + inner;
-                let mut indexed: Vec<(usize, f64)> = (0..axis_size)
-                    .map(|k| (k, data_vec[base + k * post_size]))
+        // 排序为纯计算，主动释放 GIL。
+        let data = &self.data;
+        let arr = py
+            .detach(|| -> Result<Array<f64, IxDyn>, String> {
+                if ndim <= 1 {
+                    let values: Vec<f64> = data.iter().copied().collect();
+                    let mut indices: Vec<usize> = (0..values.len()).collect();
+                    indices.sort_by(|&a, &b| {
+                        values[a]
+                            .partial_cmp(&values[b])
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    });
+                    let result: Vec<f64> = indices.into_iter().map(|i| i as f64).collect();
+                    return Array::from_shape_vec(IxDyn(&[result.len()]), result)
+                        .map_err(|e| e.to_string());
+                }
+                let shape = data.shape().to_vec();
+                let data_vec: Vec<f64> = data.iter().copied().collect();
+                let axis_size = shape[ax];
+                let pre_size: usize = shape.iter().take(ax).product();
+                let post_size: usize = shape.iter().skip(ax + 1).product();
+                let block_size = axis_size * post_size;
+                // 并行计算每个轴切片的排序索引
+                let n_slices = pre_size * post_size;
+                let index_results: Vec<Vec<(usize, f64)>> = (0..n_slices)
+                    .into_par_iter()
+                    .map(|idx| {
+                        let outer = idx / post_size;
+                        let inner = idx % post_size;
+                        let base = outer * block_size + inner;
+                        let mut indexed: Vec<(usize, f64)> = (0..axis_size)
+                            .map(|k| (k, data_vec[base + k * post_size]))
+                            .collect();
+                        indexed.sort_by(|(_, a), (_, b)| {
+                            a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+                        });
+                        indexed
+                    })
                     .collect();
-                indexed.sort_by(|(_, a), (_, b)| {
-                    a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
-                });
-                indexed
+                let mut result = data_vec;
+                for (idx, indexed) in index_results.into_iter().enumerate() {
+                    let outer = idx / post_size;
+                    let inner = idx % post_size;
+                    let base = outer * block_size + inner;
+                    for (pos, (idx_val, _)) in indexed.into_iter().enumerate() {
+                        result[base + pos * post_size] = idx_val as f64;
+                    }
+                }
+                Array::from_shape_vec(IxDyn(&shape), result).map_err(|e| e.to_string())
             })
-            .collect();
-        let mut result = data_vec;
-        for (idx, indexed) in index_results.into_iter().enumerate() {
-            let outer = idx / post_size;
-            let inner = idx % post_size;
-            let base = outer * block_size + inner;
-            for (pos, (idx_val, _)) in indexed.into_iter().enumerate() {
-                result[base + pos * post_size] = idx_val as f64;
-            }
-        }
-        let arr = Array::from_shape_vec(IxDyn(&shape), result)
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            .map_err(PyValueError::new_err)?;
         Ok(NdArray { data: arr })
     }
 }
 
-/// 逐元素并行阈值：元素数达到该值才用 rayon 并行，
-/// 更小的数组走串行以避免线程调度开销主导（小数组上并行反而更慢）。
+/// 计算密集（transcendental：sin/exp/log…）逐元素并行阈值：
+/// 每元素工作量大，较小规模并行即可回本。
 pub(crate) const PAR_THRESHOLD: usize = 32_768;
+
+/// 访存密集（add/sub/mul/div、比较、sqrt 等）逐元素并行阈值：
+/// 每元素工作量极小，瓶颈在内存带宽；小/中等规模并行的线程调度开销反而拖慢，
+/// 需到较大规模（多核带宽叠加）才划算。经基准定位（32k~500k 区间串行更快）而抬高。
+pub(crate) const PAR_THRESHOLD_CHEAP: usize = 262_144;
+
+/// 中等代价逐元素并行阈值（sqrt/reciprocal 等：比纯加乘重、比 transcendental 轻）。
+/// 基准显示其并行回本点约在 5 万元素，介于 CHEAP 与 PAR_THRESHOLD 之间。
+pub(crate) const PAR_THRESHOLD_MEDIUM: usize = 49_152;
 
 fn binary_op<F>(a: &NdArray, b: &Bound<'_, PyAny>, op: F) -> PyResult<NdArray>
 where
@@ -1731,7 +1625,7 @@ where
         let data = &a.data;
         // 纯计算，主动释放 GIL 让其它 Python 线程可并行推进。
         let out = py.detach(|| {
-            if data.len() >= PAR_THRESHOLD {
+            if data.len() >= PAR_THRESHOLD_CHEAP {
                 Zip::from(data).par_map_collect(|&x| op(x, scalar))
             } else {
                 data.mapv(|x| op(x, scalar))
@@ -1739,6 +1633,17 @@ where
         });
         return Ok(NdArray { data: out });
     }
+    // 常见情形：右操作数就是 ndarray —— 借用而非 extract（后者会整份克隆）。
+    if let Ok(other) = b.cast::<NdArray>() {
+        let other = other.borrow();
+        let a_data = &a.data;
+        let other_data = &other.data;
+        let out = py
+            .detach(|| broadcast_binary_compute(a_data, other_data, op))
+            .map_err(PyValueError::new_err)?;
+        return Ok(NdArray { data: out });
+    }
+    // 回退：可被强制转换为 ndarray 的其它序列类型（此路径会克隆，但非热点）。
     if let Ok(other) = b.extract::<NdArray>() {
         let a_data = &a.data;
         let other_data = &other.data;
@@ -1777,10 +1682,29 @@ where
         // 形状一致：用 ndarray::Zip 逐元素计算并直接产出结果数组，
         // 省去把两个输入分别物化成 Vec 的额外分配。
         let z = Zip::from(a).and(b);
-        return Ok(if a.len() >= PAR_THRESHOLD {
+        return Ok(if a.len() >= PAR_THRESHOLD_CHEAP {
             z.par_map_collect(|&x, &y| op(x, y))
         } else {
             z.map_collect(|&x, &y| op(x, y))
+        });
+    }
+
+    // 标量（0 维）广播快速路径：直接在另一操作数上逐元素映射，
+    // 跳过 reshape/clone/broadcast-view 全套机制（结果形状即另一操作数形状）。
+    if a.ndim() == 0 {
+        let s = *a.first().unwrap();
+        return Ok(if b.len() >= PAR_THRESHOLD_CHEAP {
+            Zip::from(b).par_map_collect(|&y| op(s, y))
+        } else {
+            b.mapv(|y| op(s, y))
+        });
+    }
+    if b.ndim() == 0 {
+        let s = *b.first().unwrap();
+        return Ok(if a.len() >= PAR_THRESHOLD_CHEAP {
+            Zip::from(a).par_map_collect(|&x| op(x, s))
+        } else {
+            a.mapv(|x| op(x, s))
         });
     }
 
@@ -1819,7 +1743,7 @@ where
 
     let out_len: usize = out_shape.iter().product();
     let z = Zip::from(a_view).and(b_view);
-    Ok(if out_len >= PAR_THRESHOLD {
+    Ok(if out_len >= PAR_THRESHOLD_CHEAP {
         z.par_map_collect(|&x, &y| op(x, y))
     } else {
         z.map_collect(|&x, &y| op(x, y))
@@ -1835,6 +1759,68 @@ where
     F: Fn(f64, f64) -> f64 + Sync,
 {
     broadcast_binary_compute(a, b, op).map_err(PyValueError::new_err)
+}
+
+/// 沿指定轴做就地累积扫描（cumsum/cumprod 共用）。
+/// axis=None 时在展平后的 C 序上做整体扫描，结果为 1-D。
+/// 单份缓冲上就地更新，并按连续外层块并行；纯计算，主动释放 GIL。
+fn cumulative<F>(
+    py: Python<'_>,
+    data: &Array<f64, IxDyn>,
+    axis: Option<isize>,
+    init: f64,
+    op: F,
+) -> PyResult<NdArray>
+where
+    F: Fn(f64, f64) -> f64 + Sync,
+{
+    let ndim = data.ndim();
+    if axis.is_none() {
+        let n = data.len();
+        let arr = py.detach(|| {
+            let mut buf: Vec<f64> = data.iter().copied().collect();
+            let mut cum = init;
+            for x in buf.iter_mut() {
+                cum = op(cum, *x);
+                *x = cum;
+            }
+            Array::from_shape_vec(IxDyn(&[n]), buf).unwrap()
+        });
+        return Ok(NdArray { data: arr });
+    }
+    let ax_raw = axis.unwrap();
+    let ax = if ax_raw < 0 {
+        (ndim as isize + ax_raw) as usize
+    } else {
+        ax_raw as usize
+    };
+    if ax >= ndim {
+        return Err(PyValueError::new_err("Axis out of bounds"));
+    }
+    let shape = data.shape().to_vec();
+    let axis_size = shape[ax];
+    let post_size: usize = shape.iter().skip(ax + 1).product();
+    let block_size = axis_size * post_size;
+    let arr = py.detach(|| -> Result<Array<f64, IxDyn>, String> {
+        // 单份 C 序缓冲，就地扫描；外层块（block_size 连续、互不重叠）并行。
+        let mut buf: Vec<f64> = data.iter().copied().collect();
+        if block_size > 0 {
+            buf.par_chunks_mut(block_size).for_each(|block| {
+                for inner in 0..post_size {
+                    let mut cum = init;
+                    let mut i = inner;
+                    for _ in 0..axis_size {
+                        cum = op(cum, block[i]);
+                        block[i] = cum;
+                        i += post_size;
+                    }
+                }
+            });
+        }
+        Array::from_shape_vec(IxDyn(&shape), buf).map_err(|e| e.to_string())
+    });
+    let arr = arr.map_err(PyValueError::new_err)?;
+    Ok(NdArray { data: arr })
 }
 
 /// ArrayFlags - 数组内存布局信息，与 NumPy 的 np.ndarray.flags 兼容
@@ -2008,6 +1994,7 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(indexing::getitem_scalar, m)?)?;
     m.add_function(wrap_pyfunction!(indexing::setitem_multi, m)?)?;
     m.add_function(wrap_pyfunction!(indexing::iscomplex_cpx, m)?)?;
+    m.add_function(wrap_pyfunction!(indexing::masked_select, m)?)?;
     m.add_function(wrap_pyfunction!(fft::py_fft_ndarray, m)?)?;
     m.add_function(wrap_pyfunction!(fft::py_ifft_ndarray, m)?)?;
     m.add_function(wrap_pyfunction!(fft::py_rfft_ndarray, m)?)?;
