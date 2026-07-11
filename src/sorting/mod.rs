@@ -2,14 +2,14 @@ use crate::*;
 
 #[pyfunction]
 #[pyo3(signature = (a, axis=-1))]
-fn sort(a: &NdArray, axis: isize) -> PyResult<NdArray> {
-    a.sort(axis)
+fn sort(py: Python<'_>, a: &NdArray, axis: isize) -> PyResult<NdArray> {
+    a.sort(py, axis)
 }
 
 #[pyfunction]
 #[pyo3(signature = (a, axis=-1))]
-fn argsort(a: &NdArray, axis: isize) -> PyResult<NdArray> {
-    a.argsort(axis)
+fn argsort(py: Python<'_>, a: &NdArray, axis: isize) -> PyResult<NdArray> {
+    a.argsort(py, axis)
 }
 
 #[pyfunction]

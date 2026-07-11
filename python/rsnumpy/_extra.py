@@ -237,19 +237,6 @@ def logical_not(x):
     return np.equal(arr, np.full(arr.shape, 0.0))
 
 
-def _elementwise(fn, *arrays):
-    """对齐形状的逐元素 Python 回退（用于 gcd/lcm/frexp 等无向量原语的场景）。"""
-    np = _np()
-    lists = [_asarray(a).tolist() for a in arrays]
-
-    def rec(*vals):
-        if isinstance(vals[0], list):
-            return [rec(*t) for t in zip(*vals)]
-        return fn(*vals)
-
-    return np.array(rec(*lists))
-
-
 def gcd(x1, x2):
     """逐元素最大公约数。"""
     return _wrap(_core.gcd(_asarray(x1)._array, _asarray(x2)._array), "int64")
@@ -277,10 +264,8 @@ def ldexp(x1, x2):
 
 def frexp(x):
     """逐元素返回 (尾数, 指数)。"""
-    np = _np()
-    fr = _elementwise(lambda a: _math.frexp(float(a))[0], x)
-    ex = np.array([_math.frexp(float(v))[1] for v in _flat(x)], dtype="int64")
-    return fr, ex
+    mant, expo = _core.frexp(_asarray(x)._array)
+    return _wrap(mant), _wrap(expo, "int64")
 
 
 def modf(x):
@@ -1290,23 +1275,9 @@ def bartlett(M):
 
 def i0(x):
     """第一类零阶修正贝塞尔函数。"""
-    np = _np()
     arr = _asarray(x)
-    xf = _flat(arr)
-
-    def bessel(v):
-        total = 1.0
-        term = 1.0
-        half = v / 2.0
-        for k in range(1, 40):
-            term *= (half / k) ** 2
-            total += term
-            if term < 1e-18 * total:
-                break
-        return total
-
-    res = [bessel(float(v)) for v in xf]
-    return np.reshape(np.array(res), arr.shape) if arr.ndim else _as_scalar(np.array(res))
+    res = _wrap(_core.i0(arr._array))
+    return res if arr.ndim else _as_scalar(res)
 
 
 def kaiser(M, beta):
@@ -1325,58 +1296,21 @@ def kaiser(M, beta):
 
 def convolve(a, v, mode="full"):
     """一维离散卷积。"""
-    np = _np()
-    x = _flat(a)
-    h = _flat(v)
-    n, m = len(x), len(h)
-    full = [0.0] * (n + m - 1)
-    for i in range(n):
-        xi = x[i]
-        for j in range(m):
-            full[i + j] += xi * h[j]
-    if mode == "full":
-        return np.array(full)
-    if mode == "same":
-        start = (m - 1) // 2
-        return np.array(full[start:start + n])
-    if mode == "valid":
-        length = max(n, m) - min(n, m) + 1
-        start = min(n, m) - 1
-        return np.array(full[start:start + length])
-    raise ValueError(f"unsupported mode: {mode}")
+    return _wrap(_core.convolve(_asarray(a)._array, _asarray(v)._array, mode))
 
 
 def correlate(a, v, mode="valid"):
     """一维互相关。"""
-    return convolve(a, list(reversed(_flat(v))), mode)
+    return _wrap(_core.correlate(_asarray(a)._array, _asarray(v)._array, mode))
 
 
 def interp(x, xp, fp, left=None, right=None, period=None):
     """一维线性插值。"""
     _ = period
-    np = _np()
-    xpv = _flat(xp)
-    fpv = _flat(fp)
-    lo = fpv[0] if left is None else left
-    hi = fpv[-1] if right is None else right
-
-    def one(xi):
-        if xi <= xpv[0]:
-            return lo
-        if xi >= xpv[-1]:
-            return hi
-        j = 0
-        while j < len(xpv) - 1 and not (xpv[j] <= xi <= xpv[j + 1]):
-            j += 1
-        x0, x1 = xpv[j], xpv[j + 1]
-        y0, y1 = fpv[j], fpv[j + 1]
-        if x1 == x0:
-            return y0
-        return y0 + (y1 - y0) * (xi - x0) / (x1 - x0)
-
     arr = _asarray(x)
-    res = _map_nested(one, arr.tolist()) if arr.ndim else one(_as_scalar(arr))
-    return np.array(res) if arr.ndim else res
+    raw = _core.interp(arr._array, _asarray(xp)._array, _asarray(fp)._array, left, right)
+    res = _wrap(raw)
+    return res if arr.ndim else _as_scalar(res)
 
 
 def bincount(x, weights=None, minlength=0):

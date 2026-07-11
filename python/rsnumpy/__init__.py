@@ -969,6 +969,8 @@ def _as_recarray(arr):
     return arr
 
 
+# ---------- 内部数组判定与结果包装 ----------
+
 def _ensure(x):
     """将列表/元组转换为 ndarray。"""
     if isinstance(x, (list, tuple)):
@@ -984,6 +986,28 @@ def _is_ndarray(obj):
     """检查对象是否为 rsnumpy ndarray（用 hasattr 避免类身份不一致问题）。"""
     return hasattr(obj, '_array')
 
+
+def _wrap_result(result, dtype="float64"):
+    """将原始 ndarray 结果包装到 ndarray 类中。"""
+    if hasattr(result, '__class__') and result.__class__.__name__ == 'ndarray':
+        return ndarray._wrap(result, _dtype=dtype)
+    if isinstance(result, (list, tuple)):
+        return ndarray(result, _dtype=dtype)
+    if isinstance(result, float) and dtype == "int64":
+        return int(result)
+    if hasattr(result, 'tolist'):
+        return ndarray._wrap(result, _dtype=dtype)
+    return result
+
+
+def _scalar(x):
+    """转换为标量。"""
+    if hasattr(x, 'tolist'):
+        return x.tolist()
+    return x
+
+
+# ---------- dtype 提升与浮点判定 ----------
 
 _FLOAT_DTYPES = ("float16", "float32", "float64")
 
@@ -1015,6 +1039,8 @@ def _truediv_dtype(self_dtype):
     return self_dtype if _is_float_dtype(self_dtype) else 'float64'
 
 
+# ---------- 嵌套数据与索引转换 ----------
+
 def _convert_nested(data, converter):
     """递归转换嵌套列表中的每个元素。"""
     if isinstance(data, list):
@@ -1037,6 +1063,15 @@ def _ndarray_to_index_list(k):
     return _convert(raw)
 
 
+def _nested_zeros(shape):
+    """生成给定形状的嵌套零列表（标量形状返回 0）。"""
+    if not shape:
+        return 0
+    return [_nested_zeros(shape[1:]) for _ in range(shape[0])]
+
+
+# ---------- 结构化字段规格与视图 ----------
+
 def _normalize_field(item):
     """归一化结构化字段规格：子数组字段保留形状为 (name, type, subshape)。"""
     if len(item) >= 3 and item[2]:
@@ -1052,19 +1087,37 @@ def _field_subshape(fspec):
     return ()
 
 
-def _nested_zeros(shape):
-    """生成给定形状的嵌套零列表（标量形状返回 0）。"""
-    if not shape:
-        return 0
-    return [_nested_zeros(shape[1:]) for _ in range(shape[0])]
-
-
 def _field_dtype_name(ftype):
     """将字段类型规格解析为本库 dtype 名称（字符串字段归一为 string_）。"""
     name = _resolve_type_name(ftype)
     if isinstance(name, str) and name and name[0] in ('S', 'a', 'U'):
         return 'string_'
     return name
+
+
+def _structured_field_kind(code):
+    """判断结构化字段类型：'int' / 'float' / 'str'。"""
+    if not isinstance(code, str):
+        code = _resolve_type_name(code) if code else 'f8'
+    if not isinstance(code, str):
+        return 'float'
+    c = code.lstrip('<>=|')
+    first = c[:1]
+    if first in ('S', 'U', 'a'):
+        return 'str'
+    low = c.lower()
+    if low.startswith('bytes') or low.startswith('str'):
+        return 'str'
+    is_int = any((
+        low.startswith('int'),
+        low.startswith('uint'),
+        low.startswith('bool'),
+        first == 'i',
+        first == 'u' and c[1:2].isdigit(),
+    ))
+    if is_int:
+        return 'int'
+    return 'float'
 
 
 def _extract_field(data, fi, depth):
@@ -1113,50 +1166,7 @@ def _structured_multifield_view(arr, keys):
     return ndarray._wrap(arr._array, _dtype='void', _fields=new_fields, _raw_data=new_raw)
 
 
-def _wrap_result(result, dtype="float64"):
-    """将原始 ndarray 结果包装到 ndarray 类中。"""
-    if hasattr(result, '__class__') and result.__class__.__name__ == 'ndarray':
-        return ndarray._wrap(result, _dtype=dtype)
-    if isinstance(result, (list, tuple)):
-        return ndarray(result, _dtype=dtype)
-    if isinstance(result, float) and dtype == "int64":
-        return int(result)
-    if hasattr(result, 'tolist'):
-        return ndarray._wrap(result, _dtype=dtype)
-    return result
-
-
-def _scalar(x):
-    """转换为标量。"""
-    if hasattr(x, 'tolist'):
-        return x.tolist()
-    return x
-
-
-def _structured_field_kind(code):
-    """判断结构化字段类型：'int' / 'float' / 'str'。"""
-    if not isinstance(code, str):
-        code = _resolve_type_name(code) if code else 'f8'
-    if not isinstance(code, str):
-        return 'float'
-    c = code.lstrip('<>=|')
-    first = c[:1]
-    if first in ('S', 'U', 'a'):
-        return 'str'
-    low = c.lower()
-    if low.startswith('bytes') or low.startswith('str'):
-        return 'str'
-    is_int = any((
-        low.startswith('int'),
-        low.startswith('uint'),
-        low.startswith('bool'),
-        first == 'i',
-        first == 'u' and c[1:2].isdigit(),
-    ))
-    if is_int:
-        return 'int'
-    return 'float'
-
+# ---------- 结构化数组格式化 ----------
 
 def _fmt_structured_str_val(v):
     if isinstance(v, bytes):
@@ -1302,6 +1312,8 @@ def _format_structured_repr(arr):
     return f"array({inner})"
 
 
+# ---------- 不规则/嵌套数组格式化 ----------
+
 def _format_ragged_str(arr):
     """__str__ 用于不规则数组（包含列表/元组元素）。"""
     data = arr.tolist()
@@ -1327,6 +1339,8 @@ def _format_nested_iterable(data):
         return "[" + "\n ".join(parts) + "]"
     return str(data)
 
+
+# ---------- 浮点/复数标量格式化 ----------
 
 class _float64:
     """float64 标量，显示为 np.float64(value)。"""
@@ -1396,6 +1410,8 @@ def format_float_scalar(val):
         s = s.rstrip('0').rstrip('.')
     return s
 
+
+# ---------- 子模块延迟访问 ----------
 
 def _ndarray_methods():
     """延迟导入 array_methods 模块。"""
