@@ -436,11 +436,11 @@ A: 安装 Xcode Command Line Tools（macOS）：`xcode-select --install`
 
 #### Q3: 编译报错 `pyo3` 版本冲突
 
-A: 确保 Python ≥ 3.8，且 `pip install --upgrade maturin pyo3`
+A: 确保 Python ≥ 3.10，且 `pip install --upgrade maturin pyo3`
 
 #### Q4: 性能是否优于 NumPy？
 
-A: 取决于具体操作。Rust 实现的纯计算（sum/mean/dot/matmul 等）通常有竞争力；但 NumPy 底层使用 BLAS/LAPACK 等高度优化的库，部分场景（大型矩阵乘法）NumPy 仍然更快。
+A: 多数逐元素与归约操作（`sin`/`exp`/`sum`/`std`/`cumsum` 等）在中大规模数组上快于 NumPy（约 1.3x–5x）；`matmul`/`dot` 在 macOS 上通过 Accelerate BLAS 与 NumPy 基本持平。小数组因跨语言调用开销可能略慢。详见「性能对比」。
 
 #### Q5: 是否支持 GPU？
 
@@ -457,18 +457,45 @@ A: 当前版本仅支持 CPU。
 
 ### 8. 性能对比
 
-以下是在 macOS (Apple Silicon M2) 上的初步性能测试结果（数组大小：1000x1000）：
+以下为在 macOS (Apple Silicon) 上以 NumPy 为基准的实测结果。每个算子取 20 次运行的最优耗时（`sort`/`matmul` 取 5 次），输入为 `arange` 生成的 `float64` 数组。「相对 NumPy」= NumPy 耗时 ÷ rsnumpy 耗时，> 1 表示 rsnumpy 更快。
 
-| 操作                     | rsnumpy | NumPy  | 相对性能         |
-| ------------------------ | ------- | ------ | ---------------- |
-| `np.sum()`               | 0.5 ms  | 0.8 ms | **1.6x faster**  |
-| `np.mean()`              | 0.6 ms  | 0.9 ms | **1.5x faster**  |
-| `np.dot()` (向量点积)    | 0.1 ms  | 0.2 ms | **2.0x faster**  |
-| `np.matmul()` (矩阵乘法) | 2.1 ms  | 1.8 ms | ~0.9x            |
-| `np.sin()`               | 1.2 ms  | 1.5 ms | **1.25x faster** |
-| `np.sort()`              | 3.5 ms  | 4.2 ms | **1.2x faster**  |
+**逐元素 / 归约（n = 1,000,000）**
 
-> **说明**：矩阵乘法等操作使用了 BLAS 优化的 NumPy 可能在大型矩阵上表现更好。rsnumpy 在纯计算密集型操作上有优势。
+| 操作       | rsnumpy  | NumPy    | 相对 NumPy |
+| ---------- | -------- | -------- | ---------- |
+| `add`      | 0.113 ms | 0.190 ms | **1.7x**   |
+| `multiply` | 0.110 ms | 0.186 ms | **1.7x**   |
+| `divide`   | 0.116 ms | 0.188 ms | **1.6x**   |
+| `sin`      | 0.570 ms | 2.969 ms | **5.2x**   |
+| `exp`      | 0.248 ms | 1.349 ms | **5.4x**   |
+| `sqrt`     | 0.134 ms | 0.225 ms | **1.7x**   |
+| `sum`      | 0.081 ms | 0.103 ms | **1.3x**   |
+| `mean`     | 0.080 ms | 0.104 ms | **1.3x**   |
+| `std`      | 0.271 ms | 0.438 ms | **1.6x**   |
+| `cumsum`   | 1.030 ms | 1.908 ms | **1.9x**   |
+| `sort`     | 0.741 ms | 24.03 ms | **32x**    |
+| `interp`   | 0.227 ms | 0.687 ms | **3.0x**   |
+| `i0`       | 4.459 ms | 16.41 ms | **3.7x**   |
+
+**矩阵乘法（方阵，macOS 下经 Accelerate BLAS）**
+
+| 规模      | rsnumpy  | NumPy    | 相对 NumPy |
+| --------- | -------- | -------- | ---------- |
+| 128×128   | 0.013 ms | 0.011 ms | 0.9x       |
+| 512×512   | 0.607 ms | 0.605 ms | 1.0x       |
+| 1024×1024 | 4.375 ms | 4.470 ms | 1.0x       |
+
+> **说明**：小数组（约 n < 数万）因跨语言调用与线程调度开销，rsnumpy 可能略慢于 NumPy；随规模增大，Rust 层的并行与向量化优势显现。`matmul` 在 macOS 上分派到系统 Accelerate 框架，与 NumPy 基本持平。实际数字随机器与数据分布浮动。
+
+#### 8.1 性能架构
+
+rsnumpy 的性能来自以下几项底层设计：
+
+- **主动释放 GIL**：计算密集算子（逐元素、归约、排序、`cumsum`、`matmul` 等）在进入 Rust 前通过 `py.detach` 释放 GIL，使纯计算与其它 Python 线程真正并行。
+- **成本分级并行阈值**：按算子的每元素成本设置不同的并行启用门槛——超越函数（`sin`/`exp` 等）阈值最低，访存密集型（`add`/`mul`/`div`）阈值最高——避免小数组因线程调度反而变慢。
+- **BLAS 后端**：macOS 上 `matmul`/`dot` 经 ndarray 的 `blas` 特性分派到系统 Accelerate 框架；其它平台回退到多线程的纯 Rust `matrixmultiply` 内核。
+- **连续内存与就地扫描**：`cumsum`/`cumprod` 等在单份 C 序缓冲上就地前缀扫描并按连续块并行，减少分配与拷贝。
+- **精简依赖**：关闭 `zip` 等依赖中未使用的编解码器特性，配合 `lto = "fat"` 与符号裁剪，将扩展体积控制在约 5 MB。
 
 ### 9. CI/CD
 
@@ -514,32 +541,30 @@ A: 当前版本仅支持 CPU。
 **Project layout:**
 
 ```
-
 rsnumpy/
-├── src/ # Rust source
-│ ├── lib.rs # Core ndarray & general functions
-│ ├── indexing.rs # Multi-dimensional indexing & slicing
-│ ├── fft.rs # Fast Fourier Transform
-│ ├── linalg.rs # Linear algebra
-│ └── random.rs # Random number generation (reproducible parallel sampling)
-├── python/rsnumpy/ # Python thin wrappers
-│ ├── **init**.py # Main module, exports public API
-│ ├── array_methods.py # ndarray object methods
-│ ├── array_ops.py # Array manipulation functions
-│ ├── _extra.py # Supplementary API (aliases, nan-reductions, set ops, windows, ...)
-│ ├── math_functions.py # Math functions
-│ ├── statistics.py # Statistics functions
-│ ├── char.py # String array functions
-│ ├── matlib.py # Matrix construction helpers
-│ ├── io.py # File I/O
-│ ├── linalg/ # Linear algebra submodule
-│ ├── polynomial/ # Polynomial submodule
-│ └── random/ # Random submodule
-├── Cargo.toml # Rust dependencies
-├── pyproject.toml # Python build config
-├── build_wheel.sh # Build script
-└── README.md # This file
-
+├── src/                       # Rust source
+│   ├── lib.rs                 # Core ndarray & general functions
+│   ├── indexing.rs            # Multi-dimensional indexing & slicing
+│   ├── fft.rs                 # Fast Fourier Transform
+│   ├── linalg.rs              # Linear algebra
+│   └── random.rs              # Random number generation (reproducible parallel sampling)
+├── python/rsnumpy/            # Python thin wrappers
+│   ├── __init__.py            # Main module, exports public API
+│   ├── array_methods.py       # ndarray object methods
+│   ├── array_ops.py           # Array manipulation functions
+│   ├── _extra.py              # Supplementary API (aliases, nan-reductions, set ops, windows, ...)
+│   ├── math_functions.py      # Math functions
+│   ├── statistics.py          # Statistics functions
+│   ├── char.py                # String array functions
+│   ├── matlib.py              # Matrix construction helpers
+│   ├── io.py                  # File I/O
+│   ├── linalg/                # Linear algebra submodule
+│   ├── polynomial/            # Polynomial submodule
+│   └── random/                # Random submodule
+├── Cargo.toml                 # Rust dependencies
+├── pyproject.toml             # Python build config
+├── build_wheel.sh             # Build script
+└── README.md                  # This file
 ```
 
 ---
@@ -548,7 +573,7 @@ rsnumpy/
 
 | Tool          | Minimum Version | Notes                       |
 | ------------- | --------------- | --------------------------- |
-| Python        | ≥ 3.8           | 3.10+ recommended           |
+| Python        | ≥ 3.10          | 3.10+ recommended           |
 | Rust          | ≥ 1.75          | `edition = "2024"`          |
 | maturin       | ≥ 1.13, < 2.0   | Rust ↔ Python binding       |
 | uv (optional) | latest          | Fast venv & package manager |
@@ -928,11 +953,11 @@ A: Install Xcode Command Line Tools (macOS): `xcode-select --install`
 
 #### Q3: Compilation error `pyo3` version conflict
 
-A: Ensure Python ≥ 3.8 and `pip install --upgrade maturin pyo3`
+A: Ensure Python ≥ 3.10 and `pip install --upgrade maturin pyo3`
 
 #### Q4: Is rsnumpy faster than NumPy?
 
-A: It depends. Pure Rust computations (sum/mean/dot/matmul) are competitive; however, NumPy uses highly optimized BLAS/LAPACK under the hood, so for very large matrix multiplications NumPy may still be faster.
+A: For most element-wise and reduction operations (`sin`/`exp`/`sum`/`std`/`cumsum`, etc.) rsnumpy is faster than NumPy on medium-to-large arrays (roughly 1.3x–5x). `matmul`/`dot` on macOS dispatch to Accelerate BLAS and are on par with NumPy. Small arrays may be slightly slower due to cross-language call overhead. See "Performance Comparison" for numbers.
 
 #### Q5: GPU support?
 
@@ -949,18 +974,45 @@ A: Not in the current version (CPU only).
 
 ### 8. Performance Comparison
 
-Preliminary benchmark results on macOS (Apple Silicon M2) with 1000x1000 arrays:
+Measured on macOS (Apple Silicon), using NumPy as the baseline. Each operator reports the best of 20 runs (`sort`/`matmul` best of 5); inputs are `float64` arrays from `arange`. "vs NumPy" = NumPy time ÷ rsnumpy time, so > 1 means rsnumpy is faster.
 
-| Operation                       | rsnumpy | NumPy  | Relative Performance |
-| ------------------------------- | ------- | ------ | -------------------- |
-| `np.sum()`                      | 0.5 ms  | 0.8 ms | **1.6x faster**      |
-| `np.mean()`                     | 0.6 ms  | 0.9 ms | **1.5x faster**      |
-| `np.dot()` (vector dot)         | 0.1 ms  | 0.2 ms | **2.0x faster**      |
-| `np.matmul()` (matrix multiply) | 2.1 ms  | 1.8 ms | ~0.9x                |
-| `np.sin()`                      | 1.2 ms  | 1.5 ms | **1.25x faster**     |
-| `np.sort()`                     | 3.5 ms  | 4.2 ms | **1.2x faster**      |
+**Element-wise / reductions (n = 1,000,000)**
 
-> **Note**: NumPy with BLAS optimization may outperform rsnumpy for very large matrix operations. rsnumpy excels at pure compute-bound operations.
+| Operation  | rsnumpy  | NumPy    | vs NumPy |
+| ---------- | -------- | -------- | -------- |
+| `add`      | 0.113 ms | 0.190 ms | **1.7x** |
+| `multiply` | 0.110 ms | 0.186 ms | **1.7x** |
+| `divide`   | 0.116 ms | 0.188 ms | **1.6x** |
+| `sin`      | 0.570 ms | 2.969 ms | **5.2x** |
+| `exp`      | 0.248 ms | 1.349 ms | **5.4x** |
+| `sqrt`     | 0.134 ms | 0.225 ms | **1.7x** |
+| `sum`      | 0.081 ms | 0.103 ms | **1.3x** |
+| `mean`     | 0.080 ms | 0.104 ms | **1.3x** |
+| `std`      | 0.271 ms | 0.438 ms | **1.6x** |
+| `cumsum`   | 1.030 ms | 1.908 ms | **1.9x** |
+| `sort`     | 0.741 ms | 24.03 ms | **32x**  |
+| `interp`   | 0.227 ms | 0.687 ms | **3.0x** |
+| `i0`       | 4.459 ms | 16.41 ms | **3.7x** |
+
+**Matrix multiply (square, via Accelerate BLAS on macOS)**
+
+| Size      | rsnumpy  | NumPy    | vs NumPy |
+| --------- | -------- | -------- | -------- |
+| 128×128   | 0.013 ms | 0.011 ms | 0.9x     |
+| 512×512   | 0.607 ms | 0.605 ms | 1.0x     |
+| 1024×1024 | 4.375 ms | 4.470 ms | 1.0x     |
+
+> **Note**: for small arrays (roughly n < tens of thousands), cross-language call and thread-scheduling overhead can make rsnumpy slightly slower; the Rust-layer parallelism and vectorization pay off as sizes grow. `matmul` dispatches to the system Accelerate framework on macOS and is on par with NumPy. Absolute numbers vary with hardware and data distribution.
+
+#### 8.1 Performance Architecture
+
+rsnumpy's performance comes from a few low-level design choices:
+
+- **Releasing the GIL**: compute-heavy operators (element-wise, reductions, sort, `cumsum`, `matmul`, ...) release the GIL via `py.detach` before entering Rust, so pure computation runs truly in parallel with other Python threads.
+- **Cost-tiered parallel thresholds**: the size at which parallelism kicks in varies by per-element cost — lowest for transcendental functions (`sin`/`exp`), highest for memory-bound ops (`add`/`mul`/`div`) — avoiding slowdowns from thread scheduling on small arrays.
+- **BLAS backend**: on macOS, `matmul`/`dot` dispatch to the system Accelerate framework through ndarray's `blas` feature; other platforms fall back to the multi-threaded pure-Rust `matrixmultiply` kernel.
+- **Contiguous memory & in-place scans**: `cumsum`/`cumprod` do an in-place prefix scan over a single C-order buffer, parallelized over contiguous blocks, minimizing allocation and copies.
+- **Lean dependencies**: unused codec features (e.g. in `zip`) are disabled, and combined with `lto = "fat"` and symbol stripping the extension stays around 5 MB.
 
 ### 9. CI/CD
 

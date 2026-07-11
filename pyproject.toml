@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "rsnumpy"
-version = "1.1.5"
+version = "1.1.6"
 requires-python = ">=3.10"
 description = "A Rust-powered NumPy-compatible array library."
 readme = "README.md"
@@ -29,8 +29,6 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
     "Topic :: Scientific/Engineering :: Visualization",
 ]
-
-dependencies = []
 
 [tool.maturin]
 module-name = "rsnumpy._core"
