@@ -38,6 +38,7 @@ outfile*.npy
 runoob.npz
 outfile*
 skrf_copy/
+test_rf_1/
 push*.sh
 main*.py
 debug*.py

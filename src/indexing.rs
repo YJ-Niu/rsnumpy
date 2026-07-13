@@ -11,7 +11,8 @@ enum IndexDesc {
     Slice(isize, isize, isize),
     Int(usize),
     Fancy(Vec<usize>),
-    FancyMulti(Vec<usize>),
+    /// 多维花式索引：扁平化下标 + 原始形状（用于 numpy 语义下的广播）。
+    FancyMulti(Vec<usize>, Vec<usize>),
 }
 
 fn parse_single_index(item: &Bound<'_, PyAny>, dim_size: isize) -> PyResult<IndexDesc> {
@@ -69,7 +70,7 @@ fn parse_single_index(item: &Bound<'_, PyAny>, dim_size: isize) -> PyResult<Inde
         };
         let arr = Array::from_shape_vec(nd_shape, values)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        return Ok(ndarray_to_index_desc(&NdArray { data: arr }, dim_size));
+        return Ok(ndarray_to_index_desc(&NdArray { imag: None, data: arr }, dim_size));
     }
 
     if let Ok(arr) = item.extract::<NdArray>() {
@@ -173,7 +174,7 @@ fn ndarray_to_index_desc(arr: &NdArray, dim_size: isize) -> IndexDesc {
         })
         .collect();
     if arr.data.ndim() > 1 {
-        IndexDesc::FancyMulti(fancy)
+        IndexDesc::FancyMulti(fancy, arr.data.shape().to_vec())
     } else {
         IndexDesc::Fancy(fancy)
     }
@@ -201,89 +202,56 @@ fn is_all_int(indices: &[IndexDesc]) -> bool {
 fn has_fancy(indices: &[IndexDesc]) -> bool {
     indices
         .iter()
-        .any(|idx| matches!(idx, IndexDesc::Fancy(_) | IndexDesc::FancyMulti(_)))
-}
-
-fn has_slice(indices: &[IndexDesc]) -> bool {
-    indices
-        .iter()
-        .any(|idx| matches!(idx, IndexDesc::Slice(_, _, _)))
-}
-
-fn has_fancy_multi(indices: &[IndexDesc]) -> bool {
-    indices
-        .iter()
-        .any(|idx| matches!(idx, IndexDesc::FancyMulti(_)))
+        .any(|idx| matches!(idx, IndexDesc::Fancy(_) | IndexDesc::FancyMulti(_, _)))
 }
 
 fn build_dim_lists(indices: &[IndexDesc]) -> Vec<Vec<usize>> {
     indices
         .iter()
         .map(|idx| match idx {
-            IndexDesc::Fancy(v) | IndexDesc::FancyMulti(v) => v.clone(),
+            IndexDesc::Fancy(v) | IndexDesc::FancyMulti(v, _) => v.clone(),
             IndexDesc::Slice(start, stop, step) => slice_indices_vec(*start, *stop, *step),
             IndexDesc::Int(idx) => vec![*idx],
         })
         .collect()
 }
 
-fn fancy_pairwise(a: &Array<f64, IxDyn>, dim_lists: &[Vec<usize>]) -> Array<f64, IxDyn> {
-    let n = dim_lists[0].len();
-    let strides = compute_strides(a.shape());
-
-    let result_vals: Vec<f64> = (0..n)
-        .into_par_iter()
-        .map(|i| {
-            let mut flat_idx = 0;
-            for (d, dl) in dim_lists.iter().enumerate() {
-                flat_idx += dl[i] * strides[d];
-            }
-            a.as_slice_memory_order().unwrap()[flat_idx]
-        })
-        .collect();
-
-    Array::from_shape_vec(IxDyn(&[n]), result_vals)
-        .unwrap_or_else(|_| Array::from_elem(IxDyn(&[0]), 0.0))
-}
-
 fn compute_strides(shape: &[usize]) -> Vec<usize> {
     let mut strides = vec![1; shape.len()];
-    for i in (0..shape.len() - 1).rev() {
-        strides[i] = strides[i + 1] * shape[i + 1];
+    if shape.len() > 1 {
+        for i in (0..shape.len() - 1).rev() {
+            strides[i] = strides[i + 1] * shape[i + 1];
+        }
     }
     strides
 }
 
-fn fancy_cartesian(a: &Array<f64, IxDyn>, dim_lists: &[Vec<usize>]) -> Vec<f64> {
-    let strides = compute_strides(a.shape());
-    let data = a.as_slice_memory_order().unwrap();
-
-    let mut indices: Vec<usize> = vec![0; dim_lists.len()];
-    let total_result: usize = dim_lists.iter().map(|dl| dl.len()).product();
-    let mut result = Vec::with_capacity(total_result);
-
-    loop {
-        let mut flat_idx = 0;
-        for (i, &idx) in indices.iter().enumerate() {
-            flat_idx += dim_lists[i][idx] * strides[i];
-        }
-        result.push(data[flat_idx]);
-
-        let mut i = dim_lists.len() as isize - 1;
-        while i >= 0 {
-            indices[i as usize] += 1;
-            if indices[i as usize] < dim_lists[i as usize].len() {
-                break;
-            }
-            indices[i as usize] = 0;
-            i -= 1;
-        }
-        if i < 0 {
-            break;
-        }
+/// 计算两个形状按 numpy 规则广播后的形状；不兼容时返回 None。
+fn broadcast_shapes(a: &[usize], b: &[usize]) -> Option<Vec<usize>> {
+    let n = a.len().max(b.len());
+    let mut out = vec![0usize; n];
+    for (i, slot) in out.iter_mut().enumerate() {
+        let av = if i + a.len() < n {
+            1
+        } else {
+            a[i + a.len() - n]
+        };
+        let bv = if i + b.len() < n {
+            1
+        } else {
+            b[i + b.len() - n]
+        };
+        *slot = if av == bv {
+            av
+        } else if av == 1 {
+            bv
+        } else if bv == 1 {
+            av
+        } else {
+            return None;
+        };
     }
-
-    result
+    Some(out)
 }
 
 fn slice_and_int_index(
@@ -324,21 +292,17 @@ fn slice_and_int_index(
     Ok(cur)
 }
 
-#[pyfunction]
-pub fn getitem_multi(a: &NdArray, key: &Bound<'_, PyAny>, shape: Vec<usize>) -> PyResult<NdArray> {
-    let indices = parse_indices(key, &shape)?;
-
-    let mut filled_indices = indices;
-    let ndim = shape.len();
-    while filled_indices.len() < ndim {
-        let dim_size = shape[filled_indices.len()] as isize;
-        filled_indices.push(IndexDesc::Slice(0, dim_size, 1));
-    }
-
-    if is_all_int(&filled_indices) {
-        let strides = compute_strides(&shape);
-        let data = a.data.as_slice_memory_order().unwrap();
-
+/// 依据已补齐的索引描述从单个 f64 数组中取值，返回结果数组（不含虚部）。
+/// 语义遵循 numpy 高级索引：整型轴移除，切片轴保留，花式索引按广播合并成一个块。
+fn select_from(
+    data: &Array<f64, IxDyn>,
+    filled_indices: &[IndexDesc],
+    shape: &[usize],
+) -> PyResult<Array<f64, IxDyn>> {
+    if is_all_int(filled_indices) {
+        let strides = compute_strides(shape);
+        let d = data.as_standard_layout();
+        let flat = d.as_slice().unwrap();
         let flat_idx: usize = filled_indices
             .iter()
             .enumerate()
@@ -350,46 +314,179 @@ pub fn getitem_multi(a: &NdArray, key: &Bound<'_, PyAny>, shape: Vec<usize>) -> 
                 }
             })
             .sum();
-
-        let val = data[flat_idx];
-        return Ok(NdArray {
-            data: Array::from_elem(IxDyn(&[]), val),
-        });
+        return Ok(Array::from_elem(IxDyn(&[]), flat[flat_idx]));
     }
 
-    let has_fancy_flag = has_fancy(&filled_indices);
-    let has_slice_flag = has_slice(&filled_indices);
-
-    if !has_fancy_flag {
-        let result = slice_and_int_index(&a.data, &filled_indices)?;
-        return Ok(NdArray { data: result });
+    if !has_fancy(filled_indices) {
+        return slice_and_int_index(data, filled_indices);
     }
 
-    let dim_lists = build_dim_lists(&filled_indices);
-    let ix_style = has_fancy_multi(&filled_indices);
+    // 每个源轴一种取值方式。存在高级索引时，整型索引按 numpy 语义并入高级组
+    // （视为 0 维数组：广播不贡献输出维度，但参与连续性判定并在原位被消费）。
+    enum AxisPlan {
+        Slice(Vec<usize>),
+        Adv { shape: Vec<usize>, flat: Vec<usize> },
+    }
+    let axes: Vec<AxisPlan> = filled_indices
+        .iter()
+        .map(|idx| match idx {
+            IndexDesc::Slice(a, b, c) => AxisPlan::Slice(slice_indices_vec(*a, *b, *c)),
+            IndexDesc::Int(i) => AxisPlan::Adv {
+                shape: vec![],
+                flat: vec![*i],
+            },
+            IndexDesc::Fancy(v) => AxisPlan::Adv {
+                shape: vec![v.len()],
+                flat: v.clone(),
+            },
+            IndexDesc::FancyMulti(v, sh) => AxisPlan::Adv {
+                shape: sh.clone(),
+                flat: v.clone(),
+            },
+        })
+        .collect();
 
-    if !has_slice_flag && !ix_style {
-        if dim_lists.len() > 1
-            && dim_lists[1..]
-                .iter()
-                .all(|dl| dl.len() == dim_lists[0].len())
-        {
-            let result_vals = fancy_pairwise(&a.data, &dim_lists);
-            Ok(NdArray { data: result_vals })
-        } else {
-            let result_vals = fancy_cartesian(&a.data, &dim_lists);
-            let out_shape: Vec<usize> = dim_lists.iter().map(|dl| dl.len()).collect();
-            let arr = Array::from_shape_vec(IxDyn(&out_shape), result_vals)
-                .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            Ok(NdArray { data: arr })
+    // 高级索引轴位置 + 广播后的块形状。
+    let adv_axes: Vec<usize> = axes
+        .iter()
+        .enumerate()
+        .filter(|(_, a)| matches!(a, AxisPlan::Adv { .. }))
+        .map(|(i, _)| i)
+        .collect();
+    let mut adv_shape: Vec<usize> = vec![];
+    for &ai in &adv_axes {
+        if let AxisPlan::Adv { shape: sh, .. } = &axes[ai] {
+            adv_shape = broadcast_shapes(&adv_shape, sh)
+                .ok_or_else(|| PyValueError::new_err("shape mismatch in advanced index"))?;
+        }
+    }
+    let adv_ndim = adv_shape.len();
+    // 高级索引轴是否连续：连续则块留在原位，否则按 numpy 规则前置。
+    let contiguous = adv_axes.windows(2).all(|w| w[1] == w[0] + 1);
+
+    enum OutAxis {
+        Slice(usize),
+        AdvBlock,
+    }
+    let mut out_axes: Vec<OutAxis> = Vec::new();
+    if contiguous {
+        let first_adv = *adv_axes.first().unwrap();
+        for (d, a) in axes.iter().enumerate() {
+            match a {
+                AxisPlan::Slice(_) => out_axes.push(OutAxis::Slice(d)),
+                AxisPlan::Adv { .. } => {
+                    if d == first_adv {
+                        out_axes.push(OutAxis::AdvBlock);
+                    }
+                }
+            }
         }
     } else {
-        let result_vals = fancy_cartesian(&a.data, &dim_lists);
-        let out_shape: Vec<usize> = dim_lists.iter().map(|dl| dl.len()).collect();
-        let arr = Array::from_shape_vec(IxDyn(&out_shape), result_vals)
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Ok(NdArray { data: arr })
+        out_axes.push(OutAxis::AdvBlock);
+        for (d, a) in axes.iter().enumerate() {
+            if let AxisPlan::Slice(_) = a {
+                out_axes.push(OutAxis::Slice(d));
+            }
+        }
     }
+
+    let mut out_shape: Vec<usize> = Vec::new();
+    for oa in &out_axes {
+        match oa {
+            OutAxis::Slice(d) => {
+                if let AxisPlan::Slice(idxs) = &axes[*d] {
+                    out_shape.push(idxs.len());
+                }
+            }
+            OutAxis::AdvBlock => out_shape.extend_from_slice(&adv_shape),
+        }
+    }
+
+    let src_strides = compute_strides(shape);
+    let src = data.as_standard_layout();
+    let src_flat = src.as_slice().unwrap();
+    let out_strides = compute_strides(&out_shape);
+    let total: usize = out_shape.iter().product();
+
+    // 各高级索引数组自身的行主序步长。
+    let adv_strides: Vec<Vec<usize>> = adv_axes
+        .iter()
+        .map(|&ai| {
+            if let AxisPlan::Adv { shape: sh, .. } = &axes[ai] {
+                compute_strides(sh)
+            } else {
+                unreachable!()
+            }
+        })
+        .collect();
+
+    let result: Vec<f64> = (0..total)
+        .into_par_iter()
+        .map(|lin| {
+            // 解码输出多下标。
+            let mut rem = lin;
+            let mut out_coord = vec![0usize; out_shape.len()];
+            for (k, oc) in out_coord.iter_mut().enumerate() {
+                *oc = rem / out_strides[k];
+                rem %= out_strides[k];
+            }
+            // 组装源多下标：切片/高级块按输出坐标映射（整型轴已并入高级块）。
+            let mut src_idx = vec![0usize; axes.len()];
+            let mut cursor = 0usize;
+            for oa in &out_axes {
+                match oa {
+                    OutAxis::Slice(d) => {
+                        if let AxisPlan::Slice(idxs) = &axes[*d] {
+                            src_idx[*d] = idxs[out_coord[cursor]];
+                        }
+                        cursor += 1;
+                    }
+                    OutAxis::AdvBlock => {
+                        let adv_coord = &out_coord[cursor..cursor + adv_ndim];
+                        for (j, &ai) in adv_axes.iter().enumerate() {
+                            if let AxisPlan::Adv { shape: sh, flat } = &axes[ai] {
+                                let off = adv_ndim - sh.len();
+                                let mut fidx = 0usize;
+                                for (dd, &sd) in sh.iter().enumerate() {
+                                    let c = if sd == 1 { 0 } else { adv_coord[off + dd] };
+                                    fidx += c * adv_strides[j][dd];
+                                }
+                                src_idx[ai] = flat[fidx];
+                            }
+                        }
+                        cursor += adv_ndim;
+                    }
+                }
+            }
+            let mut src_off = 0usize;
+            for (d, &si) in src_idx.iter().enumerate() {
+                src_off += si * src_strides[d];
+            }
+            src_flat[src_off]
+        })
+        .collect();
+
+    Array::from_shape_vec(IxDyn(&out_shape), result)
+        .map_err(|e| PyValueError::new_err(e.to_string()))
+}
+
+#[pyfunction]
+pub fn getitem_multi(a: &NdArray, key: &Bound<'_, PyAny>, shape: Vec<usize>) -> PyResult<NdArray> {
+    let indices = parse_indices(key, &shape)?;
+
+    let mut filled_indices = indices;
+    let ndim = shape.len();
+    while filled_indices.len() < ndim {
+        let dim_size = shape[filled_indices.len()] as isize;
+        filled_indices.push(IndexDesc::Slice(0, dim_size, 1));
+    }
+
+    let data = select_from(&a.data, &filled_indices, &shape)?;
+    let imag = match &a.imag {
+        Some(im) => Some(select_from(im, &filled_indices, &shape)?),
+        None => None,
+    };
+    Ok(NdArray { imag, data })
 }
 
 #[pyfunction]
@@ -408,6 +505,36 @@ pub fn getitem_scalar(a: &NdArray, indices: Vec<isize>) -> PyResult<f64> {
     }
 
     Ok(data[flat_idx])
+}
+
+/// 将 `values`（长度 1 表示广播）按 dim_lists 的笛卡尔序散射写入 `data`。
+fn scatter(data: &mut [f64], dim_lists: &[Vec<usize>], strides: &[usize], values: &[f64]) {
+    let broadcast = values.len() == 1;
+    let mut indices = vec![0usize; dim_lists.len()];
+    let mut counter = 0usize;
+    loop {
+        let mut flat_idx = 0;
+        for (i, &idx) in indices.iter().enumerate() {
+            flat_idx += dim_lists[i][idx] * strides[i];
+        }
+        if flat_idx < data.len() {
+            data[flat_idx] = if broadcast { values[0] } else { values[counter] };
+        }
+        counter += 1;
+
+        let mut i = dim_lists.len() as isize - 1;
+        while i >= 0 {
+            indices[i as usize] += 1;
+            if indices[i as usize] < dim_lists[i as usize].len() {
+                break;
+            }
+            indices[i as usize] = 0;
+            i -= 1;
+        }
+        if i < 0 {
+            break;
+        }
+    }
 }
 
 #[pyfunction]
@@ -429,60 +556,40 @@ pub fn setitem_multi(
     let dim_lists = build_dim_lists(&filled_indices);
     let strides = compute_strides(&shape);
 
-    // 赋值右值：标量 → 广播到所有目标位置；扁平列表 → 按 C 序逐元素赋值。
-    let values: Vec<f64> = if let Ok(v) = value.extract::<f64>() {
-        vec![v]
-    } else if let Ok(v) = value.extract::<bool>() {
-        vec![if v { 1.0 } else { 0.0 }]
-    } else if let Ok(v) = value.extract::<Vec<f64>>() {
-        v
-    } else {
-        return Err(PyTypeError::new_err(
-            "Unsupported value type for assignment",
-        ));
-    };
+    // 赋值右值：标量 → 广播到所有目标位置；数组/列表 → 按 C 序逐元素赋值。
+    // 复数右值携带虚部；实数右值虚部为 None。
+    let val_nd = crate::coerce_value_to_nd(value)?;
+    let re: Vec<f64> = val_nd.data.iter().copied().collect();
+    let im: Option<Vec<f64>> = val_nd.imag.as_ref().map(|im| im.iter().copied().collect());
 
     let target_count: usize = dim_lists.iter().map(|d| d.len()).product();
-    let broadcast = values.len() == 1;
-    if !broadcast && values.len() != target_count {
+    let broadcast = re.len() == 1;
+    if !broadcast && re.len() != target_count {
         return Err(PyValueError::new_err(format!(
             "could not broadcast input array of size {} into selection of size {}",
-            values.len(),
+            re.len(),
             target_count
         )));
     }
 
     let mut a_borrow = a.borrow_mut();
-    let data = a_borrow.data.as_slice_memory_order_mut().unwrap();
 
-    let mut indices = vec![0; dim_lists.len()];
-    let mut counter = 0usize;
+    // 右值为复数而自身为实数时，先分配零虚部完成升级。
+    if im.is_some() && a_borrow.imag.is_none() {
+        let zeros = Array::zeros(a_borrow.data.raw_dim());
+        a_borrow.imag = Some(zeros);
+    }
 
-    loop {
-        let mut flat_idx = 0;
-        for (i, &idx) in indices.iter().enumerate() {
-            flat_idx += dim_lists[i][idx] * strides[i];
-        }
-        if flat_idx < data.len() {
-            data[flat_idx] = if broadcast {
-                values[0]
-            } else {
-                values[counter]
-            };
-        }
-        counter += 1;
-
-        let mut i = dim_lists.len() as isize - 1;
-        while i >= 0 {
-            indices[i as usize] += 1;
-            if indices[i as usize] < dim_lists[i as usize].len() {
-                break;
-            }
-            indices[i as usize] = 0;
-            i -= 1;
-        }
-        if i < 0 {
-            break;
+    {
+        let data = a_borrow.data.as_slice_memory_order_mut().unwrap();
+        scatter(data, &dim_lists, &strides, &re);
+    }
+    if let Some(imag_arr) = a_borrow.imag.as_mut() {
+        let idata = imag_arr.as_slice_memory_order_mut().unwrap();
+        match &im {
+            Some(iv) => scatter(idata, &dim_lists, &strides, iv),
+            // 右值为实数而自身为复数：目标位置虚部清零。
+            None => scatter(idata, &dim_lists, &strides, &[0.0]),
         }
     }
 
@@ -502,7 +609,7 @@ pub fn iscomplex_cpx(data: Vec<Py<PyAny>>, py: Python<'_>) -> PyResult<NdArray> 
 
     let arr = Array::from_shape_vec(IxDyn(&[data.len()]), mask)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { data: arr })
+    Ok(NdArray { imag: None, data: arr })
 }
 
 /// 布尔掩码选择：掩码覆盖数据前若干维，`block` 为剩余维度元素个数（尾块大小）。
@@ -535,5 +642,5 @@ pub fn masked_select(a: &NdArray, mask: &NdArray, block: usize) -> PyResult<NdAr
     let out_len = out.len();
     let arr = Array::from_shape_vec(IxDyn(&[out_len]), out)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { data: arr })
+    Ok(NdArray { imag: None, data: arr })
 }

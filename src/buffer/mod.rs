@@ -20,7 +20,7 @@ fn bytes_to_floats(bytes: &[u8], count: isize) -> PyResult<NdArray> {
     }
     let arr = Array::from_shape_vec(IxDyn(&[result.len()]), result)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { data: arr })
+    Ok(NdArray { imag: None, data: arr })
 }
 
 // ========== 从数组接口协议缓冲区创建数组（如 PIL 图像） ==========
@@ -142,7 +142,7 @@ fn from_buffer_typed(bytes: &[u8], typestr: &str, shape: Vec<usize>) -> PyResult
 
     let arr = Array::from_shape_vec(IxDyn(&shape), result)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { data: arr })
+    Ok(NdArray { imag: None, data: arr })
 }
 
 // 供 Python 包装层按其追踪的 dtype 构建数组接口（底层 f64 → 目标类型字节）。
@@ -257,7 +257,7 @@ fn tuple_getitem(a: &NdArray, ranges: &Bound<'_, PyAny>) -> PyResult<NdArray> {
         Array::from_shape_vec(IxDyn(&out_shape), values)
             .map_err(|e| PyValueError::new_err(e.to_string()))?
     };
-    Ok(NdArray { data: arr })
+    Ok(NdArray { imag: None, data: arr })
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {

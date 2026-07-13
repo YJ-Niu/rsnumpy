@@ -117,7 +117,7 @@ fn load_npy(filename: &str) -> PyResult<NdArray> {
     };
     let arr = Array::from_shape_vec(arr_shape, values)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { data: arr })
+    Ok(NdArray { imag: None, data: arr })
 }
 
 fn format_value(fmt: &str, v: f64) -> String {
@@ -201,7 +201,7 @@ fn load_text(filename: &str, delimiter: Option<&str>, skiprows: usize) -> PyResu
     if rows.is_empty() {
         let arr = Array::from_shape_vec(IxDyn(&[0]), vec![])
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        return Ok(NdArray { data: arr });
+        return Ok(NdArray { imag: None, data: arr });
     }
 
     let ncols = rows[0].len();
@@ -211,13 +211,13 @@ fn load_text(filename: &str, delimiter: Option<&str>, skiprows: usize) -> PyResu
         let flat: Vec<f64> = rows.iter().map(|r| r[0]).collect();
         let arr = Array::from_shape_vec(IxDyn(&[flat.len()]), flat)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        return Ok(NdArray { data: arr });
+        return Ok(NdArray { imag: None, data: arr });
     }
 
     let flat: Vec<f64> = rows.into_iter().flatten().collect();
     let arr = Array::from_shape_vec(IxDyn(&[nrows, ncols]), flat)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { data: arr })
+    Ok(NdArray { imag: None, data: arr })
 }
 
 // ========== savez_npz: 将多个数组保存为 zip 格式 ==========
@@ -377,7 +377,7 @@ fn load_npz(filename: &str) -> PyResult<Vec<(String, NdArray)>> {
         };
         let arr = Array::from_shape_vec(arr_shape, values)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let nd = NdArray { data: arr };
+        let nd = NdArray { imag: None, data: arr };
         results.push((key, nd));
     }
 

@@ -1,7 +1,9 @@
 pub(crate) use ndarray::{Array, ArrayViewD, Axis, IxDyn, Slice, Zip};
 pub(crate) use pyo3::exceptions::{PyBufferError, PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-pub(crate) use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PySlice, PyTuple};
+pub(crate) use pyo3::types::{
+    PyBool, PyBytes, PyComplex, PyDict, PyFloat, PyInt, PyList, PySlice, PyTuple,
+};
 pub(crate) use rayon::prelude::*;
 use std::fmt::Write;
 
@@ -215,6 +217,61 @@ fn parse_py_categorized(data: &Bound<'_, PyAny>) -> PyResult<(Vec<f64>, Vec<usiz
     Ok((all_values, shape, merged))
 }
 
+/// 递归解析可能包含复数的 Python 序列，返回 (实部扁平, 虚部扁平, 形状, 是否含复数)。
+/// 实部/虚部等长（实数元素的虚部填 0）。numpy 复数数组通过 `tolist()` 回退处理。
+fn parse_py_complex(
+    data: &Bound<'_, PyAny>,
+) -> PyResult<(Vec<f64>, Vec<f64>, Vec<usize>, bool)> {
+    // 标量实数（int/float/bool 均可 extract 为 f64）。
+    if let Ok(v) = data.extract::<f64>() {
+        return Ok((vec![v], vec![0.0], vec![], false));
+    }
+    // 标量复数。
+    if let Ok(c) = data.cast::<PyComplex>() {
+        return Ok((vec![c.real()], vec![c.imag()], vec![], true));
+    }
+    let items: Vec<Bound<'_, PyAny>> = if let Ok(list) = data.cast::<PyList>() {
+        list.iter().collect()
+    } else if let Ok(tuple) = data.cast::<PyTuple>() {
+        tuple.iter().collect()
+    } else if let Ok(listed) = data.call_method0("tolist") {
+        // numpy 数组 / 标量等数组类对象：转为 Python 原生对象后再解析。
+        return parse_py_complex(&listed);
+    } else {
+        return Err(PyTypeError::new_err("Unsupported data type"));
+    };
+    let n = items.len();
+    if n == 0 {
+        return Ok((vec![], vec![], vec![0], false));
+    }
+    let mut re_all = Vec::with_capacity(n);
+    let mut im_all = Vec::with_capacity(n);
+    let mut child_shapes: Vec<Vec<usize>> = Vec::with_capacity(n);
+    let mut any_complex = false;
+    for item in &items {
+        let (re, im, shape, c) = parse_py_complex(item)?;
+        re_all.extend(re);
+        im_all.extend(im);
+        child_shapes.push(shape);
+        any_complex |= c;
+    }
+    let first_shape = &child_shapes[0];
+    for shape in &child_shapes {
+        if *shape != *first_shape {
+            return Err(PyValueError::new_err(
+                "All sub-arrays must have the same shape",
+            ));
+        }
+    }
+    let mut shape = vec![n];
+    if !first_shape.is_empty() && first_shape[0] != 0 {
+        shape.extend(first_shape);
+    } else if first_shape.len() == 1 && first_shape[0] == 0 {
+        shape.push(0);
+    }
+    Ok((re_all, im_all, shape, any_complex))
+}
+
 fn shape_to_vec(shape: &Bound<'_, PyAny>) -> PyResult<Vec<usize>> {
     if let Ok(tup) = shape.cast::<PyTuple>() {
         let mut result = Vec::with_capacity(tup.len());
@@ -238,6 +295,52 @@ fn shape_to_vec(shape: &Bound<'_, PyAny>) -> PyResult<Vec<usize>> {
 
 fn value_to_pyobject(py: Python<'_>, val: f64) -> Bound<'_, PyAny> {
     PyFloat::new(py, val).into_any()
+}
+
+/// 标量转 Python 对象：虚部存在返回 Python complex，否则返回 float。
+fn scalar_to_py(py: Python<'_>, re: f64, im: Option<f64>) -> Bound<'_, PyAny> {
+    match im {
+        Some(i) => PyComplex::from_doubles(py, re, i).into_any(),
+        None => value_to_pyobject(py, re),
+    }
+}
+
+/// 将赋值右值解析为 NdArray（支持实数标量、复数标量、NdArray、嵌套复数列表）。
+fn coerce_value_to_nd(value: &Bound<'_, PyAny>) -> PyResult<NdArray> {
+    if let Ok(v) = value.extract::<f64>() {
+        return Ok(NdArray::from_real(Array::from_elem(IxDyn(&[]), v)));
+    }
+    if let Ok(c) = value.cast::<PyComplex>() {
+        return Ok(NdArray::from_complex(
+            Array::from_elem(IxDyn(&[]), c.real()),
+            Array::from_elem(IxDyn(&[]), c.imag()),
+        ));
+    }
+    if let Ok(arr) = value.extract::<NdArray>() {
+        return Ok(arr);
+    }
+    let (re, im, shape, has_c) = parse_py_complex(value)?;
+    let data =
+        Array::from_shape_vec(IxDyn(&shape), re).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    if has_c {
+        let imag = Array::from_shape_vec(IxDyn(&shape), im)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(NdArray::from_complex(data, imag))
+    } else {
+        Ok(NdArray::from_real(data))
+    }
+}
+
+/// 把 `val` 的前若干元素按 C 序写入 `dst[start..]`（不广播，与原语义一致）。
+fn write_row(dst: &mut [f64], start: usize, row_size: usize, val: &Array<f64, IxDyn>) {
+    let max_len = val.len().min(row_size);
+    if let Some(vs) = val.as_slice() {
+        dst[start..start + max_len].copy_from_slice(&vs[..max_len]);
+    } else {
+        for (j, v) in val.iter().take(max_len).enumerate() {
+            dst[start + j] = *v;
+        }
+    }
 }
 
 fn vec_f64_to_pylist<'a>(py: Python<'a>, vec: &[f64]) -> Bound<'a, PyList> {
@@ -272,6 +375,36 @@ fn to_python_list<'a>(py: Python<'a>, arr: &ArrayViewD<'_, f64>) -> PyResult<Bou
         let sub = arr.index_axis(Axis(0), i);
         let item = to_python_list(py, &sub.into_dyn())?;
         list.append(item)?;
+    }
+    Ok(list.into_any())
+}
+
+fn to_python_list_complex<'a>(
+    py: Python<'a>,
+    re: &ArrayViewD<'_, f64>,
+    im: &ArrayViewD<'_, f64>,
+) -> PyResult<Bound<'a, PyAny>> {
+    if re.ndim() == 0 {
+        let r = re.iter().next().copied().unwrap_or(0.0_f64);
+        let i = im.iter().next().copied().unwrap_or(0.0_f64);
+        return Ok(PyComplex::from_doubles(py, r, i).into_any());
+    }
+    if re.ndim() == 1 {
+        let list = PyList::empty(py);
+        for (r, i) in re.iter().zip(im.iter()) {
+            list.append(PyComplex::from_doubles(py, *r, *i))?;
+        }
+        return Ok(list.into_any());
+    }
+    let list = PyList::empty(py);
+    for k in 0..re.shape()[0] {
+        let sub_re = re.index_axis(Axis(0), k);
+        let sub_im = im.index_axis(Axis(0), k);
+        list.append(to_python_list_complex(
+            py,
+            &sub_re.into_dyn(),
+            &sub_im.into_dyn(),
+        )?)?;
     }
     Ok(list.into_any())
 }
@@ -359,10 +492,37 @@ fn format_float_scalar(val: f64) -> String {
 }
 
 /// NdArray: 类似 NumPy ndarray 的多维数组
+///
+/// 复数支持：`data` 恒为实部（保留形状）；`imag` 为 `Some(虚部)`（与 `data` 同形状）
+/// 时表示复数数组，为 `None` 时表示实数数组（向后兼容，原有算子只需补 `imag: None`）。
 #[pyclass(name = "ndarray", from_py_object)]
 #[derive(Clone)]
 pub struct NdArray {
+    imag: Option<Array<f64, IxDyn>>,
     data: Array<f64, IxDyn>,
+}
+
+impl NdArray {
+    /// 构造实数数组（虚部为空）。
+    #[inline]
+    pub(crate) fn from_real(data: Array<f64, IxDyn>) -> Self {
+        NdArray { imag: None, data }
+    }
+
+    /// 构造复数数组（实部 + 虚部，需同形状）。
+    #[inline]
+    pub(crate) fn from_complex(re: Array<f64, IxDyn>, im: Array<f64, IxDyn>) -> Self {
+        NdArray {
+            imag: Some(im),
+            data: re,
+        }
+    }
+
+    /// 是否为复数数组。
+    #[inline]
+    pub(crate) fn has_imag(&self) -> bool {
+        self.imag.is_some()
+    }
 }
 
 /// 缓冲协议导出期间随 Py_buffer 存活的 shape/strides（字节步长）。
@@ -376,16 +536,23 @@ struct BufferMeta {
 impl NdArray {
     #[new]
     fn new(data: &Bound<'_, PyAny>) -> PyResult<Self> {
-        let (values, shape) = parse_py_list_to_flat(data)?;
-        if shape.is_empty() {
-            let arr = Array::from_shape_vec(IxDyn(&[]), values)
+        // 优先走原有实数快速路径（含扁平标量优化）；仅当其失败（可能含复数）时才走复数解析。
+        if let Ok((values, shape)) = parse_py_list_to_flat(data) {
+            let arr = Array::from_shape_vec(IxDyn(&shape), values)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            return Ok(NdArray { data: arr });
+            return Ok(NdArray::from_real(arr));
         }
-        let shape_vec: Vec<usize> = shape;
-        let arr = Array::from_shape_vec(IxDyn(&shape_vec), values)
+        let (re, im, shape, has_complex) = parse_py_complex(data)?;
+        let dims = IxDyn(&shape);
+        let re_arr = Array::from_shape_vec(dims.clone(), re)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Ok(NdArray { data: arr })
+        if has_complex {
+            let im_arr = Array::from_shape_vec(dims, im)
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            Ok(NdArray::from_complex(re_arr, im_arr))
+        } else {
+            Ok(NdArray::from_real(re_arr))
+        }
     }
 
     fn __repr__(&self) -> PyResult<String> {
@@ -412,12 +579,14 @@ impl NdArray {
         let py = slf.py();
         let borrowed = slf.borrow();
         let data = &borrowed.data;
+        let imag = borrowed.imag.as_ref();
 
         if let Ok(idx) = index.extract::<isize>() {
             if data.ndim() == 0 {
-                return Ok(value_to_pyobject(
+                return Ok(scalar_to_py(
                     py,
                     data.iter().next().copied().unwrap_or(0.0_f64),
+                    imag.map(|im| im.iter().next().copied().unwrap_or(0.0_f64)),
                 ));
             }
             let dim = data.shape()[0] as isize;
@@ -426,13 +595,16 @@ impl NdArray {
                 return Err(PyIndexError::new_err("Index out of bounds"));
             }
             let view = data.index_axis(Axis(0), actual as usize);
+            let imag_view = imag.map(|im| im.index_axis(Axis(0), actual as usize));
             if view.ndim() == 0 {
-                return Ok(value_to_pyobject(
+                return Ok(scalar_to_py(
                     py,
                     view.iter().next().copied().unwrap_or(0.0_f64),
+                    imag_view.map(|iv| iv.iter().next().copied().unwrap_or(0.0_f64)),
                 ));
             }
             let sub = NdArray {
+                imag: imag_view.map(|iv| iv.to_owned().into_dyn()),
                 data: view.to_owned().into_dyn(),
             };
             let bound = Bound::new(py, sub)?;
@@ -451,30 +623,54 @@ impl NdArray {
                 }
             }
             let flat_data: Vec<f64> = data.iter().copied().collect();
+            let flat_imag: Option<Vec<f64>> = imag.map(|im| im.iter().copied().collect());
             let mut result = Vec::with_capacity(bools.len());
+            let mut result_im = flat_imag.as_ref().map(|_| Vec::with_capacity(bools.len()));
             for (i, &b) in bools.iter().enumerate() {
                 if b && i < flat_data.len() {
                     result.push(flat_data[i]);
+                    if let (Some(ri), Some(fi)) = (result_im.as_mut(), flat_imag.as_ref()) {
+                        ri.push(fi[i]);
+                    }
                 }
             }
             let arr = Array::from_shape_vec(IxDyn(&[result.len()]), result)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            let sub = NdArray { data: arr };
+            let imag_arr = match result_im {
+                Some(ri) => Some(
+                    Array::from_shape_vec(IxDyn(&[ri.len()]), ri)
+                        .map_err(|e| PyValueError::new_err(e.to_string()))?,
+                ),
+                None => None,
+            };
+            let sub = NdArray { imag: imag_arr, data: arr };
             let bound = Bound::new(py, sub)?;
             return Ok(bound.into_any());
         }
 
         if let Ok(arr) = index.extract::<NdArray>() {
             let flat_data: Vec<f64> = data.iter().copied().collect();
+            let flat_imag: Option<Vec<f64>> = imag.map(|im| im.iter().copied().collect());
             let mut result = Vec::with_capacity(flat_data.len());
+            let mut result_im = flat_imag.as_ref().map(|_| Vec::with_capacity(flat_data.len()));
             for (i, &v) in arr.data.iter().enumerate() {
                 if v != 0.0 && i < flat_data.len() {
                     result.push(flat_data[i]);
+                    if let (Some(ri), Some(fi)) = (result_im.as_mut(), flat_imag.as_ref()) {
+                        ri.push(fi[i]);
+                    }
                 }
             }
             let arr_result = Array::from_shape_vec(IxDyn(&[result.len()]), result)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            let sub = NdArray { data: arr_result };
+            let imag_arr = match result_im {
+                Some(ri) => Some(
+                    Array::from_shape_vec(IxDyn(&[ri.len()]), ri)
+                        .map_err(|e| PyValueError::new_err(e.to_string()))?,
+                ),
+                None => None,
+            };
+            let sub = NdArray { imag: imag_arr, data: arr_result };
             let bound = Bound::new(py, sub)?;
             return Ok(bound.into_any());
         }
@@ -494,7 +690,11 @@ impl NdArray {
             .slice_axis(Axis(0), nd_slice)
             .to_owned()
             .into_dyn();
-        Ok(NdArray { data: view })
+        let imag = self
+            .imag
+            .as_ref()
+            .map(|im| im.slice_axis(Axis(0), nd_slice).to_owned().into_dyn());
+        Ok(NdArray { imag, data: view })
     }
 
     fn __setitem__(&mut self, index: isize, value: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -503,29 +703,7 @@ impl NdArray {
                 "Scalar array does not support item assignment",
             ));
         }
-        let val_nd = if let Ok(v) = value.extract::<f64>() {
-            NdArray {
-                data: Array::from_elem(IxDyn(&[]), v),
-            }
-        } else if let Ok(v) = value.extract::<i32>() {
-            NdArray {
-                data: Array::from_elem(IxDyn(&[]), v as f64),
-            }
-        } else if let Ok(arr) = value.extract::<NdArray>() {
-            arr
-        } else {
-            let (vals, shape) = parse_py_list_to_flat(value).ok().unwrap_or_default();
-            if !vals.is_empty() && !shape.is_empty() {
-                if let Ok(arr) = Array::from_shape_vec(IxDyn(&shape), vals) {
-                    NdArray { data: arr }
-                } else {
-                    return Err(PyTypeError::new_err("Unsupported value type"));
-                }
-            } else {
-                return Err(PyTypeError::new_err("Unsupported value type"));
-            }
-        };
-        let val_arr = val_nd.data;
+        let val_nd = coerce_value_to_nd(value)?;
 
         let dim = self.data.shape()[0] as isize;
         let actual = if index < 0 { dim + index } else { index };
@@ -534,16 +712,26 @@ impl NdArray {
         }
         let row_size = self.data.len() / self.data.shape()[0];
         let start = actual as usize * row_size;
-        let data_slice = self
-            .data
-            .as_slice_mut()
-            .ok_or_else(|| PyValueError::new_err("Non-contiguous array"))?;
-        let max_len = val_arr.len().min(row_size);
-        if let Some(val_slice) = val_arr.as_slice() {
-            data_slice[start..start + max_len].copy_from_slice(&val_slice[..max_len]);
-        } else {
-            for j in 0..max_len {
-                data_slice[start + j] = *val_arr.iter().nth(j).unwrap_or(&0.0);
+
+        // 右值为复数而自身为实数时，先分配零虚部完成升级。
+        if val_nd.imag.is_some() && self.imag.is_none() {
+            self.imag = Some(Array::zeros(self.data.raw_dim()));
+        }
+
+        {
+            let data_slice = self
+                .data
+                .as_slice_mut()
+                .ok_or_else(|| PyValueError::new_err("Non-contiguous array"))?;
+            write_row(data_slice, start, row_size, &val_nd.data);
+        }
+        if let Some(self_im) = self.imag.as_mut() {
+            let im_slice = self_im
+                .as_slice_mut()
+                .ok_or_else(|| PyValueError::new_err("Non-contiguous array"))?;
+            match &val_nd.imag {
+                Some(vi) => write_row(im_slice, start, row_size, vi),
+                None => im_slice[start..start + row_size].fill(0.0),
             }
         }
         Ok(())
@@ -554,20 +742,7 @@ impl NdArray {
         py_slice: &Bound<'_, PySlice>,
         value: &Bound<'_, PyAny>,
     ) -> PyResult<()> {
-        let val_nd = if let Ok(v) = value.extract::<f64>() {
-            NdArray {
-                data: Array::from_elem(IxDyn(&[]), v),
-            }
-        } else if let Ok(v) = value.extract::<i32>() {
-            NdArray {
-                data: Array::from_elem(IxDyn(&[]), v as f64),
-            }
-        } else if let Ok(arr) = value.extract::<NdArray>() {
-            arr
-        } else {
-            return Err(PyTypeError::new_err("Unsupported value type"));
-        };
-        let val_arr = val_nd.data;
+        let val_nd = coerce_value_to_nd(value)?;
 
         let dim = self.data.shape()[0] as i64;
         let indices = py_slice
@@ -575,28 +750,64 @@ impl NdArray {
             .extract::<(i64, i64, i64)>()?;
         let (start, stop, step) = indices;
         let nd_slice = Slice::new(start as isize, Some(stop as isize), step as isize);
-        let mut slice_view = self.data.slice_axis_mut(Axis(0), nd_slice);
-        let bcast = val_arr
-            .broadcast(slice_view.dim())
-            .ok_or_else(|| PyValueError::new_err("Cannot broadcast value to slice shape"))?;
-        slice_view.assign(&bcast);
+
+        if val_nd.imag.is_some() && self.imag.is_none() {
+            self.imag = Some(Array::zeros(self.data.raw_dim()));
+        }
+
+        {
+            let mut slice_view = self.data.slice_axis_mut(Axis(0), nd_slice);
+            let bcast = val_nd
+                .data
+                .broadcast(slice_view.dim())
+                .ok_or_else(|| PyValueError::new_err("Cannot broadcast value to slice shape"))?;
+            slice_view.assign(&bcast);
+        }
+        if let Some(self_im) = self.imag.as_mut() {
+            let mut slice_view = self_im.slice_axis_mut(Axis(0), nd_slice);
+            match &val_nd.imag {
+                Some(vi) => {
+                    let bcast = vi.broadcast(slice_view.dim()).ok_or_else(|| {
+                        PyValueError::new_err("Cannot broadcast value to slice shape")
+                    })?;
+                    slice_view.assign(&bcast);
+                }
+                None => slice_view.fill(0.0),
+            }
+        }
         Ok(())
     }
 
     fn __iter__(slf: &Bound<'_, Self>) -> PyResult<NdArrayIter> {
-        let data = slf.borrow().data.clone();
+        let borrowed = slf.borrow();
+        let data = borrowed.data.clone();
+        let imag = borrowed.imag.clone();
         let ndim = data.ndim();
         let sub_arrays: Vec<NdArray> = if ndim <= 1 {
-            data.iter()
-                .map(|&v| NdArray {
-                    data: Array::from_elem(IxDyn(&[]), v),
-                })
-                .collect()
+            match &imag {
+                Some(im) => data
+                    .iter()
+                    .zip(im.iter())
+                    .map(|(&r, &i)| {
+                        NdArray::from_complex(
+                            Array::from_elem(IxDyn(&[]), r),
+                            Array::from_elem(IxDyn(&[]), i),
+                        )
+                    })
+                    .collect(),
+                None => data
+                    .iter()
+                    .map(|&v| NdArray::from_real(Array::from_elem(IxDyn(&[]), v)))
+                    .collect(),
+            }
         } else {
             (0..data.shape()[0])
                 .map(|i| {
                     let sub = data.index_axis(Axis(0), i).to_owned().into_dyn();
-                    NdArray { data: sub }
+                    let sub_im = imag
+                        .as_ref()
+                        .map(|im| im.index_axis(Axis(0), i).to_owned().into_dyn());
+                    NdArray { imag: sub_im, data: sub }
                 })
                 .collect()
         };
@@ -730,7 +941,11 @@ impl NdArray {
 
     #[getter]
     fn dtype(&self) -> PyResult<String> {
-        Ok("float64".to_string())
+        Ok(if self.has_imag() {
+            "complex128".to_string()
+        } else {
+            "float64".to_string()
+        })
     }
 
     #[getter]
@@ -742,13 +957,14 @@ impl NdArray {
     #[pyo3(name = "T")]
     fn t(&self) -> PyResult<NdArray> {
         if self.data.ndim() <= 1 {
-            return Ok(NdArray {
-                data: self.data.clone(),
-            });
+            return Ok(self.clone());
         }
-        Ok(NdArray {
-            data: self.data.view().reversed_axes().into_owned().into_dyn(),
-        })
+        let data = self.data.view().reversed_axes().into_owned().into_dyn();
+        let imag = self
+            .imag
+            .as_ref()
+            .map(|im| im.view().reversed_axes().into_owned().into_dyn());
+        Ok(NdArray { imag, data })
     }
 
     fn reshape(&self, shape: &Bound<'_, PyAny>) -> PyResult<NdArray> {
@@ -833,14 +1049,25 @@ impl NdArray {
             .clone()
             .into_shape_with_order(IxDyn(&out))
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Ok(NdArray { data: arr })
+        let imag = match &self.imag {
+            Some(im) => Some(
+                im.clone()
+                    .into_shape_with_order(IxDyn(&out))
+                    .map_err(|e| PyValueError::new_err(e.to_string()))?,
+            ),
+            None => None,
+        };
+        Ok(NdArray { imag, data: arr })
     }
 
     fn flatten(&self) -> NdArray {
         let flat: Vec<f64> = self.data.iter().copied().collect();
-        NdArray {
-            data: Array::from_shape_vec(IxDyn(&[flat.len()]), flat).unwrap(),
-        }
+        let data = Array::from_shape_vec(IxDyn(&[flat.len()]), flat).unwrap();
+        let imag = self.imag.as_ref().map(|im| {
+            let f: Vec<f64> = im.iter().copied().collect();
+            Array::from_shape_vec(IxDyn(&[f.len()]), f).unwrap()
+        });
+        NdArray { imag, data }
     }
 
     fn ravel(&self) -> NdArray {
@@ -860,18 +1087,33 @@ impl NdArray {
             .clone()
             .into_shape_with_order(IxDyn(&new_shape))
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Ok(NdArray { data: arr })
+        let imag = match &self.imag {
+            Some(im) => Some(
+                im.clone()
+                    .into_shape_with_order(IxDyn(&new_shape))
+                    .map_err(|e| PyValueError::new_err(e.to_string()))?,
+            ),
+            None => None,
+        };
+        Ok(NdArray { imag, data: arr })
     }
 
     fn copy(&self) -> NdArray {
         NdArray {
+            imag: self.imag.clone(),
             data: self.data.clone(),
         }
     }
 
     fn tolist<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let view = self.data.view().into_dyn();
-        to_python_list(py, &view)
+        match &self.imag {
+            Some(im) => to_python_list_complex(
+                py,
+                &self.data.view().into_dyn(),
+                &im.view().into_dyn(),
+            ),
+            None => to_python_list(py, &self.data.view().into_dyn()),
+        }
     }
 
     #[pyo3(signature = (repeats, axis=None))]
@@ -887,7 +1129,7 @@ impl NdArray {
                 }
                 let arr = Array::from_shape_vec(IxDyn(&[result.len()]), result)
                     .map_err(|e| PyValueError::new_err(e.to_string()))?;
-                Ok(NdArray { data: arr })
+                Ok(NdArray { imag: None, data: arr })
             }
             Some(ax) => {
                 let ndim = self.data.ndim();
@@ -916,7 +1158,7 @@ impl NdArray {
                 new_shape[ax] = axis_size * repeats;
                 let arr = Array::from_shape_vec(IxDyn(&new_shape), result)
                     .map_err(|e| PyValueError::new_err(e.to_string()))?;
-                Ok(NdArray { data: arr })
+                Ok(NdArray { imag: None, data: arr })
             }
         }
     }
@@ -929,6 +1171,18 @@ impl NdArray {
         // rsnumpy 内部元素类型固定为 f64，这里只支持把 f64 截断为整数（int/int32/int64）。
         // 对于 float* / 其它类型，保持 f64 行为（与旧版一致）。
         let dt = dtype.to_lowercase();
+        let is_complex = matches!(
+            dt.as_str(),
+            "complex" | "complex128" | "complex64" | "c16" | "c8" | "cdouble" | "cfloat"
+        );
+        if is_complex {
+            // 转为复数：已是复数则保留虚部，否则补零虚部。
+            let imag = self
+                .imag
+                .clone()
+                .unwrap_or_else(|| Array::zeros(self.data.raw_dim()));
+            return Ok(NdArray::from_complex(self.data.clone(), imag));
+        }
         let is_int = matches!(
             dt.as_str(),
             "int"
@@ -947,28 +1201,29 @@ impl NdArray {
             let casted: Vec<f64> = self.data.iter().map(|v| v.trunc()).collect();
             let arr = Array::from_shape_vec(IxDyn(self.data.shape()), casted)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            Ok(NdArray { data: arr })
+            Ok(NdArray { imag: None, data: arr })
         } else {
+            // float* 或其它：丢弃虚部（与 numpy astype 到实数类型一致）。
             Ok(NdArray {
-                data: self.data.clone(),
+                imag: None, data: self.data.clone(),
             })
         }
     }
 
     fn __add__(&self, other: &Bound<'_, PyAny>) -> PyResult<NdArray> {
-        binary_op(self, other, |a, b| a + b)
+        dispatch_binop(self, other, CBinOp::Add)
     }
 
     fn __sub__(&self, other: &Bound<'_, PyAny>) -> PyResult<NdArray> {
-        binary_op(self, other, |a, b| a - b)
+        dispatch_binop(self, other, CBinOp::Sub)
     }
 
     fn __mul__(&self, other: &Bound<'_, PyAny>) -> PyResult<NdArray> {
-        binary_op(self, other, |a, b| a * b)
+        dispatch_binop(self, other, CBinOp::Mul)
     }
 
     fn __truediv__(&self, other: &Bound<'_, PyAny>) -> PyResult<NdArray> {
-        binary_op(self, other, |a, b| a / b)
+        dispatch_binop(self, other, CBinOp::Div)
     }
 
     fn __pow__(
@@ -980,26 +1235,70 @@ impl NdArray {
     }
 
     fn __neg__(&self) -> PyResult<NdArray> {
-        Ok(NdArray {
-            data: self.data.mapv(|x| -x),
-        })
+        match &self.imag {
+            Some(im) => Ok(NdArray::from_complex(
+                self.data.mapv(|x| -x),
+                im.mapv(|x| -x),
+            )),
+            None => Ok(NdArray::from_real(self.data.mapv(|x| -x))),
+        }
     }
 
     fn __abs__(&self) -> PyResult<NdArray> {
-        Ok(NdArray {
-            data: self.data.mapv(|x| x.abs()),
-        })
+        match &self.imag {
+            // 复数取模：sqrt(re^2 + im^2)，结果为实数数组。
+            Some(im) => {
+                let mag = Zip::from(&self.data)
+                    .and(im)
+                    .map_collect(|&r, &i| (r * r + i * i).sqrt());
+                Ok(NdArray::from_real(mag))
+            }
+            None => Ok(NdArray::from_real(self.data.mapv(|x| x.abs()))),
+        }
+    }
+
+    /// 实部（复数数组返回实部，实数数组返回自身副本）。
+    #[getter]
+    fn real(&self) -> NdArray {
+        NdArray::from_real(self.data.clone())
+    }
+
+    /// 是否为复数数组（存在虚部）。
+    #[getter]
+    fn is_complex(&self) -> bool {
+        self.imag.is_some()
+    }
+
+    /// 虚部（复数数组返回虚部，实数数组返回全零数组）。
+    #[getter]
+    fn imag(&self) -> NdArray {
+        match &self.imag {
+            Some(im) => NdArray::from_real(im.clone()),
+            None => NdArray::from_real(Array::zeros(self.data.raw_dim())),
+        }
+    }
+
+    /// 共轭（复数取反虚部；实数返回自身副本）。
+    fn conj(&self) -> NdArray {
+        match &self.imag {
+            Some(im) => NdArray::from_complex(self.data.clone(), im.mapv(|x| -x)),
+            None => NdArray::from_real(self.data.clone()),
+        }
+    }
+
+    fn conjugate(&self) -> NdArray {
+        self.conj()
     }
 
     fn __round__(&self, ndigits: Option<i32>) -> PyResult<NdArray> {
         match ndigits {
             None => Ok(NdArray {
-                data: self.data.mapv(|x| x.round()),
+                imag: None, data: self.data.mapv(|x| x.round()),
             }),
             Some(n) => {
                 let factor = 10.0_f64.powi(n);
                 Ok(NdArray {
-                    data: self.data.mapv(|x| (x * factor).round() / factor),
+                    imag: None, data: self.data.mapv(|x| (x * factor).round() / factor),
                 })
             }
         }
@@ -1045,7 +1344,7 @@ impl NdArray {
             None => {
                 let val = self.data.iter().cloned().fold(1.0_f64, |a, b| a * b);
                 Ok(NdArray {
-                    data: Array::from_elem(IxDyn(&[]), val),
+                    imag: None, data: Array::from_elem(IxDyn(&[]), val),
                 })
             }
             Some(ax) => {
@@ -1084,7 +1383,7 @@ impl NdArray {
                     .collect();
                 let arr = Array::from_shape_vec(IxDyn(&new_shape), results)
                     .map_err(|e| PyValueError::new_err(e.to_string()))?;
-                Ok(NdArray { data: arr })
+                Ok(NdArray { imag: None, data: arr })
             }
         }
     }
@@ -1136,7 +1435,7 @@ impl NdArray {
         }
         let arr = Array::from_shape_vec(IxDyn(&[diag.len()]), diag)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Ok(NdArray { data: arr })
+        Ok(NdArray { imag: None, data: arr })
     }
 
     #[pyo3(signature = (offset=0, axis1=0, axis2=1))]
@@ -1183,7 +1482,7 @@ impl NdArray {
                     .collect();
                 let arr = Array::from_shape_vec(IxDyn(&[result.len()]), result)
                     .map_err(|e| PyValueError::new_err(e.to_string()))?;
-                return Ok(NdArray { data: arr });
+                return Ok(NdArray { imag: None, data: arr });
             }
             Some(ax) => {
                 if ax < 0 {
@@ -1228,7 +1527,7 @@ impl NdArray {
         new_shape[ax] = new_axis_size;
         let arr = Array::from_shape_vec(IxDyn(&new_shape), result)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Ok(NdArray { data: arr })
+        Ok(NdArray { imag: None, data: arr })
     }
 
     fn put(&mut self, indices: &NdArray, values: &NdArray) -> PyResult<()> {
@@ -1280,19 +1579,19 @@ impl NdArray {
     }
 
     fn __radd__(&self, other: &Bound<'_, PyAny>) -> PyResult<NdArray> {
-        binary_op_lr(self, other, |a, b| a + b)
+        dispatch_binop_r(self, other, CBinOp::Add)
     }
 
     fn __rsub__(&self, other: &Bound<'_, PyAny>) -> PyResult<NdArray> {
-        binary_op_lr(self, other, |a, b| a - b)
+        dispatch_binop_r(self, other, CBinOp::Sub)
     }
 
     fn __rmul__(&self, other: &Bound<'_, PyAny>) -> PyResult<NdArray> {
-        binary_op_lr(self, other, |a, b| a * b)
+        dispatch_binop_r(self, other, CBinOp::Mul)
     }
 
     fn __rtruediv__(&self, other: &Bound<'_, PyAny>) -> PyResult<NdArray> {
-        binary_op_lr(self, other, |a, b| a / b)
+        dispatch_binop_r(self, other, CBinOp::Div)
     }
 
     #[pyo3(signature = (axis=None))]
@@ -1301,7 +1600,7 @@ impl NdArray {
             None => {
                 let val = self.data.sum();
                 Ok(NdArray {
-                    data: Array::from_elem(IxDyn(&[]), val),
+                    imag: None, data: Array::from_elem(IxDyn(&[]), val),
                 })
             }
             Some(ax) => {
@@ -1313,7 +1612,7 @@ impl NdArray {
                 };
                 let result = self.data.sum_axis(Axis(ax));
                 Ok(NdArray {
-                    data: result.into_dyn(),
+                    imag: None, data: result.into_dyn(),
                 })
             }
         }
@@ -1325,7 +1624,7 @@ impl NdArray {
             None => {
                 let val = self.data.mean().unwrap_or(0.0);
                 Ok(NdArray {
-                    data: Array::from_elem(IxDyn(&[]), val),
+                    imag: None, data: Array::from_elem(IxDyn(&[]), val),
                 })
             }
             Some(ax) => {
@@ -1338,7 +1637,7 @@ impl NdArray {
                 let result = self.data.mean_axis(Axis(ax));
                 match result {
                     Some(arr) => Ok(NdArray {
-                        data: arr.into_dyn(),
+                        imag: None, data: arr.into_dyn(),
                     }),
                     None => Err(PyValueError::new_err("Invalid axis")),
                 }
@@ -1353,7 +1652,7 @@ impl NdArray {
                 let m = self.data.mean().unwrap_or(0.0);
                 let var = self.data.mapv(|x| (x - m).powi(2)).mean().unwrap_or(0.0);
                 Ok(NdArray {
-                    data: Array::from_elem(IxDyn(&[]), var.sqrt()),
+                    imag: None, data: Array::from_elem(IxDyn(&[]), var.sqrt()),
                 })
             }
             Some(ax) => {
@@ -1399,12 +1698,12 @@ impl NdArray {
 
                         if new_shape.is_empty() {
                             Ok(NdArray {
-                                data: Array::from_elem(IxDyn(&[]), results[0]),
+                                imag: None, data: Array::from_elem(IxDyn(&[]), results[0]),
                             })
                         } else {
                             let arr = Array::from_shape_vec(IxDyn(&new_shape), results)
                                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-                            Ok(NdArray { data: arr })
+                            Ok(NdArray { imag: None, data: arr })
                         }
                     }
                     None => Err(PyValueError::new_err("Invalid axis")),
@@ -1420,7 +1719,7 @@ impl NdArray {
                 let m = self.data.mean().unwrap_or(0.0);
                 let var = self.data.mapv(|x| (x - m).powi(2)).mean().unwrap_or(0.0);
                 Ok(NdArray {
-                    data: Array::from_elem(IxDyn(&[]), var),
+                    imag: None, data: Array::from_elem(IxDyn(&[]), var),
                 })
             }
             Some(ax) => {
@@ -1466,12 +1765,12 @@ impl NdArray {
 
                         if new_shape.is_empty() {
                             Ok(NdArray {
-                                data: Array::from_elem(IxDyn(&[]), results[0]),
+                                imag: None, data: Array::from_elem(IxDyn(&[]), results[0]),
                             })
                         } else {
                             let arr = Array::from_shape_vec(IxDyn(&new_shape), results)
                                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-                            Ok(NdArray { data: arr })
+                            Ok(NdArray { imag: None, data: arr })
                         }
                     }
                     None => Err(PyValueError::new_err("Invalid axis")),
@@ -1486,7 +1785,7 @@ impl NdArray {
             None => {
                 let val = self.data.iter().cloned().fold(f64::INFINITY, f64::min);
                 Ok(NdArray {
-                    data: Array::from_elem(IxDyn(&[]), val),
+                    imag: None, data: Array::from_elem(IxDyn(&[]), val),
                 })
             }
             Some(ax) => {
@@ -1503,7 +1802,7 @@ impl NdArray {
                         if v < a { v } else { a }
                     })
                     .into_dyn();
-                Ok(NdArray { data: result })
+                Ok(NdArray { imag: None, data: result })
             }
         }
     }
@@ -1514,7 +1813,7 @@ impl NdArray {
             None => {
                 let val = self.data.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
                 Ok(NdArray {
-                    data: Array::from_elem(IxDyn(&[]), val),
+                    imag: None, data: Array::from_elem(IxDyn(&[]), val),
                 })
             }
             Some(ax) => {
@@ -1531,7 +1830,7 @@ impl NdArray {
                         if v > a { v } else { a }
                     })
                     .into_dyn();
-                Ok(NdArray { data: result })
+                Ok(NdArray { imag: None, data: result })
             }
         }
     }
@@ -1589,7 +1888,7 @@ impl NdArray {
 
     fn clip(&self, a_min: f64, a_max: f64) -> PyResult<NdArray> {
         Ok(NdArray {
-            data: self.data.mapv(|v| v.max(a_min).min(a_max)),
+            imag: None, data: self.data.mapv(|v| v.max(a_min).min(a_max)),
         })
     }
 
@@ -1647,7 +1946,7 @@ impl NdArray {
                 Array::from_shape_vec(IxDyn(&shape), data_vec).map_err(|e| e.to_string())
             })
             .map_err(PyValueError::new_err)?;
-        Ok(NdArray { data: arr })
+        Ok(NdArray { imag: None, data: arr })
     }
 
     #[pyo3(signature = (axis=-1))]
@@ -1712,7 +2011,7 @@ impl NdArray {
                 Array::from_shape_vec(IxDyn(&shape), result).map_err(|e| e.to_string())
             })
             .map_err(PyValueError::new_err)?;
-        Ok(NdArray { data: arr })
+        Ok(NdArray { imag: None, data: arr })
     }
 }
 
@@ -1744,7 +2043,7 @@ where
                 data.mapv(|x| op(x, scalar))
             }
         });
-        return Ok(NdArray { data: out });
+        return Ok(NdArray { imag: None, data: out });
     }
     // 常见情形：右操作数就是 ndarray —— 借用而非 extract（后者会整份克隆）。
     if let Ok(other) = b.cast::<NdArray>() {
@@ -1754,7 +2053,7 @@ where
         let out = py
             .detach(|| broadcast_binary_compute(a_data, other_data, op))
             .map_err(PyValueError::new_err)?;
-        return Ok(NdArray { data: out });
+        return Ok(NdArray { imag: None, data: out });
     }
     // 回退：可被强制转换为 ndarray 的其它序列类型（此路径会克隆，但非热点）。
     if let Ok(other) = b.extract::<NdArray>() {
@@ -1763,7 +2062,7 @@ where
         let out = py
             .detach(|| broadcast_binary_compute(a_data, other_data, op))
             .map_err(PyValueError::new_err)?;
-        return Ok(NdArray { data: out });
+        return Ok(NdArray { imag: None, data: out });
     }
     Err(PyTypeError::new_err("Unsupported operand type"))
 }
@@ -1874,6 +2173,161 @@ where
     broadcast_binary_compute(a, b, op).map_err(PyValueError::new_err)
 }
 
+/// 复数逐元素二元运算类别。
+#[derive(Clone, Copy)]
+pub(crate) enum CBinOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+#[inline]
+fn cbin_elem(ar: f64, ai: f64, br: f64, bi: f64, op: CBinOp) -> (f64, f64) {
+    match op {
+        CBinOp::Add => (ar + br, ai + bi),
+        CBinOp::Sub => (ar - br, ai - bi),
+        CBinOp::Mul => (ar * br - ai * bi, ar * bi + ai * br),
+        CBinOp::Div => {
+            let denom = br * br + bi * bi;
+            ((ar * br + ai * bi) / denom, (ai * br - ar * bi) / denom)
+        }
+    }
+}
+
+/// numpy 广播规则下的输出形状（尾维对齐）。
+fn broadcast_shape(a: &[usize], b: &[usize]) -> Result<Vec<usize>, String> {
+    let n = a.len().max(b.len());
+    let mut out = vec![0usize; n];
+    let (pa, pb) = (n - a.len(), n - b.len());
+    for i in 0..n {
+        let ad = if i < pa { 1 } else { a[i - pa] };
+        let bd = if i < pb { 1 } else { b[i - pb] };
+        if ad == bd || ad == 1 || bd == 1 {
+            out[i] = ad.max(bd);
+        } else {
+            return Err(format!(
+                "operands could not be broadcast together with shapes {:?} {:?}",
+                a, b
+            ));
+        }
+    }
+    Ok(out)
+}
+
+/// 复数（实部 + 虚部）广播逐元素运算，返回 (实部, 虚部)。
+fn broadcast_complex(
+    a_re: &Array<f64, IxDyn>,
+    a_im: &Array<f64, IxDyn>,
+    b_re: &Array<f64, IxDyn>,
+    b_im: &Array<f64, IxDyn>,
+    op: CBinOp,
+) -> Result<(Array<f64, IxDyn>, Array<f64, IxDyn>), String> {
+    let out_shape = broadcast_shape(a_re.shape(), b_re.shape())?;
+    let dim = IxDyn(&out_shape);
+    let fail = || "Broadcasting failed".to_string();
+    let av_re = a_re.broadcast(dim.clone()).ok_or_else(fail)?;
+    let av_im = a_im.broadcast(dim.clone()).ok_or_else(fail)?;
+    let bv_re = b_re.broadcast(dim.clone()).ok_or_else(fail)?;
+    let bv_im = b_im.broadcast(dim).ok_or_else(fail)?;
+    let pairs: Array<(f64, f64), IxDyn> = Zip::from(av_re)
+        .and(av_im)
+        .and(bv_re)
+        .and(bv_im)
+        .map_collect(|&ar, &ai, &br, &bi| cbin_elem(ar, ai, br, bi, op));
+    let re_out = pairs.mapv(|p| p.0);
+    let im_out = pairs.mapv(|p| p.1);
+    Ok((re_out, im_out))
+}
+
+/// 取 NdArray 的 (实部, 虚部) 拥有型副本（实数数组虚部为全零）。
+pub(crate) fn nd_parts(nd: &NdArray) -> (Array<f64, IxDyn>, Array<f64, IxDyn>) {
+    let re = nd.data.clone();
+    let im = match &nd.imag {
+        Some(i) => i.clone(),
+        None => Array::zeros(nd.data.raw_dim()),
+    };
+    (re, im)
+}
+
+/// 从 Python 对象取复数操作数的 (实部, 虚部)：支持复数标量、实数标量、NdArray 及可转换序列。
+fn operand_parts(b: &Bound<'_, PyAny>) -> PyResult<(Array<f64, IxDyn>, Array<f64, IxDyn>)> {
+    if let Ok(c) = b.cast::<PyComplex>() {
+        return Ok((
+            Array::from_elem(IxDyn(&[]), c.real()),
+            Array::from_elem(IxDyn(&[]), c.imag()),
+        ));
+    }
+    if let Ok(v) = b.extract::<f64>() {
+        return Ok((
+            Array::from_elem(IxDyn(&[]), v),
+            Array::from_elem(IxDyn(&[]), 0.0),
+        ));
+    }
+    if let Ok(nd) = b.cast::<NdArray>() {
+        let nd = nd.borrow();
+        return Ok(nd_parts(&nd));
+    }
+    let nd = NdArray::new(b)?;
+    Ok(nd_parts(&nd))
+}
+
+/// 判断 Python 对象是否为复数操作数（复数标量或含虚部的 NdArray）。
+fn is_complex_operand(b: &Bound<'_, PyAny>) -> bool {
+    if b.is_instance_of::<PyComplex>() {
+        return true;
+    }
+    if let Ok(nd) = b.cast::<NdArray>() {
+        return nd.borrow().has_imag();
+    }
+    false
+}
+
+/// 两个 NdArray 的复数二元运算（供自由函数 add/subtract/... 复用）。
+pub(crate) fn complex_binop_nd(a: &NdArray, b: &NdArray, op: CBinOp) -> PyResult<NdArray> {
+    let (a_re, a_im) = nd_parts(a);
+    let (b_re, b_im) = nd_parts(b);
+    let (re, im) =
+        broadcast_complex(&a_re, &a_im, &b_re, &b_im, op).map_err(PyValueError::new_err)?;
+    Ok(NdArray::from_complex(re, im))
+}
+
+/// ndarray 运算符分派：任一操作数为复数走复数路径，否则复用实数快速路径。
+fn dispatch_binop(a: &NdArray, b: &Bound<'_, PyAny>, op: CBinOp) -> PyResult<NdArray> {
+    if a.has_imag() || is_complex_operand(b) {
+        let (a_re, a_im) = nd_parts(a);
+        let (b_re, b_im) = operand_parts(b)?;
+        let (re, im) =
+            broadcast_complex(&a_re, &a_im, &b_re, &b_im, op).map_err(PyValueError::new_err)?;
+        return Ok(NdArray::from_complex(re, im));
+    }
+    match op {
+        CBinOp::Add => binary_op(a, b, |x, y| x + y),
+        CBinOp::Sub => binary_op(a, b, |x, y| x - y),
+        CBinOp::Mul => binary_op(a, b, |x, y| x * y),
+        CBinOp::Div => binary_op(a, b, |x, y| x / y),
+    }
+}
+
+/// 反向运算符分派（b 为左操作数）：仅加/乘可交换，减/除需交换次序。
+fn dispatch_binop_r(a: &NdArray, b: &Bound<'_, PyAny>, op: CBinOp) -> PyResult<NdArray> {
+    if a.has_imag() || is_complex_operand(b) {
+        let (a_re, a_im) = nd_parts(a);
+        let (b_re, b_im) = operand_parts(b)?;
+        // 反向：计算 b op a。
+        let (re, im) =
+            broadcast_complex(&b_re, &b_im, &a_re, &a_im, op).map_err(PyValueError::new_err)?;
+        return Ok(NdArray::from_complex(re, im));
+    }
+    match op {
+        CBinOp::Add => binary_op(a, b, |x, y| y + x),
+        CBinOp::Sub => binary_op(a, b, |x, y| y - x),
+        CBinOp::Mul => binary_op(a, b, |x, y| y * x),
+        CBinOp::Div => binary_op(a, b, |x, y| y / x),
+    }
+}
+
+
 /// 沿指定轴做就地累积扫描（cumsum/cumprod 共用）。
 /// axis=None 时在展平后的 C 序上做整体扫描，结果为 1-D。
 /// 单份缓冲上就地更新，并按连续外层块并行；纯计算，主动释放 GIL。
@@ -1899,7 +2353,7 @@ where
             }
             Array::from_shape_vec(IxDyn(&[n]), buf).unwrap()
         });
-        return Ok(NdArray { data: arr });
+        return Ok(NdArray { imag: None, data: arr });
     }
     let ax_raw = axis.unwrap();
     let ax = if ax_raw < 0 {
@@ -1933,7 +2387,7 @@ where
         Array::from_shape_vec(IxDyn(&shape), buf).map_err(|e| e.to_string())
     });
     let arr = arr.map_err(PyValueError::new_err)?;
-    Ok(NdArray { data: arr })
+    Ok(NdArray { imag: None, data: arr })
 }
 
 /// ArrayFlags - 数组内存布局信息，与 NumPy 的 np.ndarray.flags 兼容

@@ -101,7 +101,7 @@ fn make_ndarray_parallel(
         });
 
     let arr = Array::from_shape_vec(IxDyn(shape), values).unwrap();
-    NdArray { data: arr }
+    NdArray { imag: None, data: arr }
 }
 
 fn make_ndarray_single(
@@ -111,7 +111,7 @@ fn make_ndarray_single(
 ) -> NdArray {
     if shape.is_empty() {
         return NdArray {
-            data: Array::from_elem(IxDyn(&[]), dist.sample(rng)),
+            imag: None, data: Array::from_elem(IxDyn(&[]), dist.sample(rng)),
         };
     }
     let total: usize = shape.iter().product();
@@ -124,7 +124,7 @@ fn make_ndarray_single(
     }
 
     let arr = Array::from_shape_vec(IxDyn(shape), values).unwrap();
-    NdArray { data: arr }
+    NdArray { imag: None, data: arr }
 }
 
 #[pyfunction]
@@ -179,14 +179,14 @@ fn random_randint(low: i64, high: i64, size: Option<&Bound<'_, PyAny>>) -> PyRes
     with_thread_rng(|rng| {
         if shape.is_empty() {
             return Ok(NdArray {
-                data: Array::from_elem(IxDyn(&[]), dist.sample(rng) as f64),
+                imag: None, data: Array::from_elem(IxDyn(&[]), dist.sample(rng) as f64),
             });
         }
         let total: usize = shape.iter().product();
         let values: Vec<f64> = (0..total).map(|_| dist.sample(rng) as f64).collect();
         let arr = Array::from_shape_vec(IxDyn(&shape), values)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Ok(NdArray { data: arr })
+        Ok(NdArray { imag: None, data: arr })
     })
 }
 
@@ -268,14 +268,14 @@ impl PyGenerator {
         let mut rng = self.spawn();
         if shape.is_empty() {
             return Ok(NdArray {
-                data: Array::from_elem(IxDyn(&[]), dist.sample(&mut rng) as f64),
+                imag: None, data: Array::from_elem(IxDyn(&[]), dist.sample(&mut rng) as f64),
             });
         }
         let total: usize = shape.iter().product();
         let values: Vec<f64> = (0..total).map(|_| dist.sample(&mut rng) as f64).collect();
         let arr = Array::from_shape_vec(IxDyn(&shape), values)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Ok(NdArray { data: arr })
+        Ok(NdArray { imag: None, data: arr })
     }
 
     #[pyo3(signature = (a, size=None, replace=true))]
@@ -333,7 +333,7 @@ impl PyGenerator {
 
         let arr = Array::from_shape_vec(IxDyn(&[n]), result)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Ok(Bound::new(py, NdArray { data: arr })?.into_any())
+        Ok(Bound::new(py, NdArray { imag: None, data: arr })?.into_any())
     }
 
     fn shuffle(&self, a: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -374,7 +374,7 @@ impl PyGenerator {
             }
             let arr = Array::from_shape_vec(IxDyn(&[n]), indices)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            Ok(Bound::new(py, NdArray { data: arr })?.into_any())
+            Ok(Bound::new(py, NdArray { imag: None, data: arr })?.into_any())
         } else if let Ok(arr) = a.extract::<NdArray>() {
             let vals: Vec<f64> = arr.data.iter().copied().collect();
             let n = vals.len();
@@ -391,7 +391,7 @@ impl PyGenerator {
             Ok(Bound::new(
                 py,
                 NdArray {
-                    data: result_arr.into_dyn(),
+                    imag: None, data: result_arr.into_dyn(),
                 },
             )?
             .into_any())
@@ -512,14 +512,14 @@ impl PyGenerator {
         let mut rng = self.spawn();
         if shape.is_empty() {
             return Ok(NdArray {
-                data: Array::from_elem(IxDyn(&[]), dist.sample(&mut rng) as f64),
+                imag: None, data: Array::from_elem(IxDyn(&[]), dist.sample(&mut rng) as f64),
             });
         }
         let total: usize = shape.iter().product();
         let values: Vec<f64> = (0..total).map(|_| dist.sample(&mut rng) as f64).collect();
         let arr = Array::from_shape_vec(IxDyn(&shape), values)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Ok(NdArray { data: arr })
+        Ok(NdArray { imag: None, data: arr })
     }
 
     #[pyo3(signature = (lam, size=None))]
@@ -530,14 +530,14 @@ impl PyGenerator {
         let mut rng = self.spawn();
         if shape.is_empty() {
             return Ok(NdArray {
-                data: Array::from_elem(IxDyn(&[]), dist.sample(&mut rng)),
+                imag: None, data: Array::from_elem(IxDyn(&[]), dist.sample(&mut rng)),
             });
         }
         let total: usize = shape.iter().product();
         let values: Vec<f64> = (0..total).map(|_| dist.sample(&mut rng)).collect();
         let arr = Array::from_shape_vec(IxDyn(&shape), values)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Ok(NdArray { data: arr })
+        Ok(NdArray { imag: None, data: arr })
     }
 
     #[pyo3(signature = (a, scale=1.0, size=None))]
@@ -571,7 +571,7 @@ impl PyGenerator {
             let u: f64 = uniform.sample(&mut rng);
             let val = loc + scale * (u / (1.0 - u)).ln();
             return Ok(NdArray {
-                data: Array::from_elem(IxDyn(&[]), val),
+                imag: None, data: Array::from_elem(IxDyn(&[]), val),
             });
         }
         let total: usize = shape.iter().product();
@@ -583,7 +583,7 @@ impl PyGenerator {
             .collect();
         let arr = Array::from_shape_vec(IxDyn(&shape), values)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Ok(NdArray { data: arr })
+        Ok(NdArray { imag: None, data: arr })
     }
 
     #[pyo3(signature = (loc=0.0, scale=1.0, size=None))]
@@ -621,7 +621,7 @@ impl PyGenerator {
                 loc - scale * (2.0 * (1.0 - u)).ln()
             };
             return Ok(NdArray {
-                data: Array::from_elem(IxDyn(&[]), val),
+                imag: None, data: Array::from_elem(IxDyn(&[]), val),
             });
         }
         let total: usize = shape.iter().product();
@@ -637,7 +637,7 @@ impl PyGenerator {
             .collect();
         let arr = Array::from_shape_vec(IxDyn(&shape), values)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Ok(NdArray { data: arr })
+        Ok(NdArray { imag: None, data: arr })
     }
 }
 

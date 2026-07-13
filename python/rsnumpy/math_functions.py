@@ -9,7 +9,8 @@ def _nd():
 
 
 def _wrap(result):
-    return _nd()(result)
+    dt = "complex128" if getattr(result, 'is_complex', False) else "float64"
+    return _nd()._wrap(result, _dtype=dt)
 
 
 def _wrap_bool(result):

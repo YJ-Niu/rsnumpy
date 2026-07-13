@@ -36,7 +36,7 @@ from ._dtypes import (
     _build_struct, _scalar_typestr_short,
 )
 
-__version__ = "1.1.6"
+__version__ = "1.1.7"
 
 # 捕获内建函数别名：_extra 挂载会向本模块 globals 注入同名的 numpy 函数
 # （all/any/round），会遮蔽内建函数。以下别名保证本文件内部逻辑始终使用内建实现。
@@ -97,6 +97,17 @@ class ArrayFlags:
         return "\n".join(lines)
 
 
+def _format_float_scalar_str(v):
+    """0 维浮点标量的字符串，与 numpy 标量 str 对齐（如 75.0、85850000000.0）。"""
+    if v != v:
+        return 'nan'
+    if v == float('inf'):
+        return 'inf'
+    if v == float('-inf'):
+        return '-inf'
+    return str(v)
+
+
 class ndarray:
     """
     rsnumpy.ndarray - 多维数组对象。
@@ -154,12 +165,15 @@ class ndarray:
                         self._array = _core.zeros((len(self._raw_data),))
                         _dtype = "string_"
                     elif has_c:
-                        # 包含复数 → 存储为 _complex_data
-                        self._complex_data = [complex(v) for v in flat]
-                        _dtype = "complex128"
-                        self._array = _core.zeros((len(flat),))
-                    else:
+                        # 包含复数 → 交由 Rust 原生复数解析（保留形状与虚部）
                         self._array = _core.ndarray(data)
+                        _dtype = "complex128"
+                    else:
+                        raw = _core.ndarray(data)
+                        # 实数输入但显式指定复数 dtype → 提升为原生复数（零虚部）
+                        if _dtype in ('complex128', 'complex64'):
+                            raw = _maybe_native_complex(raw, _dtype)
+                        self._array = raw
             self._dtype = _dtype
             self._fields = _fields
 
@@ -196,6 +210,9 @@ class ndarray:
         cpx = getattr(self, '_complex_data', None)
         if cpx is not None:
             inner = _format_complex_repr_1d(cpx)
+            return f"array({inner})"
+        if getattr(self._array, 'is_complex', False):
+            inner = _format_complex_nested(self.tolist(), ", ")
             return f"array({inner})"
         dt = getattr(self, '_dtype', "float64")
         if dt == "float64" and self.ndim == 1:
@@ -238,6 +255,8 @@ class ndarray:
         if cpx is not None:
             inner = _format_complex_repr_1d(cpx)
             return inner
+        if getattr(self._array, 'is_complex', False):
+            return _format_complex_nested(self.tolist(), " ")
         if getattr(self, '_dtype', "float64") in ("int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"):
             if getattr(self, '_is_empty', False):
                 return _core._format_int_str(self._array)
@@ -257,6 +276,9 @@ class ndarray:
                     lines.append("[" + inner + "]")
                 return "[" + "\n ".join(lines) + "]"
             return format_bool_list(raw)
+        if self.ndim == 0:
+            # 0 维浮点数组的 str 与 numpy 标量一致（保留末尾 .0，如 75.0）。
+            return _format_float_scalar_str(float(self._array.tolist()))
         return _core._format_float_str(self._array)
 
     def __len__(self):
@@ -318,6 +340,9 @@ class ndarray:
         if getattr(self, '_raw_data', None) is not None:
             raise AttributeError('__array_interface__')
         if getattr(self, '_complex_data', None) is not None:
+            raise AttributeError('__array_interface__')
+        if getattr(self._array, 'is_complex', False):
+            # 原生复数无法用单一 f64 缓冲表示，交回默认处理。
             raise AttributeError('__array_interface__')
         typestr = _DTYPE_TO_TYPESTR.get(getattr(self, '_dtype', 'float64'))
         if typestr is None:
@@ -740,12 +765,12 @@ class ndarray:
     @property
     def real(self):
         """数组的实部。"""
-        return self.copy()
+        return _wrap_result(self._array.real, "float64")
 
     @property
     def imag(self):
-        """数组的虚部（全零）。"""
-        return ndarray([0.0] * self.size).reshape(self.shape)
+        """数组的虚部（实数数组为全零）。"""
+        return _wrap_result(self._array.imag, "float64")
 
     # ========== 对象方法 ==========
 
@@ -844,6 +869,10 @@ class ndarray:
     def trace(self, offset=0, axis1=0, axis2=1):
         """计算迹。"""
         return _ndarray_methods().trace(self, offset, axis1, axis2)
+
+    def dot(self, b):
+        """矩阵/向量点积。"""
+        return linalg.dot(self, b)
 
     def fill(self, value):
         """用值填充数组。"""
@@ -1015,6 +1044,9 @@ def _is_ndarray(obj):
 def _wrap_result(result, dtype="float64"):
     """将原始 ndarray 结果包装到 ndarray 类中。"""
     if hasattr(result, '__class__') and result.__class__.__name__ == 'ndarray':
+        # 原生复数结果：dtype 强制为 complex128，覆盖调用方的推导。
+        if getattr(result, 'is_complex', False):
+            dtype = "complex128"
         return ndarray._wrap(result, _dtype=dtype)
     if isinstance(result, (list, tuple)):
         return ndarray(result, _dtype=dtype)
@@ -1394,6 +1426,14 @@ def _format_complex_repr_1d(values):
     """格式化 1D complex128 数组的 repr。"""
     parts = [_format_complex_scalar(v) for v in values]
     return "[" + ", ".join(parts) + "]"
+
+
+def _format_complex_nested(data, sep):
+    """递归格式化原生复数数组（nested complex）为 numpy 风格字符串。"""
+    if isinstance(data, list):
+        inner = sep.join(_format_complex_nested(x, sep) for x in data)
+        return "[" + inner + "]"
+    return _format_complex_scalar(data)
 
 
 def _format_complex_scalar(val):
@@ -1842,11 +1882,12 @@ def _build_plain_array(nested, base_dt, shape):
     name = _scalar_name_of(base_dt)
     if k == 'c':
         flat = _flatten_data(nested) if isinstance(nested, list) else [nested]
-        obj = ndarray.__new__(ndarray)
-        obj._array = _core.zeros((len(flat),) if flat else (0,))
-        obj._dtype = 'complex128'
-        obj._complex_data = [complex(v) for v in flat]
-        return obj
+        cflat = [complex(v) for v in flat]
+        if not cflat:
+            return ndarray._wrap(_core.zeros(tuple(shape) if shape else (0,)),
+                                 _dtype='complex128')
+        nested_c = _reshape_flat(cflat, shape) if shape else cflat
+        return ndarray._wrap(_core.ndarray(nested_c), _dtype='complex128')
     return ndarray(nested, _dtype=name)
 
 
@@ -2140,17 +2181,30 @@ def _view_dtype(arr, target):
     src_dt = getattr(arr, '_dtype_obj', None)
     if src_dt is not None:
         raw, _ = _struct_to_bytes(arr)
+        ssize = src_dt._itemsize
     else:
         raw = arr.tobytes()
+        ssize = dtype(getattr(arr, '_dtype', 'float64'))._itemsize
     tsize = tdt._itemsize
     if tsize == 0:
         raise ValueError("cannot view with zero-width dtype")
     count = len(raw) // tsize
+    # numpy 语义：view 仅改变最后一个轴的长度，其余轴保持不变。
+    src_shape = tuple(arr.shape)
+    if not src_shape:
+        new_shape = (count,)
+    else:
+        last_bytes = src_shape[-1] * ssize
+        if last_bytes % tsize != 0:
+            raise ValueError(
+                "When changing to a larger dtype, its size must be a divisor "
+                "of the total size in bytes of the last axis of the array.")
+        new_shape = src_shape[:-1] + (last_bytes // tsize,)
     if tdt._names is not None:
         records = [_unpack_record(raw, i * tsize, tdt) for i in range(count)]
         return _wrap_structured(tdt, records)
     vals = [_unpack_field(raw, i * tsize, tdt) for i in range(count)]
-    return _build_plain_array(vals, tdt, (count,))
+    return _build_plain_array(vals, tdt, new_shape)
 
 
 # ---------- 比较 ----------
@@ -2888,13 +2942,24 @@ def _flatten_data(data):
 
 def _setitem_value(value):
     """规范化赋值右值供 Rust setitem_multi 使用：
-    标量原样返回；ndarray 或嵌套列表展平为 C 序浮点列表（逐元素赋值）。"""
+    标量原样返回；ndarray 或嵌套列表展平为 C 序浮点列表（逐元素赋值）。
+    复数右值原样透传，交由 Rust coerce_value_to_nd 保留虚部。"""
     if _is_ndarray(value):
-        return [float(v) for v in _flatten_data(value._array.tolist())]
+        rust = value._array
+        if getattr(rust, 'is_complex', False):
+            return rust
+        return [float(v) for v in _flatten_data(rust.tolist())]
     if value.__class__.__name__ == 'ndarray' and hasattr(value, 'tolist'):
+        if getattr(value, 'is_complex', False):
+            return value
         return [float(v) for v in _flatten_data(value.tolist())]
+    if isinstance(value, complex):
+        return value
     if isinstance(value, (list, tuple)):
-        return [float(v) for v in _flatten_data(value)]
+        flat = _flatten_data(value)
+        if any(isinstance(v, complex) for v in flat):
+            return value
+        return [float(v) for v in flat]
     return value
 
 
@@ -3019,6 +3084,10 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
         if _dt_obj is not None:
             return _make_structured_array(data, _dt_obj)
     arr = ndarray(data, _dtype=_dtype)
+    # 显式复数 dtype：即使输入已是实数 ndarray（__init__ 会沿用其 dtype），
+    # 也需提升为原生复数（零虚部）。
+    if _dtype in ('complex128', 'complex64') and not getattr(arr._array, 'is_complex', False):
+        arr = ndarray._wrap(_maybe_native_complex(arr._array, _dtype), _dtype=_dtype)
     if ndmin > arr.ndim:
         new_shape = (1,) * (ndmin - arr.ndim) + arr.shape
         arr = ndarray._wrap(arr._array.reshape(new_shape), _dtype=_dtype)
@@ -3300,13 +3369,20 @@ def _make_structured_zeros(shape, fields):
     return result
 
 
+def _maybe_native_complex(raw, _dtype):
+    """dtype 为复数时，把实数 Rust 数组提升为原生复数（零虚部）。"""
+    if _dtype in ('complex128', 'complex64'):
+        return raw + 0j
+    return raw
+
+
 def zeros(shape, dtype=None, order='C'):
     """返回指定形状的零数组。"""
     dt_obj = _as_struct_dtype(dtype)
     if dt_obj is not None:
         return _wrap_structured(dt_obj, _make_struct_filled(shape, dt_obj, _zero_scalar_for))
     _dtype = _resolve_dtype(dtype)
-    return ndarray(_core.zeros(shape), _dtype=_dtype)
+    return ndarray(_maybe_native_complex(_core.zeros(shape), _dtype), _dtype=_dtype)
 
 
 def ones(shape, dtype=None, order='C'):
@@ -3315,7 +3391,7 @@ def ones(shape, dtype=None, order='C'):
     if dt_obj is not None:
         return _wrap_structured(dt_obj, _make_struct_filled(shape, dt_obj, _one_scalar_for))
     _dtype = _resolve_dtype(dtype)
-    return ndarray(_core.ones(shape), _dtype=_dtype)
+    return ndarray(_maybe_native_complex(_core.ones(shape), _dtype), _dtype=_dtype)
 
 
 def empty(shape, dtype=None, order='C'):
@@ -3324,7 +3400,7 @@ def empty(shape, dtype=None, order='C'):
     if dt_obj is not None:
         return _wrap_structured(dt_obj, _make_struct_filled(shape, dt_obj, _zero_scalar_for))
     _dtype = _resolve_dtype(dtype)
-    arr = ndarray(_core.empty(shape), _dtype=_dtype)
+    arr = ndarray(_maybe_native_complex(_core.empty(shape), _dtype), _dtype=_dtype)
     arr._is_empty = True
     return arr
 
@@ -3332,6 +3408,10 @@ def empty(shape, dtype=None, order='C'):
 def full(shape, fill_value, dtype=None, order='C'):
     """返回指定形状的填充数组。"""
     _dtype = _resolve_dtype(dtype)
+    if isinstance(fill_value, complex) or _dtype in ('complex128', 'complex64'):
+        c = complex(fill_value)
+        raw = _core.full(shape, c.real) + complex(0.0, c.imag)
+        return ndarray(raw, _dtype='complex128' if _dtype not in ('complex128', 'complex64') else _dtype)
     return ndarray(_core.full(shape, fill_value), _dtype=_dtype)
 
 

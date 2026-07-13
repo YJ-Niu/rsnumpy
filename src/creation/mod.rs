@@ -11,7 +11,7 @@ fn build_array(data: &Bound<'_, PyAny>) -> PyResult<(NdArray, u8)> {
         Array::from_shape_vec(IxDyn(&shape), values)
     }
     .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok((NdArray { data: arr }, flags.dtype_code()))
+    Ok((NdArray { imag: None, data: arr }, flags.dtype_code()))
 }
 
 #[pyfunction]
@@ -23,7 +23,7 @@ fn array(data: &Bound<'_, PyAny>) -> PyResult<NdArray> {
 fn zeros(shape: &Bound<'_, PyAny>) -> PyResult<NdArray> {
     let s = shape_to_vec(shape)?;
     Ok(NdArray {
-        data: Array::zeros(IxDyn(&s)),
+        imag: None, data: Array::zeros(IxDyn(&s)),
     })
 }
 
@@ -31,7 +31,7 @@ fn zeros(shape: &Bound<'_, PyAny>) -> PyResult<NdArray> {
 fn ones(shape: &Bound<'_, PyAny>) -> PyResult<NdArray> {
     let s = shape_to_vec(shape)?;
     Ok(NdArray {
-        data: Array::ones(IxDyn(&s)),
+        imag: None, data: Array::ones(IxDyn(&s)),
     })
 }
 
@@ -60,7 +60,7 @@ fn eye(n: usize, m: Option<usize>, k: i32) -> PyResult<NdArray> {
     let arr =
         Array::from_shape_vec((n, cols), data).map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(NdArray {
-        data: arr.into_dyn(),
+        imag: None, data: arr.into_dyn(),
     })
 }
 
@@ -94,7 +94,7 @@ fn arange(start: f64, stop: f64, step: f64) -> PyResult<NdArray> {
     }
     let arr = Array::from_shape_vec(IxDyn(&[values.len()]), values)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { data: arr })
+    Ok(NdArray { imag: None, data: arr })
 }
 
 #[pyfunction]
@@ -105,7 +105,7 @@ fn linspace(start: f64, stop: f64, num: usize, endpoint: bool) -> PyResult<NdArr
     }
     if num == 1 {
         return Ok(NdArray {
-            data: Array::from_shape_vec(IxDyn(&[1]), vec![start])
+            imag: None, data: Array::from_shape_vec(IxDyn(&[1]), vec![start])
                 .map_err(|e| PyValueError::new_err(e.to_string()))?,
         });
     }
@@ -117,14 +117,14 @@ fn linspace(start: f64, stop: f64, num: usize, endpoint: bool) -> PyResult<NdArr
     let values: Vec<f64> = (0..num).map(|i| start + i as f64 * step).collect();
     let arr = Array::from_shape_vec(IxDyn(&[num]), values)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { data: arr })
+    Ok(NdArray { imag: None, data: arr })
 }
 
 #[pyfunction]
 fn full(shape: &Bound<'_, PyAny>, fill_value: f64) -> PyResult<NdArray> {
     let s = shape_to_vec(shape)?;
     Ok(NdArray {
-        data: Array::from_elem(IxDyn(&s), fill_value),
+        imag: None, data: Array::from_elem(IxDyn(&s), fill_value),
     })
 }
 
@@ -136,20 +136,20 @@ fn empty(shape: &Bound<'_, PyAny>) -> PyResult<NdArray> {
     let v = vec![0.0f64; size];
     let data =
         Array::from_shape_vec(IxDyn(&s), v).map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { data })
+    Ok(NdArray { data, imag: None })
 }
 
 #[pyfunction]
 fn zeros_like(a: &NdArray) -> PyResult<NdArray> {
     Ok(NdArray {
-        data: Array::from_elem(a.data.shape(), 0.0),
+        imag: None, data: Array::from_elem(a.data.shape(), 0.0),
     })
 }
 
 #[pyfunction]
 fn ones_like(a: &NdArray) -> PyResult<NdArray> {
     Ok(NdArray {
-        data: Array::from_elem(a.data.shape(), 1.0),
+        imag: None, data: Array::from_elem(a.data.shape(), 1.0),
     })
 }
 
@@ -160,13 +160,13 @@ fn empty_like(a: &NdArray) -> PyResult<NdArray> {
     let v = vec![0.0f64; size];
     let data = Array::from_shape_vec(IxDyn(&shape), v)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { data })
+    Ok(NdArray { data, imag: None })
 }
 
 #[pyfunction]
 fn full_like(a: &NdArray, fill_value: f64) -> PyResult<NdArray> {
     Ok(NdArray {
-        data: Array::from_elem(a.data.shape(), fill_value),
+        imag: None, data: Array::from_elem(a.data.shape(), fill_value),
     })
 }
 
@@ -224,7 +224,7 @@ fn meshgrid<'py>(
             .ok_or_else(|| PyValueError::new_err("Broadcasting failed"))?
             .to_owned();
         results.push(NdArray {
-            data: broadcast.into_dyn(),
+            imag: None, data: broadcast.into_dyn(),
         });
     }
     let py_results: Vec<Bound<'py, PyAny>> = results
@@ -237,7 +237,7 @@ fn meshgrid<'py>(
 #[pyfunction]
 fn logspace(start: f64, stop: f64, num: usize, base: f64) -> PyResult<NdArray> {
     linspace(start, stop, num, true).map(|nd| NdArray {
-        data: nd.data.mapv(|v| base.powf(v)),
+        imag: None, data: nd.data.mapv(|v| base.powf(v)),
     })
 }
 
@@ -248,7 +248,7 @@ fn geomspace(start: f64, stop: f64, num: usize) -> PyResult<NdArray> {
     }
     if num == 1 {
         return Ok(NdArray {
-            data: Array::from_shape_vec(IxDyn(&[1]), vec![start])
+            imag: None, data: Array::from_shape_vec(IxDyn(&[1]), vec![start])
                 .map_err(|e| PyValueError::new_err(e.to_string()))?,
         });
     }
@@ -260,7 +260,7 @@ fn geomspace(start: f64, stop: f64, num: usize) -> PyResult<NdArray> {
         .collect();
     let arr = Array::from_shape_vec(IxDyn(&[num]), values)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { data: arr })
+    Ok(NdArray { imag: None, data: arr })
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {

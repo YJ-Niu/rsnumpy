@@ -12,7 +12,7 @@ def pprint(ss):
 # ring_slot = rf.Network('data/ring slot.s2p')
 
 # ring_slot
-
+pprint(ring_slot)
 short = rf.data.wr2p2_short
 delayshort = rf.data.wr2p2_delayshort
 
