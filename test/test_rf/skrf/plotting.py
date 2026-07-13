@@ -81,6 +81,20 @@ logger = getLogger(__name__)
 SI_PREFIXES_ASCII = 'yzafpnum kMGTPEZY'
 SI_CONVERSION = {key: 10**((8-i)*3) for i, key in enumerate(SI_PREFIXES_ASCII)}
 
+# legend frame style captured by stylely() and injected into legend calls;
+# rsplotlib ignores legend.* rcParams and returns no legend handle to restyle
+_STYLE_LEGEND_KW: dict = {}
+
+
+def _legend(target, *args, **kwargs):
+    """Call ``target.legend`` applying stylely's recorded frame style as defaults.
+
+    Explicit caller kwargs take precedence over the captured style.
+    """
+    for key, value in _STYLE_LEGEND_KW.items():
+        kwargs.setdefault(key, value)
+    return target.legend(*args, **kwargs)
+
 
 def plotting_available() -> bool:
     result = False
@@ -193,6 +207,48 @@ def scale_frequency_ticks(ax: Axes, funit: str):
     ax.xaxis.set_major_formatter(ticks_x)
 
 
+def _clip_circle_to_disk(cx, cy, radius, disk_r, n=361):
+    """Return polyline segments of a circle clipped to a centered disk.
+
+    rsplotlib exposes no patch or clip-path API, so Smith-chart circles are
+    rasterised as polylines and clipped to the chart boundary by hand.
+    """
+    import math
+
+    radius = abs(radius)
+    lim = disk_r * disk_r + 1e-9
+    pts = []
+    for i in range(n):
+        t = 2.0 * math.pi * i / n
+        x = cx + radius * math.cos(t)
+        y = cy + radius * math.sin(t)
+        pts.append((x, y, x * x + y * y <= lim))
+
+    segments = []
+    xs, ys = [], []
+    for x, y, inside in pts:
+        if inside:
+            xs.append(x)
+            ys.append(y)
+        elif xs:
+            segments.append((xs, ys))
+            xs, ys = [], []
+    if xs:
+        segments.append((xs, ys))
+
+    # a run may wrap across the t = 0 / 2*pi seam
+    if len(segments) >= 2 and pts[0][2] and pts[-1][2]:
+        head_x, head_y = segments[0]
+        tail_x, tail_y = segments.pop()
+        segments[0] = (tail_x + head_x, tail_y + head_y)
+    # close the loop when the whole circle lies inside the disk
+    elif len(segments) == 1 and len(segments[0][0]) == n:
+        xs, ys = segments[0]
+        segments[0] = (xs + [xs[0]], ys + [ys[0]])
+
+    return segments
+
+
 @axes_kwarg
 def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
           border: bool = False, ax: Axes | None = None, ref_imm: float = 1.0,
@@ -240,10 +296,8 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
     .. [#] https://en.wikipedia.org/wiki/Smith_chart
 
     """
-    from rsplotlib.patches import Circle
-
-    # contour holds rsplotlib instances of: pathes.Circle, and lines.Line2D, which
-    # are the contours on the smith chart
+    # contour holds circles as (center_x, center_y, radius, color) tuples that
+    # are rasterised with ax.plot (rsplotlib has no patch support)
     contour = []
 
     # these are hard-coded on purpose,as they should always be present
@@ -287,15 +341,15 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
     # loops through Verylight, Light and Heavy lists and draws circles using patches
     # for analysis of this see R.M. Weikles Microwave II notes (from uva)
 
-    superLightColor = dict(ec='whitesmoke', fc='none')
-    veryLightColor = dict(ec='lightgrey', fc='none')
-    lightColor = dict(ec='grey', fc='none')
-    heavyColor = dict(ec='black', fc='none')
+    superLightColor = 'whitesmoke'
+    veryLightColor = 'lightgrey'
+    lightColor = 'grey'
+    heavyColor = 'black'
 
     # vswr circles verylight
     for vswr in vswrVeryLightList:
         radius = (vswr-1.0) / (vswr+1.0)
-        contour.append(Circle((0, 0), radius, **veryLightColor))
+        contour.append((0, 0, radius, veryLightColor))
 
     # impedance/admittance circles
     for r in rLightList:
@@ -303,49 +357,44 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
         radius = 1./(1+r)
         if both_charts:
             contour.insert(
-                0, Circle((-center[0], center[1]), radius, **superLightColor))
-        contour.append(Circle(center, radius, **lightColor))
+                0, (-center[0], center[1], radius, superLightColor))
+        contour.append((center[0], center[1], radius, lightColor))
     for x in xLightList:
         center = (1*y_flip_sign, 1./x)
         radius = 1./x
         if both_charts:
             contour.insert(
-                0, Circle((-center[0], center[1]), radius, **superLightColor))
-        contour.append(Circle(center, radius, **lightColor))
+                0, (-center[0], center[1], radius, superLightColor))
+        contour.append((center[0], center[1], radius, lightColor))
 
     for r in rHeavyList:
         center = (r/(1.+r)*y_flip_sign, 0)
         radius = 1./(1+r)
-        contour.append(Circle(center, radius, **heavyColor))
+        contour.append((center[0], center[1], radius, heavyColor))
     for x in xHeavyList:
         center = (1*y_flip_sign, 1./x)
         radius = 1./x
-        contour.append(Circle(center, radius, **heavyColor))
+        contour.append((center[0], center[1], radius, heavyColor))
 
-    # clipping circle
-    clipc = Circle([0, 0], smithR, ec='k', fc='None', visible=True)
-    ax.add_patch(clipc)
-
-    # draw x and y axis
-    ax.axhline(0, color='k', lw=.1, clip_path=clipc)
-    ax.axvline(1*y_flip_sign, color='k', clip_path=clipc)
-    ax.grid(0)
+    # draw the real axis as the chart's horizontal diameter
+    ax.plot([-smithR, smithR], [0, 0], color='k', lw=0.5)
+    ax.grid(False)
     # Set axis limits by plotting white points so zooming works properly
     ax.plot(smithR*np.array([-1.1, 1.1]), smithR *
             np.array([-1.1, 1.1]), 'w.', markersize=0)
     ax.axis('image')  # Combination of 'equal' and 'tight'
 
     if not border:
-        ax.yaxis.set_ticks([])
-        ax.xaxis.set_ticks([])
-        for spine in ax.spines.values():
+        ax.set_xticks([])
+        ax.set_yticks([])
+        for _name, spine in ax.spines.items():
             spine.set_color('none')
 
     if draw_labels:
         # Clear axis
-        ax.yaxis.set_ticks([])
-        ax.xaxis.set_ticks([])
-        for spine in ax.spines.values():
+        ax.set_xticks([])
+        ax.set_yticks([])
+        for _name, spine in ax.spines.items():
             spine.set_color('none')
 
         # Make annotations only if the radius is 1
@@ -424,10 +473,10 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
                             xytext=(0, rhoy*smithR), ha="center", va="bottom",
                             color='grey', size='smaller')
 
-    # loop though contours and draw them on the given axes
-    for currentContour in contour:
-        cc = ax.add_patch(currentContour)
-        cc.set_clip_path(clipc)
+    # rasterise the collected contours, clipped to the chart boundary
+    for cx, cy, radius, color in contour:
+        for seg_x, seg_y in _clip_circle_to_disk(cx, cy, radius, smithR):
+            ax.plot(seg_x, seg_y, color=color, lw=1)
 
 
 def plot_rectangular(x: NumberLike, y: NumberLike,
@@ -478,7 +527,7 @@ def plot_rectangular(x: NumberLike, y: NumberLike,
     if show_legend:
         # only show legend if they provide a label
         if 'label' in kwargs:
-            ax.legend()
+            _legend(ax)
 
     if axis is not None:
         ax.autoscale(True, 'x', True)
@@ -561,7 +610,7 @@ def plot_polar(theta: NumberLike, r: NumberLike,
     if show_legend:
         # only show legend if they provide a label
         if 'label' in kwargs:
-            ax.legend()
+            _legend(ax)
 
     if axis_equal:
         ax.axis('equal')
@@ -714,11 +763,11 @@ def plot_smith(
     if ax is None:
         ax = plt.gca()
 
-    # test if smith chart is already drawn
+    # rsplotlib exposes no drawn-patch introspection, so (re)draw the chart
+    # unless the caller suppresses it via force_chart
     if not force_chart:
-        if len(ax.patches) == 0:
-            smith(ax=ax, smithR=smith_r, chart_type=chart_type,
-                  draw_vswr=draw_vswr, draw_labels=draw_labels)
+        smith(ax=ax, smithR=smith_r, chart_type=chart_type,
+              draw_vswr=draw_vswr, draw_labels=draw_labels)
 
     plot_complex_rectangular(s, x_label=x_label, y_label=y_label,
                              title=title, show_legend=show_legend, axis=axis,
@@ -952,7 +1001,7 @@ def scrape_legend(n: int | None = None,
         raise ValueError('number of entries is too large')
 
     k_list = [int(k) for k in np.linspace(0, len(handles)-1, n)]
-    ax.legend([handles[k] for k in k_list], [labels[k] for k in k_list])
+    _legend(ax, [handles[k] for k in k_list], [labels[k] for k in k_list])
 
 
 def func_on_all_figs(func: Callable, *args, **kwargs):
@@ -1059,7 +1108,7 @@ def plot_passivity(netw: Network, port=None, label_prefix=None, **kwargs):
                             label=label,
                             **kwargs)
 
-    plt.legend()
+    _legend(plt)
     if plt.isinteractive():
         plt.draw()
 
@@ -1083,7 +1132,7 @@ def plot_reciprocity(netw: Network, db=False, *args, **kwargs):
                 y = mf.complex_2_db(y) if db else np.abs(y)
                 netw.frequency.plot(y, *args, **kwargs)
 
-    plt.legend()
+    _legend(plt)
     if plt.isinteractive():
         plt.draw()
 
@@ -1117,7 +1166,7 @@ def plot_reciprocity2(netw: Network, db=False, *args, **kwargs):
                     y = mf.complex_2_db(y)
                 netw.frequency.plot(y, *args, **kwargs)
 
-    plt.legend()
+    _legend(plt)
     if plt.isinteractive():
         plt.draw()
 
@@ -1220,6 +1269,10 @@ def plot_s_smith(
     else:
         generate_label = False
 
+    # draw the chart once (rsplotlib has no drawn-patch introspection)
+    smith(ax=ax, smithR=r, chart_type=chart_type,
+          draw_labels=draw_labels, draw_vswr=draw_vswr)
+
     for m in M:
         for n in N:
             # set the legend label for this trace to the networks name if it
@@ -1228,15 +1281,12 @@ def plot_s_smith(
                 kwargs['label'] = _get_label_str(netw, "S", m, n)
 
             # plot the desired attribute vs frequency
-            if len(ax.patches) == 0:
-                smith(ax=ax, smithR=r, chart_type=chart_type,
-                      draw_labels=draw_labels, draw_vswr=draw_vswr)
             ax.plot(netw.s[:, m, n].real,
                     netw.s[:, m, n].imag, *args, **kwargs)
 
     # draw legend
     if show_legend:
-        ax.legend()
+        _legend(ax)
     ax.axis(np.array([-1.1, 1.1, -1.1, 1.1])*r)
 
     if label_axes:
@@ -1284,29 +1334,195 @@ def plot_it_all(netw: Network, *args, **kwargs):
     netw.plot_s_complex(*args, **kwargs)
 
 
-def stylely(rc_dict: dict = None, style_file: str = 'skrf.mplstyle'):
+def _mplstyle_color(value):
+    """Normalize an mplstyle color token to a form rsplotlib accepts.
+
+    mplstyle writes bare 6-digit hex (``E5E5E5``); rsplotlib wants ``#E5E5E5``.
+    Named colors (``white``) and grayscale floats (``0.50``) pass through.
+    """
+    if not value:
+        return None
+    if not isinstance(value, str):
+        return value
+    v = value.strip()
+    if len(v) == 6 and all(c in '0123456789abcdefABCDEF' for c in v):
+        return f'#{v}'
+    return v
+
+
+def _read_mplstyle(path: str) -> dict:
+    """Parse a matplotlib style file into a ``{key: raw_value}`` dict.
+
+    Comments and blank lines are skipped and inline ``#`` comments stripped.
+    Values stay as raw strings for the caller to convert.
+    """
+    style = {}
+    try:
+        with open(path) as fh:
+            for raw in fh:
+                line = raw.strip()
+                if not line or line.startswith('#') or ':' not in line:
+                    continue
+                key, _, val = line.partition(':')
+                val = val.split('#', 1)[0].strip()
+                key = key.strip()
+                if key and val:
+                    style[key] = val
+    except OSError:
+        pass
+    return style
+
+
+def _apply_style(plt, style: dict, font_scale: float = 1.0,
+                 figsize_override=None, dpi_override=None):
+    """Apply the subset of an mplstyle that the rsplotlib backend can honor.
+
+    rsplotlib does not read ``axes.facecolor`` / ``axes.grid`` / tick colors
+    from rcParams, so those are applied programmatically to the current figure
+    and axes. Unsupported keys (e.g. ``axes.prop_cycle`` line colors) are ignored.
+    Font sizes (``font.size`` and tick label size) are multiplied by ``font_scale``.
+    ``figsize_override`` / ``dpi_override`` take precedence over the style file.
+    """
+    def _num(key):
+        try:
+            return float(style[key])
+        except (KeyError, TypeError, ValueError):
+            return None
+
+    figsize = None
+    fs = style.get('figure.figsize')
+    if isinstance(fs, (list, tuple)):
+        figsize = [float(x) for x in fs]
+    elif isinstance(fs, str):
+        try:
+            figsize = [float(x) for x in fs.split(',')]
+        except ValueError:
+            figsize = None
+    dpi = _num('figure.dpi')
+
+    # explicit caller values win over the style file
+    if figsize_override is not None:
+        figsize = [float(x) for x in figsize_override]
+    if dpi_override is not None:
+        dpi = float(dpi_override)
+
+    font_size = _num('font.size')
+    if font_size:
+        font_size *= font_scale
+
+    # rcParams honored by the backend (also picked up by later figure() calls).
+    if figsize:
+        plt.rcParams['figure.figsize'] = figsize
+    if dpi:
+        plt.rcParams['figure.dpi'] = dpi
+    if font_size:
+        plt.rcParams['font.size'] = font_size
+
+    ax = plt.gca()
+    fig = plt.gcf()
+
+    if dpi:
+        fig.set_dpi(dpi)
+    if figsize and len(figsize) == 2:
+        d = dpi or 100.0
+        fig.set_size(round(figsize[0] * d), round(figsize[1] * d))
+
+    fig_fc = _mplstyle_color(style.get('figure.facecolor'))
+    if fig_fc:
+        fig.set_facecolor(fig_fc)
+    ax_fc = _mplstyle_color(style.get('axes.facecolor'))
+    if ax_fc:
+        ax.set_facecolor(ax_fc)
+
+    # capture legend frame style so _legend() can match the axes background
+    # (rsplotlib ignores legend.* rcParams). Default to a semi-transparent frame.
+    _STYLE_LEGEND_KW.clear()
+    if ax_fc:
+        _STYLE_LEGEND_KW['facecolor'] = ax_fc
+    legend_edge = _mplstyle_color(style.get('axes.edgecolor'))
+    if legend_edge:
+        _STYLE_LEGEND_KW['edgecolor'] = legend_edge
+    framealpha = _num('legend.framealpha')
+    _STYLE_LEGEND_KW['framealpha'] = 0.5 if framealpha is None else framealpha
+    # shrink legend text 30% relative to rsplotlib's default 11pt base size
+    # (rsplotlib ignores legend.fontsize rcParams, so set it explicitly here).
+    _STYLE_LEGEND_KW['fontsize'] = 11.0 * 0.7
+
+    tick_kw = {}
+    tick_color = _mplstyle_color(style.get('xtick.color'))
+    if tick_color:
+        tick_kw['color'] = tick_color
+    label_color = _mplstyle_color(style.get('axes.labelcolor')) or tick_color
+    if label_color:
+        tick_kw['labelcolor'] = label_color
+    tick_labelsize = _num('xtick.labelsize')
+    if tick_labelsize:
+        tick_kw['labelsize'] = tick_labelsize * font_scale
+    if tick_kw:
+        ax.tick_params(**tick_kw)
+
+    grid_val = style.get('axes.grid', False)
+    grid_on = grid_val is True or (
+        isinstance(grid_val, str)
+        and grid_val.strip().lower() in ('true', '1', 'yes', 'on'))
+    if grid_on:
+        grid_kw = {}
+        grid_color = _mplstyle_color(style.get('grid.color'))
+        if grid_color:
+            grid_kw['color'] = grid_color
+        grid_ls = style.get('grid.linestyle')
+        if grid_ls:
+            grid_kw['linestyle'] = grid_ls
+        plt.grid(True, **grid_kw)
+
+
+def stylely(rc_dict: dict = None, style_file: str = 'skrf.mplstyle',
+            font_scale: float = 3.0, figsize=None, dpi=None):
     """
     Loads the rc-params from the specified file (file must be located in skrf/data).
 
     Parameters
     ----------
     rc_dict : dict, optional
-        rc dict passed to :func:`matplotlib.rc`, by default {}
+        extra ``{key: value}`` style overrides merged on top of the style file,
+        by default {}
     style_file : str, optional
         style file, by default 'skrf.mplstyle'
+    font_scale : float, optional
+        multiplier applied to the style's font and tick-label sizes, by default
+        3.0. The style file's base sizes render small at the rsplotlib backend's
+        resolution, so they are enlarged for readability.
+    figsize : tuple of (width, height) in inches, optional
+        overrides the style file's ``figure.figsize``. Use this instead of a
+        separate ``plt.figure()`` call so the styling lands on the same figure.
+    dpi : number, optional
+        overrides the style file's ``figure.dpi``. Output pixel size is
+        ``figsize * dpi``.
+
+    Notes
+    -----
+    The rsplotlib backend does not load matplotlib style files nor honor every
+    rcParam the way matplotlib does. This applies the supported subset (figure
+    size/dpi, font size, figure/axes background, grid, and tick colors) directly
+    to the current figure and axes, so it must be called just before plotting.
+    Because it styles the *current* figure, do not create a new figure with
+    ``plt.figure()`` afterwards; pass ``figsize`` / ``dpi`` here instead.
+    Unsupported keys such as ``axes.prop_cycle`` (line color cycle) are ignored.
     """
     try:
         import rsplotlib.pyplot as plt
 
         from .data import pwd  # delayed to solve circular import
-
-        rc_dict = rc_dict if rc_dict else {}
-
-        plt.style.use(os.path.join(pwd, style_file))
-        plt.rc(rc_dict)
     except ImportError as e:
         warnings.warn(
             f"Could not import rsplotlib: {e}", ImportWarning, stacklevel=2)
+        return
+
+    style = _read_mplstyle(os.path.join(pwd, style_file))
+    if rc_dict:
+        style.update(rc_dict)
+    _apply_style(plt, style, font_scale,
+                 figsize_override=figsize, dpi_override=dpi)
 
 
 # Network Set Plotting Commands

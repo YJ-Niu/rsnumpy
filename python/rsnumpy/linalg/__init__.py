@@ -48,7 +48,7 @@ def _wrap(x):
 
 def _to_np(x):
     """rsnumpy 数组/列表 → numpy 数组（复数经 tolist 保真）。"""
-    import numpy as _np
+    import rsnumpy as _np
     if isinstance(x, (list, tuple)):
         return _np.array(x)
     if hasattr(x, 'tolist'):
@@ -84,7 +84,7 @@ class linalg_module:
         """计算两个数组的点积。"""
         from ..__init__ import ndarray
         if _use_numpy(a, b):
-            import numpy as _np
+            import rsnumpy as _np
             return _from_np(_np.dot(_to_np(a), _to_np(b)))
         result = _core.linalg.dot(_ensure(a), _ensure(b))
         a_dtype = getattr(a, '_dtype', 'float64')
@@ -115,7 +115,7 @@ class linalg_module:
         """计算两个数组的矩阵乘积。"""
         from ..__init__ import ndarray
         if _use_numpy(a, b):
-            import numpy as _np
+            import rsnumpy as _np
             return _from_np(_np.matmul(_to_np(a), _to_np(b)))
         result = _core.linalg.matmul(_ensure(a), _ensure(b))
         a_dtype = getattr(a, '_dtype', 'float64')
@@ -128,7 +128,7 @@ class linalg_module:
     def inv(a):
         """计算矩阵的逆。"""
         if _use_numpy(a):
-            import numpy as _np
+            import rsnumpy as _np
             return _from_np(_np.linalg.inv(_to_np(a)))
         return _wrap(_core.linalg.inv(_ensure(a)))
 
@@ -150,21 +150,21 @@ class linalg_module:
     def solve(a, b):
         """求解线性方程组。"""
         if _use_numpy(a, b):
-            import numpy as _np
+            import rsnumpy as _np
             return _from_np(_np.linalg.solve(_to_np(a), _to_np(b)))
         return _wrap(_core.linalg.solve(_ensure(a), _ensure(b)))
 
     @staticmethod
     def lstsq(a, b, rcond=None):
         """最小二乘解，委托 numpy（Rust 无原生实现）。"""
-        import numpy as _np
+        import rsnumpy as _np
         x, res, rank, s = _np.linalg.lstsq(_to_np(a), _to_np(b), rcond=rcond)
         return (_from_np(x), _from_np(res), int(rank), _from_np(s))
 
     @staticmethod
     def matrix_rank(a, tol=None, hermitian=False):
         """矩阵秩，委托 numpy。"""
-        import numpy as _np
+        import rsnumpy as _np
         return int(_np.linalg.matrix_rank(_to_np(a), tol=tol, hermitian=hermitian))
 
     @staticmethod

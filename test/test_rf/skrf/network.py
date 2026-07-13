@@ -5326,16 +5326,15 @@ class Network:
 
                     else:
                         xlabel = f'Frequency ({self.frequency.unit})'
-                        # x = self.frequency.f_scaled
-                        x = self.frequency.f  # always plot f, and then scale the ticks instead
+                        # Plot the frequency already scaled to `unit` (e.g. GHz).
+                        # rsplotlib does not honor the FuncFormatter that
+                        # scale_frequency_ticks would set, so plotting raw Hz
+                        # leaves the ticks in Hz while the label says GHz.
+                        x = self.frequency.f_scaled
                         y = self.attribute(attribute, conversion)[:, m, n]
 
-                        # scale the ticklabels according to the frequency unit
-                        # and set log-scale if desired:
                         if logx:
                             ax.set_xscale('log')
-
-                        rfplt.scale_frequency_ticks(ax, self.frequency.unit)
 
                     rfplt.plot_rectangular(x=x,
                                            y=y,

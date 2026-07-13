@@ -583,7 +583,12 @@ def real(val):
     """返回实部。"""
     np = _np()
     if iscomplexobj(val):
-        return np.array([v.real for v in val._complex_data])
+        # Multi-dim complex arrays don't expose the flat `_complex_data`
+        # buffer (it is None/absent); fall back to the nested `tolist`.
+        cdata = getattr(val, "_complex_data", None)
+        if cdata is not None:
+            return np.array([v.real for v in cdata])
+        return np.array(_map_nested(lambda v: complex(v).real, val.tolist()))
     return _asarray(val)
 
 
@@ -591,7 +596,10 @@ def imag(val):
     """返回虚部。"""
     np = _np()
     if iscomplexobj(val):
-        return np.array([v.imag for v in val._complex_data])
+        cdata = getattr(val, "_complex_data", None)
+        if cdata is not None:
+            return np.array([v.imag for v in cdata])
+        return np.array(_map_nested(lambda v: complex(v).imag, val.tolist()))
     arr = _asarray(val)
     return np.full(arr.shape, 0.0)
 
@@ -600,7 +608,10 @@ def conjugate(x):
     """返回共轭。"""
     np = _np()
     if iscomplexobj(x):
-        return np.array([complex(v).conjugate() for v in x._complex_data])
+        cdata = getattr(x, "_complex_data", None)
+        if cdata is not None:
+            return np.array([complex(v).conjugate() for v in cdata])
+        return np.array(_map_nested(lambda v: complex(v).conjugate(), x.tolist()))
     return _asarray(x)
 
 
@@ -610,20 +621,25 @@ conj = conjugate
 def angle(z, deg=False):
     """返回复数的相位角。"""
     np = _np()
+    factor = 180.0 / _math.pi if deg else 1.0
     if iscomplexobj(z):
-        vals = [_math.atan2(v.imag, v.real) for v in z._complex_data]
-    else:
-        vals = [_math.atan2(0.0, v) for v in _flat(z)]
-    if deg:
-        vals = [v * 180.0 / _math.pi for v in vals]
-    return np.array(vals)
+        cdata = getattr(z, "_complex_data", None)
+        if cdata is not None:
+            return np.array([_math.atan2(v.imag, v.real) * factor for v in cdata])
+        return np.array(_map_nested(
+            lambda v: _math.atan2(complex(v).imag, complex(v).real) * factor,
+            z.tolist()))
+    return np.array([_math.atan2(0.0, v) * factor for v in _flat(z)])
 
 
 def real_if_close(a, tol=100):
     """若虚部接近 0 则返回实部，否则原样返回。"""
     _ = tol
     if iscomplexobj(a):
-        if builtin_all(abs(complex(v).imag) < 1e-13 for v in a._complex_data):
+        cdata = getattr(a, "_complex_data", None)
+        if cdata is None:
+            cdata = [complex(v) for v in _flat(a)]
+        if builtin_all(abs(complex(v).imag) < 1e-13 for v in cdata):
             return real(a)
     return _asarray(a)
 

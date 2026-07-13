@@ -2,6 +2,7 @@ import skrf as rf
 from skrf.data import ring_slot  # noqa: F811
 import rsnumpy as np
 import rsplotlib.pyplot as plt
+from skrf.networkSet import NetworkSet
 
 
 def pprint(ss):
@@ -31,13 +32,30 @@ print(line.s.shape)
 print(line.frequency)
 pprint(line.f[0:10])
 
-
 rs = rf.data.ring_slot  # another 2-port example
-
 pprint(rs.s_mag[:, 1, 0].min())
-
 f_match = rs.f[np.argmin(rs.s_mag[:, 0, 0])]  # frequency for min(|S11|)
 pprint(f_match)
-rf.stylely()
+
+rf.stylely(figsize=(20, 16), dpi=144)
 ring_slot.plot_s_db()
 plt.savefig('./test/test_rf/ring_slot.png')
+plt.clf()
+
+rf.stylely(figsize=(20, 16), dpi=144)
+ring_slot.plot_s_deg(m=0, n=1)
+plt.savefig('./test/test_rf/ring_slot_deg.png')
+plt.clf()
+
+rf.stylely(figsize=(20, 16), dpi=144)
+ring_slot.plot_s_smith(lw=2)
+plt.title('Big ole Smith Chart')
+plt.savefig('./test/test_rf/ring_slot_smith.png')
+plt.clf()
+
+print(rf.io.read_all('./test/test_rf/skrf/data/', contains='ro'))
+ro_dict = rf.io.read_all('./test/test_rf/skrf/data/', contains='ro')
+ro_ns = NetworkSet(ro_dict, name='ro set')  # name is optional
+print(ro_ns)
+pprint(ro_ns.mean_s)
+pprint(ro_ns.std_s)
