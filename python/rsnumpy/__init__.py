@@ -1171,7 +1171,7 @@ def _structured_field_kind(code):
     low = c.lower()
     if low.startswith('bytes') or low.startswith('str'):
         return 'str'
-    is_int = any((
+    is_int = _py_any((
         low.startswith('int'),
         low.startswith('uint'),
         low.startswith('bool'),
@@ -2963,7 +2963,7 @@ def _setitem_value(value):
         return value
     if isinstance(value, (list, tuple)):
         flat = _flatten_data(value)
-        if any(isinstance(v, complex) for v in flat):
+        if _py_any(isinstance(v, complex) for v in flat):
             return value
         return [float(v) for v in flat]
     return value
