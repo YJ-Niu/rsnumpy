@@ -3228,9 +3228,7 @@ def _numeric_tobytes(arr, order='C'):
     dt = getattr(arr, '_dtype', 'float64')
     # 快路径：float64 数组的字节布局与底层存储一致，直接从缓冲协议 memcpy，
     # 避免逐元素 tolist()→float()→struct.pack 的 Python 开销（百万点级差异达百毫秒）。
-    if (dt == 'float64'
-            and getattr(arr, '_raw_data', None) is None
-            and getattr(arr, '_complex_data', None) is None):
+    if (dt == 'float64' and getattr(arr, '_raw_data', None) is None and getattr(arr, '_complex_data', None) is None):
         return memoryview(arr._array).tobytes(order)
     fmt = _TOBYTES_STRUCT.get(dt, 'd')
     flat = _flatten_data(arr.tolist())
@@ -3617,32 +3615,10 @@ def meshgrid(*xi, copy=True, sparse=False, indexing='xy'):
     return [ndarray._wrap(g) for g in grids]
 
 
-# ========== FFT 函数 ==========
-
-def fft(a, n=None, axis=-1):
-    """计算一维离散傅里叶变换。"""
-    arr = ndarray(a)
-    return _core.py_fft_ndarray(arr._array)
-
-
-def ifft(a, n=None, axis=-1):
-    """计算一维逆离散傅里叶变换。"""
-    if _is_ndarray(a):
-        return _core.py_ifft_ndarray(a._array)
-    return _core.py_ifft(a)
-
-
-def rfft(a, n=None, axis=-1):
-    """计算实输入的一维离散傅里叶变换。"""
-    arr = ndarray(a)
-    return _core.py_rfft_ndarray(arr._array)
-
-
-def irfft(a, n=None, axis=-1):
-    """计算 rfft 的逆变换。"""
-    if _is_ndarray(a):
-        return _core.py_irfft_ndarray(a._array, n)
-    return _core.py_irfft(a, n)
+# ========== FFT ==========
+# FFT 相关函数均由子模块 `rsnumpy.fft` 提供（与 numpy 一致，
+# 通过 `np.fft.fft(...)` 或 `from rsnumpy.fft import fft` 使用）。
+# 子模块的绑定见文件末尾的“子模块”一节。
 
 
 # ========== 常量 ==========
@@ -4185,6 +4161,9 @@ def cumprod(a, axis=None):
 
 # 子模块
 
+from . import fft  # noqa: E402  FFT 子模块（numpy 风格 np.fft.*）
+from . import typing  # noqa: E402  类型注解子模块（numpy 风格 np.typing.*）
+
 linalg = _linalg_module()
 random = _random_module()
 matlib = _matlib_module
@@ -4231,7 +4210,7 @@ __all__ = [
     'argmax', 'argmin', 'argsort', 'sort', 'searchsorted', 'extract',
     'cov', 'corrcoef',
     'histogram', 'histogram2d', 'histogramdd', 'digitize',
-    'fft', 'ifft', 'rfft', 'irfft',
+    'fft', 'typing',
     'pi', 'e', 'euler_gamma', 'inf', 'nan', 'newaxis',
     'nditer',
     'isnan', 'isinf', 'isfinite',

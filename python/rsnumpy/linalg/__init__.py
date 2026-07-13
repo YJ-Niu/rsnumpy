@@ -1,5 +1,7 @@
 """rsnumpy.linalg - 线性代数模块 - 薄包装，所有实现位于 Rust。"""
 
+import sys as _sys
+
 import rsnumpy._core as _core
 
 
@@ -187,3 +189,12 @@ class linalg_module:
     def solve_banded(lower, upper, ab, b):
         """求解带状线性方程组。"""
         return _wrap(_core.linalg.solve_banded(lower, upper, _ensure(ab), _ensure(b)))
+
+
+# 将 linalg_module 的公有方法同时暴露为模块级函数，
+# 兼容 numpy 风格的 `from rsnumpy.linalg import det, inv, norm, solve, ...`。
+_this_module = _sys.modules[__name__]
+for _name in dir(linalg_module):
+    if not _name.startswith('_'):
+        setattr(_this_module, _name, getattr(linalg_module, _name))
+del _this_module, _name
