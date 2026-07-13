@@ -13,6 +13,7 @@ class AgilentCSVTestCase(unittest.TestCase):
     """
     AgilentCSVTestCase tests the IO of agilent style CSV files
     """
+
     def setUp(self):
         """
         Sets up the test directory and the initializes the members.
@@ -36,7 +37,8 @@ class AgilentCSVTestCase(unittest.TestCase):
         """
         This tests reading of comment lines in the test file.
         """
-        self.assertEqual(self.acsv.comments.strip('\r'), 'this is a comment\nline\n')
+        self.assertEqual(self.acsv.comments.strip(
+            '\r'), 'this is a comment\nline\n')
 
     def test_data(self):
         """
@@ -44,14 +46,15 @@ class AgilentCSVTestCase(unittest.TestCase):
         """
         self.assertTrue((self.acsv.data ==
                          np.array([[750000000000, 1, 2, 3, 4],
-                                    [1100000000000, 5, 6, 7,8],
+                                   [1100000000000, 5, 6, 7, 8],
                                    ])).all())
 
     def test_frequency(self):
         """
         This tests the reading of frequency from the test file
         """
-        self.assertEqual(self.acsv.frequency, rf.Frequency(750e9, 1100e9, 2, 'hz'))
+        self.assertEqual(self.acsv.frequency,
+                         rf.Frequency(750e9, 1100e9, 2, 'hz'))
 
     @suppress_warning_decorator("CSV format unrecognized")
     def test_networks(self):
@@ -74,8 +77,10 @@ class AgilentCSVTestCase(unittest.TestCase):
             with self.assertWarns(DeprecationWarning):
                 header, comment, data = rf.io.csv.read_pna_csv(self.filename)
 
-        self.assertEqual(header, 'Freq(Hz),"A,1"(REAL),"A,1"(IMAG),"R1,1"(REAL),"R1,1"(IMAG)')
+        self.assertEqual(
+            header,
+            'Freq(Hz),"A,1"(REAL),"A,1"(IMAG),"R1,1"(REAL),"R1,1"(IMAG)')
         self.assertEqual(comment, 'this is a comment\nline\n')
         self.assertTrue((data == np.array([[750000000000, 1, 2, 3, 4],
-                                    [1100000000000, 5, 6, 7,8],
-                                ])).all())
+                                           [1100000000000, 5, 6, 7, 8],
+                                           ])).all())

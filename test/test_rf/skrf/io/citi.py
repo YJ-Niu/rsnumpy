@@ -58,6 +58,7 @@ class Citi:
     >>> file = open('network.cti')
     >>> m = rf.Citi(file)
     """
+
     def __init__(self, file: str | Path | typing.TextIO):
         """
         Constructor
@@ -143,7 +144,7 @@ class Citi:
         while lines:
             line = lines.pop(0)
 
-            if line.strip().startswith(('#','!')):
+            if line.strip().startswith(('#', '!')):
                 self._comments.append(line)
 
             if line.strip().upper().startswith('NAME'):
@@ -177,14 +178,17 @@ class Citi:
                     # reads the nb of occurrences
                     _param_values.append(line.strip())
 
-                self._params[cur_name]['values'] = np.array(_param_values, dtype=float)
+                self._params[cur_name]['values'] = np.array(
+                    _param_values, dtype=float)
 
             if line.upper().startswith('BEGIN'):
                 _data_values = []
                 cur_name = data_list.pop(0)
                 # data are ordered for each param(s), then for each frequency
-                # so number of lines to read is the product of the occurrences of each param
-                nb_lines = np.prod([self._params[name]['occurences'] for name in self._params.keys()])
+                # so number of lines to read is the product of the occurrences
+                # of each param
+                nb_lines = np.prod([self._params[name]['occurences']
+                                   for name in self._params.keys()])
                 for _idx in range(nb_lines):
                     line = lines.pop(0)  # goes next line
                     # Expect:
@@ -195,11 +199,12 @@ class Citi:
                 _data = np.array(_data_values, dtype=float)
 
                 if self._data[cur_name]['format'].upper() == 'RI':
-                    values = _data[:,0] + 1j*_data[:,1]
+                    values = _data[:, 0] + 1j*_data[:, 1]
                 elif self._data[cur_name]['format'].upper() == 'MAGANGLE':
-                    values = magdeg_2_reim(_data[:,0], _data[:,1])
-                elif self._data[cur_name]['format'].upper() ==  'DBANGLE':
-                    values = ((10**(_data[:,0]/20.0)) * np.exp(1j*np.pi/180 * _data[:,1]))
+                    values = magdeg_2_reim(_data[:, 0], _data[:, 1])
+                elif self._data[cur_name]['format'].upper() == 'DBANGLE':
+                    values = ((10**(_data[:, 0]/20.0)) *
+                              np.exp(1j*np.pi/180 * _data[:, 1]))
                 else:
                     raise NotImplementedError('Not implemented format case')
 
@@ -237,10 +242,12 @@ class Citi:
         elif any([it.startswith('Z') for it in self._data.keys()]):
             ntwkprm = 'Z'
         else:
-            raise NotImplementedError('No network parameter found in this file')
+            raise NotImplementedError(
+                'No network parameter found in this file')
 
         # deduce the rank of the Network
-        rank = int(np.sqrt(len([it for it in self._data.keys() if it.startswith(ntwkprm)])))
+        rank = int(
+            np.sqrt(len([it for it in self._data.keys() if it.startswith(ntwkprm)])))
 
         # occurences of each parameter and total number of frequency sets
         occurences = [self._params[name]['occurences'] for name in self.params]
@@ -251,8 +258,11 @@ class Citi:
 
         # create a 2D array of all parameters sets
         if self.params:
-            params_sets = np.array(np.meshgrid(*[self._params[name]['values']
-                                           for name in self.params])).reshape(-1,len(self.params))
+            params_sets = np.array(np.meshgrid(
+                *
+                [self._params[name]['values']
+                 for name in self.params])).reshape(-1,
+                                                    len(self.params))
         else:
             params_sets = []
 
@@ -267,7 +277,8 @@ class Citi:
 
             for m in range(rank):
                 for idx_set in range(len(params_sets)):
-                    z0s[idx_set,:,m] = self._data[f'{zname}[{m+1}]']['values'].reshape((int(occ), len(freq)))[idx_set,:]
+                    z0s[idx_set, :, m] = self._data[f'{zname}[{m+1}]']['values'].reshape(
+                        (int(occ), len(freq)))[idx_set, :]
 
         # create list of Networks assuming the following ordering:
         # val_param1_f1
@@ -281,15 +292,18 @@ class Citi:
             for n in range(rank):
                 # network param (m,n) for all params and all frequencies
                 if f'{ntwkprm}[{m+1},{n+1}]' in self._data.keys():
-                    pp = self._data[f'{ntwkprm}[{m+1},{n+1}]']['values'].reshape((int(occ), len(freq)))
+                    pp = self._data[f'{ntwkprm}[{m +
+                                                 1},{n +
+                                                     1}]']['values'].reshape((int(occ), len(freq)))
                 else:
                     # special case some CITI files for 1port
-                    pp = self._data['S']['values'].reshape((int(occ), len(freq)))
+                    pp = self._data['S']['values'].reshape(
+                        (int(occ), len(freq)))
                     ntwkprm = 'S'
 
                 # network param (m,n) for the current set of params
                 for idx_set in range(len(params_sets)):
-                    p[idx_set,:,m,n] = pp[idx_set,:]
+                    p[idx_set, :, m, n] = pp[idx_set, :]
 
         # generate networks from the network parameters and set of params
         for (idx_set, params_set) in enumerate(params_sets):
@@ -297,15 +311,19 @@ class Citi:
             params = dict(zip(self.params, params_set))
 
             if ntwkprm == 'S':
-                ntwk = Network(frequency=freq, s=p[idx_set], params=params, z0=z0s[idx_set])
+                ntwk = Network(
+                    frequency=freq,
+                    s=p[idx_set],
+                    params=params,
+                    z0=z0s[idx_set])
             elif ntwkprm == 'Z':
-                ntwk = Network(frequency=freq, s=z2s(p[idx_set], z0s[idx_set]), params=params, z0=z0s[idx_set])
+                ntwk = Network(frequency=freq, s=z2s(
+                    p[idx_set], z0s[idx_set]), params=params, z0=z0s[idx_set])
             else:
                 raise NotImplementedError('Unknown Network Parameter')
             networks.append(ntwk)
 
         return networks
-
 
     def to_networkset(self) -> NetworkSet:
         """

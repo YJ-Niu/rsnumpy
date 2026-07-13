@@ -43,7 +43,8 @@ class QfactorTests(unittest.TestCase):
         try:
             f, s_re, s_im = np.loadtxt(file, comments="%", unpack=True)
         except ValueError:
-            f, s_re, s_im, s_abs, s_mag = np.loadtxt(file, comments="%", unpack=True)
+            f, s_re, s_im, s_abs, s_mag = np.loadtxt(
+                file, comments="%", unpack=True)
 
         s = s_re + 1j * s_im
         freq = rf.Frequency.from_f(f, unit='GHz')
@@ -57,7 +58,8 @@ class QfactorTests(unittest.TestCase):
         _Q1 = Qfactor(self.ntwk_1port, res_type='reflection')
         _Q2 = Qfactor(self.ntwk_1port, res_type='reflection', Q_L0=3)
         _Q3 = Qfactor(self.ntwk_1port, res_type='reflection', f_L0=85e9)
-        _Q3 = Qfactor(self.ntwk_1port, res_type='reflection', Q_L0=3, f_L0=85e9)
+        _Q3 = Qfactor(self.ntwk_1port, res_type='reflection',
+                      Q_L0=3, f_L0=85e9)
 
     def test_exceptions(self):
         "Test the raised exceptions."
@@ -68,7 +70,8 @@ class QfactorTests(unittest.TestCase):
         # Incorrect resonance type raises a ValueError
         self.assertRaises(ValueError, Qfactor, self.ntwk_1port, 'dummy')
 
-        # Asking for fitted S-param and Network without prior fit raises a ValueError
+        # Asking for fitted S-param and Network without prior fit raises a
+        # ValueError
         _Q = Qfactor(self.ntwk_1port, res_type='reflection')
         self.assertRaises(ValueError, _Q.fitted_s)
         self.assertRaises(ValueError, _Q.fitted_network)
@@ -83,7 +86,8 @@ class QfactorTests(unittest.TestCase):
 
         """
         # File 'Figure6b.txt' contains S21 data for Fig. 6(b) in MAT 58
-        ntwk = self.csv_file_example_to_network(self.test_dir + "qfactor_data/Figure6b.txt")
+        ntwk = self.csv_file_example_to_network(
+            self.test_dir + "qfactor_data/Figure6b.txt")
 
         with self.assertWarns(FutureWarning) as context:
             Q = Qfactor(ntwk, res_type='transmission', verbose=True)
@@ -128,7 +132,8 @@ class QfactorTests(unittest.TestCase):
         Test data is read from file Figure27.txt (as used in Figure 27 of MAT 58).
 
         """
-        ntwk = self.csv_file_example_to_network(self.test_dir + "qfactor_data/Figure27.txt")
+        ntwk = self.csv_file_example_to_network(
+            self.test_dir + "qfactor_data/Figure27.txt")
 
         with self.assertWarns(FutureWarning) as context:
             Q = Qfactor(ntwk, res_type='absorption', verbose=True)
@@ -154,9 +159,8 @@ class QfactorTests(unittest.TestCase):
 
         assert_allclose(Q0, 1846782, rtol=1/100)
         assert_allclose(cal_diam, 0.970, rtol=1/100)
-        assert_almost_equal(2.0 * res.f_L / res.Q_L/1e9, 0.00021678942580071302, decimal=10)
-
-
+        assert_almost_equal(2.0 * res.f_L / res.Q_L/1e9,
+                            0.00021678942580071302, decimal=10)
 
     def test_NLQFIT7(self):
         """
@@ -168,7 +172,8 @@ class QfactorTests(unittest.TestCase):
         Table 6(c) of MAT 58).
 
         """
-        ntwk = self.csv_file_example_to_network(self.test_dir + "qfactor_data/Table6c27.txt")
+        ntwk = self.csv_file_example_to_network(
+            self.test_dir + "qfactor_data/Table6c27.txt")
 
         with self.assertWarns(FutureWarning) as context:
             Q = Qfactor(ntwk, res_type='reflection', verbose=True)
@@ -180,7 +185,8 @@ class QfactorTests(unittest.TestCase):
         # Expected results after fit
         res = Q.fit(method='NLQFIT7')
         # Fitted length of uncalibrated line [m]
-        assert_almost_equal(-res.m7a*rf.constants.c/(4.0*np.pi*1.3), 57.47056249053462e-3)
+        assert_almost_equal(-res.m7a*rf.constants.c /
+                            (4.0*np.pi*1.3), 57.47056249053462e-3)
         assert_allclose(Q.f_L, 3.65293800e9)
         assert_almost_equal(Q.Q_L, 708, decimal=0)
 
@@ -193,7 +199,8 @@ class QfactorTests(unittest.TestCase):
         # Test against expected solutions
         assert_almost_equal(Q0, 862, decimal=0)
         assert_almost_equal(cal_diam, 0.3573, decimal=4)
-        assert_almost_equal(cal_gamma_V, 0.09084890 - 0.99586469j)  # S11 detuned
+        assert_almost_equal(cal_gamma_V, 0.09084890 -
+                            0.99586469j)  # S11 detuned
         assert_almost_equal(cal_gamma_T, 0.05878773 - 0.64003179j)  # S11 tuned
 
         print("Q-factor of unloaded one-port resonator by Method 2:")
@@ -224,7 +231,8 @@ class QfactorTests(unittest.TestCase):
         Test data is read from file Figure23.txt (shown in Figure 23 of MAT 58)
 
         """
-        ntwk = self.csv_file_example_to_network(self.test_dir + "qfactor_data/Figure23.txt")
+        ntwk = self.csv_file_example_to_network(
+            self.test_dir + "qfactor_data/Figure23.txt")
 
         Q = Qfactor(ntwk, res_type='transmission')
 
@@ -249,7 +257,9 @@ class QfactorTests(unittest.TestCase):
         Fseed = Q.f[index_max]
 
         # Set Qseed: An order-of-magnitude estimate for Q-factor
-        mult = 5.0  # Not critical. A value of around 5.0 will work well for initial and optimised fits (Section 2.6).
+        # Not critical. A value of around 5.0 will work well for initial and
+        # optimised fits (Section 2.6).
+        mult = 5.0
         Qseed = mult * Fseed / (Q.f[-1] - Q.f[0])
 
         Q = Qfactor(ntwk2, res_type='transmission', Q_L0=Qseed, f_L0=Fseed)
@@ -316,7 +326,8 @@ class QfactorTests(unittest.TestCase):
             # the resonance frequency corresponds to min value before fitting
             assert_almost_equal(Q.f_L, f_L_expected)
             assert_almost_equal(Q.f_L_scaled, f_L_expected_scaled)
-        # NB: after the fit this should not be the case anymore (slight deviation)
+        # NB: after the fit this should not be the case anymore (slight
+        # deviation)
 
     def test_BW(self):
         "Test bandwidth values."

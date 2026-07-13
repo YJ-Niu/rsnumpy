@@ -151,7 +151,6 @@ class Mdif:
 
         return comments
 
-
     def _parse_data(self, block_data: list) -> Network:
         """
         Parse the block of data corresponding to a set of parameters to a Network.
@@ -191,7 +190,8 @@ class Mdif:
         for line in block_data:
             # Parse the option line (as in Touchstone)
             if line.startswith('#'):
-                # Flag that no more comments are coming as we're now after the option line
+                # Flag that no more comments are coming as we're now after the
+                # option line
                 no_more_comments = True
 
                 toks = line[1:].strip().split()
@@ -202,17 +202,21 @@ class Mdif:
                 formt = toks[2].lower()
                 z0 = toks[4]
                 if frequency_unit not in ['hz', 'khz', 'mhz', 'ghz']:
-                    raise NotImplementedError(f'ERROR: illegal frequency_unit {frequency_unit}',  )
+                    raise NotImplementedError(
+                        f'ERROR: illegal frequency_unit {frequency_unit}',)
                 if parameter not in 'syzgh':
-                    raise NotImplementedError(f'ERROR: illegal parameter value {parameter}')
+                    raise NotImplementedError(
+                        f'ERROR: illegal parameter value {parameter}')
                 if formt not in ['ma', 'db', 'ri']:
-                    raise NotImplementedError(f'ERROR: illegal format value {formt}')
+                    raise NotImplementedError(
+                        f'ERROR: illegal format value {formt}')
 
             elif line.strip().startswith('!'):
                 if line[1:].startswith(' network name:'):
                     ntwk_name = line.split(':')[-1].strip()
 
-                # Append the comments to the list of comments for that data block
+                # Append the comments to the list of comments for that data
+                # block
                 if no_more_comments is not False:
                     comments.append(line.strip()[1:])
 
@@ -234,20 +238,25 @@ class Mdif:
 
         # grouping the data_lines in a single line for each frequency
         nb_lines_per_freq = len(kinds)
-        data_lines = [np.concatenate(data_lines[idx*nb_lines_per_freq:idx*nb_lines_per_freq + nb_lines_per_freq])
-                      for idx in range(int(len(data_lines)/nb_lines_per_freq))]
+        data_lines = [
+            np.concatenate(
+                data_lines
+                [idx * nb_lines_per_freq: idx * nb_lines_per_freq +
+                 nb_lines_per_freq])
+            for idx in range(int(len(data_lines) / nb_lines_per_freq))]
         kinds = [item for sublist in kinds for item in sublist]  # flattening
         kinds = [k.lower().replace('(complex)', '') for k in kinds]  # cleaning
         data = np.array(data_lines)
-        f = data[:,0]
+        f = data[:, 0]
 
         # grouping two by two the columns convert data to complex arrays
         if formt == 'ri':
-            values = data[:,1::2] + 1j*data[:,2::2]
+            values = data[:, 1::2] + 1j*data[:, 2::2]
         elif formt == 'ma':
-            values = magdeg_2_reim(data[:,1::2], data[:,2::2])
+            values = magdeg_2_reim(data[:, 1::2], data[:, 2::2])
         elif formt == 'db':
-            values = ((10**(data[:,1::2]/20.0)) * np.exp(1j*np.pi/180 * data[:,2::2]))
+            values = ((10**(data[:, 1::2]/20.0)) *
+                      np.exp(1j*np.pi/180 * data[:, 2::2]))
         else:
             raise NotImplementedError('not implemented case')
 
@@ -259,15 +268,15 @@ class Mdif:
             s = np.zeros((len(f), rank, rank), dtype=complex)
             for m in range(rank):
                 for n in range(rank):
-                    s[:,m,n] = values[:, kinds.index(f's[{m+1},{n+1}]') - 1]
+                    s[:, m, n] = values[:, kinds.index(f's[{m+1},{n+1}]') - 1]
 
         # Nport as in AWR MDIF file-format description
         elif (parameter == 's') and all(k in kinds for k in ['n11x', 'n11y']):
             rank = round(np.sqrt(sum('n' in s for s in kinds)/2))
-            s = values[:,:rank**2].reshape(len(f), rank, rank)
+            s = values[:, :rank**2].reshape(len(f), rank, rank)
             # if rank is 2 and S21 before S12, swap S21 and S12
             if rank == 2 and (kinds.index('n21x') < kinds.index('n12x')):
-                s[:, 1, 0], s[:, 0, 1] =  s[:, 0, 1].copy(), s[:, 1, 0].copy()
+                s[:, 1, 0], s[:, 0, 1] = s[:, 0, 1].copy(), s[:, 1, 0].copy()
 
         # no S-parameter are found. Maybe Z-param instead?
         elif ('z[1,1]') in kinds:
@@ -276,7 +285,7 @@ class Mdif:
             z = np.zeros((len(f), rank, rank), dtype=complex)
             for m in range(rank):
                 for n in range(rank):
-                    z[:,m,n] = values[:, kinds.index(f'z[{m+1},{n+1}]') - 1]
+                    z[:, m, n] = values[:, kinds.index(f'z[{m+1},{n+1}]') - 1]
             s = z2s(z, z0=z0)
 
         # no S nor Z-parameter are found. Maybe Y-param instead?
@@ -286,15 +295,17 @@ class Mdif:
             y = np.zeros((len(f), rank, rank), dtype=complex)
             for m in range(rank):
                 for n in range(rank):
-                    y[:,m,n] = values[:, kinds.index(f'y[{m+1},{n+1}]') - 1]
+                    y[:, m, n] = values[:, kinds.index(f'y[{m+1},{n+1}]') - 1]
             s = y2s(z, z0=z0)
 
         else:
-            raise NotImplementedError('Unrecognized case, probably not implemented')
+            raise NotImplementedError(
+                'Unrecognized case, probably not implemented')
 
         # building the Network
         freq = Frequency.from_f(f, unit=frequency_unit)
-        ntwk = Network(frequency=freq, s=s, z0=z0, name=ntwk_name, comments="\n".join(comments))
+        ntwk = Network(frequency=freq, s=s, z0=z0,
+                       name=ntwk_name, comments="\n".join(comments))
 
         return ntwk
 
@@ -328,11 +339,13 @@ class Mdif:
             # VAR param_name_N = Z
             if line.lower().startswith('var'):
                 # current parameter
-                param_name, param_value = (s.strip() for s in line[3:].split('='))
+                param_name, param_value = (s.strip()
+                                           for s in line[3:].split('='))
                 # remove the datatype "(blah)" in "varname(blah)" if any
                 param_name = param_name.split('(')[0]
                 # try to convert the value as a number
-                self._params.append(param_name) if param_name not in self.params else self.params
+                self._params.append(
+                    param_name) if param_name not in self.params else self.params
                 try:
                     params[param_name] = float(param_value)
                 except ValueError:
@@ -354,12 +367,14 @@ class Mdif:
                 if in_noise_block:
                     in_noise_block = False
                     noise_arr = np.array(
-                        [e.split() for e in block_data if not e.startswith(("!", "#", "%"))]
-                        ).astype(float)
+                        [e.split()
+                         for e in block_data if not e.startswith(("!", "#", "%"))]
+                    ).astype(float)
                     freq, nfmin, gamma_opt_mag, gamma_opt_angle, rn = noise_arr.T
                     nfreq = Frequency.from_f(freq, unit=ntwk.frequency.unit)
-                    gamma = gamma_opt_mag * np.exp(1j*np.deg2rad(gamma_opt_angle))
-                    ntwk.set_noise_a(nfreq, nfmin, gamma, rn * ntwk.z0[0,0])
+                    gamma = gamma_opt_mag * \
+                        np.exp(1j*np.deg2rad(gamma_opt_angle))
+                    ntwk.set_noise_a(nfreq, nfmin, gamma, rn * ntwk.z0[0, 0])
 
                 block_data = []
 
@@ -391,8 +406,8 @@ class Mdif:
         return ns
 
     @staticmethod
-    def write(ns : NetworkSet,
-              filename : str,
+    def write(ns: NetworkSet,
+              filename: str,
               values: dict | None = None,
               data_types: dict | None = None,
               comments: str | None = None,
@@ -452,7 +467,8 @@ class Mdif:
                 # using Network names (->string)
                 data_types = {"name": "string"}
 
-        # Remove the return_string argument, as it's a required argument for this method
+        # Remove the return_string argument, as it's a required argument for
+        # this method
         kwargs.pop('return_string', None)
 
         # VAR datatypes
@@ -481,23 +497,28 @@ class Mdif:
 
                     var_type = "" if ads_compatible else f"({dict_types[data_types[p]]})"
                     if data_types[p] == "string":
-                        var_def_str = f'VAR {p}{var_type} = "{values[p][filenumber]}"'
+                        var_def_str = f'VAR {p}{var_type} = "{
+                            values[p][filenumber]}"'
                     else:
-                        var_def_str = f"VAR {p}{var_type} = {values[p][filenumber]}"
+                        var_def_str = f"VAR {p}{var_type} = {
+                            values[p][filenumber]}"
                     mdif.write(var_def_str + "\n")
 
                 mdif.write("\nBEGIN ACDATA\n")
                 mdif.write(optionstring + "\n")
                 mdif.write("! network name: " + ntwk.name + "\n")
 
-                data = ntwk.write_touchstone(return_string=True, write_noise=False, **kwargs)
+                data = ntwk.write_touchstone(
+                    return_string=True, write_noise=False, **kwargs)
                 mdif.write(data)
 
                 if is_noisy:
-                    # this "END" terminates "ACDATA" (s-parameters) and begins noise ("NDATA")
+                    # this "END" terminates "ACDATA" (s-parameters) and begins
+                    # noise ("NDATA")
                     mdif.write("END\n\nBEGIN NDATA\n")
                     mdif.write("%F nfmin n11x n11y rn\n")
-                    mdif.write(f"# {ntwk.frequency.unit} S MA R {ntwk.z0[0, 0].real}\n")
+                    mdif.write(
+                        f"# {ntwk.frequency.unit} S MA R {ntwk.z0[0, 0].real}\n")
                     ntwk._write_noisedata(output=mdif)
 
                 mdif.write("END\n\n")
@@ -537,7 +558,17 @@ class Mdif:
         else:
             # parse the option string for nports not equal to 2
 
-            for i in product(list(range(1, nports + 1)), list(range(1, nports + 1))):
+            for i in product(
+                list(
+                    range(
+                        1,
+                        nports +
+                        1)),
+                list(
+                    range(
+                    1,
+                    nports +
+                        1))):
 
                 optionstring += corestring.format(i[0], i[1], i[0], i[1])
 
@@ -551,7 +582,8 @@ class Mdif:
                 if nports >= 4:
                     if np.remainder(i[1], 4) == 0:
                         optionstring += "\n"
-                    # NOTE: not sure if this is needed. Doesn't seem to be required by Microwave Office
+                    # NOTE: not sure if this is needed. Doesn't seem to be
+                    # required by Microwave Office
                     if i[1] == nports:
                         optionstring += "\n"
 

@@ -35,7 +35,8 @@ if TYPE_CHECKING:
     from .network import Network
 
 
-def indexes(y: np.ndarray, thres: float = 0.3, min_dist: int = 1) -> np.ndarray:
+def indexes(y: np.ndarray, thres: float = 0.3,
+            min_dist: int = 1) -> np.ndarray:
     """
     Peak detection routine.
 
@@ -65,32 +66,36 @@ def indexes(y: np.ndarray, thres: float = 0.3, min_dist: int = 1) -> np.ndarray:
     http://pythonhosted.org/PeakUtils/index.html
 
     """
-    #This function was taken from peakutils, and is covered
+    # This function was taken from peakutils, and is covered
     # by the MIT license, included below:
 
-    #The MIT License (MIT)
+    # The MIT License (MIT)
 
-    #Copyright (c) 2014 Lucas Hermann Negri
+    # Copyright (c) 2014 Lucas Hermann Negri
 
-    #Permission is hereby granted, free of charge, to any person obtaining a copy
-    #of this software and associated documentation files (the "Software"), to deal
-    #in the Software without restriction, including without limitation the rights
-    #to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-    #copies of the Software, and to permit persons to whom the Software is
-    #furnished to do so, subject to the following conditions:
+    # Permission is hereby granted, free of charge, to any person obtaining a copy
+    # of this software and associated documentation files (the "Software"), to deal
+    # in the Software without restriction, including without limitation the rights
+    # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    # copies of the Software, and to permit persons to whom the Software is
+    # furnished to do so, subject to the following conditions:
 
-    #The above copyright notice and this permission notice shall be included in
-    #all copies or substantial portions of the Software.
+    # The above copyright notice and this permission notice shall be included in
+    # all copies or substantial portions of the Software.
 
-    #THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-    #IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-    #FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-    #AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-    #LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-    #OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-    #THE SOFTWARE.
+    # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    # AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+    # THE SOFTWARE.
 
-    if isinstance(y, np.ndarray) and np.issubdtype(y.dtype, np.unsignedinteger):
+    if isinstance(
+            y,
+            np.ndarray) and np.issubdtype(
+            y.dtype,
+            np.unsignedinteger):
         raise ValueError("y must be signed")
 
     thres = thres * (np.max(y) - np.min(y)) + np.min(y)
@@ -99,7 +104,8 @@ def indexes(y: np.ndarray, thres: float = 0.3, min_dist: int = 1) -> np.ndarray:
     # compute first order difference
     dy = np.diff(y)
 
-    # propagate left and right values successively to fill all plateau pixels (0-value)
+    # propagate left and right values successively to fill all plateau pixels
+    # (0-value)
     zeros, = np.where(dy == 0)
 
     # check if the singal is totally flat
@@ -107,12 +113,13 @@ def indexes(y: np.ndarray, thres: float = 0.3, min_dist: int = 1) -> np.ndarray:
         return np.array([])
 
     while len(zeros):
-        # add pixels 2 by 2 to propagate left and right value onto the zero-value pixel
+        # add pixels 2 by 2 to propagate left and right value onto the
+        # zero-value pixel
         zerosr = np.hstack([dy[1:], 0.])
         zerosl = np.hstack([0., dy[:-1]])
 
         # replace 0 with right value if non zero
-        dy[zeros]=zerosr[zeros]
+        dy[zeros] = zerosr[zeros]
         zeros, = np.where(dy == 0)
 
         # replace 0 with left value if non zero
@@ -120,9 +127,7 @@ def indexes(y: np.ndarray, thres: float = 0.3, min_dist: int = 1) -> np.ndarray:
         zeros, = np.where(dy == 0)
 
     # find the peaks by using the first order difference
-    peaks = np.where((np.hstack([dy, 0.]) < 0.)
-                     & (np.hstack([0., dy]) > 0.)
-                     & (y > thres))[0]
+    peaks = np.where((np.hstack([dy, 0.]) < 0.) & (np.hstack([0., dy]) > 0.) & (y > thres))[0]
 
     # handle multiple peaks, respecting the minimum distance
     if peaks.size > 1 and min_dist > 1:
@@ -141,7 +146,11 @@ def indexes(y: np.ndarray, thres: float = 0.3, min_dist: int = 1) -> np.ndarray:
     return peaks
 
 
-def find_n_peaks(x: np.ndarray, n: int, thres: float = 0.9, **kwargs) -> list[int]:
+def find_n_peaks(
+        x: np.ndarray,
+        n: int,
+        thres: float = 0.9,
+        **kwargs) -> list[int]:
     """
     Find a given number of peaks in a signal.
 
@@ -178,6 +187,7 @@ def find_n_peaks(x: np.ndarray, n: int, thres: float = 0.9, **kwargs) -> list[in
             return peak_idxs
     raise ValueError('Couldnt find %i peaks' % n)
 
+
 time_lookup_dict = {
     "s": 1,
     "ms": 1e-3,
@@ -186,6 +196,7 @@ time_lookup_dict = {
     "ns": 1e-9,
     "ps": 1e-12
 }
+
 
 def detect_span(ntwk: Network, t_unit: str = "") -> float:
     """
@@ -217,7 +228,7 @@ def detect_span(ntwk: Network, t_unit: str = "") -> float:
         warnings.warn('''
                         Time unit not passed: uses 's' per default.
                         ''',
-                        DeprecationWarning, stacklevel=2)
+                      DeprecationWarning, stacklevel=2)
         t_unit = 's'
 
     x = ntwk.s_time_db.flatten()
@@ -227,7 +238,11 @@ def detect_span(ntwk: Network, t_unit: str = "") -> float:
 
     return span / time_lookup_dict[t_unit]
 
-def get_window(window: str | tuple | Callable, Nx: int, **kwargs) -> np.ndarray:
+
+def get_window(
+        window: str | tuple | Callable,
+        Nx: int,
+        **kwargs) -> np.ndarray:
     """Calls a custom window function or `scipy.signal.get_window()` depending on the window argument.
 
     Parameters
@@ -249,9 +264,19 @@ def get_window(window: str | tuple | Callable, Nx: int, **kwargs) -> np.ndarray:
     else:
         return scipy.signal.get_window(window, Nx=Nx, **kwargs)
 
-def time_gate(ntwk: Network, start: float = None, stop: float = None, center: float = None, span: float = None,
-              mode: str = 'bandpass', window=('kaiser', 6),
-              method: str ='fft', fft_window: str='cosine', conv_mode: str='wrap', t_unit: str = "") -> Network:
+
+def time_gate(
+        ntwk: Network,
+        start: float = None,
+        stop: float = None,
+        center: float = None,
+        span: float = None,
+        mode: str = 'bandpass',
+        window=('kaiser', 6),
+        method: str = 'fft',
+        fft_window: str = 'cosine',
+        conv_mode: str = 'wrap',
+        t_unit: str = "") -> Network:
     """
     Time-domain gating of one-port s-parameters with a window function from scipy.signal.windows.
 
@@ -347,8 +372,9 @@ def time_gate(ntwk: Network, start: float = None, stop: float = None, center: fl
         anything.
     """
 
-    if ntwk.nports >1:
-        raise ValueError('Time-gating only works on one-ports. Try passing `ntwk.s11` or `ntwk.s21`.')
+    if ntwk.nports > 1:
+        raise ValueError(
+            'Time-gating only works on one-ports. Try passing `ntwk.s11` or `ntwk.s21`.')
 
     if t_unit == "":
         if not all([e is None for e in [start, stop, center, span]]):
@@ -356,7 +382,7 @@ def time_gate(ntwk: Network, start: float = None, stop: float = None, center: fl
             warnings.warn('''
                             Time unit not passed: uses 's' per default.
                             ''',
-                            DeprecationWarning, stacklevel=2)
+                          DeprecationWarning, stacklevel=2)
         t_unit = 's'
 
     t_mult = time_lookup_dict[t_unit]
@@ -396,7 +422,8 @@ def time_gate(ntwk: Network, start: float = None, stop: float = None, center: fl
         # time-domain band-pass mode
         n_td = n_fd
         if fft_window is not None:
-            # create band-pass window (zero on both lower and upper limit, one at center)
+            # create band-pass window (zero on both lower and upper limit, one
+            # at center)
             window_fd = get_window(fft_window, n_fd)
         else:
             # create dummy-window
@@ -406,13 +433,15 @@ def time_gate(ntwk: Network, start: float = None, stop: float = None, center: fl
         # time-domain low-pass mode
         if ntwk.f[0] > 0.0:
             # no dc point included
-            warnings.warn('The network data to be gated does not contain the dc point (0 Hz). This is required for the '
-                          'selected low-pass gating mode. Please consider to include the dc point if the results are '
-                          'inaccurate, either by direct measurement of by extrapolation using '
-                          'skrf.Network.extrapolate_to_dc().', UserWarning, stacklevel=2)
+            warnings.warn(
+                'The network data to be gated does not contain the dc point (0 Hz). This is required for the '
+                'selected low-pass gating mode. Please consider to include the dc point if the results are '
+                'inaccurate, either by direct measurement of by extrapolation using '
+                'skrf.Network.extrapolate_to_dc().', UserWarning, stacklevel=2)
         n_td = 2 * n_fd - 1
         if fft_window is not None:
-            # create low-pass window (one at lower limit at f=0, zero on upper limit)
+            # create low-pass window (one at lower limit at f=0, zero on upper
+            # limit)
             window_fd = get_window(fft_window, 2 * n_fd)
             window_fd = window_fd[n_fd:]
         else:
@@ -442,7 +471,8 @@ def time_gate(ntwk: Network, start: float = None, stop: float = None, center: fl
     if method == 'convolution':
         # frequency-domain gating
         kernel = fftshift(fft(ifftshift(gate), norm='forward'))
-        ntwk_gated.s[:, 0, 0] = scipy.ndimage.convolve1d(ntwk_gated.s[:, 0, 0], kernel, mode=conv_mode)
+        ntwk_gated.s[:, 0, 0] = scipy.ndimage.convolve1d(
+            ntwk_gated.s[:, 0, 0], kernel, mode=conv_mode)
     elif method == 'fft':
         # time-domain band-pass mode
         s_td = fftshift(ifft(ntwk_gated.s[:, 0, 0]))

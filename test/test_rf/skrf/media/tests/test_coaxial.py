@@ -15,6 +15,7 @@ class MediaTestCase(unittest.TestCase):
     """
 
     """
+
     def setUp(self):
         """
 
@@ -22,30 +23,28 @@ class MediaTestCase(unittest.TestCase):
         self.files_dir = os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
             'qucs_prj'
-            )
-
-
+        )
 
     def test_line(self):
         """
         """
-        fname = os.path.join(self.files_dir,\
-                'coaxial.s2p')
+        fname = os.path.join(self.files_dir,
+                             'coaxial.s2p')
         qucs_ntwk = rf.Network(fname)
 
         a_media = Coaxial(
-            frequency = qucs_ntwk.frequency,
+            frequency=qucs_ntwk.frequency,
             Dint=1e-3, Dout=3e-3, epsilon_r=2.29,
             tan_delta=4e-4, sigma=1./1.68e-8,
-            z0_port = 50.
-            )
-        skrf_ntwk = a_media.line(200e-3,'m')
+            z0_port=50.
+        )
+        skrf_ntwk = a_media.line(200e-3, 'm')
         # Equal assertion fails if tan_delta or resistivity are non-zero
-        #self.assertEqual(qucs_ntwk, skrf_ntwk)
+        # self.assertEqual(qucs_ntwk, skrf_ntwk)
         self.assertTrue(
-            max(abs(skrf_ntwk.s_mag[:,1,0] - qucs_ntwk.s_mag[:,1,0])) < 1e-3
-            )
-
+            max(abs(skrf_ntwk.s_mag[:, 1, 0] -
+                qucs_ntwk.s_mag[:, 1, 0])) < 1e-3
+        )
 
     def test_init_from_attenuation_VF_units(self):
         """
@@ -58,30 +57,38 @@ class MediaTestCase(unittest.TestCase):
         frequency = rf.Frequency(rng.random(), unit='GHz', npoints=1)
         _att = rng.random()
         # dB/m
-        coax = Coaxial.from_attenuation_VF(frequency=frequency, VF=1, att=_att, unit='dB/m')
+        coax = Coaxial.from_attenuation_VF(
+            frequency=frequency, VF=1, att=_att, unit='dB/m')
         assert_almost_equal(coax.gamma.real,  db_2_np(_att))
         # dB/100m
-        coax = Coaxial.from_attenuation_VF(frequency=frequency, VF=1, att=_att, unit='dB/100m')
+        coax = Coaxial.from_attenuation_VF(
+            frequency=frequency, VF=1, att=_att, unit='dB/100m')
         assert_almost_equal(coax.gamma.real,  db_2_np(_att)/100)
         # dB/feet
-        coax = Coaxial.from_attenuation_VF(frequency=frequency, VF=1, att=_att, unit='dB/feet')
+        coax = Coaxial.from_attenuation_VF(
+            frequency=frequency, VF=1, att=_att, unit='dB/feet')
         assert_almost_equal(coax.gamma.real,  db_2_np(_att)*meter_2_feet())
         # dB/100m
-        coax = Coaxial.from_attenuation_VF(frequency=frequency, VF=1, att=_att, unit='dB/100feet')
+        coax = Coaxial.from_attenuation_VF(
+            frequency=frequency, VF=1, att=_att, unit='dB/100feet')
         assert_almost_equal(coax.gamma.real,  db_2_np(_att)/100*meter_2_feet())
         # Neper/m
-        coax = Coaxial.from_attenuation_VF(frequency=frequency, VF=1, att=_att, unit='Np/m')
+        coax = Coaxial.from_attenuation_VF(
+            frequency=frequency, VF=1, att=_att, unit='Np/m')
         assert_almost_equal(coax.gamma.real,  _att)
         # Neper/feet
-        coax = Coaxial.from_attenuation_VF(frequency=frequency, VF=1, att=_att, unit='Np/feet')
+        coax = Coaxial.from_attenuation_VF(
+            frequency=frequency, VF=1, att=_att, unit='Np/feet')
         assert_almost_equal(coax.gamma.real,  _att*meter_2_feet())
 
         with self.assertRaises(ValueError):
-            coax = Coaxial.from_attenuation_VF(frequency=frequency, VF=1, att=np.array([.1, .2]), unit='Np/feet')
+            coax = Coaxial.from_attenuation_VF(
+                frequency=frequency, VF=1, att=np.array([.1, .2]),
+                unit='Np/feet')
         frequency = rf.Frequency(1., 1.1, unit='GHz', npoints=2)
-        coax = Coaxial.from_attenuation_VF(frequency=frequency, VF=1, att=np.array([.1, .2]), unit='Np/feet')
-        self.assertEqual( coax.frequency.f.shape, (2,))
-
+        coax = Coaxial.from_attenuation_VF(
+            frequency=frequency, VF=1, att=np.array([.1, .2]), unit='Np/feet')
+        self.assertEqual(coax.frequency.f.shape, (2,))
 
     def test_init_from_attenuation_VF_array_att(self):
         """
@@ -94,9 +101,11 @@ class MediaTestCase(unittest.TestCase):
         # k0k1k2 attenuation model
         # values taken for HUBER+SUHNER DATA SHEET Coaxial Cable S_10172_B-1
         # attenuation in dB/m for frequency in GHz
-        att = 0 + 0.0826*np.sqrt(frequency.f_scaled) + 0.0129*frequency.f_scaled
+        att = 0 + 0.0826*np.sqrt(frequency.f_scaled) + \
+            0.0129*frequency.f_scaled
 
-        coax = Coaxial.from_attenuation_VF(frequency=frequency, att=att, unit='dB/m')
+        coax = Coaxial.from_attenuation_VF(
+            frequency=frequency, att=att, unit='dB/m')
         # check alpha in gamma
         assert_array_almost_equal(db_2_np(att), coax.gamma.real)
 
@@ -111,8 +120,8 @@ class MediaTestCase(unittest.TestCase):
 
         rho = 1e-7
         dint = 0.44e-3
-        coax = Coaxial(freq, z0_port = 50, Dint = dint, Dout = 1.0e-3,
-                       sigma = 1/rho)
+        coax = Coaxial(freq, z0_port=50, Dint=dint, Dout=1.0e-3,
+                       sigma=1/rho)
 
         dc_res = rho / (np.pi * (dint/2)**2)
 
@@ -127,9 +136,9 @@ class MediaTestCase(unittest.TestCase):
     def test_LC(self):
         """Assert that LC = mu*eps_prime."""
         coax = Coaxial(
-            frequency = rf.Frequency(1, 10, npoints=100, unit='GHz'),
+            frequency=rf.Frequency(1, 10, npoints=100, unit='GHz'),
             Dint=1e-3, Dout=3e-3, epsilon_r=2.29,
             tan_delta=4e-4, sigma=1./1.68e-8,
-            z0_port = 50.
-            )
+            z0_port=50.
+        )
         assert_array_almost_equal(coax.L*coax.C, mu_0*coax.epsilon_prime)

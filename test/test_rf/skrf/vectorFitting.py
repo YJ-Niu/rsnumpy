@@ -119,7 +119,11 @@ class VectorFitting:
         self.history_rank_deficiency = []
 
     @staticmethod
-    def get_spurious(poles: np.ndarray, residues: np.ndarray, n_freqs: int = 101, gamma: float = 0.03) -> np.ndarray:
+    def get_spurious(
+            poles: np.ndarray,
+            residues: np.ndarray,
+            n_freqs: int = 101,
+            gamma: float = 0.03) -> np.ndarray:
         """
         Classifies fitted pole-residue pairs as spurious or not spurious. The implementation is based on the evaluation
         of band-limited energy norms (p=2) of the resonance curves of individual pole-residue pairs, as proposed in
@@ -157,11 +161,24 @@ class VectorFitting:
         idx_cmplx = poles.imag > 0
         spurious = np.full(np.shape(poles), False, dtype=bool)
         if np.any(idx_cmplx):
-            omega_eval = np.linspace(np.min(poles[idx_cmplx].imag) / 3, np.max(poles[idx_cmplx].imag) * 3, n_freqs)
-            h = (residues[:, None, idx_cmplx] / (1j * omega_eval[:, None] - poles[idx_cmplx])
-                 + np.conj(residues[:, None, idx_cmplx]) / (1j * omega_eval[:, None] - np.conj(poles[idx_cmplx])))
-            norm2 = np.sqrt(scipy.integrate.trapezoid(h.real ** 2 + h.imag ** 2, omega_eval, axis=1))
-            spurious[idx_cmplx] = np.all(norm2 / np.mean(norm2) < gamma, axis=0)
+            omega_eval = np.linspace(
+                np.min(
+                    poles[idx_cmplx].imag) / 3,
+                np.max(
+                    poles[idx_cmplx].imag) * 3,
+                n_freqs)
+            h = (residues[:, None, idx_cmplx] /
+                 (1j *
+                  omega_eval[:, None] -
+                  poles[idx_cmplx]) +
+                 np.conj(residues[:, None, idx_cmplx]) /
+                 (1j *
+                 omega_eval[:, None] -
+                 np.conj(poles[idx_cmplx])))
+            norm2 = np.sqrt(scipy.integrate.trapezoid(
+                h.real ** 2 + h.imag ** 2, omega_eval, axis=1))
+            spurious[idx_cmplx] = np.all(
+                norm2 / np.mean(norm2) < gamma, axis=0)
         return spurious
 
     @staticmethod
@@ -179,12 +196,19 @@ class VectorFitting:
         order: int
         """
         # poles.imag != 0 is True(1) for complex poles, False (0) for real poles.
-        # Adding one to each element gives 2 columns for complex and 1 column for real poles.
+        # Adding one to each element gives 2 columns for complex and 1 column
+        # for real poles.
         return np.sum((poles.imag != 0) + 1)
 
-    def vector_fit(self, n_poles_real: int = 2, n_poles_cmplx: int = 2, init_pole_spacing: str = 'lin',
-                   parameter_type: str = 's', fit_constant: bool = True, fit_proportional: bool = False,
-                   enforce_dc: bool = True) -> None:
+    def vector_fit(
+            self,
+            n_poles_real: int = 2,
+            n_poles_cmplx: int = 2,
+            init_pole_spacing: str = 'lin',
+            parameter_type: str = 's',
+            fit_constant: bool = True,
+            fit_proportional: bool = False,
+            enforce_dc: bool = True) -> None:
         """
         Main work routine performing the vector fit. The results will be stored in the class variables
         :attr:`poles`, :attr:`residues`, :attr:`proportional_coeff` and :attr:`constant_coeff`.
@@ -241,21 +265,24 @@ class VectorFitting:
 
         timer_start = timer()
 
-        # use normalized frequencies during the iterations (seems to be more stable during least-squares fit)
+        # use normalized frequencies during the iterations (seems to be more
+        # stable during least-squares fit)
         norm = np.average(self.network.f)
         # norm = np.exp(np.mean(np.log(self.network.f)))
         freqs_norm = np.array(self.network.f) / norm
 
         # get initial poles
-        poles = self._init_poles(freqs_norm, n_poles_real, n_poles_cmplx, init_pole_spacing)
+        poles = self._init_poles(
+            freqs_norm, n_poles_real, n_poles_cmplx, init_pole_spacing)
 
         # check and normalize custom poles
         if poles is None:
             if self.poles is not None and len(self.poles) > 0:
                 poles = self.poles / norm
             else:
-                raise ValueError('Initial poles must be provided in `self.poles` when calling with '
-                                 '`init_pole_spacing == \'custom\'`.')
+                raise ValueError(
+                    'Initial poles must be provided in `self.poles` when calling with '
+                    '`init_pole_spacing == \'custom\'`.')
 
         # save initial poles (un-normalize first)
         initial_poles = poles * norm
@@ -271,8 +298,9 @@ class VectorFitting:
         elif parameter_type.lower() == 'y':
             nw_responses = self.network.y
         else:
-            warnings.warn('Invalid choice of matrix parameter type (S, Z, or Y); proceeding with scattering '
-                          'representation.', UserWarning, stacklevel=2)
+            warnings.warn(
+                'Invalid choice of matrix parameter type (S, Z, or Y); proceeding with scattering '
+                'representation.', UserWarning, stacklevel=2)
             nw_responses = self.network.s
 
         # stack frequency responses as a single vector
@@ -286,13 +314,15 @@ class VectorFitting:
 
         # responses will be weighted according to their norm;
         # alternative: equal weights with weight_response = 1.0
-        # or anti-proportional weights with weight_response = 1 / np.linalg.norm(freq_response)
+        # or anti-proportional weights with weight_response = 1 /
+        # np.linalg.norm(freq_response)
         weights_responses = np.linalg.norm(freq_responses, axis=1)
-        #weights_responses = np.ones(self.network.nports ** 2)
-        #weights_responses = 10 / np.exp(np.mean(np.log(np.abs(freq_responses)), axis=1))
+        # weights_responses = np.ones(self.network.nports ** 2)
+        # weights_responses = 10 / np.exp(np.mean(np.log(np.abs(freq_responses)), axis=1))
 
         # ITERATIVE FITTING OF POLES to the provided frequency responses
-        # initial set of poles will be replaced with new poles after every iteration
+        # initial set of poles will be replaced with new poles after every
+        # iteration
         iterations = self.max_iterations
         self.d_res_history = []
         self.delta_max_history = []
@@ -307,7 +337,8 @@ class VectorFitting:
             poles, d_res, cond, rank_deficiency, residuals, singular_vals = self._pole_relocation(
                 poles, freqs_norm, freq_responses, weights_responses, fit_constant, fit_proportional)
 
-            logger.info(f'Condition number of coefficient matrix is {int(cond)}')
+            logger.info(
+                f'Condition number of coefficient matrix is {int(cond)}')
             self.history_cond_A.append(cond)
 
             self.history_rank_deficiency.append(rank_deficiency)
@@ -316,7 +347,8 @@ class VectorFitting:
             self.d_res_history.append(d_res)
             logger.info(f'd_res = {d_res}')
 
-            # calculate relative changes in the singular values; stop iteration loop once poles have converged
+            # calculate relative changes in the singular values; stop iteration
+            # loop once poles have converged
             new_max_singular = np.amax(singular_vals)
             delta_max = np.abs(1 - new_max_singular / max_singular)
             self.delta_max_history.append(delta_max)
@@ -327,8 +359,11 @@ class VectorFitting:
             if delta_max < self.max_tol:
                 if converged:
                     # is really converged, finish
-                    logger.info(f'Pole relocation process converged after {self.max_iterations - iterations + 1} '
-                                  'iterations.')
+                    logger.info(
+                        f'Pole relocation process converged after {
+                            self.max_iterations -
+                            iterations +
+                            1} ' 'iterations.')
                     stop = True
                 else:
                     # might be converged, but do one last run to be sure
@@ -345,13 +380,15 @@ class VectorFitting:
                 max_cond = np.amax(self.history_cond_A)
                 max_deficiency = np.amax(self.history_rank_deficiency)
                 if max_cond > 1e10:
-                    hint_illcond = ('\nHint: the linear system was ill-conditioned (max. condition number was '
-                                    f'{max_cond}).')
+                    hint_illcond = (
+                        '\nHint: the linear system was ill-conditioned (max. condition number was '
+                        f'{max_cond}).')
                 else:
                     hint_illcond = ''
                 if max_deficiency < 0:
-                    hint_rank = ('\nHint: the coefficient matrix was rank-deficient (max. rank deficiency was '
-                                 f'{max_deficiency}).')
+                    hint_rank = (
+                        '\nHint: the coefficient matrix was rank-deficient (max. rank deficiency was '
+                        f'{max_deficiency}).')
                 else:
                     hint_rank = ''
                 if converged and stop is False:
@@ -390,19 +427,35 @@ class VectorFitting:
         timer_stop = timer()
         self.wall_clock_time = timer_stop - timer_start
 
-        logger.info(f'\n### Vector fitting finished in {self.wall_clock_time} seconds.\n')
+        logger.info(
+            f'\n### Vector fitting finished in {
+                self.wall_clock_time} seconds.\n')
 
-        # raise a warning if the fitted Network is passive but the fit is not (only without proportional_coeff):
+        # raise a warning if the fitted Network is passive but the fit is not
+        # (only without proportional_coeff):
         if self.network.is_passive() and not fit_proportional:
             if not self.is_passive():
-                warnings.warn('The fitted network is passive, but the vector fit is not passive. Consider running '
-                              '`passivity_enforce()` to enforce passivity before using this model.',
-                              UserWarning, stacklevel=2)
+                warnings.warn(
+                    'The fitted network is passive, but the vector fit is not passive. Consider running '
+                    '`passivity_enforce()` to enforce passivity before using this model.',
+                    UserWarning,
+                    stacklevel=2)
 
-    def auto_fit(self, n_poles_init_real: int = 3, n_poles_init_cmplx: int = 3, n_poles_add: int = 3,
-                 model_order_max: int = 100, iters_start: int = 3, iters_inter: int = 3, iters_final: int = 5,
-                 target_error: float = 1e-2, alpha: float = 0.03, gamma: float = 0.03, nu_samples: float = 1.0,
-                 parameter_type: str = 's', enforce_dc: bool = True) -> (np.ndarray, np.ndarray):
+    def auto_fit(self,
+                 n_poles_init_real: int = 3,
+                 n_poles_init_cmplx: int = 3,
+                 n_poles_add: int = 3,
+                 model_order_max: int = 100,
+                 iters_start: int = 3,
+                 iters_inter: int = 3,
+                 iters_final: int = 5,
+                 target_error: float = 1e-2,
+                 alpha: float = 0.03,
+                 gamma: float = 0.03,
+                 nu_samples: float = 1.0,
+                 parameter_type: str = 's',
+                 enforce_dc: bool = True) -> (np.ndarray,
+                                              np.ndarray):
         """
         Automatic fitting routine implementing the "vector fitting with adding and skimming" algorithm as proposed in
         [#Grivet-Talocia]_. This algorithm is able to provide high quality macromodels with automatic model order
@@ -491,7 +544,8 @@ class VectorFitting:
 
         timer_start = timer()
 
-        # use normalized frequencies during the iterations (seems to be more stable during least-squares fit)
+        # use normalized frequencies during the iterations (seems to be more
+        # stable during least-squares fit)
         norm = np.average(self.network.f)
         # norm = np.exp(np.mean(np.log(self.network.f)))
         freqs_norm = np.array(self.network.f) / norm
@@ -507,7 +561,8 @@ class VectorFitting:
                           f'{model_order_max}. Falling back to `{n_poles_init_real=}` and `{n_poles_init_cmplx=}`.',
                           UserWarning, stacklevel=2)
 
-        poles = self._init_poles(freqs_norm, n_poles_init_real, n_poles_init_cmplx, 'lin')
+        poles = self._init_poles(
+            freqs_norm, n_poles_init_real, n_poles_init_cmplx, 'lin')
 
         logger.info('### Starting pole relocation process.\n')
 
@@ -525,8 +580,9 @@ class VectorFitting:
             fit_constant = True
             fit_proportional = True
         else:
-            warnings.warn('Invalid choice of matrix parameter type (S, Z, or Y); proceeding with scattering '
-                          'representation.', UserWarning, stacklevel=2)
+            warnings.warn(
+                'Invalid choice of matrix parameter type (S, Z, or Y); proceeding with scattering '
+                'representation.', UserWarning, stacklevel=2)
             nw_responses = self.network.s
             fit_constant = True
             fit_proportional = False
@@ -542,7 +598,8 @@ class VectorFitting:
 
         # responses will be weighted according to their norm;
         # alternative: equal weights with weight_response = 1.0
-        # or anti-proportional weights with weight_response = 1 / np.linalg.norm(freq_response)
+        # or anti-proportional weights with weight_response = 1 /
+        # np.linalg.norm(freq_response)
         weights_responses = np.linalg.norm(freq_responses, axis=1)
         # weights_responses = np.ones(self.network.nports ** 2)
         # weights_responses = 10 / np.exp(np.mean(np.log(np.abs(freq_responses)), axis=1))
@@ -554,7 +611,8 @@ class VectorFitting:
 
             self.d_res_history.append(d_res)
 
-            logger.info(f'Condition number of coefficient matrix is {int(cond)}')
+            logger.info(
+                f'Condition number of coefficient matrix is {int(cond)}')
             self.history_cond_A.append(cond)
 
             self.history_rank_deficiency.append(rank_deficiency)
@@ -569,8 +627,14 @@ class VectorFitting:
         # RESIDUE FITTING FOR ERROR COMPUTATION
         residues, constant_coeff, proportional_coeff, residuals, rank, singular_vals = self._fit_residues(
             poles, freqs_norm, freq_responses, fit_constant, fit_proportional, enforce_dc=enforce_dc)
-        delta = self._get_delta(poles, residues, constant_coeff, proportional_coeff, freqs_norm, freq_responses,
-                                weights_responses)
+        delta = self._get_delta(
+            poles,
+            residues,
+            constant_coeff,
+            proportional_coeff,
+            freqs_norm,
+            freq_responses,
+            weights_responses)
         error_peak = np.max(delta)
         error_peak_history.append(error_peak)
 
@@ -589,7 +653,8 @@ class VectorFitting:
             model_order -= n_skim
 
             # REPLACING SPURIOUS POLE AND ADDING NEW POLES
-            idx_freqs_start, idx_freqs_stop, idx_freqs_max, delta_mean_bands = self._find_error_bands(freqs_norm, delta)
+            idx_freqs_start, idx_freqs_stop, idx_freqs_max, delta_mean_bands = self._find_error_bands(
+                freqs_norm, delta)
 
             n_bands = len(idx_freqs_max)
             if n_bands < n_skim:
@@ -599,7 +664,8 @@ class VectorFitting:
             else:
                 n_add = n_skim + n_poles_add
 
-            # only complex-conjugate pole pairs are added, each pair increases the model order by 2
+            # only complex-conjugate pole pairs are added, each pair increases
+            # the model order by 2
             if 2 * n_add > model_order_max - model_order:
                 n_add = int(0.5 * (model_order_max - model_order))
 
@@ -608,12 +674,15 @@ class VectorFitting:
                 pole_add = (-0.01 + 1j) * omega_add
 
                 # compute distance to neighbouring poles
-                abs_poles_existing = np.abs(poles) - pole_add.imag  # (equation 16)
-                #abs_poles_existing = np.abs(poles - pole_add)   # (equation 17)
+                abs_poles_existing = np.abs(
+                    poles) - pole_add.imag  # (equation 16)
+                # abs_poles_existing = np.abs(poles - pole_add)   # (equation
+                # 17)
 
                 # avoid forbidden bands (too close to neighbour)
                 if np.min(abs_poles_existing) < nu or pole_add.imag < nu:
-                    # decide shift direction (towards higher or lower frequencies)
+                    # decide shift direction (towards higher or lower
+                    # frequencies)
                     if idx_freqs_max[i] > 0:
                         delta_below = delta[idx_freqs_max[i] - 1]
                     else:
@@ -639,7 +708,8 @@ class VectorFitting:
 
                 self.d_res_history.append(d_res)
 
-                logger.info(f'Condition number of coefficient matrix is {int(cond)}')
+                logger.info(
+                    f'Condition number of coefficient matrix is {int(cond)}')
                 self.history_cond_A.append(cond)
 
                 self.history_rank_deficiency.append(rank_deficiency)
@@ -648,19 +718,27 @@ class VectorFitting:
                 new_max_singular = np.amax(singular_vals)
                 delta_max = np.abs(1 - new_max_singular / max_singular)
                 self.delta_max_history.append(delta_max)
-                logger.info(f'Max. relative change in residues = {delta_max}\n')
+                logger.info(
+                    f'Max. relative change in residues = {delta_max}\n')
                 max_singular = new_max_singular
 
             # RESIDUE FITTING FOR ERROR COMPUTATION
             residues, constant_coeff, proportional_coeff, residuals, rank, singular_vals = self._fit_residues(
                 poles, freqs_norm, freq_responses, fit_constant, fit_proportional, enforce_dc=enforce_dc)
-            delta = self._get_delta(poles, residues, constant_coeff, proportional_coeff, freqs_norm, freq_responses,
-                                    weights_responses)
+            delta = self._get_delta(
+                poles,
+                residues,
+                constant_coeff,
+                proportional_coeff,
+                freqs_norm,
+                freq_responses,
+                weights_responses)
             error_peak_history.append(np.max(delta))
 
             m = 3
             if len(error_peak_history) > m:
-                delta_eps = np.mean(np.abs(np.diff(error_peak_history[-1-m:-1])))
+                delta_eps = np.mean(
+                    np.abs(np.diff(error_peak_history[-1-m:-1])))
             else:
                 delta_eps = 1
 
@@ -678,7 +756,8 @@ class VectorFitting:
 
             self.d_res_history.append(d_res)
 
-            logger.info(f'Condition number of coefficient matrix is {int(cond)}')
+            logger.info(
+                f'Condition number of coefficient matrix is {int(cond)}')
             self.history_cond_A.append(cond)
 
             self.history_rank_deficiency.append(rank_deficiency)
@@ -704,13 +783,19 @@ class VectorFitting:
         self.wall_clock_time = timer_stop - timer_start
 
     @staticmethod
-    def _init_poles(freqs: list, n_poles_real: int, n_poles_cmplx: int, init_pole_spacing: str):
-        # create initial poles and space them across the frequencies in the provided Touchstone file
+    def _init_poles(
+            freqs: list,
+            n_poles_real: int,
+            n_poles_cmplx: int,
+            init_pole_spacing: str):
+        # create initial poles and space them across the frequencies in the
+        # provided Touchstone file
 
         fmin = np.amin(freqs)
         fmax = np.amax(freqs)
 
-        # poles cannot be at f=0; hence, f_min for starting pole must be greater than 0
+        # poles cannot be at f=0; hence, f_min for starting pole must be
+        # greater than 0
         if fmin == 0.0:
             # random choice: use 1/1000 of first non-zero frequency
             fmin = freqs[1] / 1000
@@ -726,8 +811,10 @@ class VectorFitting:
             pole_freqs_real = None
             pole_freqs_cmplx = None
         else:
-            warnings.warn('Invalid choice of initial pole spacing; proceeding with linear spacing.',
-                          UserWarning, stacklevel=2)
+            warnings.warn(
+                'Invalid choice of initial pole spacing; proceeding with linear spacing.',
+                UserWarning,
+                stacklevel=2)
             pole_freqs_real = np.linspace(fmin, fmax, n_poles_real)
             pole_freqs_cmplx = np.linspace(fmin, fmax, n_poles_cmplx)
 
@@ -752,16 +839,24 @@ class VectorFitting:
             return None
 
     @staticmethod
-    def _pole_relocation(poles, freqs, freq_responses, weights_responses, fit_constant, fit_proportional):
+    def _pole_relocation(
+            poles,
+            freqs,
+            freq_responses,
+            weights_responses,
+            fit_constant,
+            fit_proportional):
         n_responses, n_freqs = np.shape(freq_responses)
         n_samples = n_responses * n_freqs
         omega = 2 * np.pi * freqs
         s = 1j * omega
 
         # weight of extra equation to avoid trivial solution
-        weight_extra = np.linalg.norm(weights_responses[:, None] * freq_responses) / n_samples
+        weight_extra = np.linalg.norm(
+            weights_responses[:, None] * freq_responses) / n_samples
 
-        # weights w are applied directly to the samples, which get squared during least-squares fitting; hence sqrt(w)
+        # weights w are applied directly to the samples, which get squared
+        # during least-squares fitting; hence sqrt(w)
         weights_responses = np.sqrt(weights_responses)
         weight_extra = np.sqrt(weight_extra)
 
@@ -803,7 +898,8 @@ class VectorFitting:
         # complex coefficient matrix of shape [N_responses, N_freqs, n_cols_unused + n_cols_used]
         # layout of each row:
         # [pole1, pole2, ..., (constant), (proportional), pole1, pole2, ..., constant]
-        A = np.empty((n_responses, n_freqs, n_cols_unused + n_cols_used), dtype=complex)
+        A = np.empty((n_responses, n_freqs, n_cols_unused +
+                     n_cols_used), dtype=complex)
 
         # calculate coefficients for real and complex residues in the solution vector
         #
@@ -817,10 +913,18 @@ class VectorFitting:
         #                   = [1 / (s - p) + 1 / (s - conj(p))] * r' + [1j / (s - p) - 1j / (s - conj(p))] * r''
         # coefficient for r' is 1 / (s - p) + 1 / (s - conj(p))
         # coefficient for r'' is 1j / (s - p) - 1j / (s - conj(p))
-        coeff_complex_re = (1 / (s[:, None] - poles[None, idx_poles_complex]) +
-                            1 / (s[:, None] - np.conj(poles[None, idx_poles_complex])))
-        coeff_complex_im = (1j / (s[:, None] - poles[None, idx_poles_complex]) -
-                            1j / (s[:, None] - np.conj(poles[None, idx_poles_complex])))
+        coeff_complex_re = (1 /
+                            (s[:, None] -
+                             poles[None, idx_poles_complex]) +
+                            1 /
+                            (s[:, None] -
+                                np.conj(poles[None, idx_poles_complex])))
+        coeff_complex_im = (1j /
+                            (s[:, None] -
+                             poles[None, idx_poles_complex]) -
+                            1j /
+                            (s[:, None] -
+                                np.conj(poles[None, idx_poles_complex])))
 
         # part 1: first sum of rational functions (variable c)
         A[:, :, idx_res_real] = coeff_real
@@ -831,10 +935,14 @@ class VectorFitting:
         A[:, :, idx_constant] = 1
         A[:, :, idx_proportional] = s[:, None]
 
-        # part 3: second sum of rational functions multiplied with frequency response (variable c_res)
-        A[:, :, n_cols_unused + idx_res_real] = -1 * freq_responses[:, :, None] * coeff_real
-        A[:, :, n_cols_unused + idx_res_complex_re] = -1 * freq_responses[:, :, None] * coeff_complex_re
-        A[:, :, n_cols_unused + idx_res_complex_im] = -1 * freq_responses[:, :, None] * coeff_complex_im
+        # part 3: second sum of rational functions multiplied with frequency
+        # response (variable c_res)
+        A[:, :, n_cols_unused + idx_res_real] = -1 * \
+            freq_responses[:, :, None] * coeff_real
+        A[:, :, n_cols_unused + idx_res_complex_re] = -1 * \
+            freq_responses[:, :, None] * coeff_complex_re
+        A[:, :, n_cols_unused + idx_res_complex_im] = -1 * \
+            freq_responses[:, :, None] * coeff_complex_im
 
         # part 4: constant (variable d_res)
         A[:, :, -1] = -1 * freq_responses
@@ -877,7 +985,8 @@ class VectorFitting:
         # weighting
         R22 = weights_responses[:, None, None] * R22
 
-        # assemble compressed coefficient matrix A_fast by row-stacking individual upper triangular matrices R22
+        # assemble compressed coefficient matrix A_fast by row-stacking
+        # individual upper triangular matrices R22
         dim0 = n_responses * n_rows_r22 + 1
 
         A_fast = np.empty((dim0, n_cols_used))
@@ -904,7 +1013,8 @@ class VectorFitting:
         full_rank = np.min(A_fast.shape)
 
         # solve least squares for real parts
-        x, residuals, rank, singular_vals = np.linalg.lstsq(A_fast, b, rcond=None)
+        x, residuals, rank, singular_vals = np.linalg.lstsq(
+            A_fast, b, rcond=None)
 
         x = scaling * x
 
@@ -918,8 +1028,10 @@ class VectorFitting:
         # check if d_res is suited for zeros calculation
         tol_res = 1e-8
         if np.abs(d_res) < tol_res:
-            # d_res is too small, discard solution and proceed the |d_res| = tol_res
-            logger.info(f'Replacing d_res solution as it was too small ({d_res}).')
+            # d_res is too small, discard solution and proceed the |d_res| =
+            # tol_res
+            logger.info(
+                f'Replacing d_res solution as it was too small ({d_res}).')
             d_res = tol_res * (d_res / np.abs(d_res))
 
         # build test matrix H, which will hold the new poles as eigenvalues
@@ -940,16 +1052,24 @@ class VectorFitting:
         poles_new = np.linalg.eigvals(H)
 
         # replace poles for next iteration
-        # complex poles need to come in complex conjugate pairs; append only the positive part
+        # complex poles need to come in complex conjugate pairs; append only
+        # the positive part
         poles = poles_new[np.nonzero(poles_new.imag >= 0)]
 
-        # flip real part of unstable poles (real part needs to be negative for stability)
+        # flip real part of unstable poles (real part needs to be negative for
+        # stability)
         poles.real = -1 * np.abs(poles.real)
 
         return poles, d_res, cond, rank_deficiency, residuals, singular_vals
 
     @staticmethod
-    def _fit_residues(poles, freqs, freq_responses, fit_constant, fit_proportional, enforce_dc):
+    def _fit_residues(
+            poles,
+            freqs,
+            freq_responses,
+            fit_constant,
+            fit_proportional,
+            enforce_dc):
         n_responses, n_freqs = np.shape(freq_responses)
         omega = 2 * np.pi * freqs
         s = 1j * omega
@@ -1003,10 +1123,18 @@ class VectorFitting:
         #                   = [1 / (s - p) + 1 / (s - conj(p))] * r' + [1j / (s - p) - 1j / (s - conj(p))] * r''
         # coefficient for r' is 1 / (s - p) + 1 / (s - conj(p))
         # coefficient for r'' is 1j / (s - p) - 1j / (s - conj(p))
-        coeff_complex_re = (1 / (s[:, None] - poles[None, idx_poles_complex]) +
-                            1 / (s[:, None] - np.conj(poles[None, idx_poles_complex])))
-        coeff_complex_im = (1j / (s[:, None] - poles[None, idx_poles_complex]) -
-                            1j / (s[:, None] - np.conj(poles[None, idx_poles_complex])))
+        coeff_complex_re = (1 /
+                            (s[:, None] -
+                             poles[None, idx_poles_complex]) +
+                            1 /
+                            (s[:, None] -
+                                np.conj(poles[None, idx_poles_complex])))
+        coeff_complex_im = (1j /
+                            (s[:, None] -
+                             poles[None, idx_poles_complex]) -
+                            1j /
+                            (s[:, None] -
+                                np.conj(poles[None, idx_poles_complex])))
 
         # part 1: first sum of rational functions (variable c)
         A[:, idx_res_real] = coeff_real
@@ -1042,7 +1170,8 @@ class VectorFitting:
                 # use constant term for constrained
                 mask_idx_constrained[idx_constant] = True
             else:
-                # constant term not present; arbitrarily use first residue instead
+                # constant term not present; arbitrarily use first residue
+                # instead
                 mask_idx_constrained[0] = True
 
             A22 = A[1:, ~mask_idx_constrained]
@@ -1051,10 +1180,13 @@ class VectorFitting:
             A22_ri = np.vstack((A22.real, A22.imag))
             b22_ri = np.hstack((b2.real, b2.imag))
 
-            logger.info(f'Condition number of coefficient matrix = {int(np.linalg.cond(A22_ri))}')
+            logger.info(
+                f'Condition number of coefficient matrix = {int(np.linalg.cond(A22_ri))}')
 
-            # solve least-squares and obtain results as stack of real part vector and imaginary part vector
-            x2, residuals, rank, singular_vals = np.linalg.lstsq(A22_ri, b22_ri.T, rcond=None)
+            # solve least-squares and obtain results as stack of real part
+            # vector and imaginary part vector
+            x2, residuals, rank, singular_vals = np.linalg.lstsq(
+                A22_ri, b22_ri.T, rcond=None)
 
             # solve for x1 using the first row (the dc row):
             b1 = freq_responses[:, 0]
@@ -1067,21 +1199,27 @@ class VectorFitting:
             x[mask_idx_constrained, :] = x1
             x[~mask_idx_constrained, :] = x2
         else:
-            # dc point not included; use and solve the entire linear system with least-squares
+            # dc point not included; use and solve the entire linear system
+            # with least-squares
             A_ri = np.vstack((A.real, A.imag))
             b_ri = np.hstack((freq_responses.real, freq_responses.imag))
 
-            logger.info(f'Condition number of coefficient matrix = {int(np.linalg.cond(A_ri))}')
+            logger.info(
+                f'Condition number of coefficient matrix = {int(np.linalg.cond(A_ri))}')
 
-            # solve least-squares and obtain results as stack of real part vector and imaginary part vector
-            x, residuals, rank, singular_vals = np.linalg.lstsq(A_ri, b_ri.T, rcond=None)
+            # solve least-squares and obtain results as stack of real part
+            # vector and imaginary part vector
+            x, residuals, rank, singular_vals = np.linalg.lstsq(
+                A_ri, b_ri.T, rcond=None)
 
         x = scaling[:, None] * x
 
-        # extract residues from solution vector and align them with poles to get matching pole-residue pairs
+        # extract residues from solution vector and align them with poles to
+        # get matching pole-residue pairs
         residues = np.empty((len(freq_responses), len(poles)), dtype=complex)
         residues[:, idx_poles_real] = np.transpose(x[idx_res_real])
-        residues[:, idx_poles_complex] = np.transpose(x[idx_res_complex_re] + 1j * x[idx_res_complex_im])
+        residues[:, idx_poles_complex] = np.transpose(
+            x[idx_res_complex_re] + 1j * x[idx_res_complex_im])
 
         # extract constant and proportional coefficient, if available
         if fit_constant:
@@ -1097,7 +1235,14 @@ class VectorFitting:
         return residues, constant_coeff, proportional_coeff, residuals, rank, singular_vals
 
     @staticmethod
-    def _get_delta(poles, residues, constant_coeff, proportional_coeff, freqs, freq_responses, weights_responses):
+    def _get_delta(
+            poles,
+            residues,
+            constant_coeff,
+            proportional_coeff,
+            freqs,
+            freq_responses,
+            weights_responses):
         s = 2j * np.pi * freqs
         model = proportional_coeff[:, None] * s + constant_coeff[:, None]
         for i, pole in enumerate(poles):
@@ -1106,10 +1251,15 @@ class VectorFitting:
                 model += residues[:, i, None] / (s - pole)
             else:
                 # complex conjugate pole
-                model += (residues[:, i, None] / (s - pole) +
-                          np.conjugate(residues[:, i, None]) / (s - np.conjugate(pole)))
+                model += (residues[:, i, None] /
+                          (s -
+                           pole) +
+                          np.conjugate(residues[:, i, None]) /
+                          (s -
+                           np.conjugate(pole)))
 
-        # compute weighted error and return global maximum at each frequency across all individual responses
+        # compute weighted error and return global maximum at each frequency
+        # across all individual responses
         delta = np.abs(model - freq_responses) * weights_responses[:, None]
 
         return np.max(delta, axis=0)
@@ -1140,7 +1290,8 @@ class VectorFitting:
                 i_band_max_error = np.argmax(error_bands[i_band])
                 i_start = np.nonzero(freqs == freqs_bands[i_band][0])[0][0]
                 i_stop = np.nonzero(freqs == freqs_bands[i_band][-1])[0][0]
-                i_max = np.nonzero(freqs == freqs_bands[i_band][i_band_max_error])[0][0]
+                i_max = np.nonzero(
+                    freqs == freqs_bands[i_band][i_band_max_error])[0][0]
                 idx_freqs_start.append(i_start)
                 idx_freqs_stop.append(i_stop)
                 idx_freqs_max.append(i_max)
@@ -1209,18 +1360,24 @@ class VectorFitting:
         elif parameter_type.lower() == 'y':
             nw_responses = self.network.y
         else:
-            raise ValueError(f'Invalid parameter type `{parameter_type}`. Valid options: `s`, `z`, or `y`')
+            raise ValueError(
+                f'Invalid parameter type `{parameter_type}`. Valid options: `s`, `z`, or `y`')
 
         error_mean_squared = 0
         for i in list_i:
             for j in list_j:
                 nw_ij = nw_responses[:, i, j]
                 fit_ij = self.get_model_response(i, j, self.network.f)
-                error_mean_squared += np.mean(np.square(np.abs(nw_ij - fit_ij)))
+                error_mean_squared += np.mean(
+                    np.square(np.abs(nw_ij - fit_ij)))
 
         return np.sqrt(error_mean_squared)
 
-    def _get_ABCDE(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    def _get_ABCDE(self) -> tuple[np.ndarray,
+                                  np.ndarray,
+                                  np.ndarray,
+                                  np.ndarray,
+                                  np.ndarray]:
         """
         Private method.
         Returns the real-valued system matrices of the state-space representation of the current rational model, as
@@ -1254,15 +1411,20 @@ class VectorFitting:
 
         # initial checks
         if self.poles is None:
-            raise ValueError('self.poles = None; nothing to do. You need to run vector_fit() first.')
+            raise ValueError(
+                'self.poles = None; nothing to do. You need to run vector_fit() first.')
         if self.residues is None:
-            raise ValueError('self.residues = None; nothing to do. You need to run vector_fit() first.')
+            raise ValueError(
+                'self.residues = None; nothing to do. You need to run vector_fit() first.')
         if self.proportional_coeff is None:
-            raise ValueError('self.proportional_coeff = None; nothing to do. You need to run vector_fit() first.')
+            raise ValueError(
+                'self.proportional_coeff = None; nothing to do. You need to run vector_fit() first.')
         if self.constant_coeff is None:
-            raise ValueError('self.constant_coeff = None; nothing to do. You need to run vector_fit() first.')
+            raise ValueError(
+                'self.constant_coeff = None; nothing to do. You need to run vector_fit() first.')
 
-        # assemble real-valued state-space matrices A, B, C, D, E from fitted complex-valued pole-residue model
+        # assemble real-valued state-space matrices A, B, C, D, E from fitted
+        # complex-valued pole-residue model
 
         # determine size of the matrix system
         n_ports = int(np.sqrt(len(self.constant_coeff)))
@@ -1300,7 +1462,8 @@ class VectorFitting:
                     i_A += 2
 
         # state-space matrix C holds the residues
-        # assemble C = [[R1.11, R1.12, R1.13, ...], [R2.11, R2.12, R2.13, ...], ...]
+        # assemble C = [[R1.11, R1.12, R1.13, ...], [R2.11, R2.12, R2.13, ...],
+        # ...]
         C = np.zeros(shape=(n_ports, n_matrix))
         for i in range(n_ports):
             for j in range(n_ports):
@@ -1311,11 +1474,14 @@ class VectorFitting:
                 j_residues = 0
                 for zero in self.residues[i_response]:
                     if np.imag(zero) == 0.0:
-                        C[i, j * (n_poles_real + 2 * n_poles_cplx) + j_residues] = np.real(zero)
+                        C[i, j * (n_poles_real + 2 * n_poles_cplx) +
+                          j_residues] = np.real(zero)
                         j_residues += 1
                     else:
-                        C[i, j * (n_poles_real + 2 * n_poles_cplx) + j_residues] = np.real(zero)
-                        C[i, j * (n_poles_real + 2 * n_poles_cplx) + j_residues + 1] = np.imag(zero)
+                        C[i, j * (n_poles_real + 2 * n_poles_cplx) +
+                          j_residues] = np.real(zero)
+                        C[i, j * (n_poles_real + 2 * n_poles_cplx) +
+                          j_residues + 1] = np.imag(zero)
                         j_residues += 2
 
         # state-space matrix D holds the constants
@@ -1341,8 +1507,13 @@ class VectorFitting:
         return A, B, C, D, E
 
     @staticmethod
-    def _get_s_from_ABCDE(freqs: np.ndarray,
-                          A: np.ndarray, B: np.ndarray, C: np.ndarray, D: np.ndarray, E: np.ndarray) -> np.ndarray:
+    def _get_s_from_ABCDE(
+            freqs: np.ndarray,
+            A: np.ndarray,
+            B: np.ndarray,
+            C: np.ndarray,
+            D: np.ndarray,
+            E: np.ndarray) -> np.ndarray:
         """
         Private method.
         Returns the S-matrix of the vector fitted model calculated from the real-valued system matrices of the state-
@@ -1365,7 +1536,11 @@ class VectorFitting:
         """
 
         dim_A = np.shape(A)[0]
-        stsp_poles = np.linalg.inv(2j * np.pi * freqs[:, None, None] * np.identity(dim_A)[None, :, :] - A[None, :, :])
+        stsp_poles = np.linalg.inv(2j *
+                                   np.pi *
+                                   freqs[:, None, None] *
+                                   np.identity(dim_A)[None, :, :] -
+                                   A[None, :, :])
         stsp_S = np.matmul(np.matmul(C, stsp_poles), B)
         stsp_S += D + 2j * np.pi * freqs[:, None, None] * E
         return stsp_S
@@ -1418,11 +1593,14 @@ class VectorFitting:
         """
 
         if parameter_type.lower() != 's':
-            raise NotImplementedError('Passivity testing is currently only supported for scattering (S) parameters.')
-        if parameter_type.lower() == 's' and len(np.flatnonzero(self.proportional_coeff)) > 0:
-            raise ValueError('Passivity testing of scattering parameters with nonzero proportional coefficients does '
-                             'not make any sense; you need to run vector_fit() with option `fit_proportional=False` '
-                             'first.')
+            raise NotImplementedError(
+                'Passivity testing is currently only supported for scattering (S) parameters.')
+        if parameter_type.lower() == 's' and len(
+                np.flatnonzero(self.proportional_coeff)) > 0:
+            raise ValueError(
+                'Passivity testing of scattering parameters with nonzero proportional coefficients does '
+                'not make any sense; you need to run vector_fit() with option `fit_proportional=False` '
+                'first.')
 
         # # the network needs to be reciprocal for this passivity test method to work: S = transpose(S)
         # if not np.allclose(self.residues, np.transpose(self.residues)) or \
@@ -1446,7 +1624,8 @@ class VectorFitting:
         # extract eigenvalues of P
         P_eigs = np.linalg.eigvals(P)
 
-        # purely imaginary square roots of eigenvalues identify frequencies (2*pi*f) of borders of passivity violations
+        # purely imaginary square roots of eigenvalues identify frequencies
+        # (2*pi*f) of borders of passivity violations
         freqs_violation = []
         for sqrt_eigenval in np.sqrt(P_eigs, dtype=complex):
             if np.real(sqrt_eigenval) == 0.0:
@@ -1461,22 +1640,27 @@ class VectorFitting:
 
         # identify frequency bands of passivity violations
 
-        # sweep the bands between crossover frequencies and identify bands of passivity violations
+        # sweep the bands between crossover frequencies and identify bands of
+        # passivity violations
         violation_bands = []
         for i, freq in enumerate(freqs_violation):
             if i == len(freqs_violation) - 1:
                 # last band stops always at infinity
                 f_start = freq
                 f_stop = np.inf
-                f_center = 1.1 * f_start # 1.1 is chosen arbitrarily to have any frequency for evaluation
+                # 1.1 is chosen arbitrarily to have any frequency for
+                # evaluation
+                f_center = 1.1 * f_start
             else:
                 # intermediate band between this frequency and the previous one
                 f_start = freq
                 f_stop = freqs_violation[i + 1]
                 f_center = 0.5 * (f_start + f_stop)
 
-            # calculate singular values at the center frequency between crossover frequencies to identify violations
-            s_center = self._get_s_from_ABCDE(np.array([f_center]), A, B, C, D, E)
+            # calculate singular values at the center frequency between
+            # crossover frequencies to identify violations
+            s_center = self._get_s_from_ABCDE(
+                np.array([f_center]), A, B, C, D, E)
             sigma = np.linalg.svd(s_center[0], compute_uv=False)
             passive = True
             for singval in sigma:
@@ -1529,8 +1713,12 @@ class VectorFitting:
         else:
             return False
 
-    def passivity_enforce(self, n_samples: int = 200, f_max: float = None, parameter_type: str = 's',
-                          preserve_dc: bool = True) -> None:
+    def passivity_enforce(
+            self,
+            n_samples: int = 200,
+            f_max: float = None,
+            parameter_type: str = 's',
+            preserve_dc: bool = True) -> None:
         """
         Enforces the passivity of the vector fitted model, if required. This is an implementation of the methods
         presented in [#]_ and [#]_ using singular value perturbation. To preserve the dc point in the model during
@@ -1599,16 +1787,21 @@ class VectorFitting:
         """
 
         if parameter_type.lower() != 's':
-            raise NotImplementedError('Passivity testing is currently only supported for scattering (S) parameters.')
-        if parameter_type.lower() == 's' and len(np.flatnonzero(self.proportional_coeff)) > 0:
-            raise ValueError('Passivity testing of scattering parameters with nonzero proportional coefficients does '
-                             'not make any sense; you need to run vector_fit() with option `fit_proportional=False` '
-                             'first.')
+            raise NotImplementedError(
+                'Passivity testing is currently only supported for scattering (S) parameters.')
+        if parameter_type.lower() == 's' and len(
+                np.flatnonzero(self.proportional_coeff)) > 0:
+            raise ValueError(
+                'Passivity testing of scattering parameters with nonzero proportional coefficients does '
+                'not make any sense; you need to run vector_fit() with option `fit_proportional=False` '
+                'first.')
 
-        # always run passivity test first; this will write 'self.violation_bands'
+        # always run passivity test first; this will write
+        # 'self.violation_bands'
         if self.is_passive():
             # model is already passive; do nothing and return
-            logger.info('Passivity enforcement: The model is already passive. Nothing to do.')
+            logger.info(
+                'Passivity enforcement: The model is already passive. Nothing to do.')
             return
 
         # check dc passivity and find the highest relevant frequency; either
@@ -1619,9 +1812,11 @@ class VectorFitting:
         f_viol_min = violation_bands[0, 0]
         f_viol_max = violation_bands[-1, 1]
 
-        # check passivity at the dc point; 1) in the model, 2) in the original data, if available
+        # check passivity at the dc point; 1) in the model, 2) in the original
+        # data, if available
         if preserve_dc and f_viol_min == 0.0:
-            # cannot preserve a non-passive dc point during passivity enforcement
+            # cannot preserve a non-passive dc point during passivity
+            # enforcement
             preserve_dc = False
             hint = ''
 
@@ -1629,13 +1824,16 @@ class VectorFitting:
                 if self.network.f[0] == 0.0 and not self.network.is_passive():
                     hint = '\nHint: The dc point in the original network data is already non-passive.'
 
-            warnings.warn('Passivity enforcement: The dc point in the model is not passive. Cannot '
-                          f'preserve the dc point during passivity enforcement. {hint}', UserWarning, stacklevel=2)
+            warnings.warn(
+                'Passivity enforcement: The dc point in the model is not passive. Cannot '
+                f'preserve the dc point during passivity enforcement. {hint} ',
+                UserWarning, stacklevel=2)
 
         if f_max is None:
             if self.network is None:
-                raise RuntimeError('Both `self.network` and parameter `f_max` are None. One of them is required to '
-                                   'specify the frequency band of interest for the passivity enforcement.')
+                raise RuntimeError(
+                    'Both `self.network` and parameter `f_max` are None. One of them is required to '
+                    'specify the frequency band of interest for the passivity enforcement.')
             else:
                 f_samples_max = self.network.f[-1]
         else:
@@ -1650,14 +1848,16 @@ class VectorFitting:
                 'and/or without the constants (`fit_constant=False`) if the results are not satisfactory.',
                 UserWarning, stacklevel=2)
 
-        # the frequency band for the passivity evaluation is from dc to 20% above the highest relevant frequency
+        # the frequency band for the passivity evaluation is from dc to 20%
+        # above the highest relevant frequency
         if f_viol_max < f_samples_max:
             f_eval_max = 1.2 * f_samples_max
         else:
             f_eval_max = 1.2 * f_viol_max
 
         # let's not automatically adjust n_samples. The calculated number can
-        # be huge (>100k). Combined with a high number of poles in the model, this can bust the memory.
+        # be huge (>100k). Combined with a high number of poles in the model,
+        # this can bust the memory.
         freqs_eval = np.linspace(0, f_eval_max, n_samples)
 
         # get model state-space matrices
@@ -1672,7 +1872,8 @@ class VectorFitting:
             # D was fitted;
             # asymptotic passivity needs to be checked and enforced, if violated.
             # for dc preservation, the asymptotic passivity violations in D are compensated using C
-            # D is not touched, because it contains the dc point ( lim s --> {inf S(s)} = D)
+            # D is not touched, because it contains the dc point ( lim s -->
+            # {inf S(s)} = D)
             u, sigma, vh = np.linalg.svd(D, compute_uv=True)
 
             # find and perturb singular values that cause passivity violations
@@ -1694,10 +1895,12 @@ class VectorFitting:
             # S_viol = C_viol * B
             #
             # mind the transpose of the system to compensate for the exchanged order of matrix multiplication:
-            # S_viol = C_viol * B <==> transpose(S_viol) = transpose(B) * transpose(C_viol)
-            C_viol, residuals, rank, singular_vals = np.linalg.lstsq(np.vstack((B.T.real, B.T.imag)),
-                                                                     np.vstack((S_viol.T.real, S_viol.T.imag)),
-                                                                     rcond=None)
+            # S_viol = C_viol * B <==> transpose(S_viol) = transpose(B) *
+            # transpose(C_viol)
+            C_viol, residuals, rank, singular_vals = np.linalg.lstsq(
+                np.vstack(
+                    (B.T.real, B.T.imag)), np.vstack(
+                    (S_viol.T.real, S_viol.T.imag)), rcond=None)
             C_t -= C_viol.T
 
         # UNIFORM PASSIVITY ENFORCEMENT
@@ -1708,9 +1911,14 @@ class VectorFitting:
         # with
         #   A_freq = inv(s_eval * I - A)
         #   s_eval = j * omega_eval = 2j * pi * freqs_eval
-        A_freq = np.linalg.inv(2j * np.pi * freqs_eval[:, None, None] * np.identity(dim_A)[None, :, :] - A[None, :, :])
+        A_freq = np.linalg.inv(2j *
+                               np.pi *
+                               freqs_eval[:, None, None] *
+                               np.identity(dim_A)[None, :, :] -
+                               A[None, :, :])
 
-        # construct coefficient matrix for least-squares residue fitting (C_viol)
+        # construct coefficient matrix for least-squares residue fitting
+        # (C_viol)
         coeffs = np.matmul(A_freq, B)
 
         C_viol = np.empty_like(C_t)
@@ -1728,7 +1936,7 @@ class VectorFitting:
             logger.info(f'Passivity enforcement; Iteration {t + 1}')
 
             # calculate S-matrix of the model at freqs_eval (shape fxNxN)
-            #S_eval = self._get_s_from_ABCDE(freqs_eval, A, B, C_t, D, E)
+            # S_eval = self._get_s_from_ABCDE(freqs_eval, A, B, C_t, D, E)
             S_eval = D + np.matmul(C_t, coeffs)   # much faster!
 
             # singular value decomposition,
@@ -1774,7 +1982,8 @@ class VectorFitting:
             # term entirely and only use the violation residues.
             # If dc preservation is disabled, we could also perturb the constant term. This is not currently done. In
             # this new method, we always only perturb the residues. Disabling `fit_constant` and `preserve_dc` in this
-            # case will solve for the residues without the constant term in the linear system.
+            # case will solve for the residues without the constant term in the
+            # linear system.
             C_viol_stacked, D_viol_stacked, E_viol_stacked, residuals, rank, singular_vals = self._fit_residues(
                 self.poles, freqs_eval, S_viol_stacked, fit_constant=preserve_dc, fit_proportional=False,
                 enforce_dc=preserve_dc)
@@ -1788,11 +1997,14 @@ class VectorFitting:
                     j_residues = 0
                     for residue in C_viol_stacked[i_port * n_ports + j_port]:
                         if np.imag(residue) == 0.0:
-                            C_viol[i_port, j_port * model_order + j_residues] = np.real(residue)
+                            C_viol[i_port, j_port * model_order +
+                                   j_residues] = np.real(residue)
                             j_residues += 1
                         else:
-                            C_viol[i_port, j_port * model_order + j_residues] = np.real(residue)
-                            C_viol[i_port, j_port * model_order + j_residues + 1] = np.imag(residue)
+                            C_viol[i_port, j_port * model_order +
+                                   j_residues] = np.real(residue)
+                            C_viol[i_port, j_port * model_order +
+                                   j_residues + 1] = np.imag(residue)
                             j_residues += 2
 
             # perturb residues by subtracting respective row and column in C_t
@@ -1800,10 +2012,12 @@ class VectorFitting:
 
             t += 1
 
-        # PASSIVATION PROCESS DONE; model is either passive or max. number of iterations have been exceeded
+        # PASSIVATION PROCESS DONE; model is either passive or max. number of
+        # iterations have been exceeded
         if t == self.max_iterations:
-            warnings.warn('Passivity enforcement: Aborting after the max. number of iterations has been '
-                          'exceeded.', RuntimeWarning, stacklevel=2)
+            warnings.warn(
+                'Passivity enforcement: Aborting after the max. number of iterations has been '
+                'exceeded.', RuntimeWarning, stacklevel=2)
 
         # save/update model parameters (perturbed residues)
         self.history_max_sigma = np.array(self.history_max_sigma)
@@ -1821,7 +2035,8 @@ class VectorFitting:
                         k += 1
                     else:
                         # complex-conjugate pole --> complex-conjugate residue
-                        self.residues[i_response, z] = C_t[i, k] + 1j * C_t[i, k + 1]
+                        self.residues[i_response, z] = C_t[i,
+                                                           k] + 1j * C_t[i, k + 1]
                         k += 2
                     z += 1
 
@@ -1831,7 +2046,8 @@ class VectorFitting:
             # trying to determine the required number of evaluation samples based on the bandwidth and separation
             # distance of the violation bands
             violation_band_separation = np.diff(violation_bands.flat)
-            min_spacing_nonzero = np.amin(violation_band_separation[violation_band_separation != 0.0])
+            min_spacing_nonzero = np.amin(
+                violation_band_separation[violation_band_separation != 0.0])
 
             # we should need an absolute minimum of 1 sample in each violating frequency band.
             # in practice, the frequency spacing should preferably be much more dense.
@@ -1839,7 +2055,9 @@ class VectorFitting:
             n_samples_required = int(f_eval_max / min_spacing_nonzero * 2)
 
             if n_samples_required > n_samples:
-                hint = f'Consider trying again with n_samples > {n_samples_required}.'
+                hint = f'Consider trying again with n_samples > {
+                    n_samples_required
+                }.'
             else:
                 hint = ''
 
@@ -1890,25 +2108,41 @@ class VectorFitting:
         """
 
         if self.poles is None:
-            warnings.warn('Nothing to export; Poles have not been fitted.', RuntimeWarning, stacklevel=2)
+            warnings.warn(
+                'Nothing to export; Poles have not been fitted.',
+                RuntimeWarning,
+                stacklevel=2)
             return
         if self.residues is None:
-            warnings.warn('Nothing to export; Residues have not been fitted.', RuntimeWarning, stacklevel=2)
+            warnings.warn(
+                'Nothing to export; Residues have not been fitted.',
+                RuntimeWarning,
+                stacklevel=2)
             return
         if self.proportional_coeff is None:
-            warnings.warn('Nothing to export; Proportional coefficients have not been fitted.', RuntimeWarning,
-                          stacklevel=2)
+            warnings.warn(
+                'Nothing to export; Proportional coefficients have not been fitted.',
+                RuntimeWarning,
+                stacklevel=2)
             return
         if self.constant_coeff is None:
-            warnings.warn('Nothing to export; Constants have not been fitted.', RuntimeWarning, stacklevel=2)
+            warnings.warn(
+                'Nothing to export; Constants have not been fitted.',
+                RuntimeWarning,
+                stacklevel=2)
             return
 
         filename = self.network.name
 
         logger.info(f'Exporting results as compressed rsnumpy array to {path}')
-        np.savez_compressed(os.path.join(path, f'coefficients_{filename}'),
-                            poles=self.poles, residues=self.residues, proportionals=self.proportional_coeff,
-                            constants=self.constant_coeff)
+        np.savez_compressed(
+            os.path.join(
+                path,
+                f'coefficients_{filename}'),
+            poles=self.poles,
+            residues=self.residues,
+            proportionals=self.proportional_coeff,
+            constants=self.constant_coeff)
 
     def read_npz(self, file: str) -> None:
         """
@@ -1958,7 +2192,8 @@ class VectorFitting:
 
             # legacy support for exported residues
             if 'zeros' in data:
-                # old .npz file from deprecated write_npz() with residues called 'zeros'
+                # old .npz file from deprecated write_npz() with residues
+                # called 'zeros'
                 residues = data['zeros']
             else:
                 # new .npz file from current write_npz()
@@ -1969,18 +2204,24 @@ class VectorFitting:
 
             n_ports = int(np.sqrt(len(constant_coeff)))
             n_resp = n_ports ** 2
-            if np.shape(residues)[0] == np.shape(proportional_coeff)[0] == np.shape(constant_coeff)[0] == n_resp:
+            if np.shape(residues)[0] == np.shape(proportional_coeff)[
+                    0] == np.shape(constant_coeff)[0] == n_resp:
                 self.poles = poles
                 self.residues = residues
                 self.proportional_coeff = proportional_coeff
                 self.constant_coeff = constant_coeff
             else:
-                raise ValueError('The shapes of the provided parameters are not compatible. The coefficient file needs '
-                                 'to contain rsnumpy arrays labeled `poles`, `residues`, `proportionals`, and '
-                                 '`constants`. Their shapes must match the number of network ports and the number of '
-                                 'frequencies.')
+                raise ValueError(
+                    'The shapes of the provided parameters are not compatible. The coefficient file needs '
+                    'to contain rsnumpy arrays labeled `poles`, `residues`, `proportionals`, and '
+                    '`constants`. Their shapes must match the number of network ports and the number of '
+                    'frequencies.')
 
-    def get_model_response(self, i: int, j: int, freqs: Any = None) -> np.ndarray:
+    def get_model_response(
+            self,
+            i: int,
+            j: int,
+            freqs: Any = None) -> np.ndarray:
         """
         Returns one of the frequency responses :math:`H_{i+1,j+1}` of the fitted model :math:`H`.
 
@@ -2012,37 +2253,48 @@ class VectorFitting:
         """
 
         if self.poles is None:
-            warnings.warn('Returning a zero-vector; Poles have not been fitted.',
-                          RuntimeWarning, stacklevel=2)
+            warnings.warn(
+                'Returning a zero-vector; Poles have not been fitted.',
+                RuntimeWarning,
+                stacklevel=2)
             return np.zeros_like(freqs)
         if self.residues is None:
-            warnings.warn('Returning a zero-vector; Residues have not been fitted.',
-                          RuntimeWarning, stacklevel=2)
+            warnings.warn(
+                'Returning a zero-vector; Residues have not been fitted.',
+                RuntimeWarning,
+                stacklevel=2)
             return np.zeros_like(freqs)
         if self.proportional_coeff is None:
-            warnings.warn('Returning a zero-vector; Proportional coefficients have not been fitted.',
-                          RuntimeWarning, stacklevel=2)
+            warnings.warn(
+                'Returning a zero-vector; Proportional coefficients have not been fitted.',
+                RuntimeWarning,
+                stacklevel=2)
             return np.zeros_like(freqs)
         if self.constant_coeff is None:
-            warnings.warn('Returning a zero-vector; Constants have not been fitted.',
-                          RuntimeWarning, stacklevel=2)
+            warnings.warn(
+                'Returning a zero-vector; Constants have not been fitted.',
+                RuntimeWarning,
+                stacklevel=2)
             return np.zeros_like(freqs)
         if freqs is None:
-            freqs = np.linspace(np.amin(self.network.f), np.amax(self.network.f), 1000)
+            freqs = np.linspace(np.amin(self.network.f),
+                                np.amax(self.network.f), 1000)
 
         s = 2j * np.pi * np.array(freqs)
         n_ports = int(np.sqrt(len(self.constant_coeff)))
         i_response = i * n_ports + j
         residues = self.residues[i_response]
 
-        resp = self.proportional_coeff[i_response] * s + self.constant_coeff[i_response]
+        resp = self.proportional_coeff[i_response] * \
+            s + self.constant_coeff[i_response]
         for i, pole in enumerate(self.poles):
             if np.imag(pole) == 0.0:
                 # real pole
                 resp += residues[i] / (s - pole)
             else:
                 # complex conjugate pole
-                resp += residues[i] / (s - pole) + np.conjugate(residues[i]) / (s - np.conjugate(pole))
+                resp += residues[i] / (s - pole) + \
+                    np.conjugate(residues[i]) / (s - np.conjugate(pole))
         return resp
 
     @axes_kwarg
@@ -2099,7 +2351,8 @@ class VectorFitting:
         components = ['db', 'mag', 'deg', 'deg_unwrap', 're', 'im']
         if component.lower() in components:
             if self.residues is None or self.poles is None:
-                raise RuntimeError('Poles and/or residues have not been fitted. Cannot plot the model response.')
+                raise RuntimeError(
+                    'Poles and/or residues have not been fitted. Cannot plot the model response.')
 
             n_ports = int(np.sqrt(np.shape(self.residues)[0]))
 
@@ -2118,7 +2371,8 @@ class VectorFitting:
                 list_j = j
 
             if self.network is not None:
-                # plot the original network response at each sample frequency (scatter plot)
+                # plot the original network response at each sample frequency
+                # (scatter plot)
                 if parameter.lower() == 's':
                     responses = self.network.s
                 elif parameter.lower() == 'z':
@@ -2126,8 +2380,9 @@ class VectorFitting:
                 elif parameter.lower() == 'y':
                     responses = self.network.y
                 else:
-                    raise ValueError('The network parameter type is not valid, must be `s`, `z`, or `y`, '
-                                     f'got `{parameter}`.')
+                    raise ValueError(
+                        'The network parameter type is not valid, must be `s`, `z`, or `y`, '
+                        f'got `{parameter} `.')
 
                 i_samples = 0
                 for i in list_i:
@@ -2146,13 +2401,15 @@ class VectorFitting:
                         elif component.lower() == 'deg':
                             y_vals = np.rad2deg(np.angle(responses[:, i, j]))
                         elif component.lower() == 'deg_unwrap':
-                            y_vals = np.rad2deg(np.unwrap(np.angle(responses[:, i, j])))
+                            y_vals = np.rad2deg(
+                                np.unwrap(np.angle(responses[:, i, j])))
                         elif component.lower() == 're':
                             y_vals = np.real(responses[:, i, j])
                         elif component.lower() == 'im':
                             y_vals = np.imag(responses[:, i, j])
 
-                        ax.scatter(self.network.f, y_vals, color='r', label=label)
+                        ax.scatter(self.network.f, y_vals,
+                                   color='r', label=label)
 
                 if freqs is None:
                     # get frequency array from the network
@@ -2207,7 +2464,8 @@ class VectorFitting:
 
             return ax
         else:
-            raise ValueError(f'The specified component ("{component}") is not valid. Must be in {components}.')
+            raise ValueError(
+                f'The specified component ("{component}") is not valid. Must be in {components}.')
 
     def plot_s_db(self, *args, **kwargs) -> Axes:
         """
@@ -2399,7 +2657,8 @@ class VectorFitting:
         n_ports = np.shape(D)[0]
 
         # calculate and save singular values for each frequency
-        u, sigma, vh = np.linalg.svd(self._get_s_from_ABCDE(freqs, A, B, C, D, E))
+        u, sigma, vh = np.linalg.svd(
+            self._get_s_from_ABCDE(freqs, A, B, C, D, E))
 
         # plot the frequency response of each singular value
         for n in range(n_ports):
@@ -2428,11 +2687,13 @@ class VectorFitting:
             figure.
         """
 
-        ax.semilogy(np.arange(len(self.delta_max_history)) + 1, self.delta_max_history, color='darkblue')
+        ax.semilogy(np.arange(len(self.delta_max_history)) + 1,
+                    self.delta_max_history, color='darkblue')
         ax.set_xlabel('Iteration step')
         ax.set_ylabel('Max. relative change', color='darkblue')
         ax2 = ax.twinx()
-        ax2.plot(np.arange(len(self.d_res_history)) + 1, self.d_res_history, color='orangered')
+        ax2.plot(np.arange(len(self.d_res_history)) + 1,
+                 self.d_res_history, color='orangered')
         ax2.set_ylabel('Residue', color='orangered')
         return ax
 
@@ -2455,13 +2716,17 @@ class VectorFitting:
             figure.
         """
 
-        ax.plot(np.arange(len(self.history_max_sigma)) + 1, self.history_max_sigma)
+        ax.plot(np.arange(len(self.history_max_sigma)) +
+                1, self.history_max_sigma)
         ax.set_xlabel('Iteration step')
         ax.set_ylabel('Max. singular value')
         return ax
 
-    def write_spice_subcircuit_s(self, file: str, fitted_model_name: str = "s_equivalent",
-                                     create_reference_pins: bool = False) -> None:
+    def write_spice_subcircuit_s(
+            self,
+            file: str,
+            fitted_model_name: str = "s_equivalent",
+            create_reference_pins: bool = False) -> None:
         """
         Creates an equivalent N-port subcircuit based on its vector fitted scattering (S) parameter responses
         in spice simulator netlist syntax (compatible with LTspice, ngspice, Xyce, ...). The circuit synthesis is based
@@ -2519,9 +2784,11 @@ class VectorFitting:
 
             # Create subcircuit pin string and reference nodes
             if create_reference_pins:
-                str_input_nodes = " ".join(map(lambda x: f'p{x + 1} p{x + 1}_ref', range(self.network.nports)))
+                str_input_nodes = " ".join(
+                    map(lambda x: f'p{x + 1} p{x + 1}_ref', range(self.network.nports)))
             else:
-                str_input_nodes = " ".join(map(lambda x: f'p{x + 1}', range(self.network.nports)))
+                str_input_nodes = " ".join(
+                    map(lambda x: f'p{x + 1}', range(self.network.nports)))
 
             f.write(f'.SUBCKT {fitted_model_name} {str_input_nodes}\n')
 
@@ -2540,7 +2807,8 @@ class VectorFitting:
                 # transfer gain of the controlled current sources representing the incident power wave a_i at port i
                 #
                 # the gain values result from the definition of the incident power wave:
-                # a_i = 1 / 2 / sqrt(Z0_i) * (V_i + Z0_i * I_i) = 1 / 2 / sqrt(Z0_i) * V_i + sqrt(Z0_i) / 2 * I_i
+                # a_i = 1 / 2 / sqrt(Z0_i) * (V_i + Z0_i * I_i) = 1 / 2 /
+                # sqrt(Z0_i) * V_i + sqrt(Z0_i) / 2 * I_i
                 gain_vccs_a_i = 1 / 2 / np.sqrt(z0_i)
                 gain_cccs_a_i = np.sqrt(z0_i) / 2
 
@@ -2552,7 +2820,8 @@ class VectorFitting:
                 # depending on the circuit topology used for the equivalent port network, this can be implemented
                 # with either controlled current and/or controlled voltage sources. in case of the Norton current
                 # source used in this implementation, the reflected power wave relates to the source current as:
-                # b_i = sqrt(Z0_i) / 2 * I_b_i <==> I_b_i = 2 / sqrt(Z0_i) * b_i
+                # b_i = sqrt(Z0_i) / 2 * I_b_i <==> I_b_i = 2 / sqrt(Z0_i) *
+                # b_i
                 gain_b_i = 2 / np.sqrt(z0_i)
 
                 # dummy voltage source (v = 0) for port current sensing (I_i)
@@ -2561,7 +2830,8 @@ class VectorFitting:
                 # adding port reference resistor Ri = Z0_i
                 f.write(f'R{i + 1} s{i + 1} {node_ref_i} {z0_i}\n')
 
-                # transfer of states and inputs from port j to input/output network of port i
+                # transfer of states and inputs from port j to input/output
+                # network of port i
                 for j in range(self.network.nports):
                     if create_reference_pins:
                         node_ref_j = f'p{j + 1}_ref'
@@ -2575,7 +2845,8 @@ class VectorFitting:
                     # s11, s12, s13, ..., s21, s22, s23, ...
                     idx_S_i_j = i * self.network.nports + j
 
-                    # VCCS and CCCS adding their currents to represent the incident wave a_j
+                    # VCCS and CCCS adding their currents to represent the
+                    # incident wave a_j
                     gain_vccs_a_j = 1 / 2 / np.sqrt(z0_j)
                     gain_cccs_a_j = np.sqrt(z0_j) / 2
 
@@ -2583,24 +2854,34 @@ class VectorFitting:
                     e = self.proportional_coeff[idx_S_i_j]
 
                     if d != 0.0:
-                        # avoid zero-valued coefficients (in case of fit_constant=False)
+                        # avoid zero-valued coefficients (in case of
+                        # fit_constant=False)
 
-                        # input a_j is scaled by constant term d_i_j and by current gain for b_i
+                        # input a_j is scaled by constant term d_i_j and by
+                        # current gain for b_i
                         g_ij = gain_b_i * d * gain_vccs_a_j
                         f_ij = gain_b_i * d * gain_cccs_a_j
-                        f.write(f'Gd{i + 1}_{j + 1} {node_ref_i} s{i + 1} p{j + 1} {node_ref_j} {g_ij}\n')
-                        f.write(f'Fd{i + 1}_{j + 1} {node_ref_i} s{i + 1} V{j + 1} {f_ij}\n')
+                        f.write(f'Gd{i +
+                                     1}_{j +
+                                         1} {node_ref_i} s{i +
+                                                           1} p{j +
+                                                                1} {node_ref_j} {g_ij}\n')
+                        f.write(
+                            f'Fd{i + 1}_{j + 1} {node_ref_i} s{i + 1} V{j + 1} {f_ij}\n')
 
                     if build_e and e != 0.0:
                         # avoid zero-valued coefficients (in case of fit_proportional=False)
                         # proportional coefficients require an extra node for the differentiation using an inductor
                         # [Y(s) ~ s * E * U(s)]
 
-                        # differentiated input a_j is scaled by proportional term e_i_j and by current gain for b_i
+                        # differentiated input a_j is scaled by proportional
+                        # term e_i_j and by current gain for b_i
                         g_ij = gain_b_i * e
-                        f.write(f'Ge{i + 1}_{j + 1} {node_ref_i} s{i + 1} e{j + 1} 0 {g_ij}\n')
+                        f.write(
+                            f'Ge{i + 1}_{j + 1} {node_ref_i} s{i + 1} e{j + 1} 0 {g_ij}\n')
 
-                    # each residue rk_i_j at port i is multiplied by its respective state signal xk_j
+                    # each residue rk_i_j at port i is multiplied by its
+                    # respective state signal xk_j
                     for k in range(len(self.poles)):
                         pole = self.poles[k]
                         residue = self.residues[idx_S_i_j, k]
@@ -2610,17 +2891,27 @@ class VectorFitting:
                         if np.imag(pole) == 0.0:
                             # Real pole/residue pair; represented by one state
                             xkj = f'x{k + 1}_a{j + 1}'
-                            f.write(f'Gr{k + 1}_{i + 1}_{j + 1} {node_ref_i} s{i + 1} {xkj} 0 {g_re}\n')
+                            f.write(
+                                f'Gr{k + 1}_{i + 1}_{j + 1} {node_ref_i} s{i + 1} {xkj} 0 {g_re}\n')
                         else:
                             # Complex-conjugate pole/residue pair; represented by two states
                             # real part at x_{k + 1}_re_{j + 1}
                             # imaginary part at x_{k + 1}_im_{j + 1}
                             xk_re_j = f'x{k + 1}_re_a{j + 1}'
                             xk_im_j = f'x{k + 1}_im_a{j + 1}'
-                            f.write(f'Gr{k + 1}_re_{i + 1}_{j + 1} {node_ref_i} s{i + 1} {xk_re_j} 0 {g_re}\n')
-                            f.write(f'Gr{k + 1}_im_{i + 1}_{j + 1} {node_ref_i} s{i + 1} {xk_im_j} 0 {g_im}\n')
+                            f.write(f'Gr{k +
+                                         1}_re_{i +
+                                                1}_{j +
+                                                    1} {node_ref_i} s{i +
+                                                                      1} {xk_re_j} 0 {g_re}\n')
+                            f.write(f'Gr{k +
+                                         1}_im_{i +
+                                                1}_{j +
+                                                    1} {node_ref_i} s{i +
+                                                                      1} {xk_im_j} 0 {g_im}\n')
 
-                # create state networks driven by this port i (input variable u = a_i)
+                # create state networks driven by this port i (input variable u
+                # = a_i)
                 f.write('*\n')
                 f.write(f'* State networks driven by port {i + 1}\n')
                 for k in range(len(self.poles)):
@@ -2628,38 +2919,84 @@ class VectorFitting:
                     pole_re = np.real(pole)
                     pole_im = np.imag(pole)
 
-                    # Transfer of input (a_i) to state networks (node xk_i) using VCCS and CCCS
+                    # Transfer of input (a_i) to state networks (node xk_i)
+                    # using VCCS and CCCS
                     if pole_im == 0.0:
-                        # Real pole; represented by one state, input a_i is scaled by b = 1
+                        # Real pole; represented by one state, input a_i is
+                        # scaled by b = 1
                         xki = f'x{k + 1}_a{i + 1}'
-                        f.write(f'Cx{k + 1}_a{i + 1} {xki} 0 1.0\n')  # 1F capacitor makes math easy
-                        f.write(f'Gx{k + 1}_a{i + 1} 0 {xki} p{i + 1} {node_ref_i} {1 * gain_vccs_a_i}\n')
-                        f.write(f'Fx{k + 1}_a{i + 1} 0 {xki} V{i + 1} {1 * gain_cccs_a_i}\n')
+                        # 1F capacitor makes math easy
+                        f.write(f'Cx{k + 1}_a{i + 1} {xki} 0 1.0\n')
+                        f.write(
+                            f'Gx{
+                                k +
+                                1}_a{
+                                i +
+                                1} 0 {xki} p{
+                                i +
+                                1} {node_ref_i} {
+                                1 *
+                                gain_vccs_a_i}\n')
+                        f.write(
+                            f'Fx{k + 1}_a{i + 1} 0 {xki} V{i + 1} {1 * gain_cccs_a_i}\n')
                         f.write(f'Rp{k + 1}_a{i + 1} 0 {xki} {-1 / pole_re}\n')
                     else:
                         # Complex pole of a conjugate pair; represented by two states
-                        # real part at x_{k + 1}_re_{i + 1}, input a_i is scaled by b = 2
+                        # real part at x_{k + 1}_re_{i + 1}, input a_i is
+                        # scaled by b = 2
                         xk_re_i = f'x{k + 1}_re_a{i + 1}'
                         xk_im_i = f'x{k + 1}_im_a{i + 1}'
-                        f.write(f'Cx{k + 1}_re_a{i + 1} {xk_re_i} 0 1.0\n')  # 1F capacitor makes math easy
+                        # 1F capacitor makes math easy
+                        f.write(f'Cx{k + 1}_re_a{i + 1} {xk_re_i} 0 1.0\n')
                         f.write(
-                            f'Gx{k + 1}_re_a{i + 1} 0 {xk_re_i} p{i + 1} {node_ref_i} {2 * gain_vccs_a_i}\n')
-                        f.write(f'Fx{k + 1}_re_a{i + 1} 0 {xk_re_i} V{i + 1} {2 * gain_cccs_a_i}\n')
-                        f.write(f'Rp{k + 1}_re_re_a{i + 1} 0 {xk_re_i} {-1 / pole_re}\n')
-                        f.write(f'Gp{k + 1}_re_im_a{i + 1} 0 {xk_re_i} {xk_im_i} 0 {pole_im}\n')
+                            f'Gx{
+                                k +
+                                1}_re_a{
+                                i +
+                                1} 0 {xk_re_i} p{
+                                i +
+                                1} {node_ref_i} {
+                                2 *
+                                gain_vccs_a_i}\n')
+                        f.write(f'Fx{k +
+                                     1}_re_a{i +
+                                             1} 0 {xk_re_i} V{i +
+                                                              1} {2 *
+                                                                  gain_cccs_a_i}\n')
+                        f.write(
+                            f'Rp{k + 1}_re_re_a{i + 1} 0 {xk_re_i} {-1 / pole_re}\n')
+                        f.write(
+                            f'Gp{
+                                k +
+                                1}_re_im_a{
+                                i +
+                                1} 0 {xk_re_i} {xk_im_i} 0 {pole_im}\n')
 
                         # imaginary part at x_{k + 1}_im_{i + 1}, input a_i is inactive (b = 0)
-                        f.write(f'Cx{k + 1}_im_a{i + 1} {xk_im_i} 0 1.0\n')  # 1F capacitor makes math easy
-                        f.write(f'Gp{k + 1}_im_re_a{i + 1} 0 {xk_im_i} {xk_re_i} 0 {-1 * pole_im}\n')
-                        f.write(f'Rp{k + 1}_im_im_a{i + 1} 0 {xk_im_i} {-1 / pole_re}\n')
+                        # 1F capacitor makes math easy
+                        f.write(f'Cx{k + 1}_im_a{i + 1} {xk_im_i} 0 1.0\n')
+                        f.write(
+                            f'Gp{k + 1}_im_re_a{i + 1} 0 {xk_im_i} {xk_re_i} 0 {-1 * pole_im}\n')
+                        f.write(
+                            f'Rp{k + 1}_im_im_a{i + 1} 0 {xk_im_i} {-1 / pole_re}\n')
 
-                # create differentiation network for this port i (input variable u = a_i)
+                # create differentiation network for this port i (input
+                # variable u = a_i)
                 if build_e:
                     f.write('*\n')
-                    f.write(f'* Network with derivative of input a_{i + 1} for proportional term\n')
+                    f.write(
+                        f'* Network with derivative of input a_{i + 1} for proportional term\n')
                     # voltage on node 'e{i + 1}' to gnd (0) represents time-derivative of input a_i for terms e_j_i
-                    f.write(f'Le{i + 1} e{i + 1} 0 1.0\n')  # 1H inductor makes math easy
-                    f.write(f'Ge{i + 1} 0 e{i + 1} p{i + 1} {node_ref_i} {gain_vccs_a_i}\n')
+                    # 1H inductor makes math easy
+                    f.write(f'Le{i + 1} e{i + 1} 0 1.0\n')
+                    f.write(
+                        f'Ge{
+                            i +
+                            1} 0 e{
+                            i +
+                            1} p{
+                            i +
+                            1} {node_ref_i} {gain_vccs_a_i}\n')
                     f.write(f'Fe{i + 1} 0 e{i + 1} V{i + 1} {gain_cccs_a_i}\n')
 
             f.write(f'.ENDS {fitted_model_name}\n')

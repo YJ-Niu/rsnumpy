@@ -102,8 +102,8 @@ class Freespace(Media):
                  mu_loss_tan: NumberLike | None = None,
                  rho: NumberLike | str | None = None,
                  *args, **kwargs):
-        Media.__init__(self, frequency = frequency,
-                       z0_port = z0_port, z0_override = z0_override, z0 = z0)
+        Media.__init__(self, frequency=frequency,
+                       z0_port=z0_port, z0_override=z0_override, z0=z0)
         self.ep_r = ep_r
         self.mu_r = mu_r
         self.rho = rho
@@ -113,8 +113,8 @@ class Freespace(Media):
 
     def __str__(self) -> str:
         f = self.frequency
-        output = 'Freespace  Media.  %i-%i %s.  %i points'%\
-                (f.f_scaled[0], f.f_scaled[-1], f.unit, f.npoints)
+        output = 'Freespace  Media.  %i-%i %s.  %i points' %\
+            (f.f_scaled[0], f.f_scaled[-1], f.unit, f.npoints)
         return output
 
     def __repr__(self) -> str:
@@ -177,11 +177,10 @@ class Freespace(Media):
             Complex permeability in H/m.
         """
         if self.mu_loss_tan is not None:
-            mu_r = real(self.mu_r)*(1 -1j*self.mu_loss_tan)
+            mu_r = real(self.mu_r)*(1 - 1j*self.mu_loss_tan)
         else:
             mu_r = self.mu_r
         return mu_r*_const.mu_0
-
 
     @classmethod
     def from_distributed_circuit(cls, dc, *args, **kwargs) -> Media:
@@ -211,11 +210,10 @@ class Freespace(Media):
 
         """
         w = dc.frequency.w
-        z= dc.Z/(w*_const.mu_0)
-        y= dc.Y/(w*_const.epsilon_0)
+        z = dc.Z/(w*_const.mu_0)
+        y = dc.Y/(w*_const.epsilon_0)
 
-
-        kw={}
+        kw = {}
         kw['ep_r'] = -1j*y
         kw['mu_r'] = -1j*z
 
@@ -248,7 +246,7 @@ class Freespace(Media):
         if isinstance(val, str):
             self._rho = materials[val.lower()]['resistivity(ohm*m)']
         else:
-            self._rho=val
+            self._rho = val
 
     @property
     def ep_with_rho(self) -> NumberLike:
@@ -265,7 +263,7 @@ class Freespace(Media):
         ep
         """
         if self.rho is not None:
-            return self.ep -1j/(self.rho*self.frequency.w)
+            return self.ep - 1j/(self.rho*self.frequency.w)
         else:
             return self.ep
 

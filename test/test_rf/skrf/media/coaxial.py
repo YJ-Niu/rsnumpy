@@ -80,7 +80,8 @@ class Coaxial(DistributedCircuit, Media):
     .. [#] Pozar, D.M.; , "Microwave Engineering", Wiley India Pvt. Limited, 1 sept. 2009
 
     """
-    ## CONSTRUCTOR
+    # CONSTRUCTOR
+
     def __init__(self, frequency: Frequency | None = None,
                  z0_port: NumberLike | None = None,
                  z0_override: NumberLike | None = None,
@@ -89,10 +90,10 @@ class Coaxial(DistributedCircuit, Media):
                  epsilon_r: NumberLike = 1, tan_delta: NumberLike = 0,
                  sigma: NumberLike = INF,
                  *args, **kwargs):
-        Media.__init__(self, frequency = frequency,
-                       z0_port = z0_port, z0_override = z0_override, z0 = z0)
+        Media.__init__(self, frequency=frequency,
+                       z0_port=z0_port, z0_override=z0_override, z0=z0)
 
-        self.Dint, self.Dout = Dint,Dout
+        self.Dint, self.Dout = Dint, Dout
         self.epsilon_r, self.tan_delta, self.sigma = epsilon_r, tan_delta, sigma
         self.epsilon_prime = _const.epsilon_0*self.epsilon_r
         self.epsilon_second = _const.epsilon_0*self.epsilon_r*self.tan_delta
@@ -100,7 +101,7 @@ class Coaxial(DistributedCircuit, Media):
     @classmethod
     def from_attenuation_VF(cls, frequency: Frequency | None = None,
                             z0_port: NumberLike | None = None, z0: float = 50,
-                         att=0, unit='dB/m', VF=1) -> Media:
+                            att=0, unit='dB/m', VF=1) -> Media:
         """
         Init from electrical properties of the line: attenuation and velocity factor.
 
@@ -142,7 +143,8 @@ class Coaxial(DistributedCircuit, Media):
         """
         # test size of parameters
         if size(array(att, dtype="object")) not in (1, size(frequency.f)):
-            raise ValueError('Attenuation should be scalar or of same size that the frequency.')
+            raise ValueError(
+                'Attenuation should be scalar or of same size that the frequency.')
 
         # create gamma
         if unit in ('dB/m', 'db/m'):
@@ -161,7 +163,8 @@ class Coaxial(DistributedCircuit, Media):
                       'N/feet', 'N/ft'):
             alpha = att/feet_2_meter()
         else:
-            raise ValueError('Incorrect attenuation unit. Please see documentation. ', unit)
+            raise ValueError(
+                'Incorrect attenuation unit. Please see documentation. ', unit)
 
         beta = 2 * pi * frequency.f / _const.c / VF
 
@@ -169,7 +172,7 @@ class Coaxial(DistributedCircuit, Media):
 
         # return media object from z0 and gamma
         return DefinedGammaZ0(frequency=frequency, gamma=gamma,
-                                    z0_port=z0_port, z0=z0)
+                              z0_port=z0_port, z0=z0)
 
     @classmethod
     def from_Z0_Dout(cls, frequency: Frequency | None = None,
@@ -204,18 +207,17 @@ class Coaxial(DistributedCircuit, Media):
         -------
         media : :class:`~skrf.media.media.Media`
         """
-        ep= _const.epsilon_0*epsilon_r
+        ep = _const.epsilon_0*epsilon_r
 
-        if imag(z0) !=0:
+        if imag(z0) != 0:
             raise NotImplementedError()
 
         b = Dout/2.
         b_over_a = exp(2*pi*z0*sqrt(ep/_const.mu_0))
         a = b/b_over_a
         Dint = 2*a
-        return cls(frequency=frequency, z0_port = z0_port, Dint=Dint, Dout=Dout,
-                    epsilon_r=epsilon_r, **kw)
-
+        return cls(frequency=frequency, z0_port=z0_port, Dint=Dint, Dout=Dout,
+                   epsilon_r=epsilon_r, **kw)
 
     @property
     def Rs(self) -> NumberLike:
@@ -228,10 +230,10 @@ class Coaxial(DistributedCircuit, Media):
             surface resistivity
 
         """
-        f  = self.frequency.f
+        f = self.frequency.f
         rho = 1./self.sigma
-        mu_r =1
-        return surface_resistivity(f=f,rho=rho, mu_r=mu_r)
+        mu_r = 1
+        return surface_resistivity(f=f, rho=rho, mu_r=mu_r)
 
     @property
     def a(self) -> NumberLike:
@@ -326,12 +328,12 @@ class Coaxial(DistributedCircuit, Media):
         return 2*pi*self.frequency.w*self.epsilon_second/log(self.b/self.a)
 
     def __str__(self):
-        f=self.frequency
+        f = self.frequency
         f_s = f'Coaxial Media.  {f.f_scaled[0]}-{f.f_scaled[-1]}{f.unit}, '\
-                f'{f.npoints} points.'
+            f'{f.npoints} points.'
         z0 = self.z0
         z0_s = f'z0 = ({z0[0].real:.1f}, {z0[0].imag:.1f}j)-'\
-                f'({z0[-1].real:.1f}, {z0[-1].imag:.1f}j) Ohm'
+            f'({z0[-1].real:.1f}, {z0[-1].imag:.1f}j) Ohm'
         if self.z0_port is not None:
             z0_port = self.z0_port
             z0_port_s = \
@@ -345,7 +347,7 @@ class Coaxial(DistributedCircuit, Media):
                 f'Dint = {self.Dint * 1e3:.2f} mm,'\
                 f' Dout = {self.Dout * 1e3:.2f} mm\n' \
                 f'{z0_s}\n{z0_port_s}'
-        except(TypeError):
+        except (TypeError):
             output =  \
                 f'Coaxial Media.  {f_s}\n'\
                 f'Dint = {self.Dint[0] * 1e3:.2f} mm,'\

@@ -23,7 +23,8 @@ def mocked_ff(mocker):
     mock = rohde_schwarz.ZVA("TEST")
     mock.model = "TEST"
 
-    # This gets done in init, but we are mocking init to prevent super().__init__, so just call here
+    # This gets done in init, but we are mocking init to prevent
+    # super().__init__, so just call here
     mock.create_channel(1, "Channel 1")
 
     yield mock
@@ -31,41 +32,24 @@ def mocked_ff(mocker):
 
 @pytest.mark.parametrize(
     "param,expected_query,expected_write,query_response,expected_val,write_val",
-    [
-        ("freq_start", "SENS1:FREQ:STAR?", "SENS1:FREQ:STAR 100", "100", 100, 100),
-        ("freq_stop", "SENS1:FREQ:STOP?", "SENS1:FREQ:STOP 100", "100", 100, 100),
-        ("freq_span", "SENS1:FREQ:SPAN?", "SENS1:FREQ:SPAN 100", "100", 100, 100),
-        ("freq_center", "SENS1:FREQ:CENT?", "SENS1:FREQ:CENT 100", "100", 100, 100),
-        ("npoints", "SENS1:SWE:POIN?", "SENS1:SWE:POIN 100", "100", 100, 100),
-        ("if_bandwidth", "SENS1:BWID?", "SENS1:BWID 100", "100", 100, 100),
-        ("freq_step", "SENS1:SWE:STEP?", "SENS1:SWE:STEP 100", "100", 100, 100),
-        ("sweep_time", "SENS1:SWE:TIME?", "SENS1:SWE:TIME 1.0", "1.0", 1.0, 1),
-        (
-            "sweep_type",
-            "SENS1:SWE:TYPE?",
-            "SENS1:SWE:TYPE LIN",
-            "LIN",
-            rohde_schwarz.SweepType.LINEAR,
-            rohde_schwarz.SweepType.LINEAR,
-        ),
-        (
-            "sweep_mode",
-            "INIT1:CONT?",
-            "INIT1:CONT 0",
-            "0",
-            rohde_schwarz.SweepMode.SINGLE,
-            rohde_schwarz.SweepMode.SINGLE,
-        ),
-        (
-            "measurements",
-            "CALC1:PAR:CAT?",
-            None,
-            "CH4TR1,S11,CH4TR2,S12",
-            [("CH4TR1", "S11"), ("CH4TR2", "S12")],
-            None,
-        ),
-    ],
-)
+    [("freq_start", "SENS1:FREQ:STAR?", "SENS1:FREQ:STAR 100", "100", 100,
+      100),
+     ("freq_stop", "SENS1:FREQ:STOP?", "SENS1:FREQ:STOP 100", "100", 100, 100),
+     ("freq_span", "SENS1:FREQ:SPAN?", "SENS1:FREQ:SPAN 100", "100", 100, 100),
+     ("freq_center", "SENS1:FREQ:CENT?", "SENS1:FREQ:CENT 100", "100", 100,
+      100),
+     ("npoints", "SENS1:SWE:POIN?", "SENS1:SWE:POIN 100", "100", 100, 100),
+     ("if_bandwidth", "SENS1:BWID?", "SENS1:BWID 100", "100", 100, 100),
+     ("freq_step", "SENS1:SWE:STEP?", "SENS1:SWE:STEP 100", "100", 100, 100),
+     ("sweep_time", "SENS1:SWE:TIME?", "SENS1:SWE:TIME 1.0", "1.0", 1.0, 1),
+     ("sweep_type", "SENS1:SWE:TYPE?", "SENS1:SWE:TYPE LIN", "LIN",
+      rohde_schwarz.SweepType.LINEAR, rohde_schwarz.SweepType.LINEAR,),
+     ("sweep_mode", "INIT1:CONT?", "INIT1:CONT 0", "0", rohde_schwarz.
+      SweepMode.SINGLE, rohde_schwarz.SweepMode.SINGLE,),
+     ("measurements", "CALC1:PAR:CAT?", None, "CH4TR1,S11,CH4TR2,S12",
+      [("CH4TR1", "S11"),
+       ("CH4TR2", "S12")],
+      None,),],)
 def test_params(
     mocker,
     mocked_ff,
@@ -191,7 +175,8 @@ def test_delete_measurement(mocker, mocked_ff):
 
 
 def test_get_measurement(mocker, mocked_ff):
-    mocked_ff.ch1.get_active_trace = mocker.MagicMock(return_value=skrf.Network())
+    mocked_ff.ch1.get_active_trace = mocker.MagicMock(
+        return_value=skrf.Network())
     mocked_ff.query.side_effect = [
         "CH1_S11_1,S11,CH1_S12_1,S12",
         "CH1_S11_1,S11,CH1_S12_1,S12",

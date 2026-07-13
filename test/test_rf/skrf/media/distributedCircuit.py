@@ -121,9 +121,9 @@ class DistributedCircuit(Media):
                  z0: NumberLike | None = None,
                  C: NumberLike = 90e-12, L: NumberLike = 280e-9,
                  R: NumberLike = 0, G: NumberLike = 0,
-                *args, **kwargs):
-        Media.__init__(self, frequency = frequency,
-                       z0_port = z0_port, z0_override = z0_override, z0 = z0)
+                 *args, **kwargs):
+        Media.__init__(self, frequency=frequency,
+                       z0_port=z0_port, z0_override=z0_override, z0=z0)
 
         def _check_equal_length(*params):
             "Check that all params have same length"
@@ -138,7 +138,8 @@ class DistributedCircuit(Media):
         if _check_equal_length(C, L, R, G):
             self.C, self.L, self.R, self.G = C, L, R, G
         else:
-            raise ValueError("Parameters C,L,R,G must have same length or be scalar.")
+            raise ValueError(
+                "Parameters C,L,R,G must have same length or be scalar.")
 
     def _format_param(self, param):
         if isinstance(param, Iterable) and not isinstance(param, (str, bytes)):
@@ -174,17 +175,17 @@ class DistributedCircuit(Media):
         :class:`~skrf.media.media.Media`
         """
 
-        w  =  my_media.frequency.w
+        w = my_media.frequency.w
         gamma = my_media.gamma
         z0 = my_media.z0
         z0_port = my_media.z0_port
 
         Y = gamma/z0
         Z = gamma*z0
-        G,C = real(Y), imag(Y)/w
-        R,L = real(Z), imag(Z)/w
-        return cls(frequency = my_media.frequency,
-                   z0_port = z0_port, C=C, L=L, R=R, G=G, **kwargs)
+        G, C = real(Y), imag(Y)/w
+        R, L = real(Z), imag(Z)/w
+        return cls(frequency=my_media.frequency,
+                   z0_port=z0_port, C=C, L=L, R=R, G=G, **kwargs)
 
     @classmethod
     def from_csv(self, *args, **kw):
@@ -203,7 +204,7 @@ class DistributedCircuit(Media):
         --------
         write_csv
         """
-        d = DefinedGammaZ0.from_csv(*args,**kw)
+        d = DefinedGammaZ0.from_csv(*args, **kw)
         return self.from_media(d)
 
     @property
@@ -222,10 +223,11 @@ class DistributedCircuit(Media):
         Z : np.ndarray
             Distributed impedance in units of ohm/m
         """
-        w  = self.frequency.w
+        w = self.frequency.w
         Z = self.R + 1j*w*self.L
         # Avoid divide by zero.
-        # Needs to be imaginary to avoid all divide by zeros in the media class.
+        # Needs to be imaginary to avoid all divide by zeros in the media
+        # class.
         Z[Z.imag == 0] += 1j*1e-12
         return Z
 
@@ -246,10 +248,11 @@ class DistributedCircuit(Media):
             Distributed Admittance in units of S/m
         """
 
-        w  = self.frequency.w
+        w = self.frequency.w
         Y = self.G + 1j*w*self.C
         # Avoid divide by zero.
-        # Needs to be imaginary to avoid all divide by zeros in the media class.
+        # Needs to be imaginary to avoid all divide by zeros in the media
+        # class.
         Y[Y.imag == 0] += 1j*1e-12
         return Y
 

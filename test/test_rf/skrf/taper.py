@@ -201,7 +201,8 @@ class Taper1D:
             Network instance for the section of the taper
             for the given parameter value
         """
-        return self.media_at(val).line(self.section_length, unit=self.length_unit)
+        return self.media_at(val).line(
+            self.section_length, unit=self.length_unit)
 
     @property
     def medias(self) -> list:
@@ -351,8 +352,7 @@ class Klopfenstein(Taper1D):
             log_ratio = log(stop / start) / 2
             a = arccosh(1 / rmax)
             log_value = log(start * stop) / 2 + log_ratio / cosh(a) * (
-                a * a * self._phi(2 * z / length, a) + heaviside(z - length / 2, 1) + heaviside(z + length / 2, 1) - 1
-            )
+                a * a * self._phi(2 * z / length, a) + heaviside(z - length / 2, 1) + heaviside(z + length / 2, 1) - 1)
             return exp(log_value)
 
         opts = dict(f=f, f_is_normed=False)

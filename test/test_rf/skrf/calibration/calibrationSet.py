@@ -26,25 +26,28 @@ def cartesian_product(ideals, measured_sets, *args, **kwargs):
     """
     """
     measured_lists = product(*[k[:] for k in measured_sets])
-    return [Calibration(ideals = ideals, measured = measured,
-        **kwargs) for measured in measured_lists ]
+    return [Calibration(ideals=ideals, measured=measured,
+                        **kwargs) for measured in measured_lists]
+
 
 def dot_product(ideals, measured_sets, *args, **kwargs):
     """
     """
     for measured_set in measured_sets:
         if len(measured_set) != len(measured_sets[0]):
-            raise(IndexError('all measured NetworkSets must have same length for dot product combinatoric function'))
+            raise (IndexError(
+                'all measured NetworkSets must have same length for dot product combinatoric function'))
 
     cal_list = []
     for k in list(range(len(measured_sets[0]))):
         measured = [measured_set[k] for measured_set in measured_sets]
         cal_list.append(
-            Calibration(ideals=ideals, measured= measured,
-            **kwargs)
-            )
+            Calibration(ideals=ideals, measured=measured,
+                        **kwargs)
+        )
 
     return cal_list
+
 
 class CalibrationSet:
     """
@@ -61,7 +64,7 @@ class CalibrationSet:
 
     """
 
-    def __init__(self, cal_class, ideals, measured_sets,*args, **kwargs):
+    def __init__(self, cal_class, ideals, measured_sets, *args, **kwargs):
         r"""
         Parameters
         ----------
@@ -94,22 +97,22 @@ class CalibrationSet:
         """
         """
         return NetworkSet([k.apply_cal(raw_ntwk) for k in self.cal_list],
-            *args, **kwargs)
+                          *args, **kwargs)
 
     def plot_uncertainty_per_standard(self):
         """
         """
-        self.dankness('std_s','plot_s_mag')
+        self.dankness('std_s', 'plot_s_mag')
 
     def dankness(self, prop, func, *args, **kwargs):
         """
         """
         try:
-            [getattr(getattr(k, prop), func) \
+            [getattr(getattr(k, prop), func)
                 (*args, **kwargs) for k in self.measured_sets]
         except (TypeError):
-            return [getattr(getattr(k, prop), func) \
-                for k in self.measured_sets]
+            return [getattr(getattr(k, prop), func)
+                    for k in self.measured_sets]
 
     def run(self):
         NotImplementedError('SubClass must implement this')
@@ -122,8 +125,7 @@ class CalibrationSet:
         """
         n_meas = len(self.cal_list[0].measured)
         mat = [k.caled_ntwks for k in self.cal_list]
-        return [NetworkSet([k[l] for k in mat]) for l in range(n_meas)]
-
+        return [NetworkSet([k[l_] for k in mat]) for l_ in range(n_meas)]
 
 
 class Dot(CalibrationSet):
@@ -131,12 +133,13 @@ class Dot(CalibrationSet):
     def run(self, *args, **kwargs):
         ideals = self.ideals
         measured_sets = self.measured_sets
-        if len(set(map(len, measured_sets))) !=1:
-            raise(IndexError('all measured NetworkSets must have same length for dot product combinatoric function'))
+        if len(set(map(len, measured_sets))) != 1:
+            raise (IndexError(
+                'all measured NetworkSets must have same length for dot product combinatoric function'))
 
         self.cal_list = []
         for k in range(len(measured_sets[0])):
             measured = [measured_set[k] for measured_set in measured_sets]
-            cal = self.cal_class(ideals=ideals, measured= measured,
+            cal = self.cal_class(ideals=ideals, measured=measured,
                                  **kwargs)
             self.cal_list.append(cal)

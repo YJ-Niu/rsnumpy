@@ -249,8 +249,11 @@ class Qfactor:
                  verbose: bool | None = None):
         """Q-factor initializer."""
         if verbose is not None:
-            warn('The "verbose" parameter is deprecated and will be removed in a future release. '
-                          'Use logging configuration instead.', FutureWarning, stacklevel=2)
+            warn(
+                'The "verbose" parameter is deprecated and will be removed in a future release. '
+                'Use logging configuration instead.',
+                FutureWarning,
+                stacklevel=2)
 
         # check ntwk is a 1-port
         if ntwk.nports != 1:
@@ -276,7 +279,13 @@ class Qfactor:
 
     def __str__(self) -> str:
         if self.fitted:
-            status = f"fitted: f_L={float(self.f_L/self.f_multiplier):.3f}{self.f_unit}, Q_L={float(self.Q_L):.3f}"
+            status = f"fitted: f_L={
+                float(
+                    self.f_L /
+                    self.f_multiplier):.3f}{
+                self.f_unit}, Q_L={
+                float(
+                    self.Q_L):.3f}"
         else:
             status = 'not fitted'
 
@@ -332,11 +341,15 @@ class Qfactor:
             if op not in ['f', 'c', 'w']:
                 raise ValueError("Unexpected character in loop_plan")
         if loop_plan[-1] == "w":
-            raise ValueError("Last item in loop_plan must not be w (weight calculation)")
+            raise ValueError(
+                "Last item in loop_plan must not be w (weight calculation)")
         if loop_plan[0] == "w":
-            raise ValueError("First item in loop_plan must not be w (weight calculation)")
+            raise ValueError(
+                "First item in loop_plan must not be w (weight calculation)")
         if loop_plan[-1] != "c":
-            warn("Last item in loop_plan is not c so convergence not tested!", stacklevel=2)
+            warn(
+                "Last item in loop_plan is not c so convergence not tested!",
+                stacklevel=2)
 
         self.method = method
         self.loop_plan = loop_plan
@@ -404,10 +417,10 @@ class Qfactor:
         return W_i
 
     def _initial_fit(self,
-                    N: int,
-                    Q_L0: float | None = None,
-                    f_L0: None | float = None
-                    ):
+                     N: int,
+                     Q_L0: float | None = None,
+                     f_L0: None | float = None
+                     ):
         """Initial Linear least squares Q-factor fit.
 
         As this is not optimised in this function (use `fit`), the solution
@@ -441,7 +454,10 @@ class Qfactor:
         """
         if f_L0 is None:
             # search for the initial value of the resonance frequency
-            if self.res_type in ['reflection', 'reflection_method2', 'absorption']:
+            if self.res_type in [
+                'reflection',
+                'reflection_method2',
+                    'absorption']:
                 # Find minimum in |S11|
                 index_min = np.argmin(np.abs(self.s))
                 f_L0 = self.f[index_min]
@@ -488,7 +504,6 @@ class Qfactor:
 
         logger.debug(f"Preliminary estimation: Q_L={self.Q_L}, f_L={self.f_L}")
 
-
     def _optimise_fit6(self, N: int):
         """Iterative non-linear fit, NLQFIT6 Step (2).
 
@@ -529,10 +544,11 @@ class Qfactor:
         weighting_ratio = None
         number_iterations = 0
 
-        ## Loop through all of the operations specified in loop_plan
+        # Loop through all of the operations specified in loop_plan
         for op in self.loop_plan:
             if op == "w":
-                PV = self.angular_weights(self.f, Flwst * float(m5) / float(m6), float(m5))
+                PV = self.angular_weights(
+                    self.f, Flwst * float(m5) / float(m6), float(m5))
                 # PV = self.angular_weights(m5)
                 weighting_ratio = max(PV) / min(PV)
                 PV2 = np.concatenate((PV, PV))
@@ -567,7 +583,7 @@ class Qfactor:
                 T = np.multiply(X, PV2)
                 C = np.dot(T, M)
                 q = np.dot(T, G)
-                dm = np.linalg.solve(C, q)[:,0]
+                dm = np.linalg.solve(C, q)[:, 0]
                 m1 += dm[0]
                 m2 += dm[1]
                 m3 += dm[2]
@@ -590,9 +606,11 @@ class Qfactor:
                     SumDen = SumDen + ip
                 RMS_Error = np.sqrt(SumNum / SumDen)
                 if last_op == "c":
-                    logger.debug(f"Iteration {iterations}, RMS Error: {RMS_Error}")
+                    logger.debug(
+                        f"Iteration {iterations}, RMS Error: {RMS_Error}")
                 else:
-                    logger.debug(f"op {op}, Iteration {iterations}, RMS Error: {RMS_Error}")
+                    logger.debug(
+                        f"op {op}, Iteration {iterations}, RMS Error: {RMS_Error}")
                 last_op = op
 
                 if seek_convergence:
@@ -604,7 +622,6 @@ class Qfactor:
             # After last operation, we end up here ...
             logger.debug("Optimization done.")
 
-
         return OptimizedResult({
             'success': TerminationConditionMet,
             'm1': m1, 'm2': m2, 'm3': m3, 'm4': m4,
@@ -614,7 +631,7 @@ class Qfactor:
             'number_iterations': number_iterations,
             'RMS_Error': RMS_Error,
             'method': self.method,
-            })
+        })
 
     def _optimise_fit7(self, N):
         """Iterative non-linear fit, NLQFIT7 Step (2).
@@ -681,7 +698,7 @@ class Qfactor:
         weighting_ratio = None
         number_iterations = 0
 
-        ## Loop through all of the operations specified in loop_plan
+        # Loop through all of the operations specified in loop_plan
         for op in self.loop_plan:
 
             if op == "w":
@@ -720,21 +737,21 @@ class Qfactor:
                     u3 = v * fdn
                     M[i, :] = np.array(
                         [expm7.real,
-                        -expm7.imag,
-                        ym.real,
-                        -ym.imag,
-                        u.real,
-                        u2.real,
-                        -u3.imag]
+                         -expm7.imag,
+                         ym.real,
+                         -ym.imag,
+                         u.real,
+                         u2.real,
+                         -u3.imag]
                     )
                     M[i2, :] = np.array(
                         [expm7.imag,
-                        expm7.real,
-                        ym.imag,
-                        ym.real,
-                        u.imag,
-                        u2.imag,
-                        u3.real]
+                         expm7.real,
+                         ym.imag,
+                         ym.real,
+                         u.imag,
+                         u2.imag,
+                         u3.real]
                     )
                     r = self.s[i] - v  # residual
                     G[i] = r.real
@@ -743,7 +760,7 @@ class Qfactor:
                 T = np.multiply(X, PV2)
                 C = np.dot(T, M)
                 q = np.dot(T, G)
-                dm = np.linalg.solve(C, q)[:,0]
+                dm = np.linalg.solve(C, q)[:, 0]
                 m1 += dm[0]
                 m2 += dm[1]
                 m3 += dm[2]
@@ -770,9 +787,11 @@ class Qfactor:
                     SumDen = SumDen + ip
                 RMS_Error = np.sqrt(SumNum / SumDen)
                 if last_op == "c":
-                    logger.debug(f"Iteration {iterations}, RMS Error: {RMS_Error}")
+                    logger.debug(
+                        f"Iteration {iterations}, RMS Error: {RMS_Error}")
                 else:
-                    logger.debug(f"op {op}, Iteration {iterations}, RMS Error: {RMS_Error}")
+                    logger.debug(
+                        f"op {op}, Iteration {iterations}, RMS Error: {RMS_Error}")
 
                 last_op = op
 
@@ -790,12 +809,12 @@ class Qfactor:
             'm1': m1, 'm2': m2, 'm3': m3, 'm4': m4,
             'Q_L': m5,
             'f_L': m5 * Flwst / m6,
-            'm7a' : m7 / Flwst,
+            'm7a': m7 / Flwst,
             'weighting_ratio': weighting_ratio,
             'number_iterations': number_iterations,
             'RMS_Error': RMS_Error,
             'method': self.method,
-            })
+        })
 
     def _optimise_fit8(self, N):
         """Iterative non-linear fit, NLQFIT8 Step (2).
@@ -862,11 +881,12 @@ class Qfactor:
         weighting_ratio = None
         number_iterations = 0
 
-        ## Loop through all of the operations specified in loop_plan
+        # Loop through all of the operations specified in loop_plan
         for op in self.loop_plan:
 
             if op == "w":  # Fr                       QL
-                PV = self.angular_weights(self.f, Flwst * float(m5) / float(m6), float(m5))
+                PV = self.angular_weights(
+                    self.f, Flwst * float(m5) / float(m6), float(m5))
                 weighting_ratio = max(PV) / min(PV)
                 PV2 = np.concatenate((PV, PV))
                 logger.debug("Op w, Calculate weights")
@@ -895,8 +915,10 @@ class Qfactor:
                     u2 = -u * self.f[i] / Flwst
                     FL = Flwst * m5 / m6
                     t = 2 * (self.f[i] - FL) / FL
-                    M[i, :] = np.array([1.0, 0.0, y.real, -y.imag, u.real, u2.real, t, 0.0])
-                    M[i2, :] = np.array([0.0, 1.0, y.imag, y.real, u.imag, u2.imag, 0.0, t])
+                    M[i, :] = np.array(
+                        [1.0, 0.0, y.real, -y.imag, u.real, u2.real, t, 0.0])
+                    M[i2, :] = np.array(
+                        [0.0, 1.0, y.imag, y.real, u.imag, u2.imag, 0.0, t])
                     v = c2 + c3 * y + (m8 + 1j * m9) * t
                     r = self.s[i] - v  # residual
                     G[i] = r.real
@@ -905,7 +927,7 @@ class Qfactor:
                 T = np.multiply(X, PV2)
                 C = np.dot(T, M)
                 q = np.dot(T, G)
-                dm = np.linalg.solve(C, q)[:,0]
+                dm = np.linalg.solve(C, q)[:, 0]
                 m1 += dm[0]
                 m2 += dm[1]
                 m3 += dm[2]
@@ -938,9 +960,11 @@ class Qfactor:
                     SumDen = SumDen + ip
                 RMS_Error = np.sqrt(SumNum / SumDen)
                 if last_op == "c":
-                    logger.debug(f"Iteration {iterations}, RMS Error: {RMS_Error}")
+                    logger.debug(
+                        f"Iteration {iterations}, RMS Error: {RMS_Error}")
                 else:
-                    logger.debug(f"{op}, Iteration {iterations}, RMS Error: {RMS_Error}")
+                    logger.debug(
+                        f"{op}, Iteration {iterations}, RMS Error: {RMS_Error}")
 
                 last_op = op
 
@@ -962,7 +986,7 @@ class Qfactor:
             'number_iterations': number_iterations,
             'RMS_Error': RMS_Error,
             'method': self.method,
-            })
+        })
 
     def Q_circle(self,
                  opt_res: None | OptimizedResult = None,
@@ -1025,9 +1049,8 @@ class Qfactor:
         S_T = b * A
         return diam, S_V, S_T
 
-
     def Q_unloaded(self,
-                   opt_res: None| OptimizedResult = None,
+                   opt_res: None | OptimizedResult = None,
                    A: None | float = None
                    ) -> float:
         """Unloaded Q-factor Q0.
@@ -1069,25 +1092,31 @@ class Qfactor:
         elif isinstance(A, int | float):
             auto_flag = False
         else:
-            raise ValueError("Illegal Scaling factor; should be a float or  None")
+            raise ValueError(
+                "Illegal Scaling factor; should be a float or  None")
 
-        m1, m2, m3, m4, m5 = (opt_res[key] for key in ['m1', 'm2', 'm3', 'm4', 'Q_L'])
+        m1, m2, m3, m4, m5 = (opt_res[key]
+                              for key in ['m1', 'm2', 'm3', 'm4', 'Q_L'])
 
         if self.res_type == "transmission":
             if auto_flag:
-                raise ValueError('Scaling factor must be defined for transmission case')
+                raise ValueError(
+                    'Scaling factor must be defined for transmission case')
             cal_diam, cal_gamma_V, cal_gamma_T = self.Q_circle(opt_res, A)
             if cal_diam == 1.0:
-                raise ZeroDivisionError("Divide by zero forestalled in calculation of Q0")
+                raise ZeroDivisionError(
+                    "Divide by zero forestalled in calculation of Q0")
             Q0 = m5 / (1.0 - cal_diam)
 
         elif self.res_type == "reflection":
             if auto_flag:
-                logger.debug("A is undefined: using fitted data to estimate it")
+                logger.debug(
+                    "A is undefined: using fitted data to estimate it")
                 A = 1.0 / abs(complex(m1, m2))  # scale to S_V if A not defined
             cal_diam, S_V, S_T = self.Q_circle(opt_res, A)
             cal_touching_circle_diam = 2.0
-            logger.debug(f"Q-circle diam = {cal_diam}, touching_circle_diam = {cal_touching_circle_diam}")
+            logger.debug(
+                f"Q-circle diam = {cal_diam}, touching_circle_diam = {cal_touching_circle_diam}")
             den = cal_touching_circle_diam / cal_diam - 1.0
             Q0 = m5 * (1.0 + 1.0 / den)
 
@@ -1102,7 +1131,8 @@ class Qfactor:
                 2.0 * gv * cal_diam
             )  # Cosine rule
             cal_touching_circle_diam = (1.0 - gv2) / (1.0 - gv * cosphi)
-            logger.debug(f"Q-circle diam = {cal_diam}, touching_circle_diam = {cal_touching_circle_diam}")
+            logger.debug(
+                f"Q-circle diam = {cal_diam}, touching_circle_diam = {cal_touching_circle_diam}")
             den = cal_touching_circle_diam / cal_diam - 1.0
             Q0 = m5 * (1.0 + 1.0 / den)
 
@@ -1116,12 +1146,14 @@ class Qfactor:
             cal_diam, S_V, S_T = self.Q_circle(opt_res, A)
             logger.debug(f"Q-circle diam = {cal_diam}")
             if cal_diam == 1.0:
-                raise ZeroDivisionError("Divide by zero forestalled in calculation of Qo")
+                raise ZeroDivisionError(
+                    "Divide by zero forestalled in calculation of Qo")
             den = 1.0 / cal_diam - 1.0  # Gao thesis (2008) 4.35 and 4.40
             Q0 = m5 * (
                 1.0 + 1.0 / den
             )  # https://resolver.caltech.edu/CaltechETD:etd-06092008-235549
-            # For this type of resonator, critical coupling occurs for cal_diam = 0.5.
+            # For this type of resonator, critical coupling occurs for cal_diam
+            # = 0.5.
         else:
             raise ValueError("Unknown resonance type {self.res_type}")
 
@@ -1181,7 +1213,7 @@ class Qfactor:
         t = f/opt_res.f_L - opt_res.f_L/f
 
         y = 1/(1 + 1j*opt_res.Q_L*t)
-        s = opt_res.m1 +1j*opt_res.m2 + (opt_res.m3 + 1j*opt_res.m4) * y
+        s = opt_res.m1 + 1j*opt_res.m2 + (opt_res.m3 + 1j*opt_res.m4) * y
         return s
 
     def fitted_network(self,
@@ -1238,7 +1270,9 @@ class Qfactor:
 
         """
         if not self.fitted:
-            warn('Q-factor not fitted, result may be inaccurate. Use the .fit() method before.', stacklevel=2)
+            warn(
+                'Q-factor not fitted, result may be inaccurate. Use the .fit() method before.',
+                stacklevel=2)
         return self.f_L/self.f_multiplier
 
     @property
@@ -1264,7 +1298,9 @@ class Qfactor:
 
         """
         if not self.fitted:
-            warn('Q-factor not fitted, result may be inaccurate. Use the .fit() method before.', stacklevel=2)
+            warn(
+                'Q-factor not fitted, result may be inaccurate. Use the .fit() method before.',
+                stacklevel=2)
         return self.f_L/self.Q_L
 
     @property
@@ -1282,5 +1318,7 @@ class Qfactor:
 
         """
         if not self.fitted:
-            warn('Q-factor not fitted, result may be inaccurate. Use the .fit() method before.', stacklevel=2)
+            warn(
+                'Q-factor not fitted, result may be inaccurate. Use the .fit() method before.',
+                stacklevel=2)
         return self.BW/self.f_multiplier

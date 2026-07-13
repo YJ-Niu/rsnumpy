@@ -13,11 +13,13 @@ class MdifTestCase(unittest.TestCase):
     """
     Test the IO of GMDIF files
     """
+
     def setUp(self):
         """
         Sets up the test directory
         """
-        self.test_dir = os.path.dirname(os.path.abspath(__file__))+'/MDIF_CITI_MDL/'
+        self.test_dir = os.path.dirname(
+            os.path.abspath(__file__))+'/MDIF_CITI_MDL/'
 
         # constructor from filename
         self.oneport_example1 = Mdif(self.test_dir + 'test_1p_gmdif.mdf')
@@ -61,7 +63,8 @@ class MdifTestCase(unittest.TestCase):
     def test_to_to_networkset_params(self):
         """ Test if the params are correctly passed to the NetworkSet """
         self.assertEqual(self.oneport_example1.to_networkset().params, ['Cm'])
-        self.assertEqual(self.oneport_example2.to_networkset().params, ['mag', 'Phase'])
+        self.assertEqual(
+            self.oneport_example2.to_networkset().params, ['mag', 'Phase'])
         self.assertEqual(self.twoport_example1.to_networkset().params, ['Cm'])
         self.assertEqual(self.twoport_example2.to_networkset().params, ['L1'])
         self.assertEqual(self.fourport_example1.to_networkset().params, ['Cm'])
@@ -70,21 +73,22 @@ class MdifTestCase(unittest.TestCase):
         """ Test if we extract correctly the numerical values """
         # values described in real/imag
         ntwk = self.oneport_example1.to_networkset().sel({'Cm': 7e-16})[0]
-        np.testing.assert_equal(ntwk.s[0,0], 0.999999951-0.000312274302j)
+        np.testing.assert_equal(ntwk.s[0, 0], 0.999999951-0.000312274302j)
         np.testing.assert_equal(ntwk.f[0], 710000000)
         # values described in mag/deg
-        ntwk = self.oneport_example2.to_networkset().sel({'mag': 0.25, 'Phase': 180})[0]
-        np.testing.assert_equal(ntwk.s_mag[0,0], 0.1)
-        np.testing.assert_equal(ntwk.s_deg[0,0], 180)
+        ntwk = self.oneport_example2.to_networkset().sel(
+            {'mag': 0.25, 'Phase': 180})[0]
+        np.testing.assert_equal(ntwk.s_mag[0, 0], 0.1)
+        np.testing.assert_equal(ntwk.s_deg[0, 0], 180)
         np.testing.assert_equal(ntwk.f[0], 1e9)
         # values described in db/deg
         ntwk = self.twoport_example2.to_networkset().sel({'L1': 10})[0]
-        np.testing.assert_almost_equal(ntwk.s_db[0,0,0], -0.099191746)
-        np.testing.assert_almost_equal(ntwk.s_deg[0,0,0], 64.474118)
-        np.testing.assert_almost_equal(ntwk.s_db[0,0,1], -40.635912)
-        np.testing.assert_almost_equal(ntwk.s_deg[0,0,1], 154.35237)
-        np.testing.assert_almost_equal(ntwk.s_db[0,1,0], -42.635912)
-        np.testing.assert_almost_equal(ntwk.s_deg[0,1,0], 150.35237)
+        np.testing.assert_almost_equal(ntwk.s_db[0, 0, 0], -0.099191746)
+        np.testing.assert_almost_equal(ntwk.s_deg[0, 0, 0], 64.474118)
+        np.testing.assert_almost_equal(ntwk.s_db[0, 0, 1], -40.635912)
+        np.testing.assert_almost_equal(ntwk.s_deg[0, 0, 1], 154.35237)
+        np.testing.assert_almost_equal(ntwk.s_db[0, 1, 0], -42.635912)
+        np.testing.assert_almost_equal(ntwk.s_deg[0, 1, 0], 150.35237)
         np.testing.assert_equal(ntwk.f[0], 1e9)
 
     def test_comment_after_BEGIN(self):
@@ -99,7 +103,7 @@ class MdifTestCase(unittest.TestCase):
         net = rf.Network("skrf/io/tests/ts/ex_18.s2p")
         nset1 = NetworkSet([net.copy() for _i in range(4)])
 
-        #nset1 = NetworkSet.from_mdif("amplifier.mdf")
+        # nset1 = NetworkSet.from_mdif("amplifier.mdf")
         with tempfile.TemporaryDirectory() as tempdir:
             nset1.write_mdif(os.path.join(tempdir, "out1.mdf"))
             nset2 = NetworkSet.from_mdif(os.path.join(tempdir, "out1.mdf"))

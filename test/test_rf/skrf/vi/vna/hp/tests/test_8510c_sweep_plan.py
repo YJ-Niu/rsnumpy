@@ -34,44 +34,51 @@ except ImportError:
 if "matplotlib" not in sys.modules:
     pytest.skip(allow_module_level=True)
 
+
 def test_800pt_swp():
     """ Test: magic size - 1
     """
-    test_hz_0 = np.linspace(100,1000,800)
+    test_hz_0 = np.linspace(100, 1000, 800)
     test_sp_0 = SweepPlan.from_hz(test_hz_0)
     assert test_sp_0._matches_f_list(test_hz_0)
 
+
 def test_801pt_swp():
-     """ Test: magic size
-     """
-     test_hz_0 = np.linspace(100,1000,801)
-     test_sp_0 = SweepPlan.from_hz(test_hz_0)
-     assert test_sp_0._matches_f_list(test_hz_0)
+    """ Test: magic size
+    """
+    test_hz_0 = np.linspace(100, 1000, 801)
+    test_sp_0 = SweepPlan.from_hz(test_hz_0)
+    assert test_sp_0._matches_f_list(test_hz_0)
+
 
 def test_802pt_swp():
-     """ Test: magic size + 1
-     """
-     test_hz_0 = np.linspace(100,1000,802)
-     test_sp_0 = SweepPlan.from_hz(test_hz_0)
-     assert test_sp_0._matches_f_list(test_hz_0)
+    """ Test: magic size + 1
+    """
+    test_hz_0 = np.linspace(100, 1000, 802)
+    test_sp_0 = SweepPlan.from_hz(test_hz_0)
+    assert test_sp_0._matches_f_list(test_hz_0)
+
 
 def test_1001pt_swp():
     """ Test: typical size
     """
-    test_hz_1 = np.linspace(100,1000,1001)
+    test_hz_1 = np.linspace(100, 1000, 1001)
     test_sp_1 = SweepPlan.from_hz(test_hz_1)
     assert test_sp_1._matches_f_list(test_hz_1)
+
 
 def test_multi_swp():
     """ Test: multiple frequency blocks in a single sweep
     """
-    test_hz_2 = np.concatenate(([1,2,3], np.linspace(100,1000,1001)))
+    test_hz_2 = np.concatenate(([1, 2, 3], np.linspace(100, 1000, 1001)))
     test_sp_2 = SweepPlan.from_hz(test_hz_2)
     assert test_sp_2._matches_f_list(test_hz_2)
+
 
 def test_multi_swp_with_single():
     """ Test: multiple frequency blocks, one of them has size one
     """
-    test_hz_3 = np.concatenate(([1,2,3], np.linspace(100,1000,1001), [9999]))
+    test_hz_3 = np.concatenate(
+        ([1, 2, 3], np.linspace(100, 1000, 1001), [9999]))
     test_sp_3 = SweepPlan.from_hz(test_hz_3)
     assert test_sp_3._matches_f_list(test_hz_3)

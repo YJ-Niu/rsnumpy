@@ -190,7 +190,8 @@ class DeembeddingTestCase(unittest.TestCase):
         # for short-open testing
         self.raw2 = rf.Network(os.path.join(self.test_dir, 'deemb_ind2.s2p'))
         self.open2 = rf.Network(os.path.join(self.test_dir, 'deemb_open2.s2p'))
-        self.short2 = rf.Network(os.path.join(self.test_dir, 'deemb_short2.s2p'))
+        self.short2 = rf.Network(os.path.join(
+            self.test_dir, 'deemb_short2.s2p'))
 
         # for spot frequency checking
         self.raw2_1f = self.raw2['10GHz']
@@ -199,7 +200,8 @@ class DeembeddingTestCase(unittest.TestCase):
 
         # for short testing
         self.raw8 = rf.Network(os.path.join(self.test_dir, 'deemb_ind8.s2p'))
-        self.short8 = rf.Network(os.path.join(self.test_dir, 'deemb_short8.s2p'))
+        self.short8 = rf.Network(os.path.join(
+            self.test_dir, 'deemb_short8.s2p'))
 
         # for spot frequency checking
         self.raw8_1f = self.raw8['10GHz']
@@ -267,7 +269,7 @@ class DeembeddingTestCase(unittest.TestCase):
         Test that this is true at a spot frequency.
         """
         dut = self.dm_os.deembed(self.raw_1f)
-        ind_calc = 1e9*np.imag(1/dut.y[0,0,0])/2/np.pi/dut.f
+        ind_calc = 1e9*np.imag(1/dut.y[0, 0, 0])/2/np.pi/dut.f
         self.assertTrue(np.isclose(ind_calc, 1, rtol=self.rtol))
 
     def test_open(self):
@@ -276,7 +278,7 @@ class DeembeddingTestCase(unittest.TestCase):
         Test that this is true at a spot frequency.
         """
         dut = self.dm_o.deembed(self.raw7_1f)
-        ind_calc = 1e9*np.imag(1/dut.y[0,0,0])/2/np.pi/dut.f
+        ind_calc = 1e9*np.imag(1/dut.y[0, 0, 0])/2/np.pi/dut.f
         self.assertTrue(np.isclose(ind_calc, 1, rtol=self.rtol))
 
     def test_shortopen(self):
@@ -285,7 +287,7 @@ class DeembeddingTestCase(unittest.TestCase):
         Test that this is true at a spot frequency.
         """
         dut = self.dm_so.deembed(self.raw2_1f)
-        ind_calc = 1e9*np.imag(1/dut.y[0,0,0])/2/np.pi/dut.f
+        ind_calc = 1e9*np.imag(1/dut.y[0, 0, 0])/2/np.pi/dut.f
         self.assertTrue(np.isclose(ind_calc, 1, rtol=self.rtol))
 
     def test_short(self):
@@ -294,7 +296,7 @@ class DeembeddingTestCase(unittest.TestCase):
         Test that this is true at a spot frequency.
         """
         dut = self.dm_s.deembed(self.raw8_1f)
-        ind_calc = 1e9*np.imag(1/dut.y[0,0,0])/2/np.pi/dut.f
+        ind_calc = 1e9*np.imag(1/dut.y[0, 0, 0])/2/np.pi/dut.f
         self.assertTrue(np.isclose(ind_calc, 1, rtol=self.rtol))
 
     def test_splitpi(self):
@@ -303,7 +305,7 @@ class DeembeddingTestCase(unittest.TestCase):
         Test that this is true at a spot frequency.
         """
         dut = self.dm_pi.deembed(self.raw3_1f)
-        ind_calc = 1e9*np.imag(1/dut.y[0,0,0])/2/np.pi/dut.f
+        ind_calc = 1e9*np.imag(1/dut.y[0, 0, 0])/2/np.pi/dut.f
         self.assertTrue(np.isclose(ind_calc, 1, rtol=self.rtol))
 
     def test_splittee(self):
@@ -312,7 +314,7 @@ class DeembeddingTestCase(unittest.TestCase):
         Test that this is true at a spot frequency.
         """
         dut = self.dm_tee.deembed(self.raw4_1f)
-        ind_calc = 1e9*np.imag(1/dut.y[0,0,0])/2/np.pi/dut.f
+        ind_calc = 1e9*np.imag(1/dut.y[0, 0, 0])/2/np.pi/dut.f
         self.assertTrue(np.isclose(ind_calc, 1, rtol=self.rtol))
 
     def test_admittance_cancel(self):
@@ -321,7 +323,7 @@ class DeembeddingTestCase(unittest.TestCase):
         Test that this is true at a spot frequency.
         """
         dut = self.dm_ac.deembed(self.raw5_1f)
-        ind_calc = 1e9*np.imag(1/dut.y[0,0,0])/2/np.pi/dut.f
+        ind_calc = 1e9*np.imag(1/dut.y[0, 0, 0])/2/np.pi/dut.f
         self.assertTrue(np.isclose(ind_calc, 1, rtol=self.rtol))
 
     def test_impedance_cancel(self):
@@ -330,7 +332,7 @@ class DeembeddingTestCase(unittest.TestCase):
         Test that this is true at a spot frequency.
         """
         dut = self.dm_ic.deembed(self.raw6_1f)
-        ind_calc = 1e9*np.imag(1/dut.y[0,0,0])/2/np.pi/dut.f
+        ind_calc = 1e9*np.imag(1/dut.y[0, 0, 0])/2/np.pi/dut.f
         self.assertTrue(np.isclose(ind_calc, 1, rtol=self.rtol))
 
     def test_IEEEP370_SE_NZC_2xThru(self):
@@ -342,8 +344,8 @@ class DeembeddingTestCase(unittest.TestCase):
         Test that this thru has S21 amplitude and phase smaller than a limit.
         """
         s2xthru = rf.Network(os.path.join(self.test_dir, 's2xthru.s2p'))
-        dm_nzc = IEEEP370_SE_NZC_2xThru(dummy_2xthru = s2xthru,
-                                        name = '2xthru')
+        dm_nzc = IEEEP370_SE_NZC_2xThru(dummy_2xthru=s2xthru,
+                                        name='2xthru')
         residuals = dm_nzc.deembed(s2xthru)
         # insertion loss magnitude deviate from 1.0 from less than 0.1 dB
         il_mag = 20.*np.log10(np.abs(residuals.s[:, 1, 0] + 1e-12))
@@ -364,8 +366,8 @@ class DeembeddingTestCase(unittest.TestCase):
         # interpolate to dc
         s2xthru_dc = s2xthru.extrapolate_to_dc(kind='linear')
         with pytest.warns(RuntimeWarning, match="DC point detected"):
-            dm_nzc = IEEEP370_SE_NZC_2xThru(dummy_2xthru = s2xthru_dc,
-                                        name = '2xthru')
+            dm_nzc = IEEEP370_SE_NZC_2xThru(dummy_2xthru=s2xthru_dc,
+                                            name='2xthru')
         residuals = dm_nzc.deembed(s2xthru_dc)
         # insertion loss magnitude deviate from 1.0 from less than 0.1 dB
         il_mag = 20.*np.log10(np.abs(residuals.s[:, 1, 0] + 1e-12))
@@ -390,8 +392,8 @@ class DeembeddingTestCase(unittest.TestCase):
                                        npoints=len(s2xthru)-10, unit='Hz')
         s2xthru_nu = s2xthru.interpolate(nonuniform_freq)
         with pytest.warns(RuntimeWarning, match="Non-uniform frequency vector detected"):
-            dm_nzc_nu = IEEEP370_SE_NZC_2xThru(dummy_2xthru = s2xthru_nu,
-                                                name = '2xthru')
+            dm_nzc_nu = IEEEP370_SE_NZC_2xThru(dummy_2xthru=s2xthru_nu,
+                                               name='2xthru')
         residuals = dm_nzc_nu.deembed(s2xthru_nu)
         # insertion loss magnitude deviate from 1.0 from less than 0.1 dB
         il_mag = 20.*np.log10(np.abs(residuals.s[:, 1, 0] + 1e-12))
@@ -410,13 +412,13 @@ class DeembeddingTestCase(unittest.TestCase):
         """
         s2xthru = rf.Network(os.path.join(self.test_dir, 's2xthru.s2p'))
         fdf = rf.Network(os.path.join(self.test_dir, 'fdf.s2p'))
-        dm_zc  = IEEEP370_SE_ZC_2xThru(dummy_2xthru = s2xthru,
-                                       dummy_fix_dut_fix = fdf,
-                                       bandwidth_limit = 10e9,
-                                       pullback1 = 0, pullback2 = 0,
-                                       leadin = 0,
-                                       NRP_enable = False,
-                                       name = 'zc2xthru')
+        dm_zc = IEEEP370_SE_ZC_2xThru(dummy_2xthru=s2xthru,
+                                      dummy_fix_dut_fix=fdf,
+                                      bandwidth_limit=10e9,
+                                      pullback1=0, pullback2=0,
+                                      leadin=0,
+                                      NRP_enable=False,
+                                      name='zc2xthru')
         residuals = dm_zc.deembed(s2xthru)
         # insertion loss magnitude deviate from 1.0 from less than 0.2 dB
         il_mag = 20.*np.log10(np.abs(residuals.s[:, 1, 0] + 1e-12))
@@ -439,13 +441,13 @@ class DeembeddingTestCase(unittest.TestCase):
         s2xthru_dc = s2xthru.extrapolate_to_dc(kind='linear')
         fdf_dc = fdf.extrapolate_to_dc(kind='linear')
         with pytest.warns(RuntimeWarning, match="DC point detected"):
-            dm_zc  = IEEEP370_SE_ZC_2xThru(dummy_2xthru = s2xthru_dc,
-                                        dummy_fix_dut_fix = fdf_dc,
-                                        bandwidth_limit = 10e9,
-                                        pullback1 = 0, pullback2 = 0,
-                                        leadin = 0,
-                                        NRP_enable = False,
-                                        name = 'zc2xthru')
+            dm_zc = IEEEP370_SE_ZC_2xThru(dummy_2xthru=s2xthru_dc,
+                                          dummy_fix_dut_fix=fdf_dc,
+                                          bandwidth_limit=10e9,
+                                          pullback1=0, pullback2=0,
+                                          leadin=0,
+                                          NRP_enable=False,
+                                          name='zc2xthru')
         residuals = dm_zc.deembed(s2xthru_dc)
         # insertion loss magnitude deviate from 1.0 from less than 0.2 dB
         il_mag = 20.*np.log10(np.abs(residuals.s[:, 1, 0] + 1e-12))
@@ -473,13 +475,13 @@ class DeembeddingTestCase(unittest.TestCase):
         s2xthru_nu = s2xthru.interpolate(nonuniform_freq)
         fdf_nu = fdf.interpolate(nonuniform_freq)
         with pytest.warns(RuntimeWarning, match="Non-uniform frequency vector detected"):
-            dm_zc_nu  = IEEEP370_SE_ZC_2xThru(dummy_2xthru = s2xthru_nu,
-                                        dummy_fix_dut_fix = fdf_nu,
-                                        bandwidth_limit = 10e9,
-                                        pullback1 = 0, pullback2 = 0,
-                                        leadin = 0,
-                                        NRP_enable = False,
-                                        name = 'zc2xthru')
+            dm_zc_nu = IEEEP370_SE_ZC_2xThru(dummy_2xthru=s2xthru_nu,
+                                             dummy_fix_dut_fix=fdf_nu,
+                                             bandwidth_limit=10e9,
+                                             pullback1=0, pullback2=0,
+                                             leadin=0,
+                                             NRP_enable=False,
+                                             name='zc2xthru')
         residuals = dm_zc_nu.deembed(s2xthru_nu)
         # insertion loss magnitude deviate from 1.0 from less than 0.2 dB
         il_mag = 20.*np.log10(np.abs(residuals.s[:, 1, 0] + 1e-12))
@@ -505,8 +507,8 @@ class DeembeddingTestCase(unittest.TestCase):
         # implementation, but small enough to keep within 1° limit line
         s2xthru_pn = s2xthru.copy()
         s2xthru_pn.add_noise_polar(0.0002, 0.2)
-        dm_nzc_pn = IEEEP370_SE_NZC_2xThru(dummy_2xthru = s2xthru_pn,
-                                        name = '2xthru')
+        dm_nzc_pn = IEEEP370_SE_NZC_2xThru(dummy_2xthru=s2xthru_pn,
+                                           name='2xthru')
         residuals = dm_nzc_pn.deembed(s2xthru_pn)
         # insertion loss magnitude deviate from 1.0 from less than 0.1 dB
         il_mag = 20.*np.log10(np.abs(residuals.s[:, 1, 0] + 1e-12))
@@ -523,38 +525,49 @@ class DeembeddingTestCase(unittest.TestCase):
         and in the time domains.
         """
         freq = rf.Frequency(10e-3, 10, 1000, 'GHz')
-        W   = 3.00e-3
-        H   = 1.55e-3
-        T   = 50e-6
+        W = 3.00e-3
+        H = 1.55e-3
+        T = 50e-6
         ep_r = 4.459
         tanD = 0.0183
         f_epr_tand = 1e9
 
-        beta  = 2 * pi * freq.f / c # propagation in air
+        beta = 2 * pi * freq.f / c  # propagation in air
         # 50 ohm air line
-        m50 = rf.media.DefinedGammaZ0(frequency = freq, z0_port = 50, gamma = 1j * beta)
+        m50 = rf.media.DefinedGammaZ0(
+            frequency=freq, z0_port=50, gamma=1j * beta)
 
         # microstrip segments
-        with pytest.warns(RuntimeWarning, match = r"^Conductor"):
-            m = MLine(frequency=freq, z0_port=50, w=W, h=H, t=T,
-                    ep_r=ep_r, mu_r=1, rho=1.712e-8, tand=tanD, rough=0.15e-6,
-                    f_low=1e3, f_high=1e12, f_epr_tand=f_epr_tand,
-                    diel='djordjevicsvensson', disp='kirschningjansen')
+        with pytest.warns(RuntimeWarning, match=r"^Conductor"):
+            m = MLine(
+                frequency=freq,
+                z0_port=50,
+                w=W,
+                h=H,
+                t=T,
+                ep_r=ep_r,
+                mu_r=1,
+                rho=1.712e-8,
+                tand=tanD,
+                rough=0.15e-6,
+                f_low=1e3,
+                f_high=1e12,
+                f_epr_tand=f_epr_tand,
+                diel='djordjevicsvensson',
+                disp='kirschningjansen')
 
-        thru  = m.line(0.050, 'm', z0 = 52.5)
+        thru = m.line(0.050, 'm', z0=52.5)
         thru.name = "thru"
         # perfect data
         fd_qm = IEEEP370_FD_QM()
-        td_qm = IEEEP370_TD_QM(1e9, # bps
-                                  32,  # samples per UI
-                                  0.4, # rise time per UI
-                                  1,   # gaussian pulse
-                                  2,   # zero extrapolation
-                                  verbose = False)
+        td_qm = IEEEP370_TD_QM(1e9,  # bps
+                               32,  # samples per UI
+                               0.4,  # rise time per UI
+                               1,   # gaussian pulse
+                               2,   # zero extrapolation
+                               verbose=False)
         qm = fd_qm.check_se_quality(thru)
-        self.assertTrue(qm['passivity']['value'] > 99.9 and
-                        qm['reciprocity']['value'] > 99.9 and
-                        qm['causality']['value'] > 99.9,
+        self.assertTrue(qm['passivity']['value'] > 99.9 and qm['reciprocity']['value'] > 99.9 and qm['causality']['value'] > 99.9,
                         'FD quality perfect thru')
         # passivity violation (reference value from Matlab R2024a)
         thru_non_passive = thru.copy()
@@ -576,13 +589,13 @@ class DeembeddingTestCase(unittest.TestCase):
         self.assertTrue(np.round(qm['reciprocity']['value'], 4) == 28.4500,
                         'TD quality reciprocity violation')
         # causality violation (reference value from Matlab R2024a)
-        half_fd  = m50.line(0.0445, 'm', z0 = 52)
+        half_fd = m50.line(0.0445, 'm', z0=52)
         thru_non_causal_fd = half_fd.inv ** thru ** half_fd.inv
         thru_non_causal_fd.name = 'thru'
         qm = fd_qm.check_se_quality(thru_non_causal_fd)
         self.assertTrue(np.round(qm['causality']['value'], 4) == 48.2637,
                         'FD quality causality violation')
-        half  = m50.line(0.18, 'm', z0 = 52)
+        half = m50.line(0.18, 'm', z0=52)
         thru_non_causal = half.inv ** thru ** half.inv
         thru_non_causal.name = 'thru'
         qm = td_qm.check_se_quality(thru_non_causal)

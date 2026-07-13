@@ -38,6 +38,7 @@ if TYPE_CHECKING:
 
 pwd = os.path.dirname(os.path.abspath(__file__))
 
+
 class StaticData:
 
     @property
@@ -119,12 +120,15 @@ class StaticData:
     def one_port_cal(self) -> Calibration:
         return read(os.path.join(pwd, 'one_port.cal'), encoding='latin1')
 
+
 _data = StaticData()
+
 
 def __getattr__(name):
     return getattr(_data, name)
 
-#one_port_cal = read(os.path.join(pwd, 'one_port.cal'), encoding='latin1')
+# one_port_cal = read(os.path.join(pwd, 'one_port.cal'), encoding='latin1')
+
 
 mpl_rc_fname = os.path.join(pwd, 'skrf.mplstyle')
 
@@ -170,8 +174,8 @@ materials = {
 materials : Dictionary of materials properties
 """
 
-for k1,k2 in [
+for k1, k2 in [
     ('cu', 'copper'),
     ('al', 'aluminum'),
-    ('au', 'gold')]:
+        ('au', 'gold')]:
     materials[k1] = materials[k2]

@@ -157,14 +157,22 @@ class DefinedAEpTandZ0(Media):
 
     """
 
-    def __init__(self, frequency: Frequency| None = None,
-                 A: float = 0.0, f_A: float = 1.0,
-                 ep_r: NumberLike = 1.0, tanD: NumberLike = 0.0,
-                 z0_port: NumberLike | None = None,
-                 z0: float = 50.0,
-                 Z0: NumberLike | None = None,
-                 f_low: float = 1.0e3, f_high: float = 1.0e12, f_ep: float = 1.0e9,
-                 model: str = 'frequencyinvariant', *args, **kwargs):
+    def __init__(
+            self,
+            frequency: Frequency | None = None,
+            A: float = 0.0,
+            f_A: float = 1.0,
+            ep_r: NumberLike = 1.0,
+            tanD: NumberLike = 0.0,
+            z0_port: NumberLike | None = None,
+            z0: float = 50.0,
+            Z0: NumberLike | None = None,
+            f_low: float = 1.0e3,
+            f_high: float = 1.0e12,
+            f_ep: float = 1.0e9,
+            model: str = 'frequencyinvariant',
+            *args,
+            **kwargs):
 
         Media.__init__(self, frequency=frequency, z0_port=z0_port)
         self.A, self.f_A = A, f_A
@@ -194,11 +202,11 @@ class DefinedAEpTandZ0(Media):
                 'Use of `Z0` in DefinedAEpTandZ0 initialization is deprecated.\n'
                 '`Z0` has no effect. Use `z0` instead\n'
                 '`Z0` will be removed in version 1.0',
-              DeprecationWarning, stacklevel = 2)
+                DeprecationWarning, stacklevel=2)
 
     def __str__(self):
         f = self.frequency
-        output = 'DefinedAEpTandZ0 medium.  %i-%i %s.  %i points'%\
+        output = 'DefinedAEpTandZ0 medium.  %i-%i %s.  %i points' %\
             (f.f_scaled[0], f.f_scaled[-1], f.unit, f.npoints)
         return output
 
@@ -210,18 +218,18 @@ class DefinedAEpTandZ0(Media):
         """
         Frequency dependent complex relative permittivity of dielectric.
         """
-        ep_r, tand  = self.ep_r, self.tanD
+        ep_r, tand = self.ep_r, self.tanD
         f_low, f_high, f_ep = self.f_low, self.f_high, self.f_ep
         f = self.frequency.f
         if self.model == 'djordjevicsvensson':
-           # compute the slope for a log frequency scale, tanD dependent.
-           k = log((f_high + 1j * f_ep) / (f_low + 1j * f_ep))
-           fd = log((f_high + 1j * f) / (f_low + 1j * f))
-           ep_d = -tand * ep_r  / imag(k)
-           # value for frequency above f_high
-           ep_inf = ep_r * (1. + tand * real(k) / imag(k))
-           # compute complex permitivity
-           return ep_inf + ep_d * fd
+            # compute the slope for a log frequency scale, tanD dependent.
+            k = log((f_high + 1j * f_ep) / (f_low + 1j * f_ep))
+            fd = log((f_high + 1j * f) / (f_low + 1j * f))
+            ep_d = -tand * ep_r / imag(k)
+            # value for frequency above f_high
+            ep_inf = ep_r * (1. + tand * real(k) / imag(k))
+            # compute complex permitivity
+            return ep_inf + ep_d * fd
         elif self.model == 'frequencyinvariant':
             return ones(self.frequency.f.shape) * (ep_r - 1j*ep_r*tand)
         else:
@@ -271,7 +279,7 @@ class DefinedAEpTandZ0(Media):
         alpha_dielectric: calculates dielectric losses
         beta_phase      : calculates phase parameter
         """
-        beta  = self.beta_phase
+        beta = self.beta_phase
         alpha = self.alpha_conductor + self.alpha_dielectric
         return alpha + 1j*beta
 

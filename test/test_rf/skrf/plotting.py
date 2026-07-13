@@ -157,9 +157,9 @@ def _get_label_str(netw: Network, param: str, m: int, n: int) -> str:
         label_string += f"{netw.name}, "
 
     if plt.rcParams['text.usetex']:
-        label_string += f"${param}_{{{netw._fmt_trace_name(m,n)}}}$"
+        label_string += f"${param}_{{{netw._fmt_trace_name(m, n)}}}$"
     else:
-        label_string += f"{param}{netw._fmt_trace_name(m,n)}"
+        label_string += f"{param}{netw._fmt_trace_name(m, n)}"
     return label_string
 
 
@@ -191,6 +191,7 @@ def scale_frequency_ticks(ax: Axes, funit: str):
         raise ValueError(f"invalid funit {funit}")
     ticks_x = ticker.FuncFormatter(lambda x, pos: f'{x * scale:g}')
     ax.xaxis.set_major_formatter(ticks_x)
+
 
 @axes_kwarg
 def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
@@ -246,17 +247,20 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
     contour = []
 
     # these are hard-coded on purpose,as they should always be present
-    rHeavyList = [0,1]
-    xHeavyList = [1,-1]
+    rHeavyList = [0, 1]
+    xHeavyList = [1, -1]
 
-    #TODO: fix this
-    # these could be dynamically coded in the future, but work good'nuff for now
+    # TODO: fix this
+    # these could be dynamically coded in the future, but work good'nuff for
+    # now
     if not draw_labels:
-        rLightList = np.logspace(3,-5,9,base=.5)
-        xLightList = np.hstack([np.logspace(2,-5,8,base=.5), -1*np.logspace(2,-5,8,base=.5)])
+        rLightList = np.logspace(3, -5, 9, base=.5)
+        xLightList = np.hstack(
+            [np.logspace(2, -5, 8, base=.5), -1*np.logspace(2, -5, 8, base=.5)])
     else:
-        rLightList = np.array( [ 0.2, 0.5, 1.0, 2.0, 5.0 ] )
-        xLightList = np.array( [ 0.2, 0.5, 1.0, 2.0 , 5.0, -0.2, -0.5, -1.0, -2.0, -5.0 ] )
+        rLightList = np.array([0.2, 0.5, 1.0, 2.0, 5.0])
+        xLightList = np.array(
+            [0.2, 0.5, 1.0, 2.0, 5.0, -0.2, -0.5, -1.0, -2.0, -5.0])
 
     # vswr lines
     if isinstance(draw_vswr, tuple | list):
@@ -270,7 +274,7 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
     # cheap way to make a ok-looking smith chart at larger than 1 radii
     if smithR > 1:
         rMax = (1.+smithR)/(1.-smithR)
-        rLightList = np.hstack([ np.linspace(0,rMax,11)  , rLightList ])
+        rLightList = np.hstack([np.linspace(0, rMax, 11), rLightList])
 
     if chart_type.startswith('y'):
         y_flip_sign = -1
@@ -279,7 +283,6 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
 
     # draw impedance and/or admittance
     both_charts = chart_type in ('zy', 'yz')
-
 
     # loops through Verylight, Light and Heavy lists and draws circles using patches
     # for analysis of this see R.M. Weikles Microwave II notes (from uva)
@@ -292,43 +295,45 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
     # vswr circles verylight
     for vswr in vswrVeryLightList:
         radius = (vswr-1.0) / (vswr+1.0)
-        contour.append( Circle((0, 0), radius, **veryLightColor))
+        contour.append(Circle((0, 0), radius, **veryLightColor))
 
     # impedance/admittance circles
     for r in rLightList:
-        center = (r/(1.+r)*y_flip_sign,0 )
+        center = (r/(1.+r)*y_flip_sign, 0)
         radius = 1./(1+r)
         if both_charts:
-            contour.insert(0, Circle((-center[0], center[1]), radius, **superLightColor))
+            contour.insert(
+                0, Circle((-center[0], center[1]), radius, **superLightColor))
         contour.append(Circle(center, radius, **lightColor))
     for x in xLightList:
-        center = (1*y_flip_sign,1./x)
+        center = (1*y_flip_sign, 1./x)
         radius = 1./x
         if both_charts:
-            contour.insert(0, Circle( (-center[0], center[1]), radius, **superLightColor))
+            contour.insert(
+                0, Circle((-center[0], center[1]), radius, **superLightColor))
         contour.append(Circle(center, radius, **lightColor))
 
     for r in rHeavyList:
-        center = (r/(1.+r)*y_flip_sign,0 )
+        center = (r/(1.+r)*y_flip_sign, 0)
         radius = 1./(1+r)
         contour.append(Circle(center, radius, **heavyColor))
     for x in xHeavyList:
-        center = (1*y_flip_sign,1./x)
+        center = (1*y_flip_sign, 1./x)
         radius = 1./x
         contour.append(Circle(center, radius, **heavyColor))
 
     # clipping circle
-    clipc = Circle( [0,0], smithR, ec='k',fc='None',visible=True)
-    ax.add_patch( clipc)
+    clipc = Circle([0, 0], smithR, ec='k', fc='None', visible=True)
+    ax.add_patch(clipc)
 
-    #draw x and y axis
+    # draw x and y axis
     ax.axhline(0, color='k', lw=.1, clip_path=clipc)
     ax.axvline(1*y_flip_sign, color='k', clip_path=clipc)
     ax.grid(0)
     # Set axis limits by plotting white points so zooming works properly
-    ax.plot(smithR*np.array([-1.1, 1.1]), smithR*np.array([-1.1, 1.1]), 'w.', markersize = 0)
-    ax.axis('image') # Combination of 'equal' and 'tight'
-
+    ax.plot(smithR*np.array([-1.1, 1.1]), smithR *
+            np.array([-1.1, 1.1]), 'w.', markersize=0)
+    ax.axis('image')  # Combination of 'equal' and 'tight'
 
     if not border:
         ax.yaxis.set_ticks([])
@@ -336,9 +341,8 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
         for spine in ax.spines.values():
             spine.set_color('none')
 
-
     if draw_labels:
-        #Clear axis
+        # Clear axis
         ax.yaxis.set_ticks([])
         ax.xaxis.set_ticks([])
         for spine in ax.spines.values():
@@ -346,11 +350,12 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
 
         # Make annotations only if the radius is 1
         if smithR == 1:
-            #Make room for annotation
-            ax.plot(np.array([-1.25, 1.25]), np.array([-1.1, 1.1]), 'w.', markersize = 0)
+            # Make room for annotation
+            ax.plot(np.array([-1.25, 1.25]),
+                    np.array([-1.1, 1.1]), 'w.', markersize=0)
             ax.axis('image')
 
-            #Annotate real part
+            # Annotate real part
             for value in rLightList:
                 # Set radius of real part's label; offset slightly left (Z
                 # chart, y_flip_sign == 1) or right (Y chart, y_flip_sign == -1)
@@ -362,15 +367,18 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
                     halignstyle = "left"
                 if y_flip_sign == -1:  # 'y' and 'yz' charts
                     value = 1/value
-                ax.annotate(str(value*ref_imm), xy=(rho*smithR, 0.01),
-                    xytext=(rho*smithR, 0.01), ha = halignstyle, va = "baseline")
+                ax.annotate(
+                    str(value * ref_imm),
+                    xy=(rho * smithR, 0.01),
+                    xytext=(rho * smithR, 0.01),
+                    ha=halignstyle, va="baseline")
 
-            #Annotate imaginary part
-            radialScaleFactor = 1.01 # Scale radius of label position by this
-                                     # factor. Making it >1 places the label
-                                     # outside the Smith chart's circle
+            # Annotate imaginary part
+            radialScaleFactor = 1.01  # Scale radius of label position by this
+            # factor. Making it >1 places the label
+            # outside the Smith chart's circle
             for value in xLightList:
-                #Transforms from complex to cartesian
+                # Transforms from complex to cartesian
                 S = (1j*value - 1) / (1j*value + 1)
                 S *= smithR * radialScaleFactor
                 rhox = S.real
@@ -390,31 +398,35 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
                     valignstyle = "bottom"
                 if y_flip_sign == -1:  # 'y' and 'yz' charts
                     value = 1/value
-                #Annotate value
-                ax.annotate(str(value*ref_imm) + 'j', xy=(rhox, rhoy),
-                             xytext=(rhox, rhoy), ha = halignstyle, va = valignstyle)
+                # Annotate value
+                ax.annotate(
+                    str(value * ref_imm) + 'j', xy=(rhox, rhoy),
+                    xytext=(rhox, rhoy),
+                    ha=halignstyle, va=valignstyle)
 
-            #Annotate 0 and inf
+            # Annotate 0 and inf
             if y_flip_sign == 1:  # z and zy charts
                 label_left, label_right = '0.0', r'$\infty$'
             else:  # y and yz charts
                 label_left, label_right = r'$\infty$', '0.0'
             ax.annotate(label_left, xy=(-1.02, 0), xytext=(-1.02, 0),
-                             ha = "right", va = "center")
-            ax.annotate(label_right, xy=(radialScaleFactor, 0), xytext=(radialScaleFactor, 0),
-                             ha = "left", va = "center")
+                        ha="right", va="center")
+            ax.annotate(
+                label_right, xy=(
+                    radialScaleFactor, 0), xytext=(
+                    radialScaleFactor, 0), ha="left", va="center")
 
             # annotate vswr circles
             for vswr in vswrVeryLightList:
                 rhoy = (vswr-1.0) / (vswr+1.0)
 
                 ax.annotate(str(vswr), xy=(0, rhoy*smithR),
-                    xytext=(0, rhoy*smithR), ha="center", va="bottom",
-                    color='grey', size='smaller')
+                            xytext=(0, rhoy*smithR), ha="center", va="bottom",
+                            color='grey', size='smaller')
 
     # loop though contours and draw them on the given axes
     for currentContour in contour:
-        cc=ax.add_patch(currentContour)
+        cc = ax.add_patch(currentContour)
         cc.set_clip_path(clipc)
 
 
@@ -530,10 +542,10 @@ def plot_polar(theta: NumberLike, r: NumberLike,
             # axes class you get, which is different for each projection type.
             # So, passing a axe projection not polar is probably undesired
             warnings.warn(
-                f"Projection of the Axes passed as `ax` is not 'polar' but is {ax.name}." +
-                "See rsplotlib documentation to create a polar plot or call this function without the `ax` parameter."
-                , stacklevel=2
-            )
+                f"Projection of the Axes passed as `ax` is not 'polar' but is {
+                    ax.name}." +
+                "See rsplotlib documentation to create a polar plot or call this function without the `ax` parameter.",
+                stacklevel=2)
 
     ax.plot(theta, r, *args, **kwargs)
 
@@ -558,11 +570,15 @@ def plot_polar(theta: NumberLike, r: NumberLike,
         plt.draw()
 
 
-def plot_complex_rectangular(z: NumberLike,
-                             x_label: str = 'Real', y_label: str = 'Imag',
-                             title: str = 'Complex Plane', show_legend: bool = True,
-                             axis: str = 'equal', ax: Axes | None = None,
-                             **kwargs):
+def plot_complex_rectangular(
+        z: NumberLike,
+        x_label: str = 'Real',
+        y_label: str = 'Imag',
+        title: str = 'Complex Plane',
+        show_legend: bool = True,
+        axis: str = 'equal',
+        ax: Axes | None = None,
+        **kwargs):
     r"""
     Plot complex data on the complex plane.
 
@@ -594,8 +610,8 @@ def plot_complex_rectangular(z: NumberLike,
     x = np.real(z)
     y = np.imag(z)
     plot_rectangular(x=x, y=y, x_label=x_label, y_label=y_label,
-        title=title, show_legend=show_legend, axis=axis,
-        ax=ax, **kwargs)
+                     title=title, show_legend=show_legend, axis=axis,
+                     ax=ax, **kwargs)
 
 
 def plot_complex_polar(z: NumberLike,
@@ -633,15 +649,24 @@ def plot_complex_polar(z: NumberLike,
     theta = np.angle(z)
     r = np.abs(z)
     plot_polar(theta=theta, r=r, x_label=x_label, y_label=y_label,
-        title=title, show_legend=show_legend, axis_equal=axis_equal,
-        ax=ax, **kwargs)
+               title=title, show_legend=show_legend, axis_equal=axis_equal,
+               ax=ax, **kwargs)
 
 
-def plot_smith(s: NumberLike, smith_r: float = 1, chart_type: str = 'z',
-               x_label: str = 'Real', y_label: str = 'Imaginary', title: str = 'Complex Plane',
-               show_legend: bool = True, axis: str = 'equal', ax: Axes | None = None,
-               force_chart: bool = False, draw_vswr: list | bool | None = None, draw_labels: bool = False,
-               **kwargs):
+def plot_smith(
+        s: NumberLike,
+        smith_r: float = 1,
+        chart_type: str = 'z',
+        x_label: str = 'Real',
+        y_label: str = 'Imaginary',
+        title: str = 'Complex Plane',
+        show_legend: bool = True,
+        axis: str = 'equal',
+        ax: Axes | None = None,
+        force_chart: bool = False,
+        draw_vswr: list | bool | None = None,
+        draw_labels: bool = False,
+        **kwargs):
     r"""
     Plot complex data on smith chart.
 
@@ -692,11 +717,12 @@ def plot_smith(s: NumberLike, smith_r: float = 1, chart_type: str = 'z',
     # test if smith chart is already drawn
     if not force_chart:
         if len(ax.patches) == 0:
-            smith(ax=ax, smithR = smith_r, chart_type=chart_type, draw_vswr=draw_vswr, draw_labels=draw_labels)
+            smith(ax=ax, smithR=smith_r, chart_type=chart_type,
+                  draw_vswr=draw_vswr, draw_labels=draw_labels)
 
     plot_complex_rectangular(s, x_label=x_label, y_label=y_label,
-        title=title, show_legend=show_legend, axis=axis,
-        ax=ax, **kwargs)
+                             title=title, show_legend=show_legend, axis=axis,
+                             ax=ax, **kwargs)
 
     ax.axis(smith_r*np.array([-1.1, 1.1, -1.1, 1.1]))
     if plt.isinteractive():
@@ -742,21 +768,22 @@ def subplot_params(ntwk: Network, param: str = 's', proj: str = 'db',
 
     subplot_kw = subplot_kw if subplot_kw else {}
     if newfig:
-        f,axs= plt.subplots(ntwk.nports,ntwk.nports,
-                            figsize =(size_per_port*ntwk.nports,
-                                      size_per_port*ntwk.nports ),
-                                      **subplot_kw)
+        f, axs = plt.subplots(ntwk.nports, ntwk.nports,
+                              figsize=(size_per_port*ntwk.nports,
+                                       size_per_port*ntwk.nports),
+                              **subplot_kw)
     else:
         f = plt.gcf()
         axs = np.array(f.get_axes())
 
-    for ports,ax in zip(ntwk.port_tuples, axs.flatten()):
+    for ports, ax in zip(ntwk.port_tuples, axs.flatten()):
         plot_func = ntwk.__getattribute__(f'plot_{param}_{proj}')
         plot_func(m=ports[0], n=ports[1], ax=ax, **kwargs)
         if add_titles:
-            ax.set_title(f"{param.upper()}{ntwk._fmt_trace_name(ports[0], ports[1])}")
+            ax.set_title(
+                f"{param.upper()}{ntwk._fmt_trace_name(ports[0], ports[1])}")
     if keep_it_tight:
-       plt.tight_layout()
+        plt.tight_layout()
     return f, axs
 
 
@@ -789,19 +816,19 @@ def shade_bands(edges: NumberLike, y_range: tuple | None = None,
 
     cmap = plt.cm.get_cmap(cmap)
     if not isinstance(y_range, tuple | list) or (len(y_range) != 2):
-        y_range=plt.gca().get_ylim()
+        y_range = plt.gca().get_ylim()
     axis = plt.axis()
     for k in range(len(edges)-1):
         plt.fill_between(
-            [edges[k],edges[k+1]],
+            [edges[k], edges[k+1]],
             y_range[0], y_range[1],
-            color = cmap(1.0*k/len(edges)),
+            color=cmap(1.0*k/len(edges)),
             **kwargs)
     plt.axis(axis)
 
 
 def save_all_figs(dir: str = './', format: None | list[str] = None,
-                  replace_spaces: bool = True, echo: bool| None = None):
+                  replace_spaces: bool = True, echo: bool | None = None):
     """
     Save all open Figures to disk.
 
@@ -821,15 +848,16 @@ def save_all_figs(dir: str = './', format: None | list[str] = None,
     import rsplotlib.pyplot as plt
 
     if echo is not None:
-        warnings.warn("`echo` parameter is deprecated and will be removed in future versions. "
-                      "Use logging instead.", FutureWarning, stacklevel=2)
+        warnings.warn(
+            "`echo` parameter is deprecated and will be removed in future versions. "
+            "Use logging instead.", FutureWarning, stacklevel=2)
 
     if dir[-1] != '/':
         dir = dir + '/'
     for fignum in plt.get_fignums():
         fileName = plt.figure(fignum).get_axes()[0].get_title()
         if replace_spaces:
-            fileName = fileName.replace(' ','_')
+            fileName = fileName.replace(' ', '_')
         if fileName == '':
             fileName = 'unnamedPlot'
         if format is None:
@@ -841,7 +869,9 @@ def save_all_figs(dir: str = './', format: None | list[str] = None,
                 plt.savefig(path, format=fmt)
                 logger.debug(f"Saved figure {path}")
 
+
 saf = save_all_figs
+
 
 @axes_kwarg
 def add_markers_to_lines(ax: Axes = None,
@@ -871,10 +901,11 @@ def add_markers_to_lines(ax: Axes = None,
     marker_list = marker_list if marker_list else ['o', 'D', 's', '+', 'x']
 
     lines = ax.get_lines()
-    if len(lines) > len (marker_list ):
+    if len(lines) > len(marker_list):
         marker_list *= 3
     [k[0].set_marker(k[1]) for k in zip(lines, marker_list)]
     [line.set_markevery(markevery) for line in lines]
+
 
 @axes_kwarg
 def legend_off(ax: Axes = None):
@@ -890,6 +921,7 @@ def legend_off(ax: Axes = None):
         Default is None for current axe gca()
     """
     ax.legend_.set_visible(0)
+
 
 @axes_kwarg
 def scrape_legend(n: int | None = None,
@@ -914,12 +946,12 @@ def scrape_legend(n: int | None = None,
     handles, labels = ax.get_legend_handles_labels()
 
     if n is None:
-        n =len ( set(labels))
+        n = len(set(labels))
 
-    if n>len(handles):
+    if n > len(handles):
         raise ValueError('number of entries is too large')
 
-    k_list = [int(k) for k in np.linspace(0,len(handles)-1,n)]
+    k_list = [int(k) for k in np.linspace(0, len(handles)-1, n)]
     ax.legend([handles[k] for k in k_list], [labels[k] for k in k_list])
 
 
@@ -945,9 +977,10 @@ def func_on_all_figs(func: Callable, *args, **kwargs):
     for fig_n in plt.get_fignums():
         fig = plt.figure(fig_n)
         for ax_n in fig.axes:
-            fig.add_axes(ax_n) # trick to make axes current
+            fig.add_axes(ax_n)  # trick to make axes current
             func(*args, **kwargs)
             plt.draw()
+
 
 foaf = func_on_all_figs
 
@@ -971,7 +1004,7 @@ def plot_vector(a: complex, off: complex = 0+0j, **kwargs):
     import rsplotlib.pyplot as plt
 
     return plt.quiver(off.real, off.imag, a.real, a.imag, scale_units='xy',
-           angles='xy', scale=1, **kwargs)
+                      angles='xy', scale=1, **kwargs)
 
 
 def colors() -> list[str]:
@@ -987,7 +1020,7 @@ def colors() -> list[str]:
     return [c['color'] for c in plt.rcParams['axes.prop_cycle']]
 
 
-## specific plotting functions
+# specific plotting functions
 def plot(netw: Network, *args, **kw):
     """
     Plot something vs frequency
@@ -1089,14 +1122,36 @@ def plot_reciprocity2(netw: Network, db=False, *args, **kwargs):
         plt.draw()
 
 
-def plot_s_db_time(netw: Network, *args, window: str | float | tuple[str, float]=('kaiser', 6),
-        normalize: bool = True, center_to_dc: bool = None, **kwargs):
-    return netw.windowed(window, normalize, center_to_dc).plot_s_time_db(*args,**kwargs)
+def plot_s_db_time(netw: Network,
+                   *args,
+                   window: str | float | tuple[str,
+                                               float] = ('kaiser',
+                                                         6),
+                   normalize: bool = True,
+                   center_to_dc: bool = None,
+                   **kwargs):
+    return netw.windowed(
+        window,
+        normalize,
+        center_to_dc).plot_s_time_db(
+        *args,
+        **kwargs)
 
 
 # plotting
-def plot_s_smith(netw: Network, m=None, n=None,r=1, ax=None, show_legend=True,\
-        chart_type='z', draw_labels=False, label_axes=False, draw_vswr=None, *args,**kwargs):
+def plot_s_smith(
+        netw: Network,
+        m=None,
+        n=None,
+        r=1,
+        ax=None,
+        show_legend=True,
+        chart_type='z',
+        draw_labels=False,
+        label_axes=False,
+        draw_vswr=None,
+        *args,
+        **kwargs):
     r"""
     Plots the scattering parameter on a smith chart.
 
@@ -1151,7 +1206,6 @@ def plot_s_smith(netw: Network, m=None, n=None,r=1, ax=None, show_legend=True,\
     if ax is None:
         ax = plt.gca()
 
-
     if m is None:
         M = range(netw.number_of_ports)
     else:
@@ -1161,10 +1215,10 @@ def plot_s_smith(netw: Network, m=None, n=None,r=1, ax=None, show_legend=True,\
     else:
         N = [n]
 
-    if 'label'  not in kwargs.keys():
-        generate_label=True
+    if 'label' not in kwargs.keys():
+        generate_label = True
     else:
-        generate_label=False
+        generate_label = False
 
     for m in M:
         for n in N:
@@ -1174,14 +1228,16 @@ def plot_s_smith(netw: Network, m=None, n=None,r=1, ax=None, show_legend=True,\
                 kwargs['label'] = _get_label_str(netw, "S", m, n)
 
             # plot the desired attribute vs frequency
-            if len (ax.patches) == 0:
-                smith(ax=ax, smithR = r, chart_type=chart_type, draw_labels=draw_labels, draw_vswr=draw_vswr)
-            ax.plot(netw.s[:,m,n].real,  netw.s[:,m,n].imag, *args,**kwargs)
+            if len(ax.patches) == 0:
+                smith(ax=ax, smithR=r, chart_type=chart_type,
+                      draw_labels=draw_labels, draw_vswr=draw_vswr)
+            ax.plot(netw.s[:, m, n].real,
+                    netw.s[:, m, n].imag, *args, **kwargs)
 
-    #draw legend
+    # draw legend
     if show_legend:
         ax.legend()
-    ax.axis(np.array([-1.1,1.1,-1.1,1.1])*r)
+    ax.axis(np.array([-1.1, 1.1, -1.1, 1.1])*r)
 
     if label_axes:
         ax.set_xlabel('Real')
@@ -1246,11 +1302,11 @@ def stylely(rc_dict: dict = None, style_file: str = 'skrf.mplstyle'):
 
         rc_dict = rc_dict if rc_dict else {}
 
-
         plt.style.use(os.path.join(pwd, style_file))
         plt.rc(rc_dict)
     except ImportError as e:
-        warnings.warn(f"Could not import rsplotlib: {e}", ImportWarning, stacklevel=2)
+        warnings.warn(
+            f"Could not import rsplotlib: {e}", ImportWarning, stacklevel=2)
 
 
 # Network Set Plotting Commands
@@ -1328,11 +1384,11 @@ def animate(self: NetworkSet, attr: str = 's_deg', ylims: tuple = (-5, 5),
         plt.ion()
 
 
-#------------------------------
+# ------------------------------
 #
 # NetworkSet plotting functions
 #
-#------------------------------
+# ------------------------------
 
 @axes_kwarg
 def plot_uncertainty_bounds_component(
@@ -1414,17 +1470,21 @@ def plot_uncertainty_bounds_component(
             ntwk_std = self.__getattribute__('std_'+attribute)
             ntwk_std.s = n_deviations * ntwk_std.s
 
-            upper_bound = (ntwk_mean.s[:, m, n] + ntwk_std.s[:, m, n]).squeeze()
-            lower_bound = (ntwk_mean.s[:, m, n] - ntwk_std.s[:, m, n]).squeeze()
+            upper_bound = (ntwk_mean.s[:, m, n] +
+                           ntwk_std.s[:, m, n]).squeeze()
+            lower_bound = (ntwk_mean.s[:, m, n] -
+                           ntwk_std.s[:, m, n]).squeeze()
 
             if ppf is not None:
                 if type == 'bar':
-                    raise NotImplementedError('the \'ppf\' options don\'t work correctly with the bar-type error plots')
+                    raise NotImplementedError(
+                        'the \'ppf\' options don\'t work correctly with the bar-type error plots')
                 ntwk_mean.s = ppf(ntwk_mean.s)
                 upper_bound = ppf(upper_bound)
                 lower_bound = ppf(lower_bound)
                 lower_bound[np.isnan(lower_bound)] = min(lower_bound)
-                if ppf in [mf.magnitude_2_db, mf.mag_2_db]:  # fix of wrong ylabels due to usage of ppf for *_db plots
+                # fix of wrong ylabels due to usage of ppf for *_db plots
+                if ppf in [mf.magnitude_2_db, mf.mag_2_db]:
                     if attribute == 's_mag':
                         plot_attribute = 's_db'
                     elif attribute == 's_time_mag':
@@ -1434,9 +1494,13 @@ def plot_uncertainty_bounds_component(
                 ntwk_mean.plot_s_re(ax=ax, m=m, n=n, **kwargs)
                 if color_error is None:
                     color_error = ax.get_lines()[-1].get_color()
-                ax.fill_between(ntwk_mean.frequency.f,
-                                lower_bound.real, upper_bound.real, alpha=alpha, color=color_error,
-                                **kwargs_error)
+                ax.fill_between(
+                    ntwk_mean.frequency.f,
+                    lower_bound.real,
+                    upper_bound.real,
+                    alpha=alpha,
+                    color=color_error,
+                    **kwargs_error)
                 # ax.plot(ntwk_mean.frequency.f_scaled, ntwk_mean.s[:,m,n],*args,**kwargs)
 
             elif type == 'bar':
@@ -1444,24 +1508,36 @@ def plot_uncertainty_bounds_component(
                 if color_error is None:
                     color_error = ax.get_lines()[-1].get_color()
                 ax.errorbar(ntwk_mean.frequency.f[::markevery_error],
-                            ntwk_mean.s_re[:, m, n].squeeze()[::markevery_error],
-                            yerr=ntwk_std.s_mag[:, m, n].squeeze()[::markevery_error],
-                            color=color_error, **kwargs_error)
+                            ntwk_mean.s_re[:, m, n].squeeze()[
+                    ::markevery_error],
+                    yerr=ntwk_std.s_mag[:, m, n].squeeze()[
+                    ::markevery_error],
+                    color=color_error, **kwargs_error)
 
             else:
-                raise(ValueError('incorrect plot type'))
+                raise (ValueError('incorrect plot type'))
 
-            ax.set_ylabel(self[0].Y_LABEL_DICT.get(plot_attribute[2:], ''))  # use only the function of the attribute
+            # use only the function of the attribute
+            ax.set_ylabel(self[0].Y_LABEL_DICT.get(plot_attribute[2:], ''))
             scale_frequency_ticks(ax, ntwk_mean.frequency.unit)
             ax.axis('tight')
 
+
 @axes_kwarg
-def plot_minmax_bounds_component(self: NetworkSet, attribute: PrimaryPropertiesT, m: int = 0, n: int = 0,
-                                 *, type: str = 'shade',
-                                 alpha: float = .3, color_error: str | None = None,
-                                 markevery_error: int = 20, ax: Axes = None,
-                                 ppf: bool = None, kwargs_error: dict = None,
-                                 **kwargs):
+def plot_minmax_bounds_component(
+        self: NetworkSet,
+        attribute: PrimaryPropertiesT,
+        m: int = 0,
+        n: int = 0,
+        *,
+        type: str = 'shade',
+        alpha: float = .3,
+        color_error: str | None = None,
+        markevery_error: int = 20,
+        ax: Axes = None,
+        ppf: bool = None,
+        kwargs_error: dict = None,
+        **kwargs):
     r"""
     Plots mean value of the NetworkSet with minimum and maximum bounds in an Network's attribute.
 
@@ -1519,54 +1595,73 @@ def plot_minmax_bounds_component(self: NetworkSet, attribute: PrimaryPropertiesT
     ntwk_mean = self.__getattribute__('mean_'+attribute)
     ntwk_std = self.__getattribute__('std_'+attribute)
 
-    lower_bound = self.__getattribute__('min_'+attribute).s_re[:,m,n].squeeze()
-    upper_bound = self.__getattribute__('max_'+attribute).s_re[:,m,n].squeeze()
+    lower_bound = self.__getattribute__(
+        'min_'+attribute).s_re[:, m, n].squeeze()
+    upper_bound = self.__getattribute__(
+        'max_'+attribute).s_re[:, m, n].squeeze()
 
     if ppf is not None:
-        if type =='bar':
-            raise NotImplementedError('the \'ppf\' options don\'t work correctly with the bar-type error plots')
+        if type == 'bar':
+            raise NotImplementedError(
+                'the \'ppf\' options don\'t work correctly with the bar-type error plots')
         ntwk_mean.s = ppf(ntwk_mean.s)
         upper_bound = ppf(upper_bound)
         lower_bound = ppf(lower_bound)
-        lower_bound[np.isnan(lower_bound)]=min(lower_bound)
-        if ppf in [mf.magnitude_2_db, mf.mag_2_db]: # quickfix of wrong ylabels due to usage of ppf for *_db plots
+        lower_bound[np.isnan(lower_bound)] = min(lower_bound)
+        # quickfix of wrong ylabels due to usage of ppf for *_db plots
+        if ppf in [mf.magnitude_2_db, mf.mag_2_db]:
             if attribute == 's_mag':
                 attribute = 's_db'
             elif attribute == 's_time_mag':
                 attribute = 's_time_db'
 
     if type == 'shade':
-        ntwk_mean.plot_s_re(ax=ax,m=m,n=n, **kwargs)
+        ntwk_mean.plot_s_re(ax=ax, m=m, n=n, **kwargs)
         if color_error is None:
             color_error = ax.get_lines()[-1].get_color()
-        ax.fill_between(ntwk_mean.frequency.f,
-                        lower_bound, upper_bound, alpha=alpha, color=color_error,
-                        **kwargs_error)
-        #ax.plot(ntwk_mean.frequency.f_scaled,ntwk_mean.s[:,m,n],*args,**kwargs)
-    elif type =='bar':
+        ax.fill_between(
+            ntwk_mean.frequency.f,
+            lower_bound,
+            upper_bound,
+            alpha=alpha,
+            color=color_error,
+            **kwargs_error)
+        # ax.plot(ntwk_mean.frequency.f_scaled,ntwk_mean.s[:,m,n],*args,**kwargs)
+    elif type == 'bar':
         raise (NotImplementedError)
         ntwk_mean.plot_s_re(ax=ax, m=m, n=n, **kwargs)
         if color_error is None:
             color_error = ax.get_lines()[-1].get_color()
         ax.errorbar(ntwk_mean.frequency.f[::markevery_error],
-                    ntwk_mean.s_re[:,m,n].squeeze()[::markevery_error],
-                    yerr=ntwk_std.s_mag[:,m,n].squeeze()[::markevery_error],
-                    color=color_error,**kwargs_error)
+                    ntwk_mean.s_re[:, m, n].squeeze()[::markevery_error],
+                    yerr=ntwk_std.s_mag[:, m, n].squeeze()[::markevery_error],
+                    color=color_error, **kwargs_error)
 
     else:
-        raise(ValueError('incorrect plot type'))
+        raise (ValueError('incorrect plot type'))
 
-    ax.set_ylabel(self[0].Y_LABEL_DICT.get(attribute[2:], ''))  # use only the function of the attribute
+    # use only the function of the attribute
+    ax.set_ylabel(self[0].Y_LABEL_DICT.get(attribute[2:], ''))
     scale_frequency_ticks(ax, ntwk_mean.frequency.unit)
     ax.axis('tight')
 
+
 @axes_kwarg
-def plot_violin(self: NetworkSet, attribute: PrimaryPropertiesT, m: int = 0, n: int = 0,
-                         *, widths: float = None, showmeans: bool = True,
-                         showextrema: bool = True, showmedians: bool = False,
-                         quantiles = None, points: int = 100, bw_method = None,
-                         ax: Axes = None, **kwargs
-    ):
+def plot_violin(
+        self: NetworkSet,
+        attribute: PrimaryPropertiesT,
+        m: int = 0,
+        n: int = 0,
+        *,
+        widths: float = None,
+        showmeans: bool = True,
+        showextrema: bool = True,
+        showmedians: bool = False,
+        quantiles=None,
+        points: int = 100,
+        bw_method=None,
+        ax: Axes = None,
+        **kwargs):
     r"""Plots the violin plot of the network set for the desired attribute.
 
     A violin plot provides the distribution of the attribute at each frequency point, and optionally the
@@ -1616,15 +1711,26 @@ def plot_violin(self: NetworkSet, attribute: PrimaryPropertiesT, m: int = 0, n: 
     elif not widths:
         widths = 0.5
 
-    data = np.array([getattr(p, attribute)[:,m,n] for p in self.ntwk_set])
+    data = np.array([getattr(p, attribute)[:, m, n] for p in self.ntwk_set])
 
-    ax.violinplot(data, freq, widths=widths, showmeans=showmeans, showextrema=showextrema,
-                  showmedians=showmedians, quantiles=quantiles, points=points, bw_method=bw_method, **kwargs)
+    ax.violinplot(
+        data,
+        freq,
+        widths=widths,
+        showmeans=showmeans,
+        showextrema=showextrema,
+        showmedians=showmedians,
+        quantiles=quantiles,
+        points=points,
+        bw_method=bw_method,
+        **kwargs)
 
     ax.set_xlabel(f'Frequency ({self.ntwk_set[0].frequency.unit})')
-    ax.set_ylabel(self[0].Y_LABEL_DICT.get(attribute[2:], ''))  # use only the function of the attribute
+    # use only the function of the attribute
+    ax.set_ylabel(self[0].Y_LABEL_DICT.get(attribute[2:], ''))
     scale_frequency_ticks(ax, self.ntwk_set[0].frequency.unit)
     ax.axis('tight')
+
 
 def plot_uncertainty_bounds_s_db(self: NetworkSet, *args, **kwargs):
     """
@@ -1633,8 +1739,9 @@ def plot_uncertainty_bounds_s_db(self: NetworkSet, *args, **kwargs):
     See plot_uncertainty_bounds for help.
 
     """
-    kwargs.update({'ppf':mf.magnitude_2_db})
-    self.plot_uncertainty_bounds_component("s_mag", *args,**kwargs)
+    kwargs.update({'ppf': mf.magnitude_2_db})
+    self.plot_uncertainty_bounds_component("s_mag", *args, **kwargs)
+
 
 def plot_minmax_bounds_s_db(self: NetworkSet, *args, **kwargs):
     """
@@ -1643,8 +1750,9 @@ def plot_minmax_bounds_s_db(self: NetworkSet, *args, **kwargs):
     See plot_uncertainty_bounds for help.
 
     """
-    kwargs.update({'ppf':mf.magnitude_2_db})
-    self.plot_minmax_bounds_component("s_mag", *args,**kwargs)
+    kwargs.update({'ppf': mf.magnitude_2_db})
+    self.plot_minmax_bounds_component("s_mag", *args, **kwargs)
+
 
 def plot_minmax_bounds_s_db10(self: NetworkSet, *args, **kwargs):
     """
@@ -1653,8 +1761,9 @@ def plot_minmax_bounds_s_db10(self: NetworkSet, *args, **kwargs):
     see plot_uncertainty_bounds for help
 
     """
-    kwargs.update({'ppf':mf.mag_2_db10})
-    self.plot_minmax_bounds_component("s_mag", *args,**kwargs)
+    kwargs.update({'ppf': mf.mag_2_db10})
+    self.plot_minmax_bounds_component("s_mag", *args, **kwargs)
+
 
 def plot_uncertainty_bounds_s_time_db(self: NetworkSet, *args, **kwargs):
     """
@@ -1663,8 +1772,9 @@ def plot_uncertainty_bounds_s_time_db(self: NetworkSet, *args, **kwargs):
     See plot_uncertainty_bounds for help.
 
     """
-    kwargs.update({'ppf':mf.magnitude_2_db})
-    self.plot_uncertainty_bounds_component("s_time_mag", *args,**kwargs)
+    kwargs.update({'ppf': mf.magnitude_2_db})
+    self.plot_uncertainty_bounds_component("s_time_mag", *args, **kwargs)
+
 
 def plot_minmax_bounds_s_time_db(self: NetworkSet, *args, **kwargs):
     """
@@ -1673,8 +1783,9 @@ def plot_minmax_bounds_s_time_db(self: NetworkSet, *args, **kwargs):
     See plot_uncertainty_bounds for help.
 
     """
-    kwargs.update({'ppf':mf.magnitude_2_db})
+    kwargs.update({'ppf': mf.magnitude_2_db})
     self.plot_minmax_bounds_component("s_time_mag", *args, **kwargs)
+
 
 def plot_uncertainty_decomposition(self: NetworkSet, m: int = 0, n: int = 0):
     """
@@ -1690,14 +1801,21 @@ def plot_uncertainty_decomposition(self: NetworkSet, m: int = 0, n: int = 0):
     """
     import rsplotlib.pyplot as plt
     if self.name is not None:
-        plt.title(f"Uncertainty Decomposition: {self.name} $S_{{{self.ntwk_set[0]._fmt.trace_name(m,n)}}}$")
-    self.std_s.plot_s_mag(label='Distance', m=m,n=n)
-    self.std_s_re.plot_s_mag(label='Real',  m=m,n=n)
-    self.std_s_im.plot_s_mag(label='Imaginary',  m=m,n=n)
-    self.std_s_mag.plot_s_mag(label='Magnitude',  m=m,n=n)
-    self.std_s_arcl.plot_s_mag(label='Arc-length',  m=m,n=n)
+        plt.title(
+            f"Uncertainty Decomposition: {
+                self.name} $S_{
+                {
+                    self.ntwk_set[0]._fmt.trace_name(
+                        m,
+                        n)}} $")
+    self.std_s.plot_s_mag(label='Distance', m=m, n=n)
+    self.std_s_re.plot_s_mag(label='Real', m=m, n=n)
+    self.std_s_im.plot_s_mag(label='Imaginary', m=m, n=n)
+    self.std_s_mag.plot_s_mag(label='Magnitude', m=m, n=n)
+    self.std_s_arcl.plot_s_mag(label='Arc-length', m=m, n=n)
 
-def plot_logsigma(self: NetworkSet, label_axis: bool = True, *args,**kwargs):
+
+def plot_logsigma(self: NetworkSet, label_axis: bool = True, *args, **kwargs):
     r"""
     Plot the uncertainty for the set in units of log-sigma.
 
@@ -1713,15 +1831,21 @@ def plot_logsigma(self: NetworkSet, label_axis: bool = True, *args,**kwargs):
     """
     import rsplotlib.pyplot as plt
 
-    self.std_s.plot_s_db(*args,**kwargs)
+    self.std_s.plot_s_db(*args, **kwargs)
     if label_axis:
         plt.ylabel('Standard Deviation(dB)')
 
 
-def signature(self: NetworkSet, m: int = 0, n: int = 0, component: str = 's_mag',
-              vmax: Number | None = None, vs_time: bool = False,
-              cbar_label: str | None = None,
-              *args, **kwargs):
+def signature(
+        self: NetworkSet,
+        m: int = 0,
+        n: int = 0,
+        component: str = 's_mag',
+        vmax: Number | None = None,
+        vs_time: bool = False,
+        cbar_label: str | None = None,
+        *args,
+        **kwargs):
     r"""
     Visualization of a NetworkSet.
 
@@ -1753,8 +1877,8 @@ def signature(self: NetworkSet, m: int = 0, n: int = 0, component: str = 's_mag'
     import rsplotlib.pyplot as plt
     from rsplotlib.dates import date2num
 
-    mat = np.array([self[k].__getattribute__(component)[:, m, n] \
-                     for k in range(len(self))])
+    mat = np.array([self[k].__getattribute__(component)[:, m, n]
+                    for k in range(len(self))])
 
     # if vmax is None:
     #    vmax = 3*mat.mean()
@@ -1800,6 +1924,7 @@ def signature(self: NetworkSet, m: int = 0, n: int = 0, component: str = 's_mag'
 
     return img
 
+
 def plot_contour(freq: Frequency,
                  x: NumberLike, y: NumberLike, z: NumberLike,
                  min0max1: int, graph: bool = True,
@@ -1842,21 +1967,21 @@ def plot_contour(freq: Frequency,
 
     from . import Network
 
-    ri =  np.linspace(0,1, 50)
-    ti =  np.linspace(0,2*np.pi, 150)
-    Ri , Ti = np.meshgrid(ri, ti)
-    xi = np.linspace(-1,1, 50)
+    ri = np.linspace(0, 1, 50)
+    ti = np.linspace(0, 2*np.pi, 150)
+    Ri, Ti = np.meshgrid(ri, ti)
+    xi = np.linspace(-1, 1, 50)
     Xi, Yi = np.meshgrid(xi, xi)
     triang = tri.Triangulation(x, y)
     interpolator = tri.LinearTriInterpolator(triang, z)
     Zi = interpolator(Xi, Yi)
-    if min0max1 == 1 :
+    if min0max1 == 1:
         VALopt = np.max(z)
-    else :
+    else:
         VALopt = np.min(z)
-    GAMopt = Network(f=[freq], s=x[z==VALopt] +1j*y[z==VALopt])
+    GAMopt = Network(f=[freq], s=x[z == VALopt] + 1j*y[z == VALopt])
 
-    if graph :
+    if graph:
         fig, ax = plt.subplots(**kwargs)
         an = np.linspace(0, 2*np.pi, 50)
         cs, sn = np.cos(an), np.sin(an)
@@ -1865,8 +1990,10 @@ def plot_contour(freq: Frequency,
         plt.plot((1+cs)/2, sn/2, color='k', lw=0.25)
         plt.axis('equal')
         ax.set_axis_off()
-        ax.contour(Xi, Yi, Zi, levels=20, vmin=Zi.min(), vmax= Zi.max(), linewidths=0.5,  colors='k')
-        cntr1 = ax.contourf(Xi, Yi, Zi, levels=20, vmin=Zi.min(), vmax= Zi.max(),cmap=cmap)
+        ax.contour(Xi, Yi, Zi, levels=20, vmin=Zi.min(),
+                   vmax=Zi.max(), linewidths=0.5, colors='k')
+        cntr1 = ax.contourf(Xi, Yi, Zi, levels=20,
+                            vmin=Zi.min(), vmax=Zi.max(), cmap=cmap)
         fig.colorbar(cntr1, ax=ax)
         ax.plot(x, y, 'o', ms=0.3, color='k')
         ax.set(xlim=(-1, 1), ylim=(-1, 1))
@@ -1874,9 +2001,10 @@ def plot_contour(freq: Frequency,
         plt.show()
     return GAMopt, VALopt
 
+
 def plot_prop_complex(netw: Network, prop_name: str,
-                    m=None, n=None, ax=None,
-                    show_legend=True, **kwargs):
+                      m=None, n=None, ax=None,
+                      show_legend=True, **kwargs):
     r"""
     plot the Network attribute :attr:`{}` vs frequency.
 
@@ -1919,7 +2047,7 @@ def plot_prop_complex(netw: Network, prop_name: str,
     else:
         N = [n]
 
-    if 'label'  not in kwargs.keys():
+    if 'label' not in kwargs.keys():
         gen_label = True
     else:
         gen_label = False
@@ -1930,7 +2058,8 @@ def plot_prop_complex(netw: Network, prop_name: str,
             # name if it exists, and they didn't pass a name key in
             # the kwargs
             if gen_label:
-                kwargs['label'] = _get_label_str(netw, prop_name[0].upper(), m, n)
+                kwargs['label'] = _get_label_str(
+                    netw, prop_name[0].upper(), m, n)
 
             # plot the desired attribute vs frequency
             plot_complex_rectangular(
@@ -1938,10 +2067,10 @@ def plot_prop_complex(netw: Network, prop_name: str,
                 show_legend=show_legend, ax=ax,
                 **kwargs)
 
+
 def plot_prop_polar(netw: Network, prop_name: str,
                     m=None, n=None, ax=None,
                     show_legend=True, **kwargs):
-
     r"""
     plot the Network attribute :attr:`{}` vs frequency.
 
@@ -1984,7 +2113,7 @@ def plot_prop_polar(netw: Network, prop_name: str,
     else:
         N = [n]
 
-    if 'label'  not in kwargs.keys():
+    if 'label' not in kwargs.keys():
         gen_label = True
     else:
         gen_label = False
@@ -1995,10 +2124,11 @@ def plot_prop_polar(netw: Network, prop_name: str,
             # name if it exists, and they didn't pass a name key in
             # the kwargs
             if gen_label:
-                kwargs['label'] = _get_label_str(netw, prop_name[0].upper(), m, n)
+                kwargs['label'] = _get_label_str(
+                    netw, prop_name[0].upper(), m, n)
 
             # plot the desired attribute vs frequency
             plot_complex_polar(
-                z = getattr(netw,prop_name)[:,m,n],
-                show_legend = show_legend, ax = ax,
+                z=getattr(netw, prop_name)[:, m, n],
+                show_legend=show_legend, ax=ax,
                 **kwargs)

@@ -29,7 +29,8 @@ class FrequencyTestCase(unittest.TestCase):
         # Check that frequency is increasing
         self.assertTrue(all(s > 1 for s in spacing))
         # Check that ratio of adjacent frequency points is identical
-        self.assertTrue(all(abs(spacing[i] - spacing[0]) < 1e-10 for i in range(len(spacing))))
+        self.assertTrue(
+            all(abs(spacing[i] - spacing[0]) < 1e-10 for i in range(len(spacing))))
         self.assertTrue(freq.sweep_type == "log")
 
     def test_create_rando_sweep(self):
@@ -47,7 +48,8 @@ class FrequencyTestCase(unittest.TestCase):
         """
         this also tests the ability to read a touchstone file.
         """
-        rando_sweep_ntwk = rf.Network(os.path.join(self.test_dir, "ntwk_arbitrary_frequency.s2p"))
+        rando_sweep_ntwk = rf.Network(os.path.join(
+            self.test_dir, "ntwk_arbitrary_frequency.s2p"))
         self.assertTrue((rando_sweep_ntwk.f == np.array([1, 4, 10, 20])).all())
 
     def test_slicer(self):
@@ -105,16 +107,19 @@ class FrequencyTestCase(unittest.TestCase):
             f_ = 5.31
             self.assertTrue(np.array_equal(op(e, f_).f, op(e.f, f_)))
 
-            # Test a Frequency object and a numpy array of the appropriate length
+            # Test a Frequency object and a numpy array of the appropriate
+            # length
             g = rf.Frequency(1, 10, 10, "GHz")
             h = np.linspace(10, 100, g.f.size)
             self.assertTrue(np.array_equal(op(g, h).f, op(g.f, h)))
 
-            # Test a Frequency object and a numpy array of an inappropriate length
+            # Test a Frequency object and a numpy array of an inappropriate
+            # length
             i = rf.Frequency(1, 10, 10, "GHz")
             j = np.linspace(10, 100, g.f.size * 2)
             with self.assertRaises(ValueError) as context:
                 np.array_equal(op(i, j).f, op(i.f, j))
+
 
 suite = unittest.TestLoader().loadTestsFromTestCase(FrequencyTestCase)
 unittest.TextTestRunner(verbosity=2).run(suite)

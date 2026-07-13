@@ -36,8 +36,8 @@ class TestBasicTransmissionLine(unittest.TestCase):
         Gamma_l = -1  # short
 
         gamma = tlFuncs.reflection_coefficient_2_propagation_constant(Gamma_in,
-                                                                 Gamma_l,
-                                                                 self.d)
+                                                                      Gamma_l,
+                                                                      self.d)
         expected_gamma = 0.02971 + 1.272j
 
         assert_almost_equal(real(gamma), real(expected_gamma), decimal=4)
@@ -48,6 +48,7 @@ class ElectricalLengthTests(unittest.TestCase):
     """
     Test the functions related to electrical length conversions.
     """
+
     def setUp(self):
         self.d = 1.5  # m
         self.gamma0 = 0.2 + 5j
@@ -56,7 +57,6 @@ class ElectricalLengthTests(unittest.TestCase):
         self.fs = linspace(1, 50, num=50)*1e6
         self.theta0 = self.gamma0 * self.d
         self.thetas = self.gammas * self.d
-
 
     def gamma_from_f(self, f0):
         """
@@ -90,41 +90,43 @@ class ElectricalLengthTests(unittest.TestCase):
         assert_almost_equal(theta_array, theta_array_expected)
 
         # test for gamma passed as function
-        theta_function = tlFuncs.electrical_length(self.gamma_from_f, self.fs, self.d)
+        theta_function = tlFuncs.electrical_length(
+            self.gamma_from_f, self.fs, self.d)
         theta_function_expected = self.gamma_from_f(self.fs) * self.d
         assert_almost_equal(theta_function, theta_function_expected)
-
 
     def test_length_from_electrical_distance(self):
         """
         Test the conversions from electrical length to physical distances.
         """
         # test for gamma passed as scalar
-        d_scalar = tlFuncs.electrical_length_2_distance(self.theta0, self.gamma0, self.f0, deg=False)
+        d_scalar = tlFuncs.electrical_length_2_distance(
+            self.theta0, self.gamma0, self.f0, deg=False)
         d_scalar_expected = real(self.theta0 / self.gamma0)
         assert_almost_equal(d_scalar, d_scalar_expected)
 
         # test for gamma passed as array-like
-        d_array = tlFuncs.electrical_length_2_distance(self.theta0, self.gammas, self.f0, deg=False)
+        d_array = tlFuncs.electrical_length_2_distance(
+            self.theta0, self.gammas, self.f0, deg=False)
         d_array_expected = real(self.theta0 / self.gammas)
         assert_almost_equal(d_array, d_array_expected)
 
         # test for gamma passed as function
-        d_function = tlFuncs.electrical_length_2_distance(self.theta0, self.gamma_from_f, self.fs, deg=False)
+        d_function = tlFuncs.electrical_length_2_distance(
+            self.theta0, self.gamma_from_f, self.fs, deg=False)
         d_function_expected = real(self.theta0 / self.gamma_from_f(self.fs))
         assert_almost_equal(d_function, d_function_expected)
         # with theta passed as array
-        d_function = tlFuncs.electrical_length_2_distance(self.thetas, self.gamma_from_f, self.fs, deg=False)
+        d_function = tlFuncs.electrical_length_2_distance(
+            self.thetas, self.gamma_from_f, self.fs, deg=False)
         d_function_expected = real(self.thetas / self.gamma_from_f(self.fs))
         assert_almost_equal(d_function, d_function_expected)
 
         # with theta passed in degrees
-        d_scalar = tlFuncs.electrical_length_2_distance(self.theta0*180/pi, self.gamma0, self.f0, deg=True)
+        d_scalar = tlFuncs.electrical_length_2_distance(
+            self.theta0*180/pi, self.gamma0, self.f0, deg=True)
         d_scalar_expected = real(self.theta0 / self.gamma0)
         assert_almost_equal(d_scalar, d_scalar_expected)
-
-
-
 
 
 class TestVoltageCurrentPropagation(unittest.TestCase):

@@ -176,6 +176,7 @@ class CPW(Media):
         vol. 41, no. 9, pp. 1499-1510, Sept. 1993.
 
     """
+
     def __init__(self, frequency: Frequency | None = None,
                  z0_port: NumberLike | None = None,
                  z0_override: NumberLike | None = None,
@@ -190,11 +191,11 @@ class CPW(Media):
                  has_metal_backside: bool = False,
                  compatibility_mode: str | None = None,
                  *args, **kwargs):
-        Media.__init__(self, frequency = frequency,
-                       z0_port = z0_port, z0_override = z0_override, z0 = z0)
+        Media.__init__(self, frequency=frequency,
+                       z0_port=z0_port, z0_override=z0_override, z0=z0)
 
         self.w, self.s, self.h, self.t, self.ep_r, self.tand, self.rho =\
-                w, s, h, t, ep_r, tand, rho
+            w, s, h, t, ep_r, tand, rho
         self.diel = diel
         self.f_low, self.f_high, self.f_epr_tand = f_low, f_high, f_epr_tand
         self.has_metal_backside = has_metal_backside
@@ -215,11 +216,11 @@ class CPW(Media):
         if compatibility_mode == 'qucs':
             self.zl_eff, self.ep_reff, k1, kk1, kpk1 = \
                 self.analyse_quasi_static(
-                real(self.ep_r_f), w, s, h, t, has_metal_backside)
+                    real(self.ep_r_f), w, s, h, t, has_metal_backside)
         else:
             self.zl_eff, self.ep_reff, k1, kk1, kpk1 = \
                 self.analyse_quasi_static(
-                self.ep_r_f, w, s, h, t, has_metal_backside)
+                    self.ep_r_f, w, s, h, t, has_metal_backside)
 
         # analyse dispersion of impedance and relatice permittivity
         if compatibility_mode == 'qucs':
@@ -243,7 +244,7 @@ class CPW(Media):
             w, t, s, k1, kk1, kpk1)
 
     def __str__(self) -> str:
-        f=self.frequency
+        f = self.frequency
         output = (f'Coplanar Waveguide Media.  {f.f_scaled[0]}-{f.f_scaled[-1]} {f.unit}. {f.npoints} points'
                   f'\n W= {self.w:.2e}m, S= {self.s:.2e}m')
         return output
@@ -283,9 +284,9 @@ class CPW(Media):
         return alpha + 1j * beta
 
     def analyse_dielectric(self, ep_r: NumberLike, tand: NumberLike,
-                          f_low: NumberLike, f_high: NumberLike,
-                          f_epr_tand: NumberLike, f: NumberLike,
-                          diel: str):
+                           f_low: NumberLike, f_high: NumberLike,
+                           f_epr_tand: NumberLike, f: NumberLike,
+                           diel: str):
         """
         This function calculate the frequency-dependent relative permittivity
         of dielectric and tangential loss factor.
@@ -309,7 +310,7 @@ class CPW(Media):
             # compute the slope for a log frequency scale, tanD dependent.
             k = log((f_high + 1j * f_epr_tand) / (f_low + 1j * f_epr_tand))
             fd = log((f_high + 1j * f) / (f_low + 1j * f))
-            ep_d = -tand * ep_r  / imag(k)
+            ep_d = -tand * ep_r / imag(k)
             # value for frequency above f_high
             ep_inf = ep_r * (1. + tand * real(k) / imag(k))
             # compute complex permitivity
@@ -317,7 +318,7 @@ class CPW(Media):
             # get tand
             tand_f = -imag(ep_r_f) / real(ep_r_f)
         elif diel == 'frequencyinvariant':
-            ep_r_f =  ep_r - 1j * ep_r * tand
+            ep_r_f = ep_r - 1j * ep_r * tand
             tand_f = tand
         else:
             raise ValueError('Unknown dielectric dispersion model')
@@ -325,9 +326,9 @@ class CPW(Media):
         return ep_r_f, tand_f
 
     def analyse_quasi_static(self, ep_r: NumberLike,
-                           w: NumberLike, s: NumberLike,
-                           h: NumberLike, t: NumberLike,
-                           has_metal_backside: bool):
+                             w: NumberLike, s: NumberLike,
+                             h: NumberLike, t: NumberLike,
+                             has_metal_backside: bool):
         """
         Calculates quasi-static impedance of a coplanar waveguide line.
 
@@ -398,7 +399,7 @@ class CPW(Media):
             # equation (7.98) from [GGBB96]
             d = 1.25 * t / pi * (1. + log(4. * pi * w / t))
             # equation between (7.99) and (7.100) from [GGBB96]
-            #approx. equal to ke = (w + d) / (w + d + 2 * (s - d))
+            # approx. equal to ke = (w + d) / (w + d + 2 * (s - d))
             ke = k1 + (1. - k1 * k1) * d / 2. / s
             qe = ellipa(ke)
 
@@ -424,54 +425,64 @@ class CPW(Media):
         return zl_eff, ep_reff, k1, kk1, kpk1
 
     def analyse_dispersion(self, zl_eff: NumberLike, ep_reff: NumberLike,
-                          ep_r: NumberLike, w: NumberLike, s: NumberLike,
-                          h: NumberLike, f: NumberLike):
-         """
-         This function computes the frequency-dependent characteristic
-         impedance and effective permittivity accounting for coplanar waveguide
-         frequency dispersion.
+                           ep_r: NumberLike, w: NumberLike, s: NumberLike,
+                           h: NumberLike, f: NumberLike):
+        """
+        This function computes the frequency-dependent characteristic
+        impedance and effective permittivity accounting for coplanar waveguide
+        frequency dispersion.
 
-         References
-         ----------
-         .. [#] M. Y. Frankel, S. Gupta, J. A. Valdmanis, and G. A. Mourou,
-            "Terahertz Attenuation and Dispersion Characteristics of Coplanar
-            Transmission Lines" IEEE Trans. on Microwave Theory and Techniques,
-            vol. 39, no. 6, pp. 910-916, June 1991.
-         .. [#] S. Gevorgian, T. Martinsson, A. Deleniv, E. Kollberg, and
-            I. Vendik, "Simple and accurate dispersion expression for the
-            effective dielectric constant of coplanar waveguides" in
-            Proceedings of Microwaves, Antennas and Propagation,
-            vol. 144, no. 2.IEE, Apr. 1997, pp. 145-148.
+        References
+        ----------
+        .. [#] M. Y. Frankel, S. Gupta, J. A. Valdmanis, and G. A. Mourou,
+           "Terahertz Attenuation and Dispersion Characteristics of Coplanar
+           Transmission Lines" IEEE Trans. on Microwave Theory and Techniques,
+           vol. 39, no. 6, pp. 910-916, June 1991.
+        .. [#] S. Gevorgian, T. Martinsson, A. Deleniv, E. Kollberg, and
+           I. Vendik, "Simple and accurate dispersion expression for the
+           effective dielectric constant of coplanar waveguides" in
+           Proceedings of Microwaves, Antennas and Propagation,
+           vol. 144, no. 2.IEE, Apr. 1997, pp. 145-148.
 
-         Returns
-         -------
-         z : :class:`numpy.ndarray`
-         e : :class:`numpy.ndarray`
-         """
-         # cut-off frequency of the TE0 mode
-         fte = ((_const.c / 4.) / (h * sqrt(ep_r - 1.)))
+        Returns
+        -------
+        z : :class:`numpy.ndarray`
+        e : :class:`numpy.ndarray`
+        """
+        # cut-off frequency of the TE0 mode
+        fte = ((_const.c / 4.) / (h * sqrt(ep_r - 1.)))
 
-         # dispersion factor G
-         p = log(w / h)
-         u = 0.54 - (0.64 - 0.015 * p) * p
-         v = 0.43 - (0.86 - 0.54 * p) * p
-         G = exp(u * log(w / s) + v)
+        # dispersion factor G
+        p = log(w / h)
+        u = 0.54 - (0.64 - 0.015 * p) * p
+        v = 0.43 - (0.86 - 0.54 * p) * p
+        G = exp(u * log(w / s) + v)
 
-         # add the dispersive effects to ep_reff
-         sqrt_ep_reff = sqrt(ep_reff)
-         sqrt_e = sqrt_ep_reff + (sqrt(ep_r) - sqrt_ep_reff) / \
-             (1. + G * (f / fte)**(-1.8))
+        # add the dispersive effects to ep_reff
+        sqrt_ep_reff = sqrt(ep_reff)
+        sqrt_e = sqrt_ep_reff + (sqrt(ep_r) - sqrt_ep_reff) / \
+            (1. + G * (f / fte)**(-1.8))
 
-         e = sqrt_e**2
+        e = sqrt_e**2
 
-         z = zl_eff * sqrt_ep_reff / sqrt_e
+        z = zl_eff * sqrt_ep_reff / sqrt_e
 
-         return z, e
+        return z, e
 
-    def analyse_loss(self, ep_r: NumberLike, ep_reff: NumberLike,
-                    tand: NumberLike, rho: NumberLike, mu_r: NumberLike,
-                    f: NumberLike, w: NumberLike, t: NumberLike, s: NumberLike,
-                    k1: NumberLike, kk1: NumberLike, kpk1: NumberLike):
+    def analyse_loss(
+            self,
+            ep_r: NumberLike,
+            ep_reff: NumberLike,
+            tand: NumberLike,
+            rho: NumberLike,
+            mu_r: NumberLike,
+            f: NumberLike,
+            w: NumberLike,
+            t: NumberLike,
+            s: NumberLike,
+            k1: NumberLike,
+            kk1: NumberLike,
+            kpk1: NumberLike):
         """
         Calculates conductor and dielectric losses of a coplanar waveguide line.
 
@@ -498,31 +509,34 @@ class CPW(Media):
         Z0 = sqrt(_const.mu_0 / _const.epsilon_0)
         if t is not None and t > 0.:
             if rho is None:
-                raise(AttributeError("must provide values conductivity and conductor thickness to calculate this. "
-                                     "see initializer help"))
-            r_s = surface_resistivity(f=f, rho=rho, \
-                    mu_r=1)
-            ds = skin_depth(f = f, rho = rho, mu_r = 1.)
+                raise (
+                    AttributeError(
+                        "must provide values conductivity and conductor thickness to calculate this. "
+                        "see initializer help"))
+            r_s = surface_resistivity(f=f, rho=rho,
+                                      mu_r=1)
+            ds = skin_depth(f=f, rho=rho, mu_r=1.)
             if any(t < 3 * ds):
                 warnings.warn(
                     'Conductor loss calculation invalid for line'
                     f'height t ({t})  < 3 * skin depth ({ds[0]})',
                     RuntimeWarning, stacklevel=2
-                    )
+                )
             n = (1. - k1) * 8. * pi / (t * (1. + k1))
             a = w / 2.
             b = a + s
             ac = (pi + log(n * a)) / a + (pi + log(n * b)) / b
-            a_conductor = r_s * sqrt(ep_reff) * ac / (4. * Z0 * kk1 * kpk1 * \
-                               (1. - k1 * k1))
+            a_conductor = r_s * sqrt(ep_reff) * ac / (4. * Z0 * kk1 * kpk1 *
+                                                      (1. - k1 * k1))
         else:
             a_conductor = zeros(f.shape)
 
         l0 = _const.c / f
-        a_dielectric =  pi * ep_r / (ep_r - 1) * (ep_reff - 1) / \
+        a_dielectric = pi * ep_r / (ep_r - 1) * (ep_reff - 1) / \
             sqrt(ep_reff) * tand / l0
 
         return a_conductor, a_dielectric
+
 
 def ellipa(k: NumberLike):
     """

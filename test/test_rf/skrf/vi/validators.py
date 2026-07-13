@@ -47,7 +47,8 @@ class IntValidator(Validator):
         try:
             arg = int(arg)
         except ValueError as err:
-            raise ValidationError(f"Could not convert {arg} to an int") from err
+            raise ValidationError(
+                f"Could not convert {arg} to an int") from err
 
         if self.min is not None or self.max is not None:
             self.check_bounds(arg)
@@ -73,7 +74,7 @@ class FloatValidator(Validator):
         self,
         min: float | None = None,
         max: float | None = None,
-        decimal_places: int=50
+        decimal_places: int = 50
     ) -> None:
         self.min = min
         self.max = max
@@ -83,7 +84,8 @@ class FloatValidator(Validator):
         try:
             arg = float(arg)
         except ValueError as err:
-            raise ValidationError(f"Could not convert {arg} to a float") from err
+            raise ValidationError(
+                f"Could not convert {arg} to a float") from err
 
         if self.min is not None or self.max is not None:
             self.check_bounds(arg)
@@ -105,7 +107,8 @@ class FloatValidator(Validator):
 
 
 class FreqValidator(Validator):
-    freq_re = re.compile(r"(?P<val>\d+\.?\d*)\s*(?P<si_prefix>[kMG])?(?:[hH][zZ])?")
+    freq_re = re.compile(
+        r"(?P<val>\d+\.?\d*)\s*(?P<si_prefix>[kMG])?(?:[hH][zZ])?")
     si = {"k": 1e3, "M": 1e6, "G": 1e9}
 
     def validate_input(self, arg) -> int:
@@ -119,14 +122,16 @@ class FreqValidator(Validator):
             try:
                 return int(arg)
             except ValueError as err:
-                raise ValidationError("Could not convert {arg} to an int") from err
+                raise ValidationError(
+                    "Could not convert {arg} to an int") from err
 
     def validate_output(self, arg) -> int:
         try:
             f = float(arg)
             return int(f)
         except ValueError as err:
-            raise ValidationError(f"Response from instrument ({arg}) could not be converted to an int") from err
+            raise ValidationError(
+                f"Response from instrument ({arg}) could not be converted to an int") from err
 
 
 class EnumValidator(Validator):
@@ -140,7 +145,8 @@ class EnumValidator(Validator):
             try:
                 return self.Enum(arg).value
             except ValueError as err:
-                raise ValidationError(f"{arg} is not a valid {self.Enum.__name__}") from err
+                raise ValidationError(
+                    f"{arg} is not a valid {self.Enum.__name__}") from err
 
     def validate_output(self, arg) -> Any:
         try:
@@ -167,7 +173,10 @@ class SetValidator(Validator):
 
 
 class DictValidator(Validator):
-    def __init__(self, arg_string: str, response_pattern: re.Pattern | str) -> None:
+    def __init__(
+            self,
+            arg_string: str,
+            response_pattern: re.Pattern | str) -> None:
         self.arg_string = arg_string
         if isinstance(response_pattern, str):
             self.pattern = re.compile(response_pattern)
@@ -190,8 +199,9 @@ class DictValidator(Validator):
                 f"Response: {arg} Pattern: {self.pattern.pattern}"
             )
 
+
 class DelimitedStrValidator(Validator):
-    def __init__(self, dtype: type =str , sep: str = ',') -> None:
+    def __init__(self, dtype: type = str, sep: str = ',') -> None:
         self.dtype = dtype
         self.sep = sep
 
@@ -205,6 +215,7 @@ class DelimitedStrValidator(Validator):
         arg = arg.replace('"', '')
         return [self.dtype(val) for val in arg.split(self.sep)]
 
+
 class BooleanValidator(Validator):
     truthy = ['1', 'on', 'true']
     falsey = ['0', 'off', 'false']
@@ -213,8 +224,8 @@ class BooleanValidator(Validator):
         self,
         true_response: str | None = None,
         false_response: str | None = None,
-        true_setting: str='1',
-        false_setting: str='0'
+        true_setting: str = '1',
+        false_setting: str = '0'
     ):
         if true_response:
             self.truthy.append(true_response.lower())

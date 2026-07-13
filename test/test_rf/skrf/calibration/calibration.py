@@ -149,7 +149,7 @@ logger = getLogger(__name__)
 ComplexArray = np.typing.NDArray[complex]
 
 global coefs_list_12term
-coefs_list_12term =[
+coefs_list_12term = [
     'forward directivity',
     'forward source match',
     'forward reflection tracking',
@@ -162,7 +162,7 @@ coefs_list_12term =[
     'reverse transmission tracking',
     'reverse source match',
     'reverse isolation'
-    ]
+]
 
 global coefs_list_8term
 """
@@ -186,14 +186,14 @@ coefs_list_8term = [
     'k',
     'forward isolation',
     'reverse isolation'
-    ]
+]
 
 global coefs_list_3term
 coefs_list_3term = [
     'directivity',
     'source match',
     'reflection tracking',
-    ]
+]
 
 
 class Calibration:
@@ -215,8 +215,17 @@ class Calibration:
     """
 
     family = ''
-    def __init__(self, measured, ideals, sloppy_input=False,
-        is_reciprocal=True,name=None, self_calibration=False,*args, **kwargs):
+
+    def __init__(
+            self,
+            measured,
+            ideals,
+            sloppy_input=False,
+            is_reciprocal=True,
+            name=None,
+            self_calibration=False,
+            *args,
+            **kwargs):
         r"""
         Calibration initializer.
 
@@ -272,13 +281,17 @@ class Calibration:
         if hasattr(measured, 'keys'):
             measured = measured.values()
             if not sloppy_input:
-                warn('dictionary passed, sloppy_input automatically activated', stacklevel=2)
+                warn(
+                    'dictionary passed, sloppy_input automatically activated',
+                    stacklevel=2)
                 sloppy_input = True
 
         if hasattr(ideals, 'keys'):
             ideals = ideals.values()
             if not sloppy_input:
-                warn('dictionary passed, sloppy_input automatically activated', stacklevel=2)
+                warn(
+                    'dictionary passed, sloppy_input automatically activated',
+                    stacklevel=2)
                 sloppy_input = True
 
         # fill measured and ideals with copied lists of input
@@ -292,7 +305,7 @@ class Calibration:
 
         self.self_calibration = self_calibration
         if not self_calibration and len(self.measured) != len(self.ideals):
-            raise(IndexError(dedent(
+            raise (IndexError(dedent(
                 """
                 The length of measured and ideals lists are different.
                 Number of ideals must equal the number of measured.
@@ -302,12 +315,15 @@ class Calibration:
         # ensure all the measured Networks' frequency's are the same
         for measure in self.measured:
             if self.measured[0].frequency != measure.frequency:
-                raise(ValueError("Measured Networks don't have matching frequencies."))
+                raise (ValueError(
+                    "Measured Networks don't have matching frequencies."))
             if np.any(self.measured[0].z0 != measure.z0):
-                raise(ValueError("Measured Networks don't have matching z0."))
+                raise (ValueError("Measured Networks don't have matching z0."))
         if len(self.measured) > 0:
-            if np.any(self.measured[0].z0 != self.measured[0].z0[0,0]):
-                warn("Non-constant z0 in measurements. Expect trouble", stacklevel=2)
+            if np.any(self.measured[0].z0 != self.measured[0].z0[0, 0]):
+                warn(
+                    "Non-constant z0 in measurements. Expect trouble",
+                    stacklevel=2)
         # ensure that all ideals have same frequency of the measured
         # if not, then attempt to interpolate
         for k in list(range(len(self.ideals))):
@@ -320,7 +336,9 @@ class Calibration:
                     # the measurement frequency
                     self.ideals[k].interpolate_self(self.measured[0].frequency)
                 except Exception as err:
-                    raise(IndexError(f'Failed to interpolate. Check frequency of ideals[{k}].')) from err
+                    raise (
+                        IndexError(
+                            f'Failed to interpolate. Check frequency of ideals[{k}].')) from err
 
             if np.any(self.ideals[k].z0 != self.measured[0].z0):
                 raise ValueError("Measured and ideals z0 are different.")
@@ -344,7 +362,11 @@ class Calibration:
         if 'fromcoefs' in self.family.lower():
             output = f"{self.family} Calibration: '{name}', {self.frequency}"
         else:
-            output = f"{self.family} Calibration: '{name}', {self.frequency}, {len(self.measured)}-standards"
+            output = f"{
+                self.family} Calibration: '{name}', {
+                self.frequency}, {
+                len(
+                    self.measured)}-standards"
         return output
 
     def __repr__(self):
@@ -391,13 +413,13 @@ class Calibration:
             cal_ns.name = ntwk_set.name
         return cal_ns
 
-    def embed(self,ntwk):
+    def embed(self, ntwk):
         """
         Embed an ideal response in the estimated error network[s]
         """
         raise NotImplementedError('The Subclass must implement this')
 
-    def pop(self,std=-1):
+    def pop(self, std=-1):
         """
         Remove and return tuple of (ideal, measured) at index.
 
@@ -416,19 +438,19 @@ class Calibration:
         """
 
         if isinstance(std, str):
-            for idx,ideal in enumerate(self.ideals):
-                if std  == ideal.name:
+            for idx, ideal in enumerate(self.ideals):
+                if std == ideal.name:
                     std = idx
 
         if isinstance(std, str):
-            for idx,measured in enumerate(self.measured):
-                if std  == measured.name:
+            for idx, measured in enumerate(self.measured):
+                if std == measured.name:
                     std = idx
 
         if isinstance(std, str):
             raise (ValueError(f'standard {std} not found in ideals'))
 
-        return (self.ideals.pop(std),  self.measured.pop(std))
+        return (self.ideals.pop(std), self.measured.pop(std))
 
     def remove_and_cal(self, std):
         """
@@ -452,17 +474,13 @@ class Calibration:
 
         """
         measured, ideals = copy(self.measured), copy(self.ideals)
-        i,m  = self.pop(std)
+        i, m = self.pop(std)
         self.run()
         c = self.apply_cal(m)
         self.measured = measured
         self.ideals = ideals
         self.run()
-        return c,i
-
-
-
-
+        return c, i
 
     @classmethod
     def from_coefs_ntwks(cls, coefs_ntwks, **kwargs):
@@ -481,7 +499,7 @@ class Calibration:
         # assigning this measured network is a hack so that
         # * `calibration.frequency` property evaluates correctly
         # * TRL.__init__() will not throw an error
-        if not hasattr(coefs_ntwks,'keys'):
+        if not hasattr(coefs_ntwks, 'keys'):
             # maybe they passed a list? lets try and make a dict from it
             coefs_ntwks = NetworkSet(coefs_ntwks).to_dict()
 
@@ -489,7 +507,7 @@ class Calibration:
 
         frequency = list(coefs_ntwks.values())[0].frequency
 
-        cal= cls.from_coefs(frequency=frequency, coefs=coefs, **kwargs)
+        cal = cls.from_coefs(frequency=frequency, coefs=coefs, **kwargs)
         return cal
 
     @classmethod
@@ -512,22 +530,21 @@ class Calibration:
         # assigning this measured network is a hack so that
         # * `calibration.frequency` property evaluates correctly
         # * TRL.__init__() will not throw an error
-        n = Network(frequency = frequency,
-                    s = rand_c(frequency.npoints,2,2))
-        measured = [n,n,n]
+        n = Network(frequency=frequency,
+                    s=rand_c(frequency.npoints, 2, 2))
+        measured = [n, n, n]
 
         if 'forward switch term' in coefs:
-            switch_terms = (Network(frequency = frequency,
+            switch_terms = (Network(frequency=frequency,
                                     s=coefs['forward switch term']),
-                            Network(frequency = frequency,
+                            Network(frequency=frequency,
                                     s=coefs['reverse switch term']))
             kwargs['switch_terms'] = switch_terms
-
 
         cal = cls(measured, measured, **kwargs)
         cal.coefs = coefs
         cal.family += '(fromCoefs)'
-        return  cal
+        return cal
 
     @property
     def frequency(self):
@@ -568,12 +585,12 @@ class Calibration:
         """
         try:
             return self._coefs
-        except(AttributeError):
+        except (AttributeError):
             self.run()
             return self._coefs
 
     @coefs.setter
-    def coefs(self,d):
+    def coefs(self, d):
         """
         """
         for k in d:
@@ -601,12 +618,12 @@ class Calibration:
         """
         try:
             return self._output_from_run
-        except(AttributeError):
+        except (AttributeError):
             # maybe i haven't run yet
             self.run()
             try:
                 return self._output_from_run
-            except(AttributeError):
+            except (AttributeError):
                 # i did run and there is no output_from_run
                 return None
 
@@ -635,11 +652,11 @@ class Calibration:
             * source match
             * reflection tracking'
         """
-        return {k: self.coefs.get(k) for k in [\
+        return {k: self.coefs.get(k) for k in [
             'directivity',
             'source match',
             'reflection tracking',
-            ]}
+        ]}
 
     @property
     def coefs_3term_ntwks(self):
@@ -656,20 +673,19 @@ class Calibration:
         Directivity normalized to the reflection tracking.
         """
         try:
-            return self.coefs_ntwks['directivity']/\
-                   self.coefs_ntwks['reflection tracking']
+            return self.coefs_ntwks['directivity'] / \
+                self.coefs_ntwks['reflection tracking']
         except Exception:
             pass
         try:
             out = {}
-            for direction in ['forward','reverse']:
+            for direction in ['forward', 'reverse']:
                 out[direction + ' normalized directivity'] =\
-                    self.coefs_ntwks[direction + ' directivity']/\
+                    self.coefs_ntwks[direction + ' directivity'] / \
                     self.coefs_ntwks[direction + ' reflection tracking']
             return out
         except Exception as err:
             raise ValueError('cant find error coefs') from err
-
 
     @property
     def coefs_8term(self):
@@ -705,7 +721,8 @@ class Calibration:
 
         d = self.coefs
         if all([k in d.keys() for k in coefs_list_3term]):
-            raise ValueError("Can't convert one port error terms to two port error terms")
+            raise ValueError(
+                "Can't convert one port error terms to two port error terms")
 
         # Check if we have all 12-term keys and convert to 8-term if we do.
         if all([k in d.keys() for k in coefs_list_12term]):
@@ -757,7 +774,8 @@ class Calibration:
         """
         d = self.coefs
         if all([k in d.keys() for k in coefs_list_3term]):
-            raise ValueError("Can't convert one port error terms to two port error terms")
+            raise ValueError(
+                "Can't convert one port error terms to two port error terms")
 
         # Check if we have all 12-term keys and return the coefs if we do
         if all([k in d.keys() for k in coefs_list_12term]):
@@ -791,11 +809,11 @@ class Calibration:
         Etr = self.coefs_12term['reverse transmission tracking']
         Esr = self.coefs_12term['reverse source match']
 
-        return Etf*Etr - (Err + Edr*(Elf - Esr))*(Erf  + Edf *(Elr - Esf))
+        return Etf*Etr - (Err + Edr*(Elf - Esr))*(Erf + Edf * (Elr - Esf))
 
     @property
     def verify_12term_ntwk(self):
-        return Network(s= self.verify_12term, frequency = self.frequency)
+        return Network(s=self.verify_12term, frequency=self.frequency)
 
     @property
     def residual_ntwks(self):
@@ -806,8 +824,12 @@ class Calibration:
         standards and their corresponding  corrected measurements.
 
         """
-        return [caled - ideal for (ideal, caled) in zip(self.ideals, self.caled_ntwks)]
-
+        return [
+            caled - ideal for (
+                ideal,
+                caled) in zip(
+                self.ideals,
+                self.caled_ntwks)]
 
     @property
     def residual_ntwk_sets(self):
@@ -815,11 +837,12 @@ class Calibration:
         Returns a NetworkSet for each `residual_ntwk`, grouped by their names.
         """
 
-        residual_sets={}
-        std_names = list(set([k.name  for k in self.ideals]))
+        residual_sets = {}
+        std_names = list(set([k.name for k in self.ideals]))
         for std_name in std_names:
             residual_sets[std_name] = NetworkSet(
-                [k for k in self.residual_ntwks if k.name.startswith(std_name)])
+                [k for k in self.residual_ntwks
+                 if k.name.startswith(std_name)])
         return residual_sets
 
     @property
@@ -829,15 +852,14 @@ class Calibration:
         """
         return self.apply_cal_to_list(self.measured)
 
-
     @property
     def caled_ntwk_sets(self):
         """
         Return a NetworkSet for each `caled_ntwk`, grouped by their names.
         """
 
-        caled_sets={}
-        std_names = list(set([k.name  for k in self.ideals ]))
+        caled_sets = {}
+        std_names = list(set([k.name for k in self.ideals]))
         for std_name in std_names:
             caled_sets[std_name] = NetworkSet(
                 [k for k in self.caled_ntwks if k.name.startswith(std_name)])
@@ -876,7 +898,7 @@ class Calibration:
 
         """
         rns = self.residual_ntwk_sets
-        out =  NetworkSet([rns[k].mean_s for k in rns]).mean_s_mag
+        out = NetworkSet([rns[k].mean_s for k in rns]).mean_s_mag
         out.name = 'Biased Error'
         return out
 
@@ -959,10 +981,10 @@ class Calibration:
         """
         return error_dict_2_network(
             self.coefs,
-            frequency = self.frequency,
-            is_reciprocal= self.is_reciprocal)
+            frequency=self.frequency,
+            is_reciprocal=self.is_reciprocal)
 
-    def write(self, file=None,  *args, **kwargs):
+    def write(self, file=None, *args, **kwargs):
         r"""
         Write the Calibration to disk using :func:`~skrf.io.general.write`.
 
@@ -998,10 +1020,11 @@ class Calibration:
 
         if file is None:
             if self.name is None:
-                 raise (ValueError('No filename given. You must provide a filename, or set the name attribute'))
+                raise ValueError(
+                    'No filename given. You must provide a filename, or set the name attribute')
             file = self.name
 
-        write(file,self, *args, **kwargs)
+        write(file, self, *args, **kwargs)
 
     @axes_kwarg
     def plot_calibration_errors(self, *args, ax: Axes = None, **kwargs):
@@ -1015,17 +1038,20 @@ class Calibration:
         total_error
         """
 
-
         port_list = self.biased_error.port_tuples
-        for m,n in port_list:
-            ax.set_title(f"S{self.biased_error.ntwk_set[0]._fmt_trace_name(m,n)}")
-            self.unbiased_error.plot_s_db(m,n,**kwargs)
-            self.biased_error.plot_s_db(m,n,**kwargs)
-            self.total_error.plot_s_db(m,n,**kwargs)
-            ax.set_ylim(-100,0)
+        for m, n in port_list:
+            ax.set_title(
+                f"S{self.biased_error.ntwk_set[0]._fmt_trace_name(m, n)}")
+            self.unbiased_error.plot_s_db(m, n, **kwargs)
+            self.biased_error.plot_s_db(m, n, **kwargs)
+            self.total_error.plot_s_db(m, n, **kwargs)
+            ax.set_ylim(-100, 0)
 
-
-    def plot_caled_ntwks(self, attr: str = 's_smith', show_legend: bool = False, **kwargs):
+    def plot_caled_ntwks(
+            self,
+            attr: str = 's_smith',
+            show_legend: bool = False,
+            **kwargs):
         r"""
         Plot corrected calibration standards.
 
@@ -1043,16 +1069,15 @@ class Calibration:
             passed to the plot method of Network
         """
         ns = NetworkSet(self.caled_ntwks)
-        fig, axes = util.subplots(figsize=(8,8))
+        fig, axes = util.subplots(figsize=(8, 8))
 
-        kwargs.update({'show_legend':show_legend})
+        kwargs.update({'show_legend': show_legend})
 
-        for ax ,(m, n) in zip(axes, ns[0].port_tuples):
+        for ax, (m, n) in zip(axes, ns[0].port_tuples):
             ax.set_title(f"S{ns.ntwk_set[0]._fmt_trace_name(m, n)}")
             ns.__getattribute__('plot_'+attr)(m, n, **kwargs)
 
         fig.tight_layout()
-
 
     def plot_residuals(self, attr: str = 's_db', **kwargs):
         r"""
@@ -1074,8 +1099,8 @@ class Calibration:
         Calibration.residual_networks
         """
 
-        NetworkSet(self.residual_ntwks).__getattribute__('plot_'+attr)(**kwargs)
-
+        NetworkSet(self.residual_ntwks).__getattribute__(
+            'plot_'+attr)(**kwargs)
 
 
 class OnePort(Calibration):
@@ -1115,7 +1140,8 @@ class OnePort(Calibration):
     """
 
     family = 'OnePort'
-    def __init__(self, measured, ideals,*args, **kwargs):
+
+    def __init__(self, measured, ideals, *args, **kwargs):
         """
         One Port initializer.
 
@@ -1153,91 +1179,93 @@ class OnePort(Calibration):
                              *args, **kwargs)
 
     def _check_input(self):
-        if not all([n.number_of_ports==1 for n in self.ideals]):
-            raise ValueError(f'ideals for {self.family} should be 1-port Networks')
-        if not all([n.number_of_ports==1 for n in self.measured]):
-            raise ValueError(f'measured networks for {self.family} should be 1-port Networks')
+        if not all([n.number_of_ports == 1 for n in self.ideals]):
+            raise ValueError(
+                f'ideals for {self.family} should be 1-port Networks')
+        if not all([n.number_of_ports == 1 for n in self.measured]):
+            raise ValueError(
+                f'measured networks for {
+                    self.family} should be 1-port Networks')
 
     def run(self):
         """ Run the calibration algorithm.
         """
         numStds = self.nstandards
-        numCoefs=3
+        numCoefs = 3
 
-        mList = [self.measured[k].s.reshape((-1,1)) for k in range(numStds)]
-        iList = [self.ideals[k].s.reshape((-1,1)) for k in range(numStds)]
+        mList = [self.measured[k].s.reshape((-1, 1)) for k in range(numStds)]
+        iList = [self.ideals[k].s.reshape((-1, 1)) for k in range(numStds)]
 
         self._check_input()
 
         # ASSERT: mList and aList are now kx1x1 matrices, where k in frequency
         fLength = len(mList[0])
 
-        #initialize outputs
-        abc = np.zeros((fLength,numCoefs),dtype=complex)
-        residuals =     np.zeros((fLength,\
-                np.sign(numStds-numCoefs)),dtype=complex)
-        parameter_variance = np.zeros((fLength, 3,3),dtype=complex)
-        measurement_variance = np.zeros((fLength, 1),dtype=complex)
+        # initialize outputs
+        abc = np.zeros((fLength, numCoefs), dtype=complex)
+        residuals = np.zeros(
+            (fLength, np.sign(numStds-numCoefs)), dtype=complex)
+        parameter_variance = np.zeros((fLength, 3, 3), dtype=complex)
+        measurement_variance = np.zeros((fLength, 1), dtype=complex)
         # loop through frequencies and form m, a vectors and
         # the matrix M. where M = i1, 1, i1*m1
         #                         i2, 1, i2*m2
         #                                 ...etc
         for f in list(range(fLength)):
-            #create  m, i, and 1 vectors
-            one = np.ones(shape=(numStds,1))
-            m = np.array([ mList[k][f] for k in range(numStds)]).reshape(-1,1)# m-vector at f
-            i = np.array([ iList[k][f] for k in range(numStds)]).reshape(-1,1)# i-vector at f
+            # create  m, i, and 1 vectors
+            one = np.ones(shape=(numStds, 1))
+            m = np.array([mList[k][f] for k in range(numStds)]
+                         ).reshape(-1, 1)  # m-vector at f
+            i = np.array([iList[k][f] for k in range(numStds)]
+                         ).reshape(-1, 1)  # i-vector at f
 
             # construct the matrix
             Q = np.hstack([i, one, i*m])
             # calculate least squares
-            abcTmp, residualsTmp = np.linalg.lstsq(Q,m,rcond=None)[0:2]
+            abcTmp, residualsTmp = np.linalg.lstsq(Q, m, rcond=None)[0:2]
             if numStds > 3:
-                measurement_variance[f,:]= residualsTmp/(numStds-numCoefs)
-                parameter_variance[f,:] = \
-                        abs(measurement_variance[f,:])*\
-                        np.linalg.inv(np.dot(Q.T,Q))
+                measurement_variance[f,] = residualsTmp/(numStds-numCoefs)
+                parameter_variance[f, :] = abs(
+                    measurement_variance[f, :]) * np.linalg.inv(np.dot(Q.T, Q))
 
-
-            abc[f,:] = abcTmp.flatten()
+            abc[f, :] = abcTmp.flatten()
             try:
-                residuals[f,:] = residualsTmp
+                residuals[f, :] = residualsTmp
             except ValueError as err:
-                raise(ValueError('matrix has singular values. ensure standards are far enough away on smith chart'))\
-                    from err
+                raise (ValueError(
+                    'matrix has singular values. ensure standards are far enough away on smith chart')) from err
 
         # convert the abc vector to standard error coefficients
-        a,b,c = abc[:,0], abc[:,1],abc[:,2]
+        a, b, c = abc[:, 0], abc[:, 1], abc[:, 2]
         e01e10 = a+b*c
         e00 = b
         e11 = c
-        self._coefs = {\
-                'directivity':e00,\
-                'reflection tracking':e01e10, \
-                'source match':e11\
-                }
-
+        self._coefs = {
+            'directivity': e00,
+            'reflection tracking': e01e10,
+            'source match': e11
+        }
 
         # output is a dictionary of information
         self._output_from_run = {
-            'residuals':residuals,
-            'parameter variance':parameter_variance
-            }
+            'residuals': residuals,
+            'parameter variance': parameter_variance
+        }
 
         return None
 
     def apply_cal(self, ntwk):
-        er_ntwk = Network(frequency = self.frequency, name=ntwk.name)
-        tracking  = self.coefs['reflection tracking']
+        er_ntwk = Network(frequency=self.frequency, name=ntwk.name)
+        tracking = self.coefs['reflection tracking']
         s12 = np.sqrt(tracking)
         s21 = s12
 
         s11 = self.coefs['directivity']
         s22 = self.coefs['source match']
-        er_ntwk.s = np.array([[s11, s12],[s21,s22]]).transpose(2,0,1)
+        er_ntwk.s = np.array([[s11, s12], [s21, s22]]).transpose(2, 0, 1)
         return er_ntwk.inv**ntwk
 
-    def embed(self,ntwk):
+    def embed(self, ntwk):
         embedded = self.error_ntwk ** ntwk
         embedded.name = ntwk.name
         return embedded
@@ -1296,6 +1324,7 @@ class SDDLWeikle(OnePort):
     """
 
     family = 'SDDL'
+
     def __init__(self, measured, ideals, *args, **kwargs):
         """
         Short-Delay-Delay-Load initializer.
@@ -1327,56 +1356,54 @@ class SDDLWeikle(OnePort):
         """
         if (len(measured) != 4) or (len(ideals)) != 4:
             raise IndexError('Incorrect number of standards.')
-        Calibration.__init__(self, measured =  measured,
-                             ideals =ideals, **kwargs)
+        Calibration.__init__(self, measured=measured,
+                             ideals=ideals, **kwargs)
 
     def run(self):
         self._check_input()
 
-        #measured reflection coefficients
-        w_s = self.measured[0].s.flatten() # short
-        w_1 = self.measured[1].s.flatten() # delay short 1
-        w_2 = self.measured[2].s.flatten() # delay short 2
-        w_l = self.measured[3].s.flatten() # load
+        # measured reflection coefficients
+        w_s = self.measured[0].s.flatten()  # short
+        w_1 = self.measured[1].s.flatten()  # delay short 1
+        w_2 = self.measured[2].s.flatten()  # delay short 2
+        w_l = self.measured[3].s.flatten()  # load
 
         # ideal response of reflection coefficients
-        G_l = self.ideals[3].s.flatten() # gamma_load
+        G_l = self.ideals[3].s.flatten()  # gamma_load
         # handle singularities
-        G_l[G_l ==0] = ALMOST_ZERO
+        G_l[G_l == 0] = ALMOST_ZERO
 
+        w_1p = w_1 - w_s  # between (9) and (10)
+        w_2p = w_2 - w_s
+        w_lp = w_l - w_s
 
-        w_1p  = w_1 - w_s # between (9) and (10)
-        w_2p  = w_2 - w_s
-        w_lp  = w_l - w_s
+        # NOTE: the published equation has an incorrect sign on this argument
+        # perhaps because they assume arg to measure clockwise angle??
+        alpha = exp(1j*2*angle(1./w_2p - 1./w_1p))  # (17)
 
+        p = alpha/(1./w_1p - alpha/w_1p.conj() - (1.+G_l)/(G_l*w_lp))  # (22)
+        q = p/(alpha * G_l)  # (23) (put in terms of p)
 
-        ## NOTE: the published equation has an incorrect sign on this argument
-        ## perhaps because they assume arg to measure clockwise angle??
-        alpha = exp(1j*2*angle(1./w_2p - 1./w_1p)) # (17)
+        Bp_re = -1*((1 + (imag(p+q)/real(q-p)) * (imag(q-p)/real(p+q))) / (1 + (imag(p+q)/real(q-p))**2)) * real(p+q)  # (25)
 
-        p = alpha/( 1./w_1p - alpha/w_1p.conj() - (1.+G_l)/(G_l*w_lp )) # (22)
-        q = p/(alpha* G_l)   #(23) (put in terms of p)
-
-        Bp_re = -1*((1 + (imag(p+q)/real(q-p)) * (imag(q-p)/real(p+q)))/\
-                    (1 + (imag(p+q)/real(q-p))**2)) * real(p+q) # (25)
-
-        Bp_im = imag(q+p)/real(q-p) * Bp_re #(24)
+        Bp_im = imag(q+p)/real(q-p) * Bp_re  # (24)
         Bp = Bp_re + Bp_im*1j
 
-        B = Bp + w_s    #(10)
-        C = Bp * (1./w_1p - alpha/w_1p.conj()) + alpha * Bp/Bp.conj() #(20)
-        A = B - w_s + w_s*C #(6)
+        B = Bp + w_s  # (10)
+        C = Bp * (1./w_1p - alpha/w_1p.conj()) + alpha * Bp/Bp.conj()  # (20)
+        A = B - w_s + w_s*C  # (6)
 
         # convert the abc vector to standard error coefficients
         e00 = B
         e11 = -C
         e01e10 = A + e00*e11
 
-        self._coefs = {\
-                'directivity':e00,\
-                'reflection tracking':e01e10, \
-                'source match':e11\
-                }
+        self._coefs = {
+            'directivity': e00,
+            'reflection tracking': e01e10,
+            'source match': e11
+        }
+
 
 class SDDL(OnePort):
     """
@@ -1430,6 +1457,7 @@ class SDDL(OnePort):
     """
 
     family = 'SDDL'
+
     def __init__(self, measured, ideals, *args, **kwargs):
         """
         Short-Delay-Delay-Load initializer.
@@ -1470,27 +1498,26 @@ class SDDL(OnePort):
 
         if (len(measured) != 4) or (len(ideals)) != 4:
             raise IndexError('Incorrect number of standards.')
-        Calibration.__init__(self, measured =  measured,
-                             ideals =ideals, **kwargs)
-
+        Calibration.__init__(self, measured=measured,
+                             ideals=ideals, **kwargs)
 
     def run(self):
         self._check_input()
 
-        #measured impedances
-        d = s2z(self.measured[0].s,1) # short
-        a = s2z(self.measured[1].s,1) # delay short 1
-        b = s2z(self.measured[2].s,1) # delay short 2
-        c = s2z(self.measured[3].s,1) # load
-        l = s2z(self.ideals[-1].s,1) # ideal def of load
-        cr_alpha = cross_ratio(b,a,c,d)
-        cr_beta = cross_ratio(a,b,c,d)
+        # measured impedances
+        d = s2z(self.measured[0].s, 1)  # short
+        a = s2z(self.measured[1].s, 1)  # delay short 1
+        b = s2z(self.measured[2].s, 1)  # delay short 2
+        c = s2z(self.measured[3].s, 1)  # load
+        l_ = s2z(self.ideals[-1].s, 1)  # ideal def of load
+        cr_alpha = cross_ratio(b, a, c, d)
+        cr_beta = cross_ratio(a, b, c, d)
 
-        alpha = imag(cr_alpha)/real(cr_alpha/l)
-        beta = imag(cr_beta)/real(cr_beta/l)
+        alpha = imag(cr_alpha)/real(cr_alpha/l_)
+        beta = imag(cr_beta)/real(cr_beta/l_)
 
-        self.ideals[1].s = z2s(alpha*1j,1)
-        self.ideals[2].s = z2s(beta*1j,1)
+        self.ideals[1].s = z2s(alpha*1j, 1)
+        self.ideals[2].s = z2s(beta*1j, 1)
 
         OnePort.run(self)
 
@@ -1521,6 +1548,7 @@ class PHN(OnePort):
     """
 
     family = 'PHN'
+
     def __init__(self, measured, ideals, *args, **kwargs):
         """
         Half-Half-Full-Full initializer.
@@ -1552,26 +1580,25 @@ class PHN(OnePort):
         if (len(measured) != 4) or (len(ideals)) != 4:
             raise IndexError('Incorrect number of standards.')
 
-        Calibration.__init__(self, measured =  measured,
-                             ideals =ideals, **kwargs)
-
+        Calibration.__init__(self, measured=measured,
+                             ideals=ideals, **kwargs)
 
     def run(self):
         self._check_input()
 
         # ideals (in impedance)
-        a = s2z(self.ideals[0].s,1).flatten() # half known
-        b = s2z(self.ideals[1].s,1).flatten() # half known
-        c = s2z(self.ideals[2].s,1).flatten() # fully known
-        d = s2z(self.ideals[3].s,1).flatten() # fully known
+        a = s2z(self.ideals[0].s, 1).flatten()  # half known
+        b = s2z(self.ideals[1].s, 1).flatten()  # half known
+        c = s2z(self.ideals[2].s, 1).flatten()  # fully known
+        d = s2z(self.ideals[3].s, 1).flatten()  # fully known
 
         # measured (in impedances)
-        a_ = s2z(self.measured[0].s,1).flatten() # half known
-        b_ = s2z(self.measured[1].s,1).flatten() # half known
-        c_ = s2z(self.measured[2].s,1).flatten() # fully known
-        d_ = s2z(self.measured[3].s,1).flatten() # fully known
+        a_ = s2z(self.measured[0].s, 1).flatten()  # half known
+        b_ = s2z(self.measured[1].s, 1).flatten()  # half known
+        c_ = s2z(self.measured[2].s, 1).flatten()  # fully known
+        d_ = s2z(self.measured[3].s, 1).flatten()  # fully known
 
-        z = cross_ratio(a_,b_,c_,d_)
+        z = cross_ratio(a_, b_, c_, d_)
 
         # intermediate variables
         e = c-d-c*z
@@ -1579,15 +1606,15 @@ class PHN(OnePort):
         g = c*d*z
 
         A = -real(f*z.conj())
-        B = 1j*imag( f*e.conj() + g.conj()*z)
-        C = real( g*e.conj())
+        B = 1j*imag(f*e.conj() + g.conj()*z)
+        C = real(g*e.conj())
 
         npts = len(A)
-        b1,b2 = zeros(npts, dtype=complex), zeros(npts, dtype=complex)
+        b1, b2 = zeros(npts, dtype=complex), zeros(npts, dtype=complex)
 
         for k in range(npts):
-            p =  poly1d([A[k],B[k],C[k]])
-            b1[k],b2[k] = p.r
+            p = poly1d([A[k], B[k], C[k]])
+            b1[k], b2[k] = p.r
 
         a1 = -(f*b1 + g)/(z*b1 + e)
         a2 = -(f*b2 + g)/(z*b2 + e)
@@ -1595,29 +1622,27 @@ class PHN(OnePort):
         # temporarily translate into s-parameters so make the root-choice
         #  choosing a root in impedance doesn't generally work for typical
         # calibration standards
-        b1_s = z2s(b1.reshape(-1,1,1),1)
-        b2_s = z2s(b2.reshape(-1,1,1),1)
-        a1_s = z2s(a1.reshape(-1,1,1),1)
-        a2_s = z2s(a2.reshape(-1,1,1),1)
+        b1_s = z2s(b1.reshape(-1, 1, 1), 1)
+        b2_s = z2s(b2.reshape(-1, 1, 1), 1)
+        a1_s = z2s(a1.reshape(-1, 1, 1), 1)
+        a2_s = z2s(a2.reshape(-1, 1, 1), 1)
 
-        b_guess = z2s(b.reshape(-1,1,1),1)
-        a_guess = z2s(a.reshape(-1,1,1),1)
+        b_guess = z2s(b.reshape(-1, 1, 1), 1)
+        a_guess = z2s(a.reshape(-1, 1, 1), 1)
 
         distance1 = abs(a1_s - a_guess) + abs(b1_s - b_guess)
         distance2 = abs(a2_s - a_guess) + abs(b2_s - b_guess)
 
+        b_found = np.where(distance1 < distance2, b1, b2)
+        a_found = np.where(distance1 < distance2, a1, a2)
 
-        b_found = np.where(distance1<distance2, b1, b2)
-        a_found = np.where(distance1<distance2, a1, a2)
-
-
-        self.ideals[0].s = z2s(a_found.reshape(-1,1,1),1)
-        self.ideals[1].s = z2s(b_found.reshape(-1,1,1),1)
+        self.ideals[0].s = z2s(a_found.reshape(-1, 1, 1), 1)
+        self.ideals[1].s = z2s(b_found.reshape(-1, 1, 1), 1)
 
         OnePort.run(self)
 
 
-## Two Ports
+# Two Ports
 
 class TwelveTerm(Calibration):
     """
@@ -1642,6 +1667,7 @@ class TwelveTerm(Calibration):
     """
 
     family = 'TwelveTerm'
+
     def __init__(self, measured, ideals, n_thrus=None, trans_thres=-40,
                  *args, **kwargs):
         """
@@ -1692,8 +1718,8 @@ class TwelveTerm(Calibration):
 
         """
 
-        kwargs.update({'measured':measured,
-                       'ideals':ideals})
+        kwargs.update({'measured': measured,
+                       'ideals': ideals})
 
         # note: this will enable sloppy_input and align stds if necessary
         Calibration.__init__(self, *args, **kwargs)
@@ -1703,20 +1729,21 @@ class TwelveTerm(Calibration):
         trans_thres_mag = 10 ** (trans_thres / 20)
 
         if n_thrus is None:
-            warn('n_thrus is None, guessing which stds are transmissive', stacklevel=2)
-            n_thrus=0
+            warn(
+                'n_thrus is None, guessing which stds are transmissive',
+                stacklevel=2)
+            n_thrus = 0
             for k in self.ideals:
                 mean_trans = NetworkSet([k.s21, k.s12]).mean_s_mag
                 trans_mag = np.mean(mean_trans.s_mag.flatten())
                 # this number is arbitrary but reasonable
                 if trans_mag > trans_thres_mag:
-                    n_thrus +=1
+                    n_thrus += 1
 
-
-            if n_thrus ==0:
+            if n_thrus == 0:
                 raise ValueError(
                     'couldnt find a transmissive standard. check your data, or explicitly use `n_thrus` argument'
-                    )
+                )
         self.n_thrus = n_thrus
 
         # if they didntly give explicit order, lets try and put the
@@ -1726,8 +1753,8 @@ class TwelveTerm(Calibration):
             trans = [np.mean(k.s21.s_mag) for k in self.ideals]
             # see http://stackoverflow.com/questions/6618515/sorting-list-based-on-values-from-another-list
             # get order of indices of sorted means s21
-            order = [x for (y,x) in sorted(zip(trans, range(len(trans))),\
-                                           key=lambda pair: pair[0])]
+            order = [x for (y, x) in sorted(zip(trans, range(len(trans))),
+                                            key=lambda pair: pair[0])]
             self.measured = [self.measured[k] for k in order]
             self.ideals = [self.ideals[k] for k in order]
 
@@ -1743,55 +1770,57 @@ class TwelveTerm(Calibration):
         ideal_thrus = self.ideals[-n_thrus:]
 
         # create one port calibration for reflective standards
-        port1_cal = OnePort(measured = p1_m, ideals = p1_i)
-        port2_cal = OnePort(measured = p2_m, ideals = p2_i)
+        port1_cal = OnePort(measured=p1_m, ideals=p1_i)
+        port2_cal = OnePort(measured=p2_m, ideals=p2_i)
 
         # cal coefficient dictionaries
         p1_coefs = dict(port1_cal.coefs)
         p2_coefs = dict(port2_cal.coefs)
 
-        if self.kwargs.get('isolation',None) is not None:
+        if self.kwargs.get('isolation', None) is not None:
             p1_coefs['isolation'] = self.kwargs['isolation'].s21.s.flatten()
             p2_coefs['isolation'] = self.kwargs['isolation'].s12.s.flatten()
         else:
-            p1_coefs['isolation'] = np.zeros(len(self.frequency), dtype=complex)
-            p2_coefs['isolation'] = np.zeros(len(self.frequency), dtype=complex)
-
+            p1_coefs['isolation'] = np.zeros(
+                len(self.frequency), dtype=complex)
+            p2_coefs['isolation'] = np.zeros(
+                len(self.frequency), dtype=complex)
 
         # loop thru thrus, and calculate error terms for each one
         # load match and transmission tracking for ports 1 and 2
-        lm1, lm2,tt1, tt2 = [],[],[],[]
+        lm1, lm2, tt1, tt2 = [], [], [], []
         for thru, thru_i in zip(thrus, ideal_thrus):
             lm1.append(thru_i.inv**port1_cal.apply_cal(thru.s11))
             lm2.append(thru_i.flipped().inv**port2_cal.apply_cal(thru.s22))
 
             # forward transmission tracking
             g = lm1[-1].s
-            d = p1_coefs['source match'].reshape(-1,1,1)
-            e,f,b,h = thru_i.s11.s, thru_i.s22.s,thru_i.s21.s,thru_i.s12.s
-            m = thru.s21.s - p1_coefs['isolation'].reshape(-1,1,1)
+            d = p1_coefs['source match'].reshape(-1, 1, 1)
+            e, f, b, h = thru_i.s11.s, thru_i.s22.s, thru_i.s21.s, thru_i.s12.s
+            m = thru.s21.s - p1_coefs['isolation'].reshape(-1, 1, 1)
 
-            ac = m*1./b * (1 - (d*e + f*g + b*g*h*d) + (d*e*f*g) )
+            ac = m*1./b * (1 - (d*e + f*g + b*g*h*d) + (d*e*f*g))
             tt1.append(ac[:])
 
             # reverse transmission tracking
-            thru.flip(),thru_i.flip() # flip thrus to keep same ports as above
+            thru.flip(), thru_i.flip()  # flip thrus to keep same ports as above
             g = lm2[-1].s
-            d = p2_coefs['source match'].reshape(-1,1,1)
+            d = p2_coefs['source match'].reshape(-1, 1, 1)
 
-            e,f,b,h = thru_i.s11.s, thru_i.s22.s,thru_i.s21.s,thru_i.s12.s
-            m = thru.s21.s - p2_coefs['isolation'].reshape(-1,1,1)
+            e, f, b, h = thru_i.s11.s, thru_i.s22.s, thru_i.s21.s, thru_i.s12.s
+            m = thru.s21.s - p2_coefs['isolation'].reshape(-1, 1, 1)
 
             ac = m*1./b * (1 - (d*e+f*g+b*g*h*d) + d*e*f*g)
             tt2.append(ac[:])
 
-            thru.flip(), thru_i.flip() # flip em back
+            thru.flip(), thru_i.flip()  # flip em back
 
-        p1_coefs['transmission tracking'] = np.mean(np.array(tt1),axis=0).flatten()
-        p2_coefs['transmission tracking'] = np.mean(np.array(tt2),axis=0).flatten()
+        p1_coefs['transmission tracking'] = np.mean(
+            np.array(tt1), axis=0).flatten()
+        p2_coefs['transmission tracking'] = np.mean(
+            np.array(tt2), axis=0).flatten()
         p1_coefs['load match'] = NetworkSet(lm1).mean_s.s.flatten()
         p2_coefs['load match'] = NetworkSet(lm2).mean_s.s.flatten()
-
 
         # update coefs
         coefs = {}
@@ -1800,62 +1829,56 @@ class TwelveTerm(Calibration):
         coefs.update({f'reverse {k}': p2_coefs[k] for k in p2_coefs})
         eight_term_coefs = convert_12term_2_8term(coefs)
 
-        coefs.update({l: eight_term_coefs[l] for l in \
-            ['forward switch term','reverse switch term','k'] })
+        coefs.update({l_: eight_term_coefs[l_] for l_ in
+                      ['forward switch term', 'reverse switch term', 'k']})
         self._coefs = coefs
 
-    def apply_cal(self,ntwk):
+    def apply_cal(self, ntwk):
         """
         """
         caled = ntwk.copy()
 
-        s11 = ntwk.s[:,0,0]
-        s12 = ntwk.s[:,0,1]
-        s21 = ntwk.s[:,1,0]
-        s22 = ntwk.s[:,1,1]
+        s11 = ntwk.s[:, 0, 0]
+        s12 = ntwk.s[:, 0, 1]
+        s21 = ntwk.s[:, 1, 0]
+        s22 = ntwk.s[:, 1, 1]
 
         Edf = self.coefs['forward directivity']
         Esf = self.coefs['forward source match']
         Erf = self.coefs['forward reflection tracking']
         Etf = self.coefs['forward transmission tracking']
         Elf = self.coefs['forward load match']
-        Eif = self.coefs.get('forward isolation',0)
+        Eif = self.coefs.get('forward isolation', 0)
 
         Edr = self.coefs['reverse directivity']
         Elr = self.coefs['reverse load match']
         Err = self.coefs['reverse reflection tracking']
         Etr = self.coefs['reverse transmission tracking']
         Esr = self.coefs['reverse source match']
-        Eir = self.coefs.get('reverse isolation',0)
-
+        Eir = self.coefs.get('reverse isolation', 0)
 
         D = (1+(s11-Edf)/(Erf)*Esf)*(1+(s22-Edr)/(Err)*Esr) -\
             ((s21-Eif)/(Etf))*((s12-Eir)/(Etr))*Elf*Elr
 
+        caled.s[:, 0, 0] = (((s11-Edf)/(Erf))*(1+(s22-Edr)/(Err)*Esr) - Elf*((s21-Eif)/(Etf))*(s12-Eir)/(Etr)) / D
 
-        caled.s[:,0,0] = \
-            (((s11-Edf)/(Erf))*(1+(s22-Edr)/(Err)*Esr)-\
-            Elf*((s21-Eif)/(Etf))*(s12-Eir)/(Etr)) /D
+        caled.s[:, 1, 1] = (((s22-Edr)/(Err))*(1+(s11-Edf)/(Erf)*Esf) - Elr*((s21-Eif)/(Etf))*(s12-Eir)/(Etr)) / D
 
-        caled.s[:,1,1] = \
-            (((s22-Edr)/(Err))*(1+(s11-Edf)/(Erf)*Esf)-\
-            Elr*((s21-Eif)/(Etf))*(s12-Eir)/(Etr)) /D
+        caled.s[:, 1, 0] = \
+            (((s21 - Eif)/(Etf))*(1+((s22-Edr)/(Err))*(Esr-Elf)))/D
 
-        caled.s[:,1,0] = \
-            ( ((s21 -Eif)/(Etf))*(1+((s22-Edr)/(Err))*(Esr-Elf)) )/D
-
-        caled.s[:,0,1] = \
-            ( ((s12 -Eir)/(Etr))*(1+((s11-Edf)/(Erf))*(Esf-Elr)) )/D
+        caled.s[:, 0, 1] = \
+            (((s12 - Eir)/(Etr))*(1+((s11-Edf)/(Erf))*(Esf-Elr)))/D
 
         return caled
 
     def embed(self, ntwk):
         measured = ntwk.copy()
 
-        s11 = ntwk.s[:,0,0]
-        s12 = ntwk.s[:,0,1]
-        s21 = ntwk.s[:,1,0]
-        s22 = ntwk.s[:,1,1]
+        s11 = ntwk.s[:, 0, 0]
+        s12 = ntwk.s[:, 0, 1]
+        s21 = ntwk.s[:, 1, 0]
+        s22 = ntwk.s[:, 1, 1]
         det = s11*s22 - s12*s21
 
         Edf = self.coefs['forward directivity']
@@ -1863,25 +1886,24 @@ class TwelveTerm(Calibration):
         Erf = self.coefs['forward reflection tracking']
         Etf = self.coefs['forward transmission tracking']
         Elf = self.coefs['forward load match']
-        Eif = self.coefs.get('forward isolation',0)
+        Eif = self.coefs.get('forward isolation', 0)
 
         Edr = self.coefs['reverse directivity']
         Elr = self.coefs['reverse load match']
         Err = self.coefs['reverse reflection tracking']
         Etr = self.coefs['reverse transmission tracking']
         Esr = self.coefs['reverse source match']
-        Eir = self.coefs.get('reverse isolation',0)
-
+        Eir = self.coefs.get('reverse isolation', 0)
 
         measured = ntwk.copy()
 
         D1 = (1 - Esf*s11 - Elf*s22 + Esf*Elf*det)
         D2 = (1 - Elr*s11 - Esr*s22 + Esr*Elr*det)
 
-        measured.s[:,0,0] =  Edf + Erf * (s11 - Elf*det)/D1
-        measured.s[:,1,0] =  Eif + Etf * s21/D1
-        measured.s[:,1,1] =  Edr + Err * (s22 - Elr*det)/D2
-        measured.s[:,0,1] =  Eir + Etr * s12/D2
+        measured.s[:, 0, 0] = Edf + Erf * (s11 - Elf*det)/D1
+        measured.s[:, 1, 0] = Eif + Etf * s21/D1
+        measured.s[:, 1, 1] = Edr + Err * (s22 - Elr*det)/D2
+        measured.s[:, 0, 1] = Eir + Etr * s12/D2
 
         return measured
 
@@ -1913,6 +1935,7 @@ class SOLT(TwelveTerm):
 
     """
     family = 'SOLT'
+
     def __init__(self, measured, ideals, n_thrus=1, *args, **kwargs):
         """
         SOLT initializer.
@@ -1959,26 +1982,27 @@ class SOLT(TwelveTerm):
 
         # see if they passed a None for the thru, and if so lets
         # make an ideal flush thru for them
-        for k in range(-n_thrus,len(ideals)):
+        for k in range(-n_thrus, len(ideals)):
             if ideals[k] is None:
                 if (n_thrus is None) or (hasattr(ideals, 'keys')) or \
                    (hasattr(measured, 'keys')):
-                    raise ValueError(dedent(
-                        """Can't use sloppy_input and have the ideal thru be None.
+                    raise ValueError(
+                        dedent(
+                            """Can't use sloppy_input and have the ideal thru be None.
                         Measured and ideals must be lists, or dont use None for the thru ideal."""))
 
                 ideal_thru = measured[0].copy()
-                ideal_thru.s[:,0,0] = 0
-                ideal_thru.s[:,1,1] = 0
-                ideal_thru.s[:,1,0] = 1
-                ideal_thru.s[:,0,1] = 1
+                ideal_thru.s[:, 0, 0] = 0
+                ideal_thru.s[:, 1, 1] = 0
+                ideal_thru.s[:, 1, 0] = 1
+                ideal_thru.s[:, 0, 1] = 1
                 ideals[k] = ideal_thru
 
-        kwargs.update({'measured':measured,
-                       'ideals':ideals,
-                       'n_thrus':n_thrus})
+        kwargs.update({'measured': measured,
+                       'ideals': ideals,
+                       'n_thrus': n_thrus})
 
-        TwelveTerm.__init__(self,*args, **kwargs)
+        TwelveTerm.__init__(self, *args, **kwargs)
 
 
 class TwoPortOnePath(TwelveTerm):
@@ -2043,14 +2067,13 @@ class TwoPortOnePath(TwelveTerm):
         # Make S12 = S21 and S22 = S11 for numerical reasons
         measured_sym = [m.copy() for m in measured]
         for m in measured_sym:
-            m.s[:,self.sp, self.rp] = m.s[:,self.rp, self.sp]
-            m.s[:,self.rp, self.rp] = m.s[:,self.sp, self.sp]
+            m.s[:, self.sp, self.rp] = m.s[:, self.rp, self.sp]
+            m.s[:, self.rp, self.rp] = m.s[:, self.sp, self.sp]
 
-        kwargs.update({'measured':measured_sym,
-                       'ideals':ideals,
-                       'n_thrus':n_thrus})
-        TwelveTerm.__init__(self,*args, **kwargs)
-
+        kwargs.update({'measured': measured_sym,
+                       'ideals': ideals,
+                       'n_thrus': n_thrus})
+        TwelveTerm.__init__(self, *args, **kwargs)
 
     def run(self):
         """
@@ -2060,25 +2083,24 @@ class TwoPortOnePath(TwelveTerm):
         # over reverse error terms
         TwelveTerm.run(self)
 
-
         out_coefs = self.coefs.copy()
 
-        if self.sp ==0:
+        if self.sp == 0:
             forward = 'forward'
             reverse = 'reverse'
-        elif self.sp ==1:
+        elif self.sp == 1:
             forward = 'reverse'
             reverse = 'forward'
         else:
             raise ValueError('source_port is out of range. should be 1 or 2.')
         for k in self.coefs:
             if k.startswith(forward):
-                k_out = k.replace(forward,reverse)
+                k_out = k.replace(forward, reverse)
                 out_coefs[k_out] = self.coefs[k]
 
         eight_term_coefs = convert_12term_2_8term(out_coefs)
-        out_coefs.update({l: eight_term_coefs[l] for l in \
-            ['forward switch term','reverse switch term','k'] })
+        out_coefs.update({l_: eight_term_coefs[l_] for l_ in
+                          ['forward switch term', 'reverse switch term', 'k']})
         self._coefs = out_coefs
 
     def apply_cal(self, ntwk_tuple):
@@ -2107,31 +2129,33 @@ class TwoPortOnePath(TwelveTerm):
 
 
         """
-        if isinstance(ntwk_tuple,tuple) or isinstance(ntwk_tuple,list):
-            f,r = ntwk_tuple[0].copy(), ntwk_tuple[1].copy()
-            sp,rp = self.sp,self.rp
+        if isinstance(ntwk_tuple, tuple) or isinstance(ntwk_tuple, list):
+            f, r = ntwk_tuple[0].copy(), ntwk_tuple[1].copy()
+            sp, rp = self.sp, self.rp
             ntwk = f.copy()
-            ntwk.s[:,sp,sp] = f.s[:,sp,sp]
-            ntwk.s[:,rp,sp] = f.s[:,rp,sp]
-            ntwk.s[:,rp,rp] = r.s[:,sp,sp]
-            ntwk.s[:,sp,rp] = r.s[:,rp,sp]
+            ntwk.s[:, sp, sp] = f.s[:, sp, sp]
+            ntwk.s[:, rp, sp] = f.s[:, rp, sp]
+            ntwk.s[:, rp, rp] = r.s[:, sp, sp]
+            ntwk.s[:, sp, rp] = r.s[:, rp, sp]
 
             out = TwelveTerm.apply_cal(self, ntwk)
             return out
 
         else:
-            warnings.warn('only gave a single measurement orientation, error correction is partial without a tuple',
-                          stacklevel=2)
+            warnings.warn(
+                'only gave a single measurement orientation, error correction is partial without a tuple',
+                stacklevel=2)
             ntwk = ntwk_tuple.copy()
-            sp,rp = self.sp,self.rp
+            sp, rp = self.sp, self.rp
 
-            ntwk.s[:,rp,rp] = 0
-            ntwk.s[:,sp,rp] = 0
+            ntwk.s[:, rp, rp] = 0
+            ntwk.s[:, sp, rp] = 0
             out = TwelveTerm.apply_cal(self, ntwk)
-            out.s[:,rp,rp] = 0
-            out.s[:,sp,rp] = 0
+            out.s[:, rp, rp] = 0
+            out.s[:, sp, rp] = 0
 
             return out
+
 
 class EnhancedResponse(TwoPortOnePath):
     """
@@ -2186,8 +2210,9 @@ class EightTerm(Calibration):
     """
 
     family = 'EightTerm'
+
     def __init__(self, measured, ideals, switch_terms=None,
-                isolation=None, ut_hook=None,*args, **kwargs):
+                 isolation=None, ut_hook=None, *args, **kwargs):
         """
         EightTerm Initializer.
 
@@ -2226,22 +2251,21 @@ class EightTerm(Calibration):
 
         if isolation is None:
             self.isolation = measured[0].copy()
-            self.isolation.s[:,:,:] = 0
+            self.isolation.s[:, :, :] = 0
         else:
             self.isolation = isolation.copy()
-            #Zero port matching so that networks can be simply subtracted
-            self.isolation.s[:,0,0] = 0
-            self.isolation.s[:,1,1] = 0
+            # Zero port matching so that networks can be simply subtracted
+            self.isolation.s[:, 0, 0] = 0
+            self.isolation.s[:, 1, 1] = 0
 
-        self.ut_hook=ut_hook
+        self.ut_hook = ut_hook
 
         Calibration.__init__(self,
-            measured = measured,
-            ideals = ideals,
-            **kwargs)
+                             measured=measured,
+                             ideals=ideals,
+                             **kwargs)
 
-
-    def unterminate(self,ntwk):
+    def unterminate(self, ntwk):
         """
         Unterminates switch terms from a raw measurement.
 
@@ -2250,7 +2274,7 @@ class EightTerm(Calibration):
         calibration.unterminate
         """
         if self.ut_hook is not None:
-            return self.ut_hook(self,ntwk)
+            return self.ut_hook(self, ntwk)
 
         if self.switch_terms is not None:
             gamma_f, gamma_r = self.switch_terms
@@ -2258,8 +2282,6 @@ class EightTerm(Calibration):
 
         else:
             return ntwk
-
-
 
     def terminate(self, ntwk):
         """
@@ -2287,16 +2309,16 @@ class EightTerm(Calibration):
         numStds = self.nstandards
         numCoefs = 7
 
-
-        mList = [k.s  for k in self.measured_unterminated]
+        mList = [k.s for k in self.measured_unterminated]
         iList = [k.s for k in self.ideals]
 
         fLength = len(mList[0])
-        #initialize outputs
-        error_vector = np.zeros(shape=(fLength,numCoefs),dtype=complex)
-        residuals = np.zeros(shape=(fLength,4*numStds-numCoefs),dtype=complex)
-        Q = np.zeros((numStds*4, 7),dtype=complex)
-        M = np.zeros((numStds*4, 1),dtype=complex)
+        # initialize outputs
+        error_vector = np.zeros(shape=(fLength, numCoefs), dtype=complex)
+        residuals = np.zeros(
+            shape=(fLength, 4*numStds-numCoefs), dtype=complex)
+        Q = np.zeros((numStds*4, 7), dtype=complex)
+        M = np.zeros((numStds*4, 1), dtype=complex)
         # loop through frequencies and form m, a vectors and
         # the matrix M. where M =       e00 + S11i
         #                                                       i2, 1, i2*m2
@@ -2304,60 +2326,61 @@ class EightTerm(Calibration):
         for f in list(range(fLength)):
             # loop through standards and fill matrix
             for k in list(range(numStds)):
-                m,i  = mList[k][f,:,:],iList[k][f,:,:] # 2x2 s-matrices
-                Q[k*4:k*4+4,:] = np.array([\
-                        [ 1, i[0,0]*m[0,0], -i[0,0],    0,  i[1,0]*m[0,1],        0,         0   ],\
-                        [ 0, i[0,1]*m[0,0], -i[0,1],    0,  i[1,1]*m[0,1],        0,     -m[0,1] ],\
-                        [ 0, i[0,0]*m[1,0],     0,      0,  i[1,0]*m[1,1],   -i[1,0],        0   ],\
-                        [ 0, i[0,1]*m[1,0],     0,      1,  i[1,1]*m[1,1],   -i[1,1],    -m[1,1] ],\
-                        ])
-                #pdb.set_trace()
-                M[k*4:k*4+4,:] = np.array([\
-                        [ m[0,0]],\
-                        [       0       ],\
-                        [ m[1,0]],\
-                        [       0       ],\
-                        ])
+                m, i = mList[k][f, :, :], iList[k][f, :, :]  # 2x2 s-matrices
+                Q[k*4:k*4+4, :] = np.array([
+                    [1, i[0, 0]*m[0, 0], -i[0, 0], 0,
+                        i[1, 0]*m[0, 1], 0, 0],
+                    [0, i[0, 1]*m[0, 0], -i[0, 1], 0, i[1, 1] * m[0, 1], 0, -m[0, 1]],
+                    [0, i[0, 0]*m[1, 0], 0, 0,
+                        i[1, 0]*m[1, 1], -i[1, 0], 0],
+                    [0, i[0, 1]*m[1, 0], 0, 1, i[1, 1] * m[1, 1], -i[1, 1], -m[1, 1]],
+                ])
+                # pdb.set_trace()
+                M[k*4:k*4+4, :] = np.array([
+                    [m[0, 0]],
+                    [0],
+                    [m[1, 0]],
+                    [0],
+                ])
 
             # calculate least squares
-            error_vector_at_f, residuals_at_f = np.linalg.lstsq(Q,M,rcond=None)[0:2]
-            #if len (residualsTmp )==0:
+            error_vector_at_f, residuals_at_f = np.linalg.lstsq(Q, M, rcond=None)[
+                0:2]
+            # if len (residualsTmp )==0:
             #       raise ValueError( 'matrix has singular values, check standards')
 
-
-            error_vector[f,:] = error_vector_at_f.flatten()
-            residuals[f,:] = residuals_at_f
+            error_vector[f, :] = error_vector_at_f.flatten()
+            residuals[f, :] = residuals_at_f
 
         e = error_vector
         # put the error vector into human readable dictionary
-        self._coefs = {\
-                'forward directivity':e[:,0],
-                'forward source match':e[:,1],
-                'forward reflection tracking':(e[:,0]*e[:,1])-e[:,2],
-                'reverse directivity':e[:,3]/e[:,6],
-                'reverse source match':e[:,4]/e[:,6],
-                'reverse reflection tracking':(e[:,4]/e[:,6])*(e[:,3]/e[:,6])- (e[:,5]/e[:,6]),
-                'k':e[:,6],
-                }
+        self._coefs = {
+            'forward directivity': e[:, 0],
+            'forward source match': e[:, 1],
+            'forward reflection tracking': (e[:, 0] * e[:, 1]) - e[:, 2],
+            'reverse directivity': e[:, 3] / e[:, 6],
+            'reverse source match': e[:, 4] / e[:, 6],
+            'reverse reflection tracking': (e[:, 4] / e[:, 6]) * (e[:, 3] / e[:, 6]) - (e[:, 5] / e[:, 6]),
+            'k': e[:, 6], }
 
-        self._coefs['forward isolation'] = self.isolation.s[:,1,0].flatten()
-        self._coefs['reverse isolation'] = self.isolation.s[:,0,1].flatten()
+        self._coefs['forward isolation'] = self.isolation.s[:, 1, 0].flatten()
+        self._coefs['reverse isolation'] = self.isolation.s[:, 0, 1].flatten()
 
         if self.switch_terms is not None:
             self._coefs.update({
                 'forward switch term': self.switch_terms[0].s.flatten(),
                 'reverse switch term': self.switch_terms[1].s.flatten(),
-                })
+            })
         else:
             self._coefs.update({
                 'forward switch term': np.zeros(fLength, dtype=complex),
                 'reverse switch term': np.zeros(fLength, dtype=complex),
-                })
+            })
         # output is a dictionary of information
         self._output_from_run = {
-                'error vector':e,
-                'residuals':residuals
-                }
+            'error vector': e,
+            'residuals': residuals
+        }
 
         return None
 
@@ -2377,10 +2400,10 @@ class EightTerm(Calibration):
         """
         caled = ntwk.copy()
 
-        T1,T2,T3,T4 = self.T_matrices
+        T1, T2, T3, T4 = self.T_matrices
 
-        caled.s[:,1,0] -= self.coefs['forward isolation']
-        caled.s[:,0,1] -= self.coefs['reverse isolation']
+        caled.s[:, 1, 0] -= self.coefs['forward isolation']
+        caled.s[:, 0, 1] -= self.coefs['reverse isolation']
 
         caled = self.unterminate(caled)
         caled.s = linalg.inv(-caled.s @ T3 + T1) @ (caled.s @ T4 - T2)
@@ -2403,16 +2426,15 @@ class EightTerm(Calibration):
         """
         embedded = ntwk.copy()
 
-        T1,T2,T3,T4 = self.T_matrices
+        T1, T2, T3, T4 = self.T_matrices
 
         embedded.s = (T1 @ ntwk.s + T2) @ linalg.inv(T3 @ ntwk.s + T4)
         embedded = self.terminate(embedded)
 
-        embedded.s[:,1,0] += self.coefs['forward isolation']
-        embedded.s[:,0,1] += self.coefs['reverse isolation']
+        embedded.s[:, 1, 0] += self.coefs['forward isolation']
+        embedded.s[:, 0, 1] += self.coefs['reverse isolation']
 
         return embedded
-
 
     @property
     def T_matrices(self):
@@ -2426,8 +2448,8 @@ class EightTerm(Calibration):
         """
         ec = self.coefs
         npoints = len(ec['k'])
-        one = np.ones(npoints,dtype=complex)
-        zero = np.zeros(npoints,dtype=complex)
+        one = np.ones(npoints, dtype=complex)
+        zero = np.zeros(npoints, dtype=complex)
 
         Edf = self.coefs['forward directivity']
         Esf = self.coefs['forward source match']
@@ -2441,24 +2463,23 @@ class EightTerm(Calibration):
         detY = Edr*Esr-Err
 
         T1 = np.array([
-                [ -detX, zero    ],
-                [ zero,  -k*detY ]
-                ]).transpose(2,0,1)
+            [-detX, zero],
+            [zero, -k*detY]
+        ]).transpose(2, 0, 1)
         T2 = np.array([
-                [ Edf,    zero ],
-                [ zero,  k*Edr ]
-                ]).transpose(2,0,1)
+            [Edf, zero],
+            [zero, k*Edr]
+        ]).transpose(2, 0, 1)
         T3 = np.array([
-                [ -Esf,   zero ],
-                [ zero, -k*Esr ]
-                ]).transpose(2,0,1)
+            [-Esf, zero],
+            [zero, -k*Esr]
+        ]).transpose(2, 0, 1)
         T4 = np.array([
-                [ one, zero ],
-                [ zero, k   ]
-                ]).transpose(2,0,1)
+            [one, zero],
+            [zero, k]
+        ]).transpose(2, 0, 1)
 
-        return T1,T2,T3,T4
-
+        return T1, T2, T3, T4
 
     def renormalize(self, z0_old, z0_new, powerwave=False):
         """Renormalizes the calibration error boxes to a new reference impedance.
@@ -2471,7 +2492,7 @@ class EightTerm(Calibration):
         """
         ec = self.coefs
         npoints = len(ec['k'])
-        one = np.ones(npoints,dtype=complex)
+        one = np.ones(npoints, dtype=complex)
 
         Edf = self.coefs['forward directivity']
         Esf = self.coefs['forward source match']
@@ -2482,21 +2503,21 @@ class EightTerm(Calibration):
         k = self.coefs['k']
 
         S1 = np.array([
-                [ Edf,  Erf/k ],
-                [ k,    Esf ]
-                ]).transpose(2,0,1)
+            [Edf, Erf/k],
+            [k, Esf]
+        ]).transpose(2, 0, 1)
 
         S2 = np.array([
-                [ Edr,  one ],
-                [ Err,  Esr ]
-                ]).transpose(2,0,1)
+            [Edr, one],
+            [Err, Esr]
+        ]).transpose(2, 0, 1)
 
-        #Port impedances before renormalization.
-        #Only the DUT side (port 2) is renormalized.
-        #VNA side (port 1) stays unchanged.
-        z = np.zeros((len(k),2), dtype=complex)
-        z[:,0] = z0_new
-        z[:,1] = z0_old
+        # Port impedances before renormalization.
+        # Only the DUT side (port 2) is renormalized.
+        # VNA side (port 1) stays unchanged.
+        z = np.zeros((len(k), 2), dtype=complex)
+        z[:, 0] = z0_new
+        z[:, 1] = z0_old
 
         if powerwave:
             S1 = renormalize_s(S1, z, z0_new, s_def='power')
@@ -2505,13 +2526,13 @@ class EightTerm(Calibration):
             S1 = renormalize_s(S1, z, z0_new, s_def='traveling')
             S2 = renormalize_s(S2, z, z0_new, s_def='traveling')
 
-        self.coefs['forward directivity'] = S1[:,0,0]
-        self.coefs['forward source match'] = S1[:,1,1]
-        self.coefs['forward reflection tracking'] = S1[:,0,1]*S1[:,1,0]
-        self.coefs['reverse directivity'] = S2[:,0,0]
-        self.coefs['reverse source match'] = S2[:,1,1]
-        self.coefs['reverse reflection tracking'] = S2[:,1,0]*S2[:,0,1]
-        self.coefs['k'] = S1[:,1,0]/S2[:,0,1]
+        self.coefs['forward directivity'] = S1[:, 0, 0]
+        self.coefs['forward source match'] = S1[:, 1, 1]
+        self.coefs['forward reflection tracking'] = S1[:, 0, 1]*S1[:, 1, 0]
+        self.coefs['reverse directivity'] = S2[:, 0, 0]
+        self.coefs['reverse source match'] = S2[:, 1, 1]
+        self.coefs['reverse reflection tracking'] = S2[:, 1, 0]*S2[:, 0, 1]
+        self.coefs['k'] = S1[:, 1, 0]/S2[:, 0, 1]
 
         return None
 
@@ -2546,8 +2567,9 @@ class TRL(EightTerm):
 
     """
     family = 'TRL'
+
     def __init__(self, measured, ideals=None, estimate_line=False,
-                n_reflects=1,solve_reflect=True, *args,**kwargs):
+                 n_reflects=1, solve_reflect=True, *args, **kwargs):
         r"""
         Initialize a TRL calibration.
 
@@ -2636,14 +2658,14 @@ class TRL(EightTerm):
         TUGMultilineTRL
 
         """
-        #warn('Value of Reflect is not solved for yet.')
+        # warn('Value of Reflect is not solved for yet.')
 
         self.n_stds = n_stds = len(measured)
         self.n_reflects = n_reflects
         self.estimate_line = estimate_line
         self.solve_reflect = solve_reflect
 
-        ## generate ideals, given various inputs
+        # generate ideals, given various inputs
 
         if ideals is None:
             ideals = [None]*len(measured)
@@ -2651,57 +2673,56 @@ class TRL(EightTerm):
         if ideals[0] is None:
             # lets make an ideal flush thru for them
             ideal_thru = measured[0].copy()
-            ideal_thru.s[:,0,0] = 0
-            ideal_thru.s[:,1,1] = 0
-            ideal_thru.s[:,1,0] = 1
-            ideal_thru.s[:,0,1] = 1
+            ideal_thru.s[:, 0, 0] = 0
+            ideal_thru.s[:, 1, 1] = 0
+            ideal_thru.s[:, 1, 0] = 1
+            ideal_thru.s[:, 0, 1] = 1
             ideals[0] = ideal_thru
 
         orig_ideal_thru = None
 
-        if np.any(ideals[0].s[:,1,0] != 1) or np.any(ideals[0].s[:,0,1] != 1):
+        if np.any(ideals[0].s[:, 1, 0] != 1) or np.any(
+                ideals[0].s[:, 0, 1] != 1):
             orig_ideal_thru = ideals[0]
             ideals[0] = ideals[0].copy()
-            ideals[0].s[:,0,0] = 0
-            ideals[0].s[:,1,1] = 0
-            ideals[0].s[:,0,1] = 1
-            ideals[0].s[:,1,0] = 1
+            ideals[0].s[:, 0, 0] = 0
+            ideals[0].s[:, 1, 1] = 0
+            ideals[0].s[:, 0, 1] = 1
+            ideals[0].s[:, 1, 0] = 1
 
-        for k in range(1,n_reflects+1):
+        for k in range(1, n_reflects+1):
             if ideals[k] is None:
                 # default  assume they are using flushshorts
                 ideals[k] = -1
 
             if isinstance(ideals[k], Number):
                 ideal_reflect = measured[k].copy()
-                ideal_reflect.s[:,0,0] = ideals[k]
-                ideal_reflect.s[:,1,1] = ideals[k]
-                ideal_reflect.s[:,1,0] = 0
-                ideal_reflect.s[:,0,1] = 0
+                ideal_reflect.s[:, 0, 0] = ideals[k]
+                ideal_reflect.s[:, 1, 1] = ideals[k]
+                ideal_reflect.s[:, 1, 0] = 0
+                ideal_reflect.s[:, 0, 1] = 0
                 ideals[k] = ideal_reflect
 
-
-        for k in range(n_reflects+1,n_stds):
+        for k in range(n_reflects+1, n_stds):
             if ideals[k] is None:
                 # lets make an 90deg line for them
                 ideal_line = measured[k].copy()
-                ideal_line.s[:,0,0] = 0
-                ideal_line.s[:,1,1] = 0
-                ideal_line.s[:,1,0] = -1j
-                ideal_line.s[:,0,1] = -1j
+                ideal_line.s[:, 0, 0] = 0
+                ideal_line.s[:, 1, 1] = 0
+                ideal_line.s[:, 1, 0] = -1j
+                ideal_line.s[:, 0, 1] = -1j
                 ideals[k] = ideal_line
 
             if orig_ideal_thru is not None:
                 ideals[k] = ideals[k].copy()
                 # De-embed original thru
-                ideals[k].s[:,0,1] /= orig_ideal_thru.s[:,0,1]
-                ideals[k].s[:,1,0] /= orig_ideal_thru.s[:,1,0]
-
+                ideals[k].s[:, 0, 1] /= orig_ideal_thru.s[:, 0, 1]
+                ideals[k].s[:, 1, 0] /= orig_ideal_thru.s[:, 1, 0]
 
         EightTerm.__init__(self,
-            measured = measured,
-            ideals = ideals,
-            **kwargs)
+                           measured=measured,
+                           ideals=ideals,
+                           **kwargs)
 
     def run(self):
         m_ut = self.measured_unterminated
@@ -2711,8 +2732,8 @@ class TRL(EightTerm):
         solve_reflect = self.solve_reflect
         ideals = self.ideals
 
-        ## Solve for the line[s]
-        for k in range(n_reflects+1,n_stds):
+        # Solve for the line[s]
+        for k in range(n_reflects+1, n_stds):
             if estimate_line:
                 # setting line_approx  to None causes determine_line() to
                 # estimate the line length from raw measurements
@@ -2720,18 +2741,25 @@ class TRL(EightTerm):
             else:
                 line_approx = ideals[k]
 
-            self.ideals[k] = determine_line(m_ut[0], m_ut[k], line_approx) # find line
+            self.ideals[k] = determine_line(
+                m_ut[0], m_ut[k], line_approx)  # find line
 
-        ## Solve for the reflect[s]
+        # Solve for the reflect[s]
         if solve_reflect:
-            for k in range(1,n_reflects+1):
+            for k in range(1, n_reflects+1):
                 # solve for reflect using the last line if they pass >1
-                r = determine_reflect(m_ut[0],m_ut[k],m_ut[-1],reflect_approx=ideals[k], line_approx=self.ideals[-1])
-                self.ideals[k] = two_port_reflect(r,r)
+                r = determine_reflect(m_ut[0],
+                                      m_ut[k],
+                                      m_ut[-1],
+                                      reflect_approx=ideals[k],
+                                      line_approx=self.ideals[-1])
+                self.ideals[k] = two_port_reflect(r, r)
 
         return EightTerm.run(self)
 
+
 MultilineTRL = TRL
+
 
 class NISTMultilineTRL(EightTerm):
     """
@@ -2767,7 +2795,8 @@ class NISTMultilineTRL(EightTerm):
     """
 
     family = 'TRL'
-    def __init__(self, measured, Grefls, l,
+
+    def __init__(self, measured, Grefls, l_,
                  er_est=1, refl_offset=None, ref_plane=0,
                  gamma_root_choice='auto', k_method='multical', c0=None,
                  z0_ref=50, z0_line=None, *args, **kwargs):
@@ -2886,7 +2915,7 @@ class NISTMultilineTRL(EightTerm):
             ref_plane = [ref_plane, ref_plane]
         self.ref_plane = ref_plane
         self.er_est = er_est
-        self.l = [float(v) for v in l] # cast to float, see gh-895
+        self.l_ = [float(v) for v in l_]  # cast to float, see gh-895
         self.Grefls = Grefls
         self.gamma_root_choice = gamma_root_choice
         self.k_method = k_method
@@ -2914,37 +2943,42 @@ class NISTMultilineTRL(EightTerm):
         if np.isscalar(self.refl_offset):
             self.refl_offset = [self.refl_offset] * n_reflects
 
-        if len(measured) != len(self.Grefls) + len(l):
-            raise ValueError(dedent(
-                f"""Amount of measurements {len(measured)} doesn't match amount of line lengths {len(l)}
-                and reflection coefficients {len(self.Grefls)}"""))
+        if len(measured) != len(self.Grefls) + len(l_):
+            raise ValueError(
+                dedent(
+                    f"""Amount of measurements {len(measured)}
+                                  doesn't match amount of line lengths
+                                 {len(l_)}
 
-        #Not used, but needed for Calibration class init
+                and reflection coefficients
+                                 {len(self.Grefls)} """))
+
+        # Not used, but needed for Calibration class init
         ideals = measured
 
-        #EightTerm applies the switch correction
+        # EightTerm applies the switch correction
         EightTerm.__init__(self,
-            measured = measured,
-            ideals = ideals,
-            self_calibration=True,
-            **kwargs)
+                           measured=measured,
+                           ideals=ideals,
+                           self_calibration=True,
+                           **kwargs)
 
         m_sw = [k for k in self.measured_unterminated]
-
 
         self.measured_reflects = m_sw[1:1+n_reflects]
         self.measured_lines = [m_sw[0]]
         self.measured_lines.extend(m_sw[1+n_reflects:])
 
-        self.ref_plane[0] -= l[0]/2
-        self.ref_plane[1] -= l[0]/2
-        self.refl_offset = [r - l[0]/2 for r in self.refl_offset]
+        self.ref_plane[0] -= l_[0]/2
+        self.ref_plane[1] -= l_[0]/2
+        self.refl_offset = [r - l_[0]/2 for r in self.refl_offset]
 
         # The first line is thru
-        self.l = [i - self.l[0] for i in self.l]
+        self.l_ = [i - self.l_[0] for i in self.l_]
 
-        if len(l) != len(self.measured_lines):
-            raise ValueError("Different amount of lines and line lengths found")
+        if len(l_) != len(self.measured_lines):
+            raise ValueError(
+                "Different amount of lines and line lengths found")
 
     def run(self):
         c = 299792458.0
@@ -2960,16 +2994,17 @@ class NISTMultilineTRL(EightTerm):
         measured_reflects = self.measured_reflects
         measured_lines = self.measured_lines
         measured_lines_t = list(map(lambda x: s2t(x.s), self.measured_lines))
-        l = self.l
+        l_ = self.l_
         er_est = self.er_est
 
         freqs = measured_lines[0].f
         fpoints = len(freqs)
-        lines = len(l)
+        lines = len(l_)
         gamma = np.zeros(fpoints, dtype=complex)
         z0 = np.zeros(fpoints, dtype=complex)
 
-        gamma_est = (1j*2*pi*freqs[0]/c)*np.sqrt(er_est.real + 1j*er_est.imag/(freqs[0]*1e-9))
+        gamma_est = (
+            1j*2*pi*freqs[0]/c)*np.sqrt(er_est.real + 1j*er_est.imag/(freqs[0]*1e-9))
 
         line_c = np.zeros(fpoints, dtype=int)
         er_eff = np.zeros(fpoints, dtype=complex)
@@ -2984,18 +3019,18 @@ class NISTMultilineTRL(EightTerm):
         nstd = np.zeros(shape=(fpoints), dtype=float)
 
         def t2s_single(t):
-            return t2s(t[np.newaxis,:,:])[0]
+            return t2s(t[np.newaxis, :, :])[0]
 
         def s2t_single(s):
-            return s2t(s[np.newaxis,:,:])[0]
+            return s2t(s[np.newaxis, :, :])[0]
 
         def root_choice(Mij, dl, gamma_est):
             e_val = linalg.eigvals(Mij)
-            Da = [0,0]
-            Db = [0,0]
-            ga = [0,0]
-            gb = [0,0]
-            for i in [0,1]:
+            Da = [0, 0]
+            Db = [0, 0]
+            ga = [0, 0]
+            gb = [0, 0]
+            for i in [0, 1]:
                 if i == 0:
                     eij1 = e_val[0]
                     eij2 = e_val[1]
@@ -3003,7 +3038,8 @@ class NISTMultilineTRL(EightTerm):
                     eij1 = e_val[1]
                     eij2 = e_val[0]
                 ea = (eij1 + 1/eij2)/2
-                periods = np.round(((gamma_est*dl).imag - (-log(ea)).imag)/(2*pi))
+                periods = np.round(
+                    ((gamma_est*dl).imag - (-log(ea)).imag)/(2*pi))
                 ga[i] = (-log(ea) + 1j*2*pi*periods)/dl
                 Da[i] = abs(ga[i]*dl - gamma_est*dl)/abs(gamma_est*dl)
 
@@ -3022,22 +3058,22 @@ class NISTMultilineTRL(EightTerm):
                     return e_val[::-1]
             else:
                 if abs((ga[0]-gb[0]).real) < 0.1*abs((ga[1] + gb[1]).real) \
-                    and abs(ga[0].real/ga[0].imag) > 0.001 \
-                    and ga[0].real > 0:
-                        if Da[0] + Db[0] < 0.2:
-                            return e_val
-                        else:
-                            return e_val[::-1]
+                        and abs(ga[0].real/ga[0].imag) > 0.001 \
+                        and ga[0].real > 0:
+                    if Da[0] + Db[0] < 0.2:
+                        return e_val
+                    else:
+                        return e_val[::-1]
                 else:
                     if Da[0] + Db[0] < Da[1] + Db[1]:
                         return e_val
                     else:
                         return e_val[::-1]
-            #Unreachable
+            # Unreachable
             return e_val
 
         V_inv = np.eye(lines-1, dtype=complex) \
-                - (1.0/lines)*np.ones(shape=(lines-1, lines-1), dtype=complex)
+            - (1.0/lines)*np.ones(shape=(lines-1, lines-1), dtype=complex)
 
         b1_vec = np.zeros(lines-1, dtype=complex)
         b2_vec = np.zeros(lines-1, dtype=complex)
@@ -3054,43 +3090,44 @@ class NISTMultilineTRL(EightTerm):
 
         for m in range(fpoints):
             min_phi_eff = pi*np.ones(lines)
-            #Find the best common line to use
+            # Find the best common line to use
             for n in range(lines):
                 for k in range(lines):
                     if n == k:
                         continue
-                    dl = l[k] - l[n]
+                    dl = l_[k] - l_[n]
                     pd = abs(exp(-gamma_est*dl) - exp(gamma_est*dl))/2
                     if -1 <= pd <= 1:
-                        phi_eff = np.arcsin( pd )
+                        phi_eff = np.arcsin(pd)
                     else:
                         phi_eff = np.pi/2
                     min_phi_eff[n] = min(min_phi_eff[n], phi_eff)
-            #Common line is selected to be one with the largest phase difference
+            # Common line is selected to be one with the largest phase
+            # difference
             line_c[m] = np.argmax(min_phi_eff)
 
-            #Pre-calculate inverse T-matrix of the common line
+            # Pre-calculate inverse T-matrix of the common line
             inv_line_c = inv(measured_lines_t[line_c[m]][m])
 
-            #Propagation constant extraction
-            #Compute eigenvalues of each line pair
+            # Propagation constant extraction
+            # Compute eigenvalues of each line pair
 
             g_dl = np.zeros(lines-1, dtype=complex)
             dl_vec = np.zeros(lines-1, dtype=complex)
             k = 0
 
             for n in range(lines):
-                #Skip the common line
+                # Skip the common line
                 if n == line_c[m]:
                     continue
-                dl = l[n] - l[line_c[m]]
+                dl = l_[n] - l_[line_c[m]]
                 Mij = (measured_lines_t[n][m]).dot(inv_line_c)
 
                 if 'estimate' in self.gamma_root_choice:
-                    #Choose the correct root later
+                    # Choose the correct root later
                     e_val = linalg.eigvals(Mij)
                 else:
-                    #Choose the correct root using heuristics
+                    # Choose the correct root using heuristics
                     e_val = root_choice(Mij, dl, gamma_est)
 
                 g_dl1 = -log(0.5*(e_val[0] + 1.0/e_val[1]))
@@ -3099,23 +3136,25 @@ class NISTMultilineTRL(EightTerm):
                 g_dl[k] = g_dl1
 
                 if 'real' in self.gamma_root_choice and (g_dl1/dl).real < 0:
-                    #Choose root that has bigger real part (more lossier)
+                    # Choose root that has bigger real part (more lossier)
                     g_dl[k] = g_dl2
 
                 if 'imag' in self.gamma_root_choice and (g_dl1/dl).imag < 0:
-                    #Choose root that has larger imaginary part
-                    #Only works for short lines
+                    # Choose root that has larger imaginary part
+                    # Only works for short lines
                     g_dl[k] = g_dl2
 
                 if 'estimate' in self.gamma_root_choice:
-                    #Choose root that is closer to the estimate
+                    # Choose root that is closer to the estimate
                     if gamma_est_user is not None:
                         g_est = gamma_est_user[m]
                     else:
-                        #Use estimate from earlier iterations
+                        # Use estimate from earlier iterations
                         g_est = gamma_est
-                    periods1 = np.round( ((gamma_est*dl).imag - g_dl1.imag)/(2*pi))
-                    periods2 = np.round( ((gamma_est*dl).imag - g_dl2.imag)/(2*pi))
+                    periods1 = np.round(
+                        ((gamma_est*dl).imag - g_dl1.imag)/(2*pi))
+                    periods2 = np.round(
+                        ((gamma_est*dl).imag - g_dl2.imag)/(2*pi))
                     g_dl1 += 1j*2*pi*periods1
                     g_dl2 += 1j*2*pi*periods2
 
@@ -3124,22 +3163,25 @@ class NISTMultilineTRL(EightTerm):
                     else:
                         g_dl[k] = g_dl2
                 else:
-                    periods = np.round(((gamma_est*dl).imag - (g_dl[k].imag))/(2*pi))
+                    periods = np.round(
+                        ((gamma_est*dl).imag - (g_dl[k].imag))/(2*pi))
                     g_dl[k] += 1j*2*pi*periods
                 dl_vec[k] = dl
                 k = k + 1
 
-            gamma[m] = (dl_vec.transpose().dot(V_inv).dot(g_dl))/(dl_vec.transpose().dot(V_inv).dot(dl_vec))
+            gamma[m] = (dl_vec.transpose().dot(V_inv).dot(g_dl)) / \
+                (dl_vec.transpose().dot(V_inv).dot(dl_vec))
 
             if m != fpoints-1:
-                gamma_est = gamma[m].real + 1j*gamma[m].imag*freqs[m+1]/freqs[m]
+                gamma_est = gamma[m].real + 1j * \
+                    gamma[m].imag*freqs[m+1]/freqs[m]
             er_eff[m] = -(gamma[m]/(2*pi*freqs[m]/c))**2
 
             root1 = []
             root2 = []
 
-            d1 = [0,0]
-            d2 = [0,0]
+            d1 = [0, 0]
+            d2 = [0, 0]
 
             S_thru = measured_lines[0].s[m]
 
@@ -3148,123 +3190,131 @@ class NISTMultilineTRL(EightTerm):
             for n in range(lines):
                 if n == line_c[m]:
                     continue
-                #Port 1
+                # Port 1
                 T = measured_lines_t[n][m].dot(inv_line_c)
-                T = measured_lines[n].s[m,1,0]*measured_lines[line_c[m]].s[m,0,1]*T
+                T = measured_lines[n].s[m, 1, 0] * \
+                    measured_lines[line_c[m]].s[m, 0, 1]*T
                 e_val = linalg.eigvals(T)
 
-                B1 = np.array([\
-                    [T[0,1]/(e_val[0]-T[0,0]), T[0,1]/(e_val[1]-T[0,0])],
-                    [(e_val[0]-T[1,1])/T[1,0], (e_val[1]-T[1,1])/T[1,0]]])
-                CoA1 = np.array([\
-                    [T[1,0]/(e_val[1]-T[1,1]), T[1,0]/(e_val[0]-T[1,1])],
-                    [(e_val[1]-T[0,0])/T[0,1], (e_val[0]-T[0,0])/T[0,1]]])
-                B_est1 = T[0,1]/(exp(gamma[m]*(l[n]-l[line_c[m]]) - T[0,0]))
-                CoA_est1 = T[1,0]/(exp(-gamma[m]*(l[n]-l[line_c[m]]) - T[1,1]))
+                B1 = np.array([
+                    [T[0, 1]/(e_val[0]-T[0, 0]), T[0, 1]/(e_val[1]-T[0, 0])],
+                    [(e_val[0]-T[1, 1])/T[1, 0], (e_val[1]-T[1, 1])/T[1, 0]]])
+                CoA1 = np.array([
+                    [T[1, 0]/(e_val[1]-T[1, 1]), T[1, 0]/(e_val[0]-T[1, 1])],
+                    [(e_val[1]-T[0, 0])/T[0, 1], (e_val[0]-T[0, 0])/T[0, 1]]])
+                B_est1 = T[0, 1]/(exp(gamma[m]*(l_[n]-l_[line_c[m]]) - T[0, 0]))
+                CoA_est1 = T[1, 0] / \
+                    (exp(-gamma[m]*(l_[n]-l_[line_c[m]]) - T[1, 1]))
                 dB1 = abs(B1 - B_est1)/abs(B_est1)
                 dCoA1 = abs(CoA1 - CoA_est1)/abs(CoA_est1)
 
-                if abs(B1[0,1] - B_est1) < abs(B1[1,1] - B_est1):
-                    b1_vec[p] = B1[0,1]
-                    b1_vec2[p] = B1[0,0]
-                    root1.append([0,1])
+                if abs(B1[0, 1] - B_est1) < abs(B1[1, 1] - B_est1):
+                    b1_vec[p] = B1[0, 1]
+                    b1_vec2[p] = B1[0, 0]
+                    root1.append([0, 1])
                 else:
-                    b1_vec[p] = B1[1,1]
-                    b1_vec2[p] = B1[1,0]
-                    root1.append([1,1])
+                    b1_vec[p] = B1[1, 1]
+                    b1_vec2[p] = B1[1, 0]
+                    root1.append([1, 1])
 
-                if abs(CoA1[0,1] - CoA_est1) < abs(CoA1[1,1] - CoA_est1):
-                    CoA1_vec[p] = CoA1[0,1]
-                    CoA1_vec2[p] = CoA1[0,0]
+                if abs(CoA1[0, 1] - CoA_est1) < abs(CoA1[1, 1] - CoA_est1):
+                    CoA1_vec[p] = CoA1[0, 1]
+                    CoA1_vec2[p] = CoA1[0, 0]
                 else:
-                    CoA1_vec[p] = CoA1[1,1]
-                    CoA1_vec2[p] = CoA1[1,0]
+                    CoA1_vec[p] = CoA1[1, 1]
+                    CoA1_vec2[p] = CoA1[1, 0]
 
-                d1[0] += np.sum(dB1[:,root1[-1][1]]) + np.sum(dCoA1[:,root1[-1][1]])
-                d1[1] += np.sum(dB1[:,int(not root1[-1][1])]) + np.sum(dCoA1[:,int(not root1[-1][1])])
+                d1[0] += np.sum(dB1[:, root1[-1][1]]) + \
+                    np.sum(dCoA1[:, root1[-1][1]])
+                d1[1] += np.sum(dB1[:, int(not root1[-1][1])]) + \
+                    np.sum(dCoA1[:, int(not root1[-1][1])])
 
-                #Port 2
-                k = np.array([[0,1],[1,0]], dtype=complex)
+                # Port 2
+                k = np.array([[0, 1], [1, 0]], dtype=complex)
 
-                T = s2t_single(k.dot(measured_lines[n].s[m]).dot(k)).dot(\
-                        inv(s2t_single(k.dot(measured_lines[line_c[m]].s[m]).dot(k))))
-                T = measured_lines[n].s[m][0,1]*measured_lines[line_c[m]].s[m][1,0]*T
+                T = s2t_single(k.dot(measured_lines[n].s[m]).dot(k)).dot(
+                    inv(s2t_single(k.dot(measured_lines[line_c[m]].s[m]).dot(k))))
+                T = measured_lines[n].s[m][0, 1] * \
+                    measured_lines[line_c[m]].s[m][1, 0]*T
                 e_val = linalg.eigvals(T)
 
-                B2 = np.array([\
-                    [T[0,1]/(e_val[0]-T[0,0]), T[0,1]/(e_val[1]-T[0,0])],
-                    [(e_val[0]-T[1,1])/T[1,0], (e_val[1]-T[1,1])/T[1,0]]])
-                CoA2 = np.array([\
-                    [T[1,0]/(e_val[1]-T[1,1]), T[1,0]/(e_val[0]-T[1,1])],
-                    [(e_val[1]-T[0,0])/T[0,1], (e_val[0]-T[0,0])/T[0,1]]])
-                B_est2 = T[0,1]/(exp(gamma[m]*(l[n]-l[line_c[m]]) - T[0,0]))
-                CoA_est2 = T[1,0]/(exp(-gamma[m]*(l[n]-l[line_c[m]]) - T[1,1]))
+                B2 = np.array([
+                    [T[0, 1]/(e_val[0]-T[0, 0]), T[0, 1]/(e_val[1]-T[0, 0])],
+                    [(e_val[0]-T[1, 1])/T[1, 0], (e_val[1]-T[1, 1])/T[1, 0]]])
+                CoA2 = np.array([
+                    [T[1, 0]/(e_val[1]-T[1, 1]), T[1, 0]/(e_val[0]-T[1, 1])],
+                    [(e_val[1]-T[0, 0])/T[0, 1], (e_val[0]-T[0, 0])/T[0, 1]]])
+                B_est2 = T[0, 1]/(exp(gamma[m]*(l_[n]-l_[line_c[m]]) - T[0, 0]))
+                CoA_est2 = T[1, 0] / \
+                    (exp(-gamma[m]*(l_[n]-l_[line_c[m]]) - T[1, 1]))
                 dB2 = abs(B2 - B_est2)/abs(B_est2)
                 dCoA2 = abs(CoA2 - CoA_est2)/abs(CoA_est2)
 
-                if abs(B2[0,1] - B_est2) < abs(B2[1,1] - B_est2):
-                    b2_vec[p] = B2[0,1]
-                    b2_vec2[p] = B2[0,0]
-                    root2.append([0,1])
+                if abs(B2[0, 1] - B_est2) < abs(B2[1, 1] - B_est2):
+                    b2_vec[p] = B2[0, 1]
+                    b2_vec2[p] = B2[0, 0]
+                    root2.append([0, 1])
                 else:
-                    b2_vec[p] = B2[1,1]
-                    b2_vec2[p] = B2[1,0]
-                    root2.append([1,1])
+                    b2_vec[p] = B2[1, 1]
+                    b2_vec2[p] = B2[1, 0]
+                    root2.append([1, 1])
 
-                if abs(CoA2[0,1] - CoA_est2) < abs(CoA2[1,1] - CoA_est2):
-                    CoA2_vec[p] = CoA2[0,1]
-                    CoA2_vec2[p] = CoA2[0,0]
+                if abs(CoA2[0, 1] - CoA_est2) < abs(CoA2[1, 1] - CoA_est2):
+                    CoA2_vec[p] = CoA2[0, 1]
+                    CoA2_vec2[p] = CoA2[0, 0]
                 else:
-                    CoA2_vec[p] = CoA2[1,1]
-                    CoA2_vec2[p] = CoA2[1,0]
+                    CoA2_vec[p] = CoA2[1, 1]
+                    CoA2_vec2[p] = CoA2[1, 0]
 
-                d2[0] += np.sum(dB2[:,root2[-1][1]]) + np.sum(dCoA2[:,root2[-1][1]])
-                d2[1] += np.sum(dB2[:,int(not root2[-1][1])]) + np.sum(dCoA2[:,int(not root2[-1][1])])
+                d2[0] += np.sum(dB2[:, root2[-1][1]]) + \
+                    np.sum(dCoA2[:, root2[-1][1]])
+                d2[1] += np.sum(dB2[:, int(not root2[-1][1])]) + \
+                    np.sum(dCoA2[:, int(not root2[-1][1])])
 
                 p += 1
 
-            Vb = np.zeros(shape=(lines-1,lines-1), dtype=complex)
-            Vc = np.zeros(shape=(lines-1,lines-1), dtype=complex)
-            #Fill in upper triangular matrix
-            l_not_common = [i for i in l if i != l[line_c[m]]]
+            Vb = np.zeros(shape=(lines-1, lines-1), dtype=complex)
+            Vc = np.zeros(shape=(lines-1, lines-1), dtype=complex)
+            # Fill in upper triangular matrix
+            l_not_common = [i for i in l_ if i != l_[line_c[m]]]
             for b in range(len(l_not_common)):
                 for a in range(b+1):
-                    if a == b: #Diagonal
+                    if a == b:  # Diagonal
                         len_l = l_not_common[a]
-                        exp_factor = exp(-gamma[m]*(len_l - l[line_c[m]]))
-                        Vb[a,b] = abs(exp_factor)**2 + 1/abs(exp_factor)**2 + \
-                                2*( abs(exp(-gamma[m]*len_l))*\
-                                abs(exp(-gamma[m]*l[line_c[m]])) )**2
+                        exp_factor = exp(-gamma[m]*(len_l - l_[line_c[m]]))
+                        Vb[a, b] = abs(exp_factor)**2 + 1/abs(exp_factor)**2 + \
+                            2 * (abs(exp(-gamma[m]*len_l)) * abs(exp(-gamma[m]*l_[line_c[m]])))**2
                         n = abs(exp_factor - 1/exp_factor)**2
-                        Vb[a,b] /= n
+                        Vb[a, b] /= n
 
-                        Vc[a,b] = abs(exp_factor)**2 + 1/(abs(exp_factor))**2 + \
-                                2/( abs(exp(-gamma[m]*l[line_c[m]]))*\
-                                abs(exp(-gamma[m]*len_l)) )**2
-                        Vc[a,b] /= n
+                        Vc[a, b] = abs(exp_factor)**2 + 1/(abs(exp_factor))**2 + \
+                            2 * (abs(exp(-gamma[m]*l_[line_c[m]])) * abs(exp(-gamma[m]*len_l)))**2
+                        Vc[a, b] /= n
                     elif a < b:
                         len_a = l_not_common[a]
                         len_b = l_not_common[b]
-                        exp_factor = exp(-gamma[m]*(len_a -l[line_c[m]]))
-                        exp_factor2 = exp(-gamma[m]*(len_b -l[line_c[m]]))
-                        Vb[a,b] = exp_factor*exp_factor2.conjugate() + \
-                                (abs(exp(-gamma[m]*l[line_c[m]])))**2 * \
-                                exp(-gamma[m]*len_a)*(exp(-gamma[m]*len_b)).conjugate()
-                        n = (exp_factor - 1/exp_factor)* \
-                                (exp_factor2-1/exp_factor2).conjugate()
-                        Vb[a,b] /= n
-                        Vb[b,a] = Vb[a,b].conjugate()
+                        exp_factor = exp(-gamma[m]*(len_a - l_[line_c[m]]))
+                        exp_factor2 = exp(-gamma[m]*(len_b - l_[line_c[m]]))
+                        Vb[a, b] = exp_factor*exp_factor2.conjugate() + \
+                            (abs(exp(-gamma[m]*l_[line_c[m]])))**2 * \
+                            exp(-gamma[m]*len_a) * \
+                            (exp(-gamma[m]*len_b)).conjugate()
+                        n = (exp_factor - 1/exp_factor) * \
+                            (exp_factor2-1/exp_factor2).conjugate()
+                        Vb[a, b] /= n
+                        Vb[b, a] = Vb[a, b].conjugate()
 
-                        Vc[a,b] = 1/(exp_factor*exp_factor2.conjugate()) + \
-                                1/( (abs(exp(-gamma[m]*l[line_c[m]])))**2 * \
-                                exp(-gamma[m]*len_a)*(exp(-gamma[m]*len_b)).conjugate() )
-                        Vc[a,b] /= n
-                        Vc[b,a] = Vc[a,b].conjugate()
+                        Vc[a, b] = 1/(exp_factor*exp_factor2.conjugate()) + \
+                            1 * (abs(exp(-gamma[m]*l_[line_c[m]])))**2 * exp(-gamma[m]*len_a) * \
+                            (exp(-gamma[m]*len_b)).conjugate()
+                        Vc[a, b] /= n
+                        Vc[b, a] = Vc[a, b].conjugate()
 
             def solve_A(B1, B2, CoA1, CoA2, S_thru, m):
-                #Determine A using unknown reflect
-                Ap = B1*B2 - B1*S_thru[1,1] - B2*S_thru[0,0] + linalg.det(S_thru)
-                Ap = -Ap/(1 - CoA1*S_thru[0,0] - CoA2*S_thru[1,1] + CoA1*CoA2*linalg.det(S_thru))
+                # Determine A using unknown reflect
+                Ap = B1*B2 - B1*S_thru[1, 1] - B2 * \
+                    S_thru[0, 0] + linalg.det(S_thru)
+                Ap = -Ap/(1 - CoA1*S_thru[0, 0] - CoA2 * S_thru[1, 1] + CoA1*CoA2*linalg.det(S_thru))
 
                 A1_vals = np.zeros(len(measured_reflects), dtype=complex)
                 A2_vals = np.zeros(len(measured_reflects), dtype=complex)
@@ -3272,14 +3322,16 @@ class NISTMultilineTRL(EightTerm):
                 for n in range(len(measured_reflects)):
                     S_r = measured_reflects[n].s[m]
 
-                    S_r11 = S_r[0,0]
-                    S_r22 = S_r[1,1]
+                    S_r11 = S_r[0, 0]
+                    S_r22 = S_r[1, 1]
 
-                    Arr = (S_r11 - B1)/(1 - S_r11*CoA1)* \
-                            (1 - S_r22*CoA2)/(S_r22 - B2)
-                    Gr_est = self.Grefls[n]*exp(-2*gamma[m]*(self.refl_offset[n] - l[0]/2.))
+                    Arr = (S_r11 - B1)/(1 - S_r11*CoA1) * \
+                        (1 - S_r22*CoA2)/(S_r22 - B2)
+                    Gr_est = self.Grefls[n] * \
+                        exp(-2*gamma[m]*(self.refl_offset[n] - l_[0]/2.))
                     G_trial = (S_r11 - B1)/(np.sqrt(Ap*Arr)*(1 - S_r11*CoA1))
-                    if abs( Gr_est/abs(Gr_est) - G_trial/abs(G_trial) ) > np.sqrt(2):
+                    if abs(
+                            Gr_est / abs(Gr_est) - G_trial / abs(G_trial)) > np.sqrt(2):
                         A1_vals[n] = -np.sqrt(Ap*Arr)
                     else:
                         A1_vals[n] = np.sqrt(Ap*Arr)
@@ -3294,8 +3346,8 @@ class NISTMultilineTRL(EightTerm):
             sum_inv_Vb = np.sum(inv_Vb)
             sum_inv_Vc = np.sum(inv_Vc)
             values = []
-            #List possible root choices for B and CoA
-            for i in [(0,0), (0,1), (1,0), (1,1)]:
+            # List possible root choices for B and CoA
+            for i in [(0, 0), (0, 1), (1, 0), (1, 1)]:
                 if i[0] == 0:
                     b1 = b1_vec
                     coa1 = CoA1_vec
@@ -3315,18 +3367,24 @@ class NISTMultilineTRL(EightTerm):
                 CoA1 = np.sum(inv_Vc.dot(coa1))/sum_inv_Vc
                 CoA2 = np.sum(inv_Vc.dot(coa2))/sum_inv_Vc
 
-                denom = 1 - CoA1*S_thru[0,0] - CoA2*S_thru[1,1] + CoA1*CoA2*\
-                (S_thru[0,0]*S_thru[1,1] - S_thru[0,1]*S_thru[1,0])
+                denom = 1 - CoA1*S_thru[0,
+                                        0] - CoA2*S_thru[1,
+                                                         1] + CoA1*CoA2 * (S_thru[0,
+                                                                                  0]*S_thru[1,
+                                                                                            1] - S_thru[0,
+                                                                                                        1]*S_thru[1,
+                                                                                                                  0])
 
-                values.append( (abs(denom), B1, B2, CoA1, CoA2) )
+                values.append((abs(denom), B1, B2, CoA1, CoA2))
 
-            if abs(values[0][0]) > 1e-9 and d1[1]/d1[0] > 10 and d2[1]/d2[0] > 10:
-                #Estimate seems to be correct
+            if abs(values[0][0]) > 1e-9 and d1[1] / \
+                    d1[0] > 10 and d2[1]/d2[0] > 10:
+                # Estimate seems to be correct
                 B1, B2, CoA1, CoA2 = values[0][1:]
                 A1, A2 = solve_A(B1, B2, CoA1, CoA2, S_thru, m)
             else:
-                #Estimation is incorrect or the accuracy is bad
-                #Choose the root that minimizes error to measurements
+                # Estimation is incorrect or the accuracy is bad
+                # Choose the root that minimizes error to measurements
                 best_error = None
                 best_values = []
                 for v in values:
@@ -3336,17 +3394,19 @@ class NISTMultilineTRL(EightTerm):
                     A1, A2 = solve_A(B1, B2, CoA1, CoA2, S_thru, m)
                     C1 = CoA1*A1
                     C2 = CoA2*A2
-                    R = S_thru[0,1]*(1 - C1*C2)/(A1 - B1*C1)
+                    R = S_thru[0, 1]*(1 - C1*C2)/(A1 - B1*C1)
 
-                    T1 = R*np.array([[A1, B1],[C1, 1]])
-                    g = np.array([[0,1],[1,0]])
-                    T2 = np.array([[A2, B2],[C2, 1]])
+                    T1 = R*np.array([[A1, B1], [C1, 1]])
+                    g = np.array([[0, 1], [1, 0]])
+                    T2 = np.array([[A2, B2], [C2, 1]])
 
                     error = 0
                     for n in range(lines):
                         meas = measured_lines[n].s[m]
-                        ideal = np.array([[exp(-gamma[m]*l[n]), 0],[0,exp(gamma[m]*l[n])]])
-                        embedded = t2s_single(T1.dot(ideal).dot(g.dot(inv(T2).dot(g))))
+                        ideal = np.array(
+                            [[exp(-gamma[m]*l_[n]), 0], [0, exp(gamma[m]*l_[n])]])
+                        embedded = t2s_single(
+                            T1.dot(ideal).dot(g.dot(inv(T2).dot(g))))
 
                         error += np.sum(abs(embedded - meas))
                     if best_error is None or error < best_error:
@@ -3368,40 +3428,45 @@ class NISTMultilineTRL(EightTerm):
             C1 = CoA1*A1
             C2 = CoA2*A2
 
-            #Determine R1, R2
+            # Determine R1, R2
             if self.k_method == 'marks':
                 p1_len_est = self.kwargs.get('p1_len_est', 0)
                 p2_len_est = self.kwargs.get('p2_len_est', 0)
 
-                z0_phase = np.angle( np.sqrt(er_eff[m]) )
-                Qox = ( 1 - 1j*z0_phase)
-                Qoy = ( 1 - 1j*z0_phase)
+                z0_phase = np.angle(np.sqrt(er_eff[m]))
+                Qox = (1 - 1j*z0_phase)
+                Qoy = (1 - 1j*z0_phase)
 
-                R1R2 = (S_thru[1,0]*(1 - C1*C2))**-1
+                R1R2 = (S_thru[1, 0]*(1 - C1*C2))**-1
                 gam = A2 - B2*C2
                 de = (A1-B1*C1)*(R1R2*(A2-B2*C2))**2
-                beta_sqr = (abs(de)**2 + abs(gam)**2)/\
-                        (de.conjugate()*Qox + de.conjugate()*Qoy)
-                s21y = np.sqrt( beta_sqr )
-                R2 = ((A2 -B2*C2)/s21y)**-1
+                beta_sqr = (abs(de)**2 + abs(gam)**2) /\
+                    (de.conjugate()*Qox + de.conjugate()*Qoy)
+                s21y = np.sqrt(beta_sqr)
+                R2 = ((A2 - B2*C2)/s21y)**-1
 
                 R2_est = exp(gamma[m]*p2_len_est)
-                if abs( R2_est/abs(R2_est) -R2/abs(R2) ) > np.sqrt(2):
+                if abs(R2_est/abs(R2_est) - R2/abs(R2)) > np.sqrt(2):
                     R2 = -R2
                 R1 = R1R2/R2
                 R1_est = exp(gamma[m]*p1_len_est)
 
-                if abs( R1_est/abs(R1_est) - R1/abs(R1) ) > np.sqrt(2):
+                if abs(R1_est/abs(R1_est) - R1/abs(R1)) > np.sqrt(2):
                     warn('Inconsistencies detected', stacklevel=2)
             elif self.k_method == 'multical':
-                denom = 1 - CoA1*S_thru[0,0] - CoA2*S_thru[1,1] + CoA1*CoA2*\
-                (S_thru[0,0]*S_thru[1,1] - S_thru[0,1]*S_thru[1,0])
-                R1 = S_thru[0,1]/denom
-                R2 = S_thru[1,0]/denom
+                denom = 1 - CoA1*S_thru[0,
+                                        0] - CoA2*S_thru[1,
+                                                         1] + CoA1*CoA2 * (S_thru[0,
+                                                                                  0]*S_thru[1,
+                                                                                            1] - S_thru[0,
+                                                                                                        1]*S_thru[1,
+                                                                                                                  0])
+                R1 = S_thru[0, 1]/denom
+                R2 = S_thru[1, 0]/denom
             else:
                 raise ValueError(f'Unknown k_method: {self.k_method}')
 
-            #Reference plane shift
+            # Reference plane shift
             if np.any(self.ref_plane):
                 shift1 = exp(-2*gamma[m]*self.ref_plane[0])
                 shift2 = exp(-2*gamma[m]*self.ref_plane[1])
@@ -3413,39 +3478,39 @@ class NISTMultilineTRL(EightTerm):
                 R2 *= shift2
 
             if self.c0 is not None:
-                #Estimate the line characteristic impedance
-                #using known capacitance/length
+                # Estimate the line characteristic impedance
+                # using known capacitance/length
                 z0[m] = gamma[m]/(1j*2*np.pi*freqs[m]*self.c0[m])
             else:
-                #Set the known line characteristic impedance
+                # Set the known line characteristic impedance
                 if self.z0_line is not None:
                     z0[m] = self.z0_line[m]
                 else:
                     z0[m] = self.z0_ref[m]
 
-            #Error matrices
-            Tmat1[m,:,:] = R1*np.array([[A1, B1],[C1, 1]])
-            Tmat2[m,:,:] = R2*np.array([[A2, B2],[C2, 1]])
+            # Error matrices
+            Tmat1[m, :, :] = R1*np.array([[A1, B1], [C1, 1]])
+            Tmat2[m, :, :] = R2*np.array([[A2, B2], [C2, 1]])
 
-            Smat1[m,:,:] = t2s_single(Tmat1[m,:,:])
-            Smat2[m,:,:] = t2s_single(Tmat2[m,:,:])
+            Smat1[m, :, :] = t2s_single(Tmat1[m, :, :])
+            Smat2[m, :, :] = t2s_single(Tmat2[m, :, :])
 
-            #Convert the error coefficients to
-            #definitions used by the EightTerm class.
-            dx = linalg.det(Smat1[m,:,:])
-            dy = linalg.det(Smat2[m,:,:])
+            # Convert the error coefficients to
+            # definitions used by the EightTerm class.
+            dx = linalg.det(Smat1[m, :, :])
+            dy = linalg.det(Smat2[m, :, :])
 
             if self.k_method == 'marks':
-                k = Smat1[m,1,0]/Smat2[m,0,1]
+                k = Smat1[m, 1, 0]/Smat2[m, 0, 1]
             else:
-                k = dx*dy*Smat1[m,1,0]/(Smat2[m,0,1]*Smat2[m,1,0])
+                k = dx*dy*Smat1[m, 1, 0]/(Smat2[m, 0, 1]*Smat2[m, 1, 0])
 
-            #Error coefficients
-            e[m] = [Smat1[m,0,0],
-                    Smat1[m,1,1],
+            # Error coefficients
+            e[m] = [Smat1[m, 0, 0],
+                    Smat1[m, 1, 1],
                     dx,
-                    Smat2[m,0,0],
-                    Smat2[m,1,1],
+                    Smat2[m, 0, 0],
+                    Smat2[m, 1, 1],
                     dy,
                     k]
 
@@ -3453,35 +3518,35 @@ class NISTMultilineTRL(EightTerm):
         self._gamma = gamma
         self._er_eff = er_eff
         self._nstd = nstd
-        self._coefs = {\
-                'forward directivity':e[:,0],
-                'forward source match':e[:,1],
-                'forward reflection tracking':e[:,0]*e[:,1]-e[:,2],
-                'reverse directivity':e[:,3],
-                'reverse source match':e[:,4],
-                'reverse reflection tracking':e[:,4]*e[:,3]- e[:,5],
-                'k':e[:,6],
-                }
+        self._coefs = {
+            'forward directivity': e[:, 0],
+            'forward source match': e[:, 1],
+            'forward reflection tracking': e[:, 0]*e[:, 1]-e[:, 2],
+            'reverse directivity': e[:, 3],
+            'reverse source match': e[:, 4],
+            'reverse reflection tracking': e[:, 4]*e[:, 3] - e[:, 5],
+            'k': e[:, 6],
+        }
 
-        self._coefs['forward isolation'] = self.isolation.s[:,1,0].flatten()
-        self._coefs['reverse isolation'] = self.isolation.s[:,0,1].flatten()
+        self._coefs['forward isolation'] = self.isolation.s[:, 1, 0].flatten()
+        self._coefs['reverse isolation'] = self.isolation.s[:, 0, 1].flatten()
 
         if self.switch_terms is not None:
             self._coefs.update({
                 'forward switch term': self.switch_terms[0].s.flatten(),
                 'reverse switch term': self.switch_terms[1].s.flatten(),
-                })
+            })
         else:
             self._coefs.update({
                 'forward switch term': np.zeros(fpoints, dtype=complex),
                 'reverse switch term': np.zeros(fpoints, dtype=complex),
-                })
+            })
         # output is a dictionary of information
         self._output_from_run = {
-                'error vector':e
-                }
+            'error vector': e
+        }
 
-        #Reference impedance renormalization
+        # Reference impedance renormalization
         if self.z0_ref is not None and np.any(z0 != self.z0_ref):
             powerwave = self.kwargs.get('powerwave', False)
             self.renormalize(z0, self.z0_ref, powerwave=powerwave)
@@ -3506,24 +3571,23 @@ class NISTMultilineTRL(EightTerm):
         # assigning this measured network is a hack so that
         # * `calibration.frequency` property evaluates correctly
         # * __init__() will not throw an error
-        n = Network(frequency = frequency,
-                    s = rand_c(frequency.npoints,2,2))
-        measured = [n,n,n]
+        n = Network(frequency=frequency,
+                    s=rand_c(frequency.npoints, 2, 2))
+        measured = [n, n, n]
 
         if 'forward switch term' in coefs:
-            switch_terms = (Network(frequency = frequency,
+            switch_terms = (Network(frequency=frequency,
                                     s=coefs['forward switch term']),
-                            Network(frequency = frequency,
+                            Network(frequency=frequency,
                                     s=coefs['reverse switch term']))
             kwargs['switch_terms'] = switch_terms
 
-
-        #Fill the required __init__ fields with garbage
-        #and assign the coefficients manually
-        cal = cls(measured, [-1], [0,1], **kwargs)
+        # Fill the required __init__ fields with garbage
+        # and assign the coefficients manually
+        cal = cls(measured, [-1], [0, 1], **kwargs)
         cal.coefs = coefs
         cal.family += '(fromCoefs)'
-        return  cal
+        return cal
 
     @property
     def gamma(self):
@@ -3533,7 +3597,7 @@ class NISTMultilineTRL(EightTerm):
         """
         try:
             return self._gamma
-        except(AttributeError):
+        except (AttributeError):
             self.run()
             return self._gamma
 
@@ -3549,7 +3613,7 @@ class NISTMultilineTRL(EightTerm):
         """
         try:
             return self._er_eff
-        except(AttributeError):
+        except (AttributeError):
             self.run()
             return self._er_eff
 
@@ -3564,7 +3628,7 @@ class NISTMultilineTRL(EightTerm):
         """
         try:
             return self._z0
-        except(AttributeError):
+        except (AttributeError):
             self.run()
             return self._z0
 
@@ -3578,7 +3642,7 @@ class NISTMultilineTRL(EightTerm):
         """
         try:
             return self._nstd
-        except(AttributeError):
+        except (AttributeError):
             self.run()
             return self._nstd
 
@@ -3597,7 +3661,8 @@ class NISTMultilineTRL(EightTerm):
         parameters["calibration class"] = self.__class__.__name__
         parameters["skrf version"] = skrf__version__
 
-        parameters["measured"] = ntwk_names = [ntwk.name for ntwk in self.measured]
+        parameters["measured"] = ntwk_names = [
+            ntwk.name for ntwk in self.measured]
         for i, name in enumerate(ntwk_names):
             ntwk_names[i] = util.unique_name(name, ntwk_names, i)
         parameters["ideals"] = None
@@ -3621,24 +3686,35 @@ class NISTMultilineTRL(EightTerm):
         }
 
         with zipfile.ZipFile(filename, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
-            archive.writestr("parameters.json", json.dumps(parameters, indent=2))
+            archive.writestr("parameters.json",
+                             json.dumps(parameters, indent=2))
             if self.switch_terms:
-                fswitch.write_touchstone(dir="switch terms", to_archive=archive)
-                rswitch.write_touchstone(dir="switch terms", to_archive=archive)
+                fswitch.write_touchstone(
+                    dir="switch terms", to_archive=archive)
+                rswitch.write_touchstone(
+                    dir="switch terms", to_archive=archive)
             for i, ntwk in enumerate(self.measured):  # type: int, Network
-                ntwk.write_touchstone(ntwk_names[i] + ".s2p", dir="measured", to_archive=archive)
+                ntwk.write_touchstone(
+                    ntwk_names[i] + ".s2p", dir="measured", to_archive=archive)
             for ntwk in self.coefs_ntwks.values():
                 ntwk.write_touchstone(dir="coefs", to_archive=archive)
-            gamma_ntwk = Network(f=self.measured[0].f, s=self.gamma, z0=50., comments="propagation constant")
+            gamma_ntwk = Network(
+                f=self.measured[0].f,
+                s=self.gamma,
+                z0=50.,
+                comments="propagation constant")
             gamma_ntwk.write_touchstone("gamma.s1p", to_archive=archive)
 
     @classmethod
     def load_calibration_archive(cls, filename):
         with zipfile.ZipFile(filename) as archive:
-            parameters = json.loads(archive.open("parameters.json").read().decode("ascii"))
+            parameters = json.loads(archive.open(
+                "parameters.json").read().decode("ascii"))
             measured_dict = read_zipped_touchstones(archive, "measured")
-            switch_terms_dict = read_zipped_touchstones(archive, "switch terms")
-            coefs_dict = read_zipped_touchstones(archive, "coefs")  # not used currently
+            switch_terms_dict = read_zipped_touchstones(
+                archive, "switch terms")
+            coefs_dict = read_zipped_touchstones(
+                archive, "coefs")  # not used currently
             gamma_ntwk = Network.zipped_touchstone("gamma.s1p", archive)
 
         measured = list()
@@ -3660,6 +3736,7 @@ class NISTMultilineTRL(EightTerm):
         cal._gamma = gamma_ntwk.s.flatten()
 
         return cal
+
 
 class TUGMultilineTRL(EightTerm):
     """
@@ -3725,10 +3802,20 @@ class TUGMultilineTRL(EightTerm):
     """
 
     family = 'TRL'
-    def __init__(self, line_meas, line_lengths, er_est=1-.0j,
-                reflect_meas=None, reflect_est=None, reflect_offset=0, ref_plane=0,
-                compensate_repeated_lines=False, lnorm=1,
-                *args, **kwargs):
+
+    def __init__(
+            self,
+            line_meas,
+            line_lengths,
+            er_est=1-.0j,
+            reflect_meas=None,
+            reflect_est=None,
+            reflect_offset=0,
+            ref_plane=0,
+            compensate_repeated_lines=False,
+            lnorm=1,
+            *args,
+            **kwargs):
         r"""
         TUGMultilineTRL initializer.
 
@@ -3792,41 +3879,46 @@ class TUGMultilineTRL(EightTerm):
 
         """
 
-        self.line_meas    = line_meas
+        self.line_meas = line_meas
         self.line_lengths = line_lengths
         self.er_est = er_est*(1+0j)  # make complex
         if len(self.line_lengths) != len(self.line_meas):
-            raise ValueError("Different amount of measured lines and line lengths found.")
+            raise ValueError(
+                "Different amount of measured lines and line lengths found.")
 
         if len(self.line_lengths) < 2:
             raise ValueError("Less than two lines have been found.")
 
         self.freq = self.line_meas[0].frequency
-        s_nan = np.array([ np.eye(2)*np.nan for f in self.freq.f])
+        s_nan = np.array([np.eye(2)*np.nan for f in self.freq.f])
 
         self.reflect_meas = (
             [Network(s=s_nan, frequency=self.freq)]
             if reflect_meas is None
-            else (reflect_meas if isinstance(reflect_meas, list) else [reflect_meas])
-        )
-        self.reflect_est    = np.atleast_1d(reflect_est)
-        self.reflect_offset = np.atleast_1d(reflect_offset)*np.ones(len(self.reflect_est))
+            else (
+                reflect_meas
+                if isinstance(reflect_meas, list) else [reflect_meas]))
+        self.reflect_est = np.atleast_1d(reflect_est)
+        self.reflect_offset = np.atleast_1d(
+            reflect_offset)*np.ones(len(self.reflect_est))
 
         if len(self.reflect_meas) != len(self.reflect_est):
-            raise ValueError("Different amount of measured reflects and estimated reflects found.")
+            raise ValueError(
+                "Different amount of measured reflects and estimated reflects found.")
 
         # EightTerm applies the switch correction
         measured = self.line_meas if reflect_meas is None else self.line_meas + self.reflect_meas
         EightTerm.__init__(self,
-            measured = measured,
-            ideals = measured, # not actually used. Just to initiate the class
-            self_calibration=True,
-            **kwargs)
+                           measured=measured,
+                           ideals=measured,  # not actually used. Just to initiate the class
+                           self_calibration=True,
+                           **kwargs)
 
         n_lines = len(self.line_lengths)
         # switch term corrected
         self.line_meas = self.measured_unterminated[:n_lines]
-        self.reflect_meas = self.reflect_meas if reflect_meas is None else self.measured_unterminated[n_lines:]
+        self.reflect_meas = self.reflect_meas if reflect_meas is None else self.measured_unterminated[
+            n_lines:]
 
         self.ref_plane = np.atleast_1d(ref_plane)*np.ones(2)
 
@@ -3836,30 +3928,32 @@ class TUGMultilineTRL(EightTerm):
     def run(self):
         # Constants
         c0 = 299792458  # speed of light in vacuum (m/s)
-        Q  = np.array([[0,0,0,1], [0,-1,0,0], [0,0,-1,0], [1,0,0,0]])
-        P  = np.array([[1,0,0,0], [0, 0,1,0], [0,1, 0,0], [0,0,0,1]])
-        P2 = np.array([[0,1],[1,0]])  # 2x2 permutation matrix
+        Q = np.array([[0, 0, 0, 1], [0, -1, 0, 0],
+                     [0, 0, -1, 0], [1, 0, 0, 0]])
+        P = np.array([[1, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 1]])
+        P2 = np.array([[0, 1], [1, 0]])  # 2x2 permutation matrix
 
         # Functions used throughout the calibration
         def gamma2ereff(x, f):
             return -(c0 / 2 / np.pi / f * x) ** 2
+
         def ereff2gamma(x, f):
             return 2 * np.pi * f / c0 * np.sqrt(-x)
 
         def s2t_single(S, pseudo=False):
             T = S.copy()
-            T[0,0] = -(S[0,0]*S[1,1]-S[0,1]*S[1,0])
-            T[0,1] = S[0,0]
-            T[1,0] = -S[1,1]
-            T[1,1] = 1
-            return T if pseudo else T/S[1,0]
+            T[0, 0] = -(S[0, 0]*S[1, 1]-S[0, 1]*S[1, 0])
+            T[0, 1] = S[0, 0]
+            T[1, 0] = -S[1, 1]
+            T[1, 1] = 1
+            return T if pseudo else T/S[1, 0]
 
         def LFTinv(E, S):
             # inverse linear fractional transformation (measured -> de-embedded S)
             # R. A. Speciale, "Projective Matrix Transformations in Microwave Network Theory,"
             #     1981 IEEE MTT-S International Microwave Symposium Digest.
             N = S.shape[0]
-            E11, E12, E21, E22 = E[:N,:N], E[:N,N:], E[N:,:N], E[N:,N:]
+            E11, E12, E21, E22 = E[:N, :N], E[:N, N:], E[N:, :N], E[N:, N:]
             return np.linalg.inv(S@E21 - E11)@(E12 - S@E22)
 
         def compute_G_with_takagi(A):
@@ -3868,24 +3962,28 @@ class TUGMultilineTRL(EightTerm):
             Takagi decomposition is based on the paper below:
             Alexander M. Chebotarev, Alexander E. Teretenkov,
             "Singular value decomposition for the Takagi factorization of symmetric matrices,"
-            Applied Mathematics and Computation, Volume 234, 2014, Pages 380-384, https://doi.org/10.1016/j.amc.2014.01.170.
+            Applied Mathematics and Computation, Volume 234, 2014,
+            Pages 380-384, https://doi.org/10.1016/j.amc.2014.01.170.
             '''
-            u,s,vh = np.linalg.svd(A)
-            u,s,vh = u[:,:2],s[:2],vh[:2,:]  # low-rank truncated (Eckart-Young theorem)
-            phi = np.sqrt( s*np.diag(vh@u.conj()) )
+            u, s, vh = np.linalg.svd(A)
+            # low-rank truncated (Eckart-Young theorem)
+            u, s, vh = u[:, :2], s[:2], vh[:2, :]
+            phi = np.sqrt(s*np.diag(vh@u.conj()))
             G = u@np.diag(phi)
-            # this is the eigenvalue of the weighted eigenvalue problem (1/2 squared Frobenius norm of W)
+            # this is the eigenvalue of the weighted eigenvalue problem (1/2
+            # squared Frobenius norm of W)
             lambd = s[0]*s[1]
             return G, lambd
 
-        def WLS(x,y,w=1):
+        def WLS(x, y, w=1):
             # Weighted least-squares for a single parameter estimation
-            x = x*(1+0j) # force x to be complex type
+            x = x*(1+0j)  # force x to be complex type
             return (x.conj().dot(w).dot(y))/(x.conj().dot(w).dot(x))
 
         def Vgl(N):
             # inverse covariance matrix for propagation constant computation
-            return np.eye(N-1, dtype=complex) - (1/N)*np.ones(shape=(N-1, N-1), dtype=complex)
+            return np.eye(N-1, dtype=complex) - (1/N) * \
+                np.ones(shape=(N-1, N-1), dtype=complex)
 
         def compute_gamma(z, y, lengths, gamma_est, inx=0):
             # gamma = alpha + 1j*beta is determined through linear weighted least-squares.
@@ -3894,106 +3992,126 @@ class TUGMultilineTRL(EightTerm):
             lengths = lengths - lengths[inx]
             z = z/z[inx]
             y = y/y[inx]
-            del_inx = np.arange(len(lengths)) != inx  # get rid of the reference line (i.e., thru)
+            # get rid of the reference line (i.e., thru)
+            del_inx = np.arange(len(lengths)) != inx
 
-            l = -lengths[del_inx]
+            l_ = -lengths[del_inx]
             gamma_l = np.log((z + 1/y)/2)[del_inx]
-            n = np.round( (gamma_l - gamma_est*l).imag/np.pi/2 )
-            gamma_l = gamma_l - 1j*2*np.pi*n # unwrap
-            gamma = WLS(l, gamma_l, Vgl(len(l)+1))
-            # ensure positive imaginary part (delay/causality) in case unwrapping is imperfect.
+            n = np.round((gamma_l - gamma_est*l_).imag/np.pi/2)
+            gamma_l = gamma_l - 1j*2*np.pi*n  # unwrap
+            gamma = WLS(l_, gamma_l, Vgl(len(l_)+1))
+            # ensure positive imaginary part (delay/causality) in case
+            # unwrapping is imperfect.
             return gamma.real + 1j*abs(gamma.imag)
 
         def solve_quadratic(v1, v2, inx, x_est):
             # This is related to solving the normalized error terms using nullspace approach.
-            # The variable `inx` allowes to reuse the function to shuffel the coefficient to get other error terms.
-            v12,v13 = v1[inx]
-            v22,v23 = v2[inx]
+            # The variable `inx` allowes to reuse the function to shuffel the
+            # coefficient to get other error terms.
+            v12, v13 = v1[inx]
+            v22, v23 = v2[inx]
             mask = np.ones(v1.shape, bool)
             mask[inx] = False
-            v11,v14 = v1[mask]
-            v21,v24 = v2[mask]
+            v11, v14 = v1[mask]
+            v21, v24 = v2[mask]
             if abs(v12) > abs(v22):  # to avoid dividing by small numbers
                 k2 = -v11*v22*v24/v12 + v11*v14*v22**2/v12**2 + v21*v24 - v14*v21*v22/v12
                 k1 = v11*v24/v12 - 2*v11*v14*v22/v12**2 - v23 + v13*v22/v12 + v14*v21/v12
                 k0 = v11*v14/v12**2 - v13/v12
-                c2 = np.roots([k2,k1,k0])*np.ones(2)
+                c2 = np.roots([k2, k1, k0])*np.ones(2)
                 c1 = (1 - c2*v22)/v12
             else:
                 k2 = -v11*v12*v24/v22 + v11*v14 + v12**2*v21*v24/v22**2 - v12*v14*v21/v22
                 k1 = v11*v24/v22 - 2*v12*v21*v24/v22**2 + v12*v23/v22 - v13 + v14*v21/v22
                 k0 = v21*v24/v22**2 - v23/v22
-                c1 = np.roots([k2,k1,k0])*np.ones(2)
+                c1 = np.roots([k2, k1, k0])*np.ones(2)
                 c2 = (1 - c1*v12)/v22
-            x = np.array( [v1*x + v2*y for x,y in zip(c1,c2)] )  # 2 solutions
-            mininx = np.argmin( abs(x - x_est).sum(axis=1) )
+            x = np.array([v1*x + v2*y for x, y in zip(c1, c2)])  # 2 solutions
+            mininx = np.argmin(abs(x - x_est).sum(axis=1))
             return x[mininx]
 
-        line_meas_S    = np.array([x.s for x in self.line_meas])    # get the S-parameters
-        reflect_meas_S = np.array([x.s for x in self.reflect_meas]) # get the S-parameters
-        lengths = np.atleast_1d( self.line_lengths )  # make rsnumpy array
+        # get the S-parameters
+        line_meas_S = np.array([x.s for x in self.line_meas])
+        reflect_meas_S = np.array(
+            [x.s for x in self.reflect_meas])  # get the S-parameters
+        lengths = np.atleast_1d(self.line_lengths)  # make rsnumpy array
         er_est = self.er_est
         reflect_est = self.reflect_est
         reflect_offset = self.reflect_offset
         compensate_repeated_lines = self.compensate_repeated_lines
         lnorm = self.lnorm
 
-        freqs   = self.freq.f
+        freqs = self.freq.f
         fpoints = len(freqs)
-        Xs = np.zeros(shape=(fpoints, 4, 4), dtype=complex)  # to store the combined error boxes (6 error terms)
-        ks = np.zeros(shape=(fpoints,), dtype=complex)  # to store the 7th transmission error terms
+        # to store the combined error boxes (6 error terms)
+        Xs = np.zeros(shape=(fpoints, 4, 4), dtype=complex)
+        # to store the 7th transmission error terms
+        ks = np.zeros(shape=(fpoints,), dtype=complex)
         er_effs = np.zeros(shape=(fpoints,), dtype=complex)
         gammas = np.zeros(shape=(fpoints,), dtype=complex)
-        lambds = np.zeros(shape=(fpoints,), dtype=float)  # eigenvalue of the (scaled) weighted eigendecomposition
-        kappas = np.zeros(shape=(fpoints,), dtype=float)  # normalized eigenvalue (scaled)
+        # eigenvalue of the (scaled) weighted eigendecomposition
+        lambds = np.zeros(shape=(fpoints,), dtype=float)
+        # normalized eigenvalue (scaled)
+        kappas = np.zeros(shape=(fpoints,), dtype=float)
 
-        # initial propagation constant estimate (carried forward across frequency)
+        # initial propagation constant estimate (carried forward across
+        # frequency)
         gamma_est = ereff2gamma(er_est, freqs[0])
-        gamma_est = abs(gamma_est.real) + 1j*abs(gamma_est.imag)  # this to avoid sign inconsistencies
+        # this to avoid sign inconsistencies
+        gamma_est = abs(gamma_est.real) + 1j*abs(gamma_est.imag)
 
         # compute the calibration at each frequency point
         for m, f in enumerate(freqs):
             # measurements
-            Mi   = np.array([s2t_single(x) for x in line_meas_S[:,m,:,:]]) # convert to T-parameters
-            M    = np.array([x.flatten('F') for x in Mi]).T
+            # convert to T-parameters
+            Mi = np.array([s2t_single(x) for x in line_meas_S[:, m, :, :]])
+            M = np.array([x.flatten('F') for x in Mi]).T
             Dinv = np.diag([1/np.linalg.det(x) for x in Mi])
 
-            ## Compute W via Takagi decomposition (also the eigenvalue lambda)
+            # Compute W via Takagi decomposition (also the eigenvalue lambda)
             G, lambd = compute_G_with_takagi(Dinv@M.T@P@Q@M)
-            W = (G@np.array([[0,1j],[-1j,0]])@G.T).conj()
+            W = (G@np.array([[0, 1j], [-1j, 0]])@G.T).conj()
 
-            ## recover z = exp(-gamma*length) and y = 1/z from the matrix G (rank-1 recovery)
-            zy = G@np.array([[1,-1j],[1j,1]])@G.T  # outer product of z and y (up to sign of W)
-            u,_,vh = np.linalg.svd(zy)
-            z = u[:,0]
-            y = vh[0,:]
+            # recover z = exp(-gamma*length) and y = 1/z from the matrix G (rank-1 recovery)
+            # outer product of z and y (up to sign of W)
+            zy = G@np.array([[1, -1j], [1j, 1]])@G.T
+            u, _, vh = np.linalg.svd(zy)
+            z = u[:, 0]
+            y = vh[0, :]
 
-            ## resolve the sign of W and swap z and y if needed
+            # resolve the sign of W and swap z and y if needed
             z_est = np.exp(-gamma_est*lengths)
             y_est = 1/z_est
-            lambd_est = y_est.dot(W).dot(z_est)  # projection of the estimate onto W (defines lambda's sign)
+            # projection of the estimate onto W (defines lambda's sign)
+            lambd_est = y_est.dot(W).dot(z_est)
             if abs(lambd_est - lambd) > abs(lambd_est + lambd):
                 W = -W
                 y, z = z, y
 
-            ## scale the weighting matrix to handle repeated lengths and/or the L-norm weighting
-            _, inv, counts = np.unique(lengths, return_inverse=True, return_counts=True)
-            q  = 1/counts[inv]
-            S1 = np.outer(q, q) if compensate_repeated_lines else 1  # compensate repeated lengths
-            S2 = abs(W)**(lnorm-1)                                   # change the L-norm weighting
+            # scale the weighting matrix to handle repeated lengths and/or the
+            # L-norm weighting
+            _, inv, counts = np.unique(
+                lengths, return_inverse=True, return_counts=True)
+            q = 1/counts[inv]
+            # compensate repeated lengths
+            S1 = np.outer(q, q) if compensate_repeated_lines else 1
+            # change the L-norm weighting
+            S2 = abs(W)**(lnorm-1)
             WS = W*(S1*S2)
             lambd_S = 0.5*abs(WS.conj()*W).sum()  # scaled eigenvalue
-            kappa_S = 2*lambd_S/abs(WS).sum()     # normalized scaled eigenvalue
+            # normalized scaled eigenvalue
+            kappa_S = 2*lambd_S/abs(WS).sum()
 
-            ## weighted eigenvalue problem
+            # weighted eigenvalue problem
             F = M@WS@Dinv@M.T@P@Q
             eigval, eigvec = np.linalg.eig(F)
             inx = np.argsort(abs(eigval))
-            v2 = eigvec[:,inx[0]]  # null space
-            v3 = eigvec[:,inx[1]]  # null space
-            v1 = eigvec[:,inx[2]]  # range space
-            v4 = eigvec[:,inx[3]]  # range space
-            # the eigenvalue from the eigenproblem should match the one from Takagi decomposition.
+            v2 = eigvec[:, inx[0]]  # null space
+            v3 = eigvec[:, inx[1]]  # null space
+            v1 = eigvec[:, inx[2]]  # range space
+            v4 = eigvec[:, inx[3]]  # range space
+            # the eigenvalue from the eigenproblem should match the one from
+            # Takagi decomposition.
             lambd_eigval = (eigval[inx[3]] - eigval[inx[2]])/2
             if abs(lambd_eigval - lambd_S) > abs(lambd_eigval + lambd_S):
                 v1, v4 = v4, v1  # swap if the assumed order is wrong
@@ -4002,120 +4120,139 @@ class TUGMultilineTRL(EightTerm):
             x1__est[-1] = x1__est[1]*x1__est[2]
             x4_est = v4/v4[-1]
             x4_est[0] = x4_est[1]*x4_est[2]
-            x2__est = np.array([x4_est[2], 1, x4_est[2]*x1__est[2], x1__est[2]])
-            x3__est = np.array([x4_est[1], x4_est[1]*x1__est[1], 1, x1__est[1]])
+            x2__est = np.array(
+                [x4_est[2], 1, x4_est[2]*x1__est[2], x1__est[2]])
+            x3__est = np.array(
+                [x4_est[1], x4_est[1]*x1__est[1], 1, x1__est[1]])
 
             # solve quadratic equation for each column
-            x1_ = solve_quadratic(v1, v4, [0,3], x1__est) # range
-            x2_ = solve_quadratic(v2, v3, [1,2], x2__est) # nullspace
-            x3_ = solve_quadratic(v2, v3, [2,1], x3__est) # nullspace
-            x4  = solve_quadratic(v1, v4, [3,0], x4_est)  # range
+            x1_ = solve_quadratic(v1, v4, [0, 3], x1__est)  # range
+            x2_ = solve_quadratic(v2, v3, [1, 2], x2__est)  # nullspace
+            x3_ = solve_quadratic(v2, v3, [2, 1], x3__est)  # nullspace
+            x4 = solve_quadratic(v1, v4, [3, 0], x4_est)  # range
 
-            # build the normalized error terms (average the answers from range and nullspaces)
+            # build the normalized error terms (average the answers from range
+            # and nullspaces)
             a12 = (x2_[0] + x4[2])/2
             b21 = (x3_[0] + x4[1])/2
             a21_a11 = (x1_[1] + x3_[3])/2
             b12_b11 = (x1_[2] + x2_[3])/2
-            A_ = np.array([[1,a12],[a21_a11,1]])
-            B_ = np.array([[1,b12_b11],[b21,1]])
+            A_ = np.array([[1, a12], [a21_a11, 1]])
+            B_ = np.array([[1, b12_b11], [b21, 1]])
             X_ = np.kron(B_.T, A_)  # normalized cal coefficients
             Zero = np.zeros_like(A_)
-            E_ = P.T@np.block([[A_, Zero],[Zero, P2@np.linalg.inv(B_)@P2]])@P  # 16-term error-box
+            # 16-term error-box
+            E_ = P.T@np.block([[A_, Zero], [Zero, P2@np.linalg.inv(B_)@P2]])@P
 
-            ## de-embed the lines and recover s21 = exp(-gamma*length) (rank-1 recovery)
-            Slines_cal = np.array([LFTinv(E_, s) for s in line_meas_S[:,m,:,:]])
-            R = np.vstack(( Slines_cal[:, 1, 0], Slines_cal[:, 0, 1] ))
-            _,_,vh = np.linalg.svd(R)
-            s21 = vh[0,:]/vh[0,0]  # normalized to the thru
+            # de-embed the lines and recover s21 = exp(-gamma*length) (rank-1
+            # recovery)
+            Slines_cal = np.array([LFTinv(E_, s)
+                                  for s in line_meas_S[:, m, :, :]])
+            R = np.vstack((Slines_cal[:, 1, 0], Slines_cal[:, 0, 1]))
+            _, _, vh = np.linalg.svd(R)
+            s21 = vh[0, :]/vh[0, 0]  # normalized to the thru
 
-            ## compute propagation constant two ways and pick the one consistent with lambda
-            gamma1 = compute_gamma(z, y, lengths, gamma_est)        # from the Takagi matrix G
-            gamma2 = compute_gamma(s21, 1/s21, lengths, gamma_est)  # from the de-embedded lines
+            # compute propagation constant two ways and pick the one consistent with lambda
+            # from the Takagi matrix G
+            gamma1 = compute_gamma(z, y, lengths, gamma_est)
+            # from the de-embedded lines
+            gamma2 = compute_gamma(s21, 1/s21, lengths, gamma_est)
             z1 = np.exp(-gamma1*lengths)
             z2 = np.exp(-gamma2*lengths)
             lambd1 = (1/z1).dot(W).dot(z1)
             lambd2 = (1/z2).dot(W).dot(z2)
-            gamma = gamma1 if abs(lambd1 - lambd) < abs(lambd2 - lambd) else gamma2
+            gamma = gamma1 if abs(
+                lambd1 - lambd) < abs(lambd2 - lambd) else gamma2
             er_eff = gamma2ereff(gamma, f)
 
-            ## solve a11b11 and k from the thru measurement (S-parameter formulation; forces thru S21=S12=1)
-            k = 1/Slines_cal[0,1,0]
-            a11b11 = Slines_cal[0,0,1]/k
-            # shift plane to edges of the thru standard plus defined reference plane
+            # solve a11b11 and k from the thru measurement (S-parameter
+            # formulation; forces thru S21=S12=1)
+            k = 1/Slines_cal[0, 1, 0]
+            a11b11 = Slines_cal[0, 0, 1]/k
+            # shift plane to edges of the thru standard plus defined reference
+            # plane
             a11b11 = a11b11*np.exp(2*gamma*(lengths[0] - self.ref_plane.sum()))
             k = k*np.exp(-gamma*(lengths[0] - self.ref_plane.sum()))
 
-            if np.isnan(reflect_meas_S[0,m,0,0]):
+            if np.isnan(reflect_meas_S[0, m, 0, 0]):
                 # no reflect measurement available.
                 a11 = np.sqrt(a11b11)
                 b11 = a11
             else:
-                # solve for a11/b11, a11 and b11 (use redundant reflect measurement, if available)
-                reflect_est_offset = reflect_est*np.exp(-2*gamma*reflect_offset) # shift estimated reflect
-                Sreflect_cal = np.array([LFTinv(E_, s) for s in reflect_meas_S[:,m,:,:]])
-                R = np.vstack(( Sreflect_cal[:, 0, 0], Sreflect_cal[:, 1, 1] ))
-                u,_,_ = np.linalg.svd(R)  # rank-1 recovery across all reflect measurements
-                a11_b11 = u[0,0]/u[1,0]   # this is a11/b11
+                # solve for a11/b11, a11 and b11 (use redundant reflect
+                # measurement, if available)
+                reflect_est_offset = reflect_est * \
+                    np.exp(-2*gamma*reflect_offset)  # shift estimated reflect
+                Sreflect_cal = np.array([LFTinv(E_, s)
+                                        for s in reflect_meas_S[:, m, :, :]])
+                R = np.vstack((Sreflect_cal[:, 0, 0], Sreflect_cal[:, 1, 1]))
+                # rank-1 recovery across all reflect measurements
+                u, _, _ = np.linalg.svd(R)
+                a11_b11 = u[0, 0]/u[1, 0]   # this is a11/b11
                 a11 = np.sqrt(a11_b11*a11b11)
                 b11 = a11b11/a11
-                G_cal = (Sreflect_cal[:,0,0]/a11 + Sreflect_cal[:,1,1]/b11)/2  # average
-                if np.abs(G_cal + reflect_est_offset).sum() < np.abs(G_cal - reflect_est_offset).sum():
+                G_cal = (Sreflect_cal[:, 0, 0]/a11 + Sreflect_cal[:, 1, 1]/b11)/2  # average
+                if np.abs(
+                        G_cal + reflect_est_offset).sum() < np.abs(
+                        G_cal - reflect_est_offset).sum():
                     a11 = -a11
                     b11 = -b11
 
-            X  = X_@np.diag([a11b11, b11, a11, 1]) # build the calibration matrix (de-normalize)
+            # build the calibration matrix (de-normalize)
+            X = X_@np.diag([a11b11, b11, a11, 1])
 
             Xs[m] = X
             ks[m] = k
-            gammas[m]  = gamma
+            gammas[m] = gamma
             er_effs[m] = er_eff
-            lambds[m]  = lambd_S
-            kappas[m]  = kappa_S
+            lambds[m] = lambd_S
+            kappas[m] = kappa_S
 
-            # carry the propagation constant forward as the estimate for the next frequency
+            # carry the propagation constant forward as the estimate for the
+            # next frequency
             if m+1 < fpoints:
                 gamma_est = (gamma/f)*freqs[m+1]
 
         self._er_eff = er_effs
-        self._gamma  = gammas
-        self._lambd  = lambds
-        self._kappa  = kappas
+        self._gamma = gammas
+        self._lambd = lambds
+        self._kappa = kappas
 
         e = np.zeros(shape=(len(self.freq.f), 7), dtype=complex)
-        e[:,0] =  Xs[:,2,3]
-        e[:,1] = -Xs[:,3,2]
-        e[:,2] = -Xs[:,2,2]
-        e[:,3] = -Xs[:,1,3]
-        e[:,4] =  Xs[:,3,1]
-        e[:,5] = -Xs[:,1,1]
-        e[:,6] =  1/ks/(e[:,4]*e[:,3]-e[:,5])
+        e[:, 0] = Xs[:, 2, 3]
+        e[:, 1] = -Xs[:, 3, 2]
+        e[:, 2] = -Xs[:, 2, 2]
+        e[:, 3] = -Xs[:, 1, 3]
+        e[:, 4] = Xs[:, 3, 1]
+        e[:, 5] = -Xs[:, 1, 1]
+        e[:, 6] = 1/ks/(e[:, 4]*e[:, 3]-e[:, 5])
 
-        self._coefs = {\
-                'forward directivity':e[:,0],
-                'forward source match':e[:,1],
-                'forward reflection tracking':e[:,0]*e[:,1]-e[:,2],
-                'reverse directivity':e[:,3],
-                'reverse source match':e[:,4],
-                'reverse reflection tracking':e[:,4]*e[:,3]-e[:,5],
-                'k':e[:,6],
-                }
-        self._coefs['forward isolation'] = self.isolation.s[:,1,0].flatten()
-        self._coefs['reverse isolation'] = self.isolation.s[:,0,1].flatten()
+        self._coefs = {
+            'forward directivity': e[:, 0],
+            'forward source match': e[:, 1],
+            'forward reflection tracking': e[:, 0]*e[:, 1]-e[:, 2],
+            'reverse directivity': e[:, 3],
+            'reverse source match': e[:, 4],
+            'reverse reflection tracking': e[:, 4]*e[:, 3]-e[:, 5],
+            'k': e[:, 6],
+        }
+        self._coefs['forward isolation'] = self.isolation.s[:, 1, 0].flatten()
+        self._coefs['reverse isolation'] = self.isolation.s[:, 0, 1].flatten()
 
         if self.switch_terms is not None:
             self._coefs.update({
                 'forward switch term': self.switch_terms[0].s.flatten(),
                 'reverse switch term': self.switch_terms[1].s.flatten(),
-                })
+            })
         else:
             self._coefs.update({
                 'forward switch term': np.zeros(fpoints, dtype=complex),
                 'reverse switch term': np.zeros(fpoints, dtype=complex),
-                })
+            })
         # output is a dictionary of information
         self._output_from_run = {
-                'error vector':e
-                }
+            'error vector': e
+        }
 
     @property
     def gamma(self):
@@ -4125,7 +4262,7 @@ class TUGMultilineTRL(EightTerm):
         """
         try:
             return self._gamma
-        except(AttributeError):
+        except (AttributeError):
             self.run()
             return self._gamma
 
@@ -4137,7 +4274,7 @@ class TUGMultilineTRL(EightTerm):
         """
         try:
             return self._er_eff
-        except(AttributeError):
+        except (AttributeError):
             self.run()
             return self._er_eff
 
@@ -4151,7 +4288,7 @@ class TUGMultilineTRL(EightTerm):
         """
         try:
             return self._lambd
-        except(AttributeError):
+        except (AttributeError):
             self.run()
             return self._lambd
 
@@ -4166,7 +4303,7 @@ class TUGMultilineTRL(EightTerm):
         """
         try:
             return self._kappa
-        except(AttributeError):
+        except (AttributeError):
             self.run()
             return self._kappa
 
@@ -4206,7 +4343,7 @@ class UnknownThru(EightTerm):
     # before the Thru calibration.
     _ONEPORT_ALGO = OnePort
 
-    def __init__(self, measured, ideals,  *args, **kwargs):
+    def __init__(self, measured, ideals, *args, **kwargs):
         r"""
         UnknownThru Initializer.
 
@@ -4229,9 +4366,8 @@ class UnknownThru(EightTerm):
             the pair of switch terms in the order (forward, reverse)
         """
 
-        EightTerm.__init__(self, measured = measured, ideals = ideals,
+        EightTerm.__init__(self, measured=measured, ideals=ideals,
                            **kwargs)
-
 
     def run(self):
         p1_m = [k.s11 for k in self.measured_unterminated[:-1]]
@@ -4242,8 +4378,8 @@ class UnknownThru(EightTerm):
         thru_m = self.measured_unterminated[-1]
 
         # create one port calibration for all reflective standards
-        port1_cal = self._ONEPORT_ALGO(measured = p1_m, ideals = p1_i)
-        port2_cal = self._ONEPORT_ALGO(measured = p2_m, ideals = p2_i)
+        port1_cal = self._ONEPORT_ALGO(measured=p1_m, ideals=p1_i)
+        port2_cal = self._ONEPORT_ALGO(measured=p2_m, ideals=p2_i)
 
         # cal coefficient dictionaries
         p1_coefs = port1_cal.coefs.copy()
@@ -4255,8 +4391,8 @@ class UnknownThru(EightTerm):
         # create single dictionary for all error terms
         coefs = {}
 
-        coefs['forward isolation'] = self.isolation.s[:,1,0].flatten()
-        coefs['reverse isolation'] = self.isolation.s[:,0,1].flatten()
+        coefs['forward isolation'] = self.isolation.s[:, 1, 0].flatten()
+        coefs['reverse isolation'] = self.isolation.s[:, 0, 1].flatten()
 
         coefs.update({f'forward {k}': p1_coefs[k] for k in p1_coefs})
         coefs.update({f'reverse {k}': p2_coefs[k] for k in p2_coefs})
@@ -4265,13 +4401,16 @@ class UnknownThru(EightTerm):
             coefs.update({
                 'forward switch term': self.switch_terms[0].s.flatten(),
                 'reverse switch term': self.switch_terms[1].s.flatten(),
-                })
+            })
         else:
             warn('No switch terms provided', stacklevel=2)
-            coefs.update({
-                'forward switch term': np.zeros(len(self.frequency), dtype=complex),
-                'reverse switch term': np.zeros(len(self.frequency), dtype=complex),
-                })
+            coefs.update(
+                {'forward switch term': np.zeros(
+                    len(self.frequency),
+                    dtype=complex),
+                 'reverse switch term': np.zeros(
+                     len(self.frequency),
+                     dtype=complex), })
         self.coefs = coefs
 
         # this is equivalent to sqrt(detX*detY/detM)
@@ -4305,10 +4444,10 @@ class UnknownThru(EightTerm):
 
         # Compare the phase angle differences of two solutions.
         arg_diff1 = np.abs(
-            np.angle(solved_thru_k1.s[:,1,0] / thru_def.s[:,1,0])
+            np.angle(solved_thru_k1.s[:, 1, 0] / thru_def.s[:, 1, 0])
         )
         arg_diff2 = np.abs(
-            np.angle(solved_thru_k2.s[:,1,0] / thru_def.s[:,1,0])
+            np.angle(solved_thru_k2.s[:, 1, 0] / thru_def.s[:, 1, 0])
         )
 
         # At every frequency, pick the corresponding k value from k1 if
@@ -4368,10 +4507,10 @@ class LRM(EightTerm):
         """
 
         super().__init__(
-            measured = measured,
-            ideals = ideals,
-            switch_terms = switch_terms,
-            isolation = isolation,
+            measured=measured,
+            ideals=ideals,
+            switch_terms=switch_terms,
+            isolation=isolation,
             **kwargs)
 
     def run(self):
@@ -4380,16 +4519,18 @@ class LRM(EightTerm):
         rm = mList[1]
         mm = mList[2]
 
-        gm = self.ideals[2].s[:,0,0]
+        gm = self.ideals[2].s[:, 0, 0]
         if self.ideals[2].nports > 1:
-            if any(gm != self.ideals[2].s[:,1,1]):
-                warnings.warn('Match ideal port 1 and port 2 are different. Using port 1 match also for port 2.',
-                              stacklevel=2)
+            if any(gm != self.ideals[2].s[:, 1, 1]):
+                warnings.warn(
+                    'Match ideal port 1 and port 2 are different. Using port 1 match also for port 2.',
+                    stacklevel=2)
 
         if self.ideals[1].nports > 1:
-            if any(self.ideals[1].s[:,0,0] != self.ideals[1].s[:,1,1]):
-                warnings.warn('Reflect ideal port 1 and port 2 are different. Using port 1 reflect also for port 2.',
-                              stacklevel=2)
+            if any(self.ideals[1].s[:, 0, 0] != self.ideals[1].s[:, 1, 1]):
+                warnings.warn(
+                    'Reflect ideal port 1 and port 2 are different. Using port 1 reflect also for port 2.',
+                    stacklevel=2)
 
         inv = np.linalg.inv
 
@@ -4397,23 +4538,23 @@ class LRM(EightTerm):
 
         fpoints = len(mList[0])
 
-        r1 = rm.s[:,0,0]
-        r2 = rm.s[:,1,1]
-        m1 = mm.s[:,0,0]
-        m2 = mm.s[:,1,1]
+        r1 = rm.s[:, 0, 0]
+        r2 = rm.s[:, 1, 1]
+        m1 = mm.s[:, 0, 0]
+        m2 = mm.s[:, 1, 1]
 
-        lm11 = lm.s[:,0,0]
-        lm12 = lm.s[:,0,1]
-        lm21 = lm.s[:,1,0]
-        lm22 = lm.s[:,1,1]
+        lm11 = lm.s[:, 0, 0]
+        lm12 = lm.s[:, 0, 1]
+        lm21 = lm.s[:, 1, 0]
+        lm22 = lm.s[:, 1, 1]
 
         ones = np.ones(fpoints, dtype=complex)
         zeros = np.zeros(fpoints, dtype=complex)
 
-        wlr1 = np.transpose(np.array([[ones, ones], [r1, m1]]), [2,0,1])
-        wll1 = np.transpose(np.array([[ones, zeros], [lm11, lm12]]), [2,0,1])
-        wll2 = np.transpose(np.array([[zeros, ones], [lm21, lm22]]), [2,0,1])
-        wlr2 = np.transpose(np.array([[ones, ones], [r2, m2]]), [2,0,1])
+        wlr1 = np.transpose(np.array([[ones, ones], [r1, m1]]), [2, 0, 1])
+        wll1 = np.transpose(np.array([[ones, zeros], [lm11, lm12]]), [2, 0, 1])
+        wll2 = np.transpose(np.array([[zeros, ones], [lm21, lm22]]), [2, 0, 1])
+        wlr2 = np.transpose(np.array([[ones, ones], [r2, m2]]), [2, 0, 1])
 
         wl = inv(wlr1) @ wll1 @ inv(wll2) @ wlr2
 
@@ -4444,7 +4585,7 @@ class LRM(EightTerm):
             x = w12 / (tl[:, 1, 0] + tl[:, 1, 1]*gm - w22)
             gr = (w11 - tl[:, 1, 0] + w21*x) / tl[:, 1, 1]
 
-            er[root] = np.abs(gr - self.ideals[1].s[:,0,0])
+            er[root] = np.abs(gr - self.ideals[1].s[:, 0, 0])
 
             grs[root] = gr
             xs[root] = x
@@ -4459,10 +4600,10 @@ class LRM(EightTerm):
         self._solved_r = Network(s=gr, frequency=self.measured[0].frequency)
 
         # Calculate error matrices
-        t10 = np.transpose(np.array([[ones, x], [gr, gm*x]]), [2,0,1]) \
-                @ inv(np.transpose(np.array([[ones,ones],[r1, m1]]), [2,0,1]))
-        t23 = np.transpose((1/z)*np.array([[ones, y], [gr, gm*y]]), [2,0,1]) \
-                @ inv(np.transpose(np.array([[ones,ones],[r2, m2]]), [2,0,1]))
+        t10 = np.transpose(np.array([[ones, x], [gr, gm*x]]), [2, 0, 1]) \
+            @ inv(np.transpose(np.array([[ones, ones], [r1, m1]]), [2, 0, 1]))
+        t23 = np.transpose((1/z)*np.array([[ones, y], [gr, gm*y]]), [2, 0, 1]) \
+            @ inv(np.transpose(np.array([[ones, ones], [r2, m2]]), [2, 0, 1]))
 
         Smat1 = t2s(t10)
         Smat2 = t2s(t23)
@@ -4472,44 +4613,44 @@ class LRM(EightTerm):
         dx = linalg.det(Smat1)
         dy = linalg.det(Smat2)
 
-        k = Smat1[:,0,1]/Smat2[:,0,1]
+        k = Smat1[:, 0, 1]/Smat2[:, 0, 1]
 
         # Error coefficients
-        e = [Smat1[:,0,0],
-             Smat1[:,1,1],
+        e = [Smat1[:, 0, 0],
+             Smat1[:, 1, 1],
              dx,
-             Smat2[:,0,0],
-             Smat2[:,1,1],
+             Smat2[:, 0, 0],
+             Smat2[:, 1, 1],
              dy,
              k]
 
-        self._coefs = {\
-                'forward directivity':e[1],
-                'forward source match':e[0],
-                'forward reflection tracking':e[0]*e[1]-e[2],
-                'reverse directivity':e[4],
-                'reverse source match':e[3],
-                'reverse reflection tracking':e[4]*e[3]- e[5],
-                'k':e[6],
-                }
+        self._coefs = {
+            'forward directivity': e[1],
+            'forward source match': e[0],
+            'forward reflection tracking': e[0]*e[1]-e[2],
+            'reverse directivity': e[4],
+            'reverse source match': e[3],
+            'reverse reflection tracking': e[4]*e[3] - e[5],
+            'k': e[6],
+        }
 
-        self._coefs['forward isolation'] = self.isolation.s[:,1,0].flatten()
-        self._coefs['reverse isolation'] = self.isolation.s[:,0,1].flatten()
+        self._coefs['forward isolation'] = self.isolation.s[:, 1, 0].flatten()
+        self._coefs['reverse isolation'] = self.isolation.s[:, 0, 1].flatten()
 
         if self.switch_terms is not None:
             self._coefs.update({
                 'forward switch term': self.switch_terms[0].s.flatten(),
                 'reverse switch term': self.switch_terms[1].s.flatten(),
-                })
+            })
         else:
             self._coefs.update({
                 'forward switch term': np.zeros(fpoints, dtype=complex),
                 'reverse switch term': np.zeros(fpoints, dtype=complex),
-                })
+            })
         # output is a dictionary of information
         self._output_from_run = {
-                'error vector':e
-                }
+            'error vector': e
+        }
 
     @property
     def solved_r(self):
@@ -4518,7 +4659,7 @@ class LRM(EightTerm):
         """
         try:
             return self._solved_r
-        except(AttributeError):
+        except (AttributeError):
             self.run()
             return self._solved_r
 
@@ -4574,7 +4715,7 @@ class LRRM(EightTerm):
     family = 'LRRM'
 
     def __init__(self, measured, ideals, switch_terms=None, isolation=None,
-            z0=50, match_fit='l', *args, **kwargs):
+                 z0=50, match_fit='l', *args, **kwargs):
         """
         LRRM Initializer.
 
@@ -4624,10 +4765,10 @@ class LRRM(EightTerm):
             raise ValueError('match_port must be either 0 or 1.')
 
         super().__init__(
-            measured = measured,
-            ideals = ideals,
-            switch_terms = switch_terms,
-            isolation = isolation,
+            measured=measured,
+            ideals=ideals,
+            switch_terms=switch_terms,
+            isolation=isolation,
             **kwargs)
 
     def run(self):
@@ -4644,27 +4785,27 @@ class LRRM(EightTerm):
         w = 2*np.pi*self.measured[0].f
         fpoints = len(mList[0])
 
-        r11 = r1m.s[:,0,0]
-        r12 = r1m.s[:,1,1]
-        r21 = r2m.s[:,0,0]
-        r22 = r2m.s[:,1,1]
+        r11 = r1m.s[:, 0, 0]
+        r12 = r1m.s[:, 1, 1]
+        r21 = r2m.s[:, 0, 0]
+        r22 = r2m.s[:, 1, 1]
 
-        lm11 = lm.s[:,0,0]
-        lm12 = lm.s[:,0,1]
-        lm21 = lm.s[:,1,0]
-        lm22 = lm.s[:,1,1]
+        lm11 = lm.s[:, 0, 0]
+        lm12 = lm.s[:, 0, 1]
+        lm21 = lm.s[:, 1, 0]
+        lm22 = lm.s[:, 1, 1]
 
-        mm1 = mm.s[:,0,0]
+        mm1 = mm.s[:, 0, 0]
 
-        thru_s21 = self.ideals[0].s[:,1,0]
+        thru_s21 = self.ideals[0].s[:, 1, 0]
 
         ones = np.ones(fpoints, dtype=complex)
         zeros = np.zeros(fpoints, dtype=complex)
 
-        wlr1 = np.transpose(np.array([[ones, ones], [r11, r21]]), [2,0,1])
-        wll1 = np.transpose(np.array([[ones, zeros], [lm11, lm12]]), [2,0,1])
-        wll2 = np.transpose(np.array([[zeros, ones], [lm21, lm22]]), [2,0,1])
-        wlr2 = np.transpose(np.array([[ones, ones], [r12, r22]]), [2,0,1])
+        wlr1 = np.transpose(np.array([[ones, ones], [r11, r21]]), [2, 0, 1])
+        wll1 = np.transpose(np.array([[ones, zeros], [lm11, lm12]]), [2, 0, 1])
+        wll2 = np.transpose(np.array([[zeros, ones], [lm21, lm22]]), [2, 0, 1])
+        wlr2 = np.transpose(np.array([[ones, ones], [r12, r22]]), [2, 0, 1])
 
         wl = inv(wlr1) @ wll1 @ inv(wll2) @ wlr2
 
@@ -4679,10 +4820,12 @@ class LRRM(EightTerm):
         z1 = (-c1 - np.sqrt(c1**2 - 4*c2*c0))/(2*c2)
         zs = np.stack([z0, z1])
 
-        # wm and solve_gr equations are different if match is on the second port.
+        # wm and solve_gr equations are different if match is on the second
+        # port.
         assert self.match_port == 0
-        wm_t1 = inv(np.transpose(np.array([[ones, ones],[r11, r21]]), [2,0,1]))
-        wm_t2 = np.transpose(np.array([[ones], [mm1]]), [2,0,1])
+        wm_t1 = inv(np.transpose(
+            np.array([[ones, ones], [r11, r21]]), [2, 0, 1]))
+        wm_t2 = np.transpose(np.array([[ones], [mm1]]), [2, 0, 1])
         wm = wm_t1 @ wm_t2
         wm1 = wm[:, 0, 0]
         wm2 = wm[:, 1, 0]
@@ -4704,18 +4847,32 @@ class LRRM(EightTerm):
                 w22 = wl[:, 1, 1] * xyz
 
                 e1 = (tl[:, 1, 1]**2) * wm1
-                e0 = tl[:, 1, 1] * (tl[:, 1, 0] - w22) * wm1 + tl[:, 1, 1] * wm2 * w12
-                f1 = tl[:, 1, 1] * (w11 - tl[:, 1, 0]) * wm1 + tl[:, 1, 1] * wm2 * w12
-                f0 = (w11 - tl[:, 1, 0]) * (tl[:, 1, 0] - w22) * wm1 + wm1 * w21 * w12
+                e0 = tl[:, 1, 1] * (tl[:, 1, 0] - w22) * \
+                    wm1 + tl[:, 1, 1] * wm2 * w12
+                f1 = tl[:, 1, 1] * (w11 - tl[:, 1, 0]) * \
+                    wm1 + tl[:, 1, 1] * wm2 * w12
+                f0 = (w11 - tl[:, 1, 0]) * \
+                    (tl[:, 1, 0] - w22) * wm1 + wm1 * w21 * w12
 
                 gr2 = -(f0 - e0 * gm) / (f1 - e1 * gm)
 
                 x = w12 / (tl[:, 1, 0] + tl[:, 1, 1]*gr2 - w22)
-                gr1 = ((w11 - tl[:, 1, 0]) * (tl[:, 1, 0] + tl[:, 1, 1] * gr2 - w22) + w21*w12) \
-                    / (tl[:, 1, 1] * (tl[:, 1, 0] + tl[:, 1, 1] * gr2 - w22))
+                gr1 = ((w11 - tl[:,
+                                 1,
+                                 0]) * (tl[:,
+                                           1,
+                                           0] + tl[:,
+                                                   1,
+                                                   1] * gr2 - w22) + w21*w12) / (tl[:,
+                                                                                    1,
+                                                                                    1] * (tl[:,
+                                                                                             1,
+                                                                                             0] + tl[:,
+                                                                                                     1,
+                                                                                                     1] * gr2 - w22))
 
-                egr1 = np.abs(gr1 - self.ideals[1].s[:,0,0])
-                egr2 = np.abs(gr2 - self.ideals[2].s[:,0,0])
+                egr1 = np.abs(gr1 - self.ideals[1].s[:, 0, 0])
+                egr2 = np.abs(gr2 - self.ideals[2].s[:, 0, 0])
 
                 er[root] = egr1 + egr2
                 gr1s[root] = gr1
@@ -4737,20 +4894,20 @@ class LRRM(EightTerm):
 
             return gr1, gr2, x, y, z, efs
 
-        def calc_gm(R, l, c=0):
+        def calc_gm(R, l_, c=0):
             """
             Calculates reflection coefficient of resistor R in series with inductance
             l in parallel with capacitor c.
             """
-            return (self.z0 + R*(-1 + 1j*c*w*self.z0) - l*w*(1j + c*w*self.z0)) \
-                 /(-self.z0 + R*(-1 - 1j*c*w*self.z0) + l*w*(-1j + c*w*self.z0))
+            return (self.z0 + R*(-1 + 1j*c*w*self.z0) - l_*w*(1j + c*w*self.z0)) \
+                / (-self.z0 + R*(-1 - 1j*c*w*self.z0) + l_*w*(-1j + c*w*self.z0))
 
         # First, solve reflects assuming ideal gm
         gmi = self.ideals[3].s[:, self.match_port, self.match_port]
         gr1, gr2, x, y, z, efs = solve_gr(gmi)
 
         # Next solve for match inductance
-        R = (self.z0 * (1 + gmi)/(1 - gmi)).real # Resistance of the match
+        R = (self.z0 * (1 + gmi)/(1 - gmi)).real  # Resistance of the match
 
         a = 2*gr2.real + np.abs(gr2)**2 - \
             2*(gr2*thru_s21**(-2)).real - np.abs(gr2*thru_s21**(-2))**2
@@ -4759,18 +4916,20 @@ class LRRM(EightTerm):
 
         det = b**2 - 4*a*c
         if np.any(det < 0):
-            warnings.warn('Load inductance determination failed. Calibration might be incorrect.', stacklevel=2)
+            warnings.warn(
+                'Load inductance determination failed. Calibration might be incorrect.',
+                stacklevel=2)
         det[det < 0] = 0
         wL = [None, None]
         wL[0] = (-b+np.sqrt(det))/(2*a)
         wL[1] = (-b-np.sqrt(det))/(2*a)
 
         gm_guess = [None, None]
-        for p in [0,1]:
+        for p in [0, 1]:
             gm_guess[p] = (R + 1j*wL[p] - self.z0)/(R + 1j*wL[p] + self.z0)
 
         # Choose the root according to which one is closer to the ideal
-        m_ideal = self.ideals[3].s[:,0,0]
+        m_ideal = self.ideals[3].s[:, 0, 0]
         root = (np.abs(gm_guess[0] - m_ideal) > np.abs(gm_guess[1] - m_ideal)).astype(int)
 
         # L from reactance
@@ -4785,22 +4944,22 @@ class LRRM(EightTerm):
         f1 = efs[2, :]
         f0 = efs[3, :]
 
-        gr2_abs = np.abs(self.ideals[2].s[:,0,0])
+        gr2_abs = np.abs(self.ideals[2].s[:, 0, 0])
 
         if self.match_fit == 'l':
 
-            def min_l(l):
+            def min_l(l_):
                 """
                 Calculates gr2 absolute value error as a function of
                 the match inductance.
                 """
-                gm = (R + 1j*w*l - self.z0)/(R + 1j*w*l + self.z0)
+                gm = (R + 1j*w*l_ - self.z0)/(R + 1j*w*l_ + self.z0)
                 return gr2_abs - np.abs((f0 - e0 * gm) / (f1 - e1 * gm))
 
             # Try some alternative initial guesses
             init_x = np.linspace(-10, 10, 10)
             init_l = init_x / (w[-1])
-            init_guess = [np.mean(min_l(l)**2) for l in init_l]
+            init_guess = [np.mean(min_l(l_)**2) for l_ in init_l]
             li = np.argmin(init_guess)
             best_guess = init_l[li]
 
@@ -4809,16 +4968,19 @@ class LRRM(EightTerm):
                 l0 = best_guess
 
             sol = scipy.optimize.least_squares(
-                min_l, l0, method="lm", diff_step=np.sqrt(np.finfo(np.float64).resolution)
-            )
+                min_l, l0, method="lm", diff_step=np.sqrt(
+                    np.finfo(
+                        np.float64).resolution))
             match_l = sol.x * np.ones(match_l.shape)
             match_c = zeros
 
         elif self.match_fit == 'lc':
 
-            if self.ideals[2].s[0,0,0].real < 0:
-                warnings.warn("2nd reflect assumed to be open, but 2nd ideal ' \
-                'doesn't look like open. Calibration is likely incorrect.", stacklevel=2)
+            if self.ideals[2].s[0, 0, 0].real < 0:
+                warnings.warn(
+                    "2nd reflect assumed to be open, but 2nd ideal ' \
+                'doesn't look like open. Calibration is likely incorrect.",
+                    stacklevel=2)
 
             match_c = -1/(np.choose(root, wL)*w)
             c0 = np.sum(w * match_c) / np.sum(w)
@@ -4845,14 +5007,15 @@ class LRRM(EightTerm):
                 return np.abs(e)
 
             # Biggest capacitance value assuming given gm matching.
-            worst_match = 0.4 # -7 dB
-            max_init_c = (2*worst_match)/(np.sqrt(1 - worst_match**2)*w[-1]*self.z0)
+            worst_match = 0.4  # -7 dB
+            max_init_c = (2*worst_match) / \
+                (np.sqrt(1 - worst_match**2)*w[-1]*self.z0)
 
             # Initial reactance guess, try to find positive L, C.
             init_x = np.linspace(0, 20, 10)
             init_l = init_x / (w[-1])
             init_c = np.linspace(0, max_init_c, 10)
-            init_lc = [(l, c) for l in init_l for c in init_c]
+            init_lc = [(l_, c) for l_ in init_l for c in init_c]
             if l0 > 0:
                 init_lc.append((l0, 0))
             if c0 > 0:
@@ -4874,7 +5037,8 @@ class LRRM(EightTerm):
 
         gamma_m = calc_gm(R, match_l, match_c)
 
-        # Solve finally reflects and calibration parameters using the solved match
+        # Solve finally reflects and calibration parameters using the solved
+        # match
         gr1, gr2, x, y, z, _ = solve_gr(gamma_m)
 
         freq = self.measured[0].frequency
@@ -4885,10 +5049,10 @@ class LRRM(EightTerm):
         self._solved_r2 = Network(s=gr2, frequency=freq, name='LRRM reflect 2')
 
         # Calculate error matrices
-        t10 = np.transpose(np.array([[ones, x], [gr1, gr2*x]]), [2,0,1]) \
-                @ inv(np.transpose(np.array([[ones,ones],[r11, r21]]), [2,0,1]))
-        t23 = np.transpose((1/z)*np.array([[ones, y], [gr1, gr2*y]]), [2,0,1]) \
-                @ inv(np.transpose(np.array([[ones,ones],[r12, r22]]), [2,0,1]))
+        t10 = np.transpose(np.array([[ones, x], [gr1, gr2*x]]), [2, 0, 1]) \
+            @ inv(np.transpose(np.array([[ones, ones], [r11, r21]]), [2, 0, 1]))
+        t23 = np.transpose((1/z)*np.array([[ones, y], [gr1, gr2*y]]), [2, 0, 1]) \
+            @ inv(np.transpose(np.array([[ones, ones], [r12, r22]]), [2, 0, 1]))
 
         Smat1 = t2s(t10)
         Smat2 = t2s(t23)
@@ -4898,44 +5062,44 @@ class LRRM(EightTerm):
         dx = linalg.det(Smat1)
         dy = linalg.det(Smat2)
 
-        k = Smat1[:,0,1]/Smat2[:,0,1]
+        k = Smat1[:, 0, 1]/Smat2[:, 0, 1]
 
         # Error coefficients
-        e = [Smat1[:,0,0],
-             Smat1[:,1,1],
+        e = [Smat1[:, 0, 0],
+             Smat1[:, 1, 1],
              dx,
-             Smat2[:,0,0],
-             Smat2[:,1,1],
+             Smat2[:, 0, 0],
+             Smat2[:, 1, 1],
              dy,
              k]
 
-        self._coefs = {\
-                'forward directivity':e[1],
-                'forward source match':e[0],
-                'forward reflection tracking':e[0]*e[1]-e[2],
-                'reverse directivity':e[4],
-                'reverse source match':e[3],
-                'reverse reflection tracking':e[4]*e[3]- e[5],
-                'k':e[6],
-                }
+        self._coefs = {
+            'forward directivity': e[1],
+            'forward source match': e[0],
+            'forward reflection tracking': e[0]*e[1]-e[2],
+            'reverse directivity': e[4],
+            'reverse source match': e[3],
+            'reverse reflection tracking': e[4]*e[3] - e[5],
+            'k': e[6],
+        }
 
-        self._coefs['forward isolation'] = self.isolation.s[:,1,0].flatten()
-        self._coefs['reverse isolation'] = self.isolation.s[:,0,1].flatten()
+        self._coefs['forward isolation'] = self.isolation.s[:, 1, 0].flatten()
+        self._coefs['reverse isolation'] = self.isolation.s[:, 0, 1].flatten()
 
         if self.switch_terms is not None:
             self._coefs.update({
                 'forward switch term': self.switch_terms[0].s.flatten(),
                 'reverse switch term': self.switch_terms[1].s.flatten(),
-                })
+            })
         else:
             self._coefs.update({
                 'forward switch term': np.zeros(fpoints, dtype=complex),
                 'reverse switch term': np.zeros(fpoints, dtype=complex),
-                })
+            })
         # output is a dictionary of information
         self._output_from_run = {
-                'error vector':e
-                }
+            'error vector': e
+        }
 
     @property
     def solved_l(self):
@@ -4944,7 +5108,7 @@ class LRRM(EightTerm):
         """
         try:
             return self._solved_l
-        except(AttributeError):
+        except (AttributeError):
             self.run()
             return self._solved_l
 
@@ -4956,7 +5120,7 @@ class LRRM(EightTerm):
         """
         try:
             return self._solved_c
-        except(AttributeError):
+        except (AttributeError):
             self.run()
             return self._solved_c
 
@@ -4967,7 +5131,7 @@ class LRRM(EightTerm):
         """
         try:
             return self._solved_m
-        except(AttributeError):
+        except (AttributeError):
             self.run()
             return self._solved_m
 
@@ -4978,7 +5142,7 @@ class LRRM(EightTerm):
         """
         try:
             return self._solved_r1
-        except(AttributeError):
+        except (AttributeError):
             self.run()
             return self._solved_r1
 
@@ -4989,7 +5153,7 @@ class LRRM(EightTerm):
         """
         try:
             return self._solved_r2
-        except(AttributeError):
+        except (AttributeError):
             self.run()
             return self._solved_r2
 
@@ -5024,7 +5188,7 @@ class MRC(UnknownThru):
     # by UnknownThru.run()
     _ONEPORT_ALGO = SDDL
 
-    def __init__(self, measured, ideals,  *args, **kwargs):
+    def __init__(self, measured, ideals, *args, **kwargs):
         r"""
         MRC Initializer
 
@@ -5053,8 +5217,8 @@ class MRC(UnknownThru):
             the pair of switch terms in the order (forward, reverse)
         """
 
-        UnknownThru.__init__(self, measured = measured, ideals = ideals,
-                           **kwargs)
+        UnknownThru.__init__(self, measured=measured, ideals=ideals,
+                             **kwargs)
 
 
 class SixteenTerm(Calibration):
@@ -5076,6 +5240,7 @@ class SixteenTerm(Calibration):
     """
 
     family = 'SixteenTerm'
+
     def __init__(self, measured, ideals, switch_terms=None,
                  *args, **kwargs):
         """
@@ -5105,11 +5270,11 @@ class SixteenTerm(Calibration):
             warn('No switch terms provided', stacklevel=2)
 
         Calibration.__init__(self,
-            measured = measured,
-            ideals = ideals,
-            **kwargs)
+                             measured=measured,
+                             ideals=ideals,
+                             **kwargs)
 
-    def unterminate(self,ntwk):
+    def unterminate(self, ntwk):
         """
         Unterminate switch terms from a raw measurement.
 
@@ -5138,7 +5303,6 @@ class SixteenTerm(Calibration):
         else:
             return ntwk
 
-
     @property
     def measured_unterminated(self):
         return [self.unterminate(k) for k in self.measured]
@@ -5147,117 +5311,117 @@ class SixteenTerm(Calibration):
         numStds = self.nstandards
         numCoefs = 15
 
-        mList = [k.s  for k in self.measured_unterminated]
+        mList = [k.s for k in self.measured_unterminated]
         iList = [k.s for k in self.ideals]
 
         fLength = len(mList[0])
-        #initialize outputs
-        error_vector = np.zeros(shape=(fLength,numCoefs),dtype=complex)
-        residuals = np.zeros(shape=(fLength,4*numStds-numCoefs),dtype=complex)
-        Q = np.zeros((numStds*4, 15),dtype=complex)
-        M = np.zeros((numStds*4, 1),dtype=complex)
+        # initialize outputs
+        error_vector = np.zeros(shape=(fLength, numCoefs), dtype=complex)
+        residuals = np.zeros(
+            shape=(fLength, 4*numStds-numCoefs), dtype=complex)
+        Q = np.zeros((numStds*4, 15), dtype=complex)
+        M = np.zeros((numStds*4, 1), dtype=complex)
         # loop through frequencies and form m, a vectors and
         # the matrix M.
-        #i[j,k] = Actual S-parameters
-        #m[j,k] = Measured S-parameters
-        #t15 is normalized to one
+        # i[j,k] = Actual S-parameters
+        # m[j,k] = Measured S-parameters
+        # t15 is normalized to one
         for f in list(range(fLength)):
             # loop through standards and fill matrix
             for k in list(range(numStds)):
-                m,i  = mList[k][f,:,:],iList[k][f,:,:] # 2x2 s-matrices
-                Q[k*4:k*4+4,:] = np.array([
-                        [ i[0,0], i[1,0], 0     , 0     , 1, 0, 0, 0, -m[0,0]*i[0,0], -m[0,0]*i[1,0], -m[0,1]*i[0,0], -m[0,1]*i[1,0], -m[0,0] , 0       , -m[0,1] ],  # noqa: E501
-                        [ i[0,1], i[1,1], 0     , 0     , 0, 1, 0, 0, -m[0,0]*i[0,1], -m[0,0]*i[1,1], -m[0,1]*i[0,1], -m[0,1]*i[1,1], 0       , -m[0,0] , 0       ],  # noqa: E501
-                        [ 0     , 0     , i[0,0], i[1,0], 0, 0, 1, 0, -m[1,0]*i[0,0], -m[1,0]*i[1,0], -m[1,1]*i[0,0], -m[1,1]*i[1,0], -m[1,0] , 0       , -m[1,1] ],  # noqa: E501
-                        [ 0     , 0     , i[0,1], i[1,1], 0 ,0 ,0, 1, -m[1,0]*i[0,1], -m[1,0]*i[1,1], -m[1,1]*i[0,1], -m[1,1]*i[1,1], 0       , -m[1,0] , 0       ],  # noqa: E501
-                        ])
-                #pdb.set_trace()
-                M[k*4:k*4+4,:] = np.array([\
-                        [    0    ],\
-                        [ m[0,1]  ],\
-                        [    0    ],\
-                        [ m[1,1]  ],\
-                        ])
+                m, i = mList[k][f, :, :], iList[k][f, :, :]  # 2x2 s-matrices
+                Q[k*4:k*4+4, :] = np.array([
+                    [i[0, 0], i[1, 0], 0, 0, 1, 0, 0, 0, -m[0, 0]*i[0, 0], -m[0, 0]*i[1, 0], -m[0, 1]*i[0, 0], -m[0, 1]*i[1, 0], -m[0, 0], 0, -m[0, 1]],  # noqa: E501
+                    [i[0, 1], i[1, 1], 0, 0, 0, 1, 0, 0, -m[0, 0]*i[0, 1], -m[0, 0]*i[1, 1], -m[0, 1]*i[0, 1], -m[0, 1]*i[1, 1], 0, -m[0, 0], 0],  # noqa: E501
+                    [0, 0, i[0, 0], i[1, 0], 0, 0, 1, 0, -m[1, 0]*i[0, 0], -m[1, 0]*i[1, 0], -m[1, 1]*i[0, 0], -m[1, 1]*i[1, 0], -m[1, 0], 0, -m[1, 1]],  # noqa: E501
+                    [0, 0, i[0, 1], i[1, 1], 0, 0, 0, 1, -m[1, 0]*i[0, 1], -m[1, 0]*i[1, 1], -m[1, 1]*i[0, 1], -m[1, 1]*i[1, 1], 0, -m[1, 0], 0],  # noqa: E501
+                ])
+                # pdb.set_trace()
+                M[k*4:k*4+4, :] = np.array([
+                    [0],
+                    [m[0, 1]],
+                    [0],
+                    [m[1, 1]],
+                ])
 
-            ## calculate least squares
-            error_vector_at_f, residuals_at_f = np.linalg.lstsq(Q,M,rcond=None)[0:2]
-            ##if len (residualsTmp )==0:
-            ##       raise ValueError( 'matrix has singular values, check standards')
+            # calculate least squares
+            error_vector_at_f, residuals_at_f = np.linalg.lstsq(Q, M, rcond=None)[
+                0:2]
+            # if len (residualsTmp )==0:
+            # raise ValueError( 'matrix has singular values, check standards')
 
-
-            error_vector[f,:] = error_vector_at_f.flatten()
-            residuals[f,:] = residuals_at_f
+            error_vector[f, :] = error_vector_at_f.flatten()
+            residuals[f, :] = residuals_at_f
 
         e = error_vector
 
-        #Normalize e23 = 1
-        c = e[:,12]/(e[:,12]-e[:,13]*e[:,14])
+        # Normalize e23 = 1
+        c = e[:, 12]/(e[:, 12]-e[:, 13]*e[:, 14])
         for i in range(len(e[0])):
-            e[:,i] *= c
+            e[:, i] *= c
 
         T1 = np.zeros(shape=(fLength, 2, 2), dtype=complex)
         T2 = np.zeros(shape=(fLength, 2, 2), dtype=complex)
         T3 = np.zeros(shape=(fLength, 2, 2), dtype=complex)
         T4 = np.zeros(shape=(fLength, 2, 2), dtype=complex)
 
-        T1[:,0,0] = e[:,0]
-        T1[:,0,1] = e[:,1]
-        T1[:,1,0] = e[:,2]
-        T1[:,1,1] = e[:,3]
+        T1[:, 0, 0] = e[:, 0]
+        T1[:, 0, 1] = e[:, 1]
+        T1[:, 1, 0] = e[:, 2]
+        T1[:, 1, 1] = e[:, 3]
 
-        T2[:,0,0] = e[:,4]
-        T2[:,0,1] = e[:,5]
-        T2[:,1,0] = e[:,6]
-        T2[:,1,1] = e[:,7]
+        T2[:, 0, 0] = e[:, 4]
+        T2[:, 0, 1] = e[:, 5]
+        T2[:, 1, 0] = e[:, 6]
+        T2[:, 1, 1] = e[:, 7]
 
-        T3[:,0,0] = e[:,8]
-        T3[:,0,1] = e[:,9]
-        T3[:,1,0] = e[:,10]
-        T3[:,1,1] = e[:,11]
+        T3[:, 0, 0] = e[:, 8]
+        T3[:, 0, 1] = e[:, 9]
+        T3[:, 1, 0] = e[:, 10]
+        T3[:, 1, 1] = e[:, 11]
 
-        T4[:,0,0] = e[:,12]
-        T4[:,0,1] = e[:,13]
-        T4[:,1,0] = e[:,14]
-        T4[:,1,1] = c
+        T4[:, 0, 0] = e[:, 12]
+        T4[:, 0, 1] = e[:, 13]
+        T4[:, 1, 0] = e[:, 14]
+        T4[:, 1, 1] = c
 
         # put the error vector into human readable dictionary
         e1, e2, e3, e4 = self.E_matrices(T1, T2, T3, T4)
 
-
-        self._coefs = {\
-                'forward directivity':e1[:,0,0],
-                'reverse directivity':e1[:,1,1],
-                'forward source match':e4[:,0,0],
-                'reverse source match':e4[:,1,1],
-                'forward reflection tracking':e2[:,0,0]*e3[:,0,0],
-                'reverse reflection tracking':e2[:,1,1],
-                'k':e3[:,0,0],
-                'forward isolation':e1[:,1,0],
-                'reverse isolation':e1[:,0,1],
-                'forward port 1 isolation':e3[:,1,0],
-                'reverse port 1 isolation':e2[:,0,1],
-                'forward port 2 isolation':e2[:,1,0],
-                'reverse port 2 isolation':e3[:,0,1],
-                'forward port isolation':e4[:,1,0],
-                'reverse port isolation':e4[:,0,1],
-                }
+        self._coefs = {
+            'forward directivity': e1[:, 0, 0],
+            'reverse directivity': e1[:, 1, 1],
+            'forward source match': e4[:, 0, 0],
+            'reverse source match': e4[:, 1, 1],
+            'forward reflection tracking': e2[:, 0, 0]*e3[:, 0, 0],
+            'reverse reflection tracking': e2[:, 1, 1],
+            'k': e3[:, 0, 0],
+            'forward isolation': e1[:, 1, 0],
+            'reverse isolation': e1[:, 0, 1],
+            'forward port 1 isolation': e3[:, 1, 0],
+            'reverse port 1 isolation': e2[:, 0, 1],
+            'forward port 2 isolation': e2[:, 1, 0],
+            'reverse port 2 isolation': e3[:, 0, 1],
+            'forward port isolation': e4[:, 1, 0],
+            'reverse port isolation': e4[:, 0, 1],
+        }
 
         if self.switch_terms is not None:
             self._coefs.update({
                 'forward switch term': self.switch_terms[0].s.flatten(),
                 'reverse switch term': self.switch_terms[1].s.flatten(),
-                })
+            })
         else:
             self._coefs.update({
                 'forward switch term': np.zeros(fLength, dtype=complex),
                 'reverse switch term': np.zeros(fLength, dtype=complex),
-                })
+            })
 
         # output is a dictionary of information
         self._output_from_run = {
-                'error vector':e,
-                'residuals':residuals
-                }
+            'error vector': e,
+            'residuals': residuals
+        }
 
         return None
 
@@ -5275,7 +5439,7 @@ class SixteenTerm(Calibration):
         """
         caled = ntwk.copy()
 
-        T1,T2,T3,T4 = self.T_matrices
+        T1, T2, T3, T4 = self.T_matrices
 
         caled = self.unterminate(caled)
         caled.s = linalg.inv(-caled.s @ T3 + T1) @ (caled.s @ T4 - T2)
@@ -5296,7 +5460,7 @@ class SixteenTerm(Calibration):
         """
         embedded = ntwk.copy()
 
-        T1,T2,T3,T4 = self.T_matrices
+        T1, T2, T3, T4 = self.T_matrices
 
         embedded.s = (T1 @ ntwk.s + T2) @ linalg.inv(T3 @ ntwk.s + T4)
         embedded = self.terminate(embedded)
@@ -5334,21 +5498,21 @@ class SixteenTerm(Calibration):
         e410 = ec['forward port isolation']
 
         E1 = np.array([
-                [ e100 , e101],
-                [ e110 , e111]
-                ]).transpose(2,0,1)
+            [e100, e101],
+            [e110, e111]
+        ]).transpose(2, 0, 1)
         E2 = np.array([
-                [ e200 , e201],
-                [ e210 , e211]
-                ]).transpose(2,0,1)
+            [e200, e201],
+            [e210, e211]
+        ]).transpose(2, 0, 1)
         E3 = np.array([
-                [ e300 , e301],
-                [ e310 , e311]
-                ]).transpose(2,0,1)
+            [e300, e301],
+            [e310, e311]
+        ]).transpose(2, 0, 1)
         E4 = np.array([
-                [ e400 , e401],
-                [ e410 , e411]
-                ]).transpose(2,0,1)
+            [e400, e401],
+            [e410, e411]
+        ]).transpose(2, 0, 1)
 
         invE3 = linalg.inv(E3)
         T1 = E2 - E1 @ invE3 @ E4
@@ -5382,49 +5546,49 @@ class SixteenTerm(Calibration):
         """
 
         Z = np.zeros((len(self.coefs['k']), 4, 4), dtype=complex)
-        Z[:,0,0] = self.coefs['forward directivity']
-        Z[:,1,1] = self.coefs['forward source match']
-        Z[:,2,2] = self.coefs['reverse source match']
-        Z[:,3,3] = self.coefs['reverse directivity']
-        Z[:,1,0] = self.coefs['k']
-        Z[:,0,1] = self.coefs['forward reflection tracking'] / self.coefs['k']
-        Z[:,2,3] = 1
-        Z[:,3,2] = self.coefs['reverse reflection tracking']
-        Z[:,3,0] = self.coefs['forward isolation']
-        Z[:,0,3] = self.coefs['reverse isolation']
-        Z[:,2,1] = self.coefs['forward port isolation']
-        Z[:,1,2] = self.coefs['reverse port isolation']
-        Z[:,2,0] = self.coefs['forward port 1 isolation']
-        Z[:,0,2] = self.coefs['reverse port 1 isolation']
-        Z[:,3,1] = self.coefs['forward port 2 isolation']
-        Z[:,1,3] = self.coefs['reverse port 2 isolation']
+        Z[:, 0, 0] = self.coefs['forward directivity']
+        Z[:, 1, 1] = self.coefs['forward source match']
+        Z[:, 2, 2] = self.coefs['reverse source match']
+        Z[:, 3, 3] = self.coefs['reverse directivity']
+        Z[:, 1, 0] = self.coefs['k']
+        Z[:, 0, 1] = self.coefs['forward reflection tracking'] / self.coefs['k']
+        Z[:, 2, 3] = 1
+        Z[:, 3, 2] = self.coefs['reverse reflection tracking']
+        Z[:, 3, 0] = self.coefs['forward isolation']
+        Z[:, 0, 3] = self.coefs['reverse isolation']
+        Z[:, 2, 1] = self.coefs['forward port isolation']
+        Z[:, 1, 2] = self.coefs['reverse port isolation']
+        Z[:, 2, 0] = self.coefs['forward port 1 isolation']
+        Z[:, 0, 2] = self.coefs['reverse port 1 isolation']
+        Z[:, 3, 1] = self.coefs['forward port 2 isolation']
+        Z[:, 1, 3] = self.coefs['reverse port 2 isolation']
 
-        #Port impedances before renormalization.
-        #Only the DUT side (port 2 and 3) is renormalized.
-        #VNA side (port 1 and 4) stays unchanged.
-        z = np.zeros((len(self.coefs['k']),4), dtype=complex)
-        z[:,0] = z0_new
-        z[:,1] = z0_old
-        z[:,2] = z0_old
-        z[:,3] = z0_new
+        # Port impedances before renormalization.
+        # Only the DUT side (port 2 and 3) is renormalized.
+        # VNA side (port 1 and 4) stays unchanged.
+        z = np.zeros((len(self.coefs['k']), 4), dtype=complex)
+        z[:, 0] = z0_new
+        z[:, 1] = z0_old
+        z[:, 2] = z0_old
+        z[:, 3] = z0_new
 
         Z = renormalize_s(Z, z, z0_new, s_def='traveling')
 
-        self.coefs['k'] = Z[:,1,0] / Z[:,2,3]
-        self.coefs['forward directivity'] = Z[:,0,0]
-        self.coefs['forward source match'] = Z[:,1,1]
-        self.coefs['reverse source match'] = Z[:,2,2]
-        self.coefs['reverse directivity'] = Z[:,3,3]
-        self.coefs['forward reflection tracking'] = Z[:,1,0] * Z[:,0,1]
-        self.coefs['reverse reflection tracking'] = Z[:,2,3] * Z[:,3,2]
-        self.coefs['forward isolation'] = Z[:,3,0]
-        self.coefs['reverse isolation'] = Z[:,0,3]
-        self.coefs['forward port isolation'] = Z[:,2,1]
-        self.coefs['reverse port isolation'] = Z[:,1,2]
-        self.coefs['forward port 1 isolation'] = Z[:,2,0] / Z[:,2,3]
-        self.coefs['reverse port 1 isolation'] = Z[:,0,2] * Z[:,2,3]
-        self.coefs['forward port 2 isolation'] = Z[:,3,1] * Z[:,2,3]
-        self.coefs['reverse port 2 isolation'] = Z[:,1,3] / Z[:,2,3]
+        self.coefs['k'] = Z[:, 1, 0] / Z[:, 2, 3]
+        self.coefs['forward directivity'] = Z[:, 0, 0]
+        self.coefs['forward source match'] = Z[:, 1, 1]
+        self.coefs['reverse source match'] = Z[:, 2, 2]
+        self.coefs['reverse directivity'] = Z[:, 3, 3]
+        self.coefs['forward reflection tracking'] = Z[:, 1, 0] * Z[:, 0, 1]
+        self.coefs['reverse reflection tracking'] = Z[:, 2, 3] * Z[:, 3, 2]
+        self.coefs['forward isolation'] = Z[:, 3, 0]
+        self.coefs['reverse isolation'] = Z[:, 0, 3]
+        self.coefs['forward port isolation'] = Z[:, 2, 1]
+        self.coefs['reverse port isolation'] = Z[:, 1, 2]
+        self.coefs['forward port 1 isolation'] = Z[:, 2, 0] / Z[:, 2, 3]
+        self.coefs['reverse port 1 isolation'] = Z[:, 0, 2] * Z[:, 2, 3]
+        self.coefs['forward port 2 isolation'] = Z[:, 3, 1] * Z[:, 2, 3]
+        self.coefs['reverse port 2 isolation'] = Z[:, 1, 3] / Z[:, 2, 3]
         return None
 
 
@@ -5461,6 +5625,7 @@ class LMR16(SixteenTerm):
     """
 
     family = 'SixteenTerm'
+
     def __init__(self, measured, ideals, ideal_is_reflect=True, sign=None,
                  switch_terms=None, *args, **kwargs):
         r"""
@@ -5496,33 +5661,37 @@ class LMR16(SixteenTerm):
         if isinstance(ideals, Network):
             ideals = [ideals]
         if len(ideals) != 1:
-            raise ValueError("One ideal must be given: Through or reflect definition.")
+            raise ValueError(
+                "One ideal must be given: Through or reflect definition.")
         if not ideal_is_reflect:
             self.through = ideals[0].copy()
             self.reflect = None
             self._solved_through = self.through
-            self._solved_reflect = Network(s=[0]*len(self.through.f), f=self.through.f, f_unit='Hz')
+            self._solved_reflect = Network(
+                s=[0]*len(self.through.f), f=self.through.f, f_unit='Hz')
         else:
             self.through = None
             self.reflect = ideals[0].copy()
-            self._solved_through = Network(s=[[[0,1],[1,0]]]*len(self.reflect.f), f=self.reflect.f, f_unit='Hz')
+            self._solved_through = Network(
+                s=[[[0, 1], [1, 0]]]*len(self.reflect.f), f=self.reflect.f, f_unit='Hz')
             self._solved_reflect = self.reflect
 
         if len(measured) != 5:
-            raise ValueError("5 Measurements are needed: T, M-M, R-R, R-M and M-R")
+            raise ValueError(
+                "5 Measurements are needed: T, M-M, R-R, R-M and M-R")
 
         self.measured = measured
         self.sign = sign
 
         Calibration.__init__(self,
-            measured = measured,
-            ideals = ideals,
-            sloppy_input=False,
-            self_calibration=True,
-            **kwargs)
+                             measured=measured,
+                             ideals=ideals,
+                             sloppy_input=False,
+                             self_calibration=True,
+                             **kwargs)
 
     def run(self):
-        mList = [k.s  for k in self.measured_unterminated]
+        mList = [k.s for k in self.measured_unterminated]
 
         fLength = len(mList[0])
 
@@ -5536,11 +5705,11 @@ class LMR16(SixteenTerm):
         auto_sign = self.sign is None
 
         for f in range(fLength):
-            ma = mList[0][f] #Through
-            mb = mList[1][f] #Match-match
-            mc = mList[2][f] #Reflect-reflect
-            md = mList[3][f] #Reflect-match
-            me = mList[4][f] #Match-reflect
+            ma = mList[0][f]  # Through
+            mb = mList[1][f]  # Match-match
+            mc = mList[2][f]  # Reflect-reflect
+            md = mList[3][f]  # Reflect-match
+            me = mList[4][f]  # Match-reflect
 
             nn = inv(me-ma).dot(mb-me)
             mm = (ma-mc).dot(nn)
@@ -5548,32 +5717,32 @@ class LMR16(SixteenTerm):
             rr = inv(md-ma).dot(mb-md)
             pp = (ma-mc).dot(rr)
 
-            m = (pp[1,0] + oo[1,0])*mm[1,1] - (pp[1,1] + oo[1,1])*mm[1,0]
-            n = oo[1,0]*pp[0,1] - oo[1,1]*pp[0,0]
-            o = (mm[0,1]+ oo[0,1])*pp[0,0] - (mm[0,0] + oo[0,0])*pp[0,1]
-            p = oo[0,1]*mm[1,0] - oo[0,0]*mm[1,1]
+            m = (pp[1, 0] + oo[1, 0])*mm[1, 1] - (pp[1, 1] + oo[1, 1])*mm[1, 0]
+            n = oo[1, 0]*pp[0, 1] - oo[1, 1]*pp[0, 0]
+            o = (mm[0, 1] + oo[0, 1])*pp[0, 0] - (mm[0, 0] + oo[0, 0])*pp[0, 1]
+            p = oo[0, 1]*mm[1, 0] - oo[0, 0]*mm[1, 1]
 
-            #One of the coefficients is normalized to one
+            # One of the coefficients is normalized to one
             t12 = 1.0
 
             auto_sign_abs = []
             if auto_sign:
                 self.sign = 1
 
-            for sign_tries in [0,1,2]:
+            for sign_tries in [0, 1, 2]:
                 gt = self.sign*np.sqrt(m*o/(n*p))
                 if self.through is None:
-                    g = self.reflect.s[f][0,0]
+                    g = self.reflect.s[f][0, 0]
                     t = g/gt
-                    self._solved_through.s[f] = np.array([[0,t],[t,0]])
+                    self._solved_through.s[f] = np.array([[0, t], [t, 0]])
                 else:
-                    t = self.through.s[f][1,0]
+                    t = self.through.s[f][1, 0]
                     g = gt*t
                     self._solved_reflect.s[f] = np.array([g])
-                t15 = -(p/o)*(pp[0,0]/mm[1,1])*gt*t12
-                #If correct sign is not specified try to choose it based
-                #on the fact that with correct sign t15/t12 ~= +1
-                #Assuming that test fixtures are symmetric
+                t15 = -(p/o)*(pp[0, 0]/mm[1, 1])*gt*t12
+                # If correct sign is not specified try to choose it based
+                # on the fact that with correct sign t15/t12 ~= +1
+                # Assuming that test fixtures are symmetric
                 if auto_sign:
                     auto_sign_abs.append(np.abs(1 - t15/t12))
                     if sign_tries == 0:
@@ -5586,69 +5755,71 @@ class LMR16(SixteenTerm):
                 else:
                     break
 
+            t13 = -pp[0, 1]/pp[0, 0]*t15
+            t14 = -mm[1, 0]/mm[1, 1]*t12
 
-            t13 = -pp[0,1]/pp[0,0]*t15
-            t14 = -mm[1,0]/mm[1,1]*t12
-
-            #Normalize e23 = 1
+            # Normalize e23 = 1
             c = 1/(t15 - t13*t14)
 
-            t8 =  (rr[0,0]*t12 + rr[0,1]*t14)*(1./g) - t13/t
-            t9 =  (nn[0,0]*t13 + nn[0,1]*t15)*(1./g) - t12/t
-            t10 = (rr[1,0]*t12 + rr[1,1]*t14)*(1./g) - t15/t
-            t11 = (nn[1,0]*t13 + nn[1,1]*t15)*(1./g) - t14/t
-            t0 = mc[0,0]*t8 + mc[0,1]*t10 - (1./g)*(oo[0,0]*t12+oo[0,1]*t14)
-            t1 = mc[0,0]*t9 + mc[0,1]*t11 - (1./g)*(oo[0,0]*t13+oo[0,1]*t15)
-            t2 = mc[1,0]*t8 + mc[1,1]*t10 - (1./g)*(oo[1,0]*t12+oo[1,1]*t14)
-            t3 = mc[1,0]*t9 + mc[1,1]*t11 - (1./g)*(oo[1,0]*t13+oo[1,1]*t15)
-            t4 = mb[0,0]*t12 + mb[0,1]*t14
-            t5 = mb[0,0]*t13 + mb[0,1]*t15
-            t6 = mb[1,0]*t12 + mb[1,1]*t14
-            t7 = mb[1,0]*t13 + mb[1,1]*t15
+            t8 = (rr[0, 0]*t12 + rr[0, 1]*t14)*(1./g) - t13/t
+            t9 = (nn[0, 0]*t13 + nn[0, 1]*t15)*(1./g) - t12/t
+            t10 = (rr[1, 0]*t12 + rr[1, 1]*t14)*(1./g) - t15/t
+            t11 = (nn[1, 0]*t13 + nn[1, 1]*t15)*(1./g) - t14/t
+            t0 = mc[0, 0]*t8 + mc[0, 1]*t10 - \
+                (1./g)*(oo[0, 0]*t12+oo[0, 1]*t14)
+            t1 = mc[0, 0]*t9 + mc[0, 1]*t11 - \
+                (1./g)*(oo[0, 0]*t13+oo[0, 1]*t15)
+            t2 = mc[1, 0]*t8 + mc[1, 1]*t10 - \
+                (1./g)*(oo[1, 0]*t12+oo[1, 1]*t14)
+            t3 = mc[1, 0]*t9 + mc[1, 1]*t11 - \
+                (1./g)*(oo[1, 0]*t13+oo[1, 1]*t15)
+            t4 = mb[0, 0]*t12 + mb[0, 1]*t14
+            t5 = mb[0, 0]*t13 + mb[0, 1]*t15
+            t6 = mb[1, 0]*t12 + mb[1, 1]*t14
+            t7 = mb[1, 0]*t13 + mb[1, 1]*t15
 
-            T1.append( c*np.array([[t0,t1],[t2,t3]]) )
-            T2.append( c*np.array([[t4,t5],[t6,t7]]) )
-            T3.append( c*np.array([[t8,t9],[t10,t11]]) )
-            T4.append( c*np.array([[t12,t13],[t14,t15]]) )
+            T1.append(c*np.array([[t0, t1], [t2, t3]]))
+            T2.append(c*np.array([[t4, t5], [t6, t7]]))
+            T3.append(c*np.array([[t8, t9], [t10, t11]]))
+            T4.append(c*np.array([[t12, t13], [t14, t15]]))
 
         T1 = np.array(T1)
         T2 = np.array(T2)
         T3 = np.array(T3)
         T4 = np.array(T4)
 
-        #Convert T-matrix to S-parameters
-        #and put error terms in human readable form
-        e1,e2,e3,e4 = self.E_matrices(T1, T2, T3, T4)
+        # Convert T-matrix to S-parameters
+        # and put error terms in human readable form
+        e1, e2, e3, e4 = self.E_matrices(T1, T2, T3, T4)
 
-        self._coefs = {\
-            'forward directivity':e1[:,0,0],
-            'reverse directivity':e1[:,1,1],
-            'forward source match':e4[:,0,0],
-            'reverse source match':e4[:,1,1],
-            'forward reflection tracking':e2[:,0,0]*e3[:,0,0],
-            'reverse reflection tracking':e2[:,1,1],
-            'k':e3[:,0,0],
-            'forward isolation':e1[:,1,0],
-            'reverse isolation':e1[:,0,1],
-            'forward port 1 isolation':e3[:,1,0],
-            'reverse port 1 isolation':e2[:,0,1],
-            'forward port 2 isolation':e2[:,1,0],
-            'reverse port 2 isolation':e3[:,0,1],
-            'forward port isolation':e4[:,1,0],
-            'reverse port isolation':e4[:,0,1],
-            }
+        self._coefs = {
+            'forward directivity': e1[:, 0, 0],
+            'reverse directivity': e1[:, 1, 1],
+            'forward source match': e4[:, 0, 0],
+            'reverse source match': e4[:, 1, 1],
+            'forward reflection tracking': e2[:, 0, 0]*e3[:, 0, 0],
+            'reverse reflection tracking': e2[:, 1, 1],
+            'k': e3[:, 0, 0],
+            'forward isolation': e1[:, 1, 0],
+            'reverse isolation': e1[:, 0, 1],
+            'forward port 1 isolation': e3[:, 1, 0],
+            'reverse port 1 isolation': e2[:, 0, 1],
+            'forward port 2 isolation': e2[:, 1, 0],
+            'reverse port 2 isolation': e3[:, 0, 1],
+            'forward port isolation': e4[:, 1, 0],
+            'reverse port isolation': e4[:, 0, 1],
+        }
 
         if self.switch_terms is not None:
             self._coefs.update({
                 'forward switch term': self.switch_terms[0].s.flatten(),
                 'reverse switch term': self.switch_terms[1].s.flatten(),
-                })
+            })
         else:
             self._coefs.update({
                 'forward switch term': np.zeros(fLength, dtype=complex),
                 'reverse switch term': np.zeros(fLength, dtype=complex),
-                })
-
+            })
 
         return None
 
@@ -5669,21 +5840,21 @@ class LMR16(SixteenTerm):
         Calibration.from_coefs_ntwks
 
         """
-        n = Network(frequency = frequency,
-                    s = rand_c(frequency.npoints,2,2))
-        measured = [n,n,n,n,n]
+        n = Network(frequency=frequency,
+                    s=rand_c(frequency.npoints, 2, 2))
+        measured = [n, n, n, n, n]
 
         if 'forward switch term' in coefs:
-            switch_terms = (Network(frequency = frequency,
+            switch_terms = (Network(frequency=frequency,
                                     s=coefs['forward switch term']),
-                            Network(frequency = frequency,
+                            Network(frequency=frequency,
                                     s=coefs['reverse switch term']))
             kwargs['switch_terms'] = switch_terms
 
         cal = cls(measured, measured[0], **kwargs)
         cal.coefs = coefs
         cal.family += '(fromCoefs)'
-        return  cal
+        return cal
 
     @property
     def residual_ntwks(self):
@@ -5694,11 +5865,12 @@ class LMR16(SixteenTerm):
         standards and their corresponding  corrected measurements.
 
         """
-        #Runs the calibration if needed
+        # Runs the calibration if needed
         caled_ntwks = self.caled_ntwks
 
         r = self.solved_reflect
-        m  = Network(s=[0]*len(self.solved_reflect.f), f=self.solved_reflect.f, f_unit='Hz')
+        m = Network(s=[0]*len(self.solved_reflect.f),
+                    f=self.solved_reflect.f, f_unit='Hz')
         mm = two_port_reflect(m, m)
         mr = two_port_reflect(m, r)
         rm = two_port_reflect(r, m)
@@ -5734,10 +5906,13 @@ class Normalization(Calibration):
     For calibration the S parameters of the network are divided by average of
     the measured networks. The ideal networks are not used in the calibration.
     """
+
     def run(self):
         pass
+
     def apply_cal(self, input_ntwk):
         return input_ntwk/average(self.measured)
+
 
 class MultiportCal:
     """
@@ -5785,6 +5960,7 @@ class MultiportCal:
     """
 
     family = 'Multiport'
+
     def __init__(self, cal_dict, isolation=None):
         if not isinstance(cal_dict, dict):
             raise ValueError("cal_dict not dictionary.")
@@ -5795,7 +5971,8 @@ class MultiportCal:
         frequency = None
         for k, c in cal_dict.items():
             if len(k) != 2:
-                raise ValueError(f"Invalid cal_dict key {k}. Expected tuple of length two.")
+                raise ValueError(
+                    f"Invalid cal_dict key {k}. Expected tuple of length two.")
             if not isinstance(k[0], int) or not isinstance(k[1], int):
                 raise ValueError("cal_dict key should be tuple of ints.")
             max_key_nports = max(max_key_nports, max(k[0], k[1]))
@@ -5808,14 +5985,16 @@ class MultiportCal:
                 raise ValueError(f"cal_dict[{k}] missing key 'measured'.")
             for m in c['measured']:
                 if not isinstance(m, Network):
-                    raise ValueError(f"Expected Network in cal_dict[{k}]['measured']")
+                    raise ValueError(
+                        f"Expected Network in cal_dict[{k}]['measured']")
                 if nports is None:
                     nports = m.nports
                 if m.nports not in [2, nports]:
-                    raise ValueError("Measurement have inconsistent number of ports.")
+                    raise ValueError(
+                        "Measurement have inconsistent number of ports.")
                 if z0 is None:
-                    z0 = m.z0[0,0]
-                elif m.z0[0,0] != z0:
+                    z0 = m.z0[0, 0]
+                elif m.z0[0, 0] != z0:
                     raise ValueError("Inconsistent z0 in measured.")
                 if frequency is None:
                     frequency = m.frequency
@@ -5823,24 +6002,29 @@ class MultiportCal:
                     raise ValueError("Inconsistent frequency in measured.")
             if "ideals" in c and z0 is not None:
                 for n in c["ideals"]:
-                    if n.z0[0,0] != z0:
-                        raise ValueError(f"Ideals and measured z0 doesn't match. {n.z0[0,0]} and {z0}")
+                    if n.z0[0, 0] != z0:
+                        raise ValueError(
+                            f"Ideals and measured z0 doesn't match. {n.z0[0, 0]} and {z0}")
 
         self.nports = nports = max_key_nports + 1
         if min_key_nports < 0:
-            raise ValueError("Negative port number found. Minimum should be zero.")
+            raise ValueError(
+                "Negative port number found. Minimum should be zero.")
         if min_key_nports != 0:
-            raise ValueError("Missing port 0. Make sure that ports are zero-indexed.")
+            raise ValueError(
+                "Missing port 0. Make sure that ports are zero-indexed.")
         if max_key_nports < 2:
-            raise ValueError("Less than three ports found. Use two-port or one-port calibration directly.")
+            raise ValueError(
+                "Less than three ports found. Use two-port or one-port calibration directly.")
 
         if isolation is not None:
             # Zero diagonal so that network can be simply subtracted
             isolation = isolation.copy()
             if isolation.nports != nports:
-                raise ValueError("Isolation network should have the same number of ports as measurements.")
+                raise ValueError(
+                    "Isolation network should have the same number of ports as measurements.")
             for i in range(nports):
-                isolation.s[:,i,i] = 0
+                isolation.s[:, i, i] = 0
         else:
             s = np.zeros((len(frequency), nports, nports), dtype=complex)
             isolation = Network(s=s, z0=z0, frequency=frequency)
@@ -5866,14 +6050,20 @@ class MultiportCal:
             # It's easy to put `k` in non-repeated ports if one port is always used.
             # I think this limitation could be removed if the `k` would be
             # solved to be consistent in repeated ports.
-            raise ValueError("Invalid thru port combinations. One port should be common in all thru measurements.")
+            raise ValueError(
+                "Invalid thru port combinations. One port should be common in all thru measurements.")
         for p in self.cal_dict.keys():
             c = self.cal_dict[p].copy()
             if 'ideals' in c:
-                ideals = [i if i.nports == 2 else subnetwork(i, p) for i in c['ideals']]
+                ideals = [i if i.nports == 2 else subnetwork(
+                    i, p) for i in c['ideals']]
                 c['ideals'] = ideals
-            c['measured'] = [m - subnetwork(self.isolation, p) if m.nports == 2 else subnetwork(m - self.isolation, p)
-                             for m in c['measured']]
+            c['measured'] = [
+                m - subnetwork(
+                    self.isolation,
+                    p) if m.nports == 2 else subnetwork(
+                    m - self.isolation,
+                    p) for m in c['measured']]
             k_side = 0
             if p_count[p[0]] > p_count[p[1]]:
                 k_side = 1
@@ -5933,7 +6123,7 @@ class MultiportCal:
     def coefs(self):
         try:
             return self._coefs
-        except(AttributeError):
+        except (AttributeError):
             self.run()
             return self._coefs
 
@@ -5989,21 +6179,21 @@ class MultiportCal:
         detY = Edr*Esr-Err
 
         T1 = np.array([
-                [ -k1*detX, zero    ],
-                [ zero,  -k2*detY ]
-                ]).transpose(2,0,1)
+            [-k1*detX, zero],
+            [zero, -k2*detY]
+        ]).transpose(2, 0, 1)
         T2 = np.array([
-                [ k1*Edf,    zero ],
-                [ zero,  k2*Edr ]
-                ]).transpose(2,0,1)
+            [k1*Edf, zero],
+            [zero, k2*Edr]
+        ]).transpose(2, 0, 1)
         T3 = np.array([
-                [ -k1*Esf,   zero ],
-                [ zero, -k2*Esr ]
-                ]).transpose(2,0,1)
+            [-k1*Esf, zero],
+            [zero, -k2*Esr]
+        ]).transpose(2, 0, 1)
         T4 = np.array([
-                [ k1, zero ],
-                [ zero, k2   ]
-                ]).transpose(2,0,1)
+            [k1, zero],
+            [zero, k2]
+        ]).transpose(2, 0, 1)
 
         return T1, T2, T3, T4
 
@@ -6014,7 +6204,8 @@ class MultiportCal:
         # A new copy of ntwk is created
         ntwk = ntwk - self.isolation
         caled = ntwk.copy()
-        # Use traveling definition since it can renormalize to negative real part impedance.
+        # Use traveling definition since it can renormalize to negative real
+        # part impedance.
         s_def = caled.s_def
         caled.s_def = 'traveling'
 
@@ -6030,15 +6221,15 @@ class MultiportCal:
             caled_2p = self.unterminate_2port(caled_2p, p[0], p[1])
             caled_2p.s = linalg.inv(-caled_2p.s @ T3 + T1) @ (caled_2p.s @ T4 - T2)
             z = np.zeros((fpoints, 2), dtype=complex)
-            z[:,0] = self.terminations[p[0]].z[:,0,0]
-            z[:,1] = self.terminations[p[1]].z[:,0,0]
+            z[:, 0] = self.terminations[p[0]].z[:, 0, 0]
+            z[:, 1] = self.terminations[p[1]].z[:, 0, 0]
             caled_2p.renormalize(z)
             for ei, i in enumerate(p):
                 for ej, j in enumerate(p):
                     caled.s[:, i, j] = caled_2p.s[:, ei, ej]
 
         for i in range(self.nports):
-            caled.z0[:,i] = self.terminations[i].z[:,0,0]
+            caled.z0[:, i] = self.terminations[i].z[:, 0, 0]
         caled.renormalize(ntwk.z0, s_def=s_def)
 
         return caled
@@ -6055,10 +6246,12 @@ class MultiportCal:
 
         gammas = []
         for e, c in enumerate(self.coefs):
-            gammas.append(Network(s=c['switch term'], frequency=nout.frequency, z0=50))
+            gammas.append(Network(s=c['switch term'],
+                          frequency=nout.frequency, z0=50))
             Z[:, e, e] = c['directivity']
             Z[:, nports+e, nports+e] = c['source match']
-            Z[:, e, nports+e] = c['reflection tracking'] * c['k'] / self.coefs[0]['k']
+            Z[:, e, nports+e] = c['reflection tracking'] * \
+                c['k'] / self.coefs[0]['k']
             Z[:, nports+e, e] = self.coefs[0]['k'] / c['k']
 
         # Consistent internal port Z0.
@@ -6092,32 +6285,33 @@ class MultiportCal:
 
         if k_side == 0:
             S1 = np.array([
-                    [ Edf,  Erf/k ],
-                    [ k,    Esf ]
-                    ]).transpose(2,0,1)
+                [Edf, Erf/k],
+                [k, Esf]
+            ]).transpose(2, 0, 1)
 
             S2 = np.array([
-                    [ Edr,  one ],
-                    [ Err,  Esr ]
-                    ]).transpose(2,0,1)
+                [Edr, one],
+                [Err, Esr]
+            ]).transpose(2, 0, 1)
         elif k_side == 1:
             S1 = np.array([
-                    [ Edf,  Erf ],
-                    [ one,    Esf ]
-                    ]).transpose(2,0,1)
+                [Edf, Erf],
+                [one, Esf]
+            ]).transpose(2, 0, 1)
 
             S2 = np.array([
-                    [ Edr,  one/k ],
-                    [ Err*k,  Esr ]
-                    ]).transpose(2,0,1)
+                [Edr, one/k],
+                [Err*k, Esr]
+            ]).transpose(2, 0, 1)
         else:
             raise ValueError(f"Invalid k_side {k_side}, expected 0 or 1.")
         return (S1, S2)
 
     def dut_termination(self, S, gamma):
         """Impedance looking from DUT to VNA terminated with switch term."""
-        term = S[:,1,1] + (S[:,0,1] * S[:,1,0] * gamma) / (1 - S[:,0,0] * gamma)
+        term = S[:, 1, 1] + (S[:, 0, 1] * S[:, 1, 0] * gamma) / (1 - S[:, 0, 0] * gamma)
         return term
+
 
 class MultiportSOLT(MultiportCal):
     """
@@ -6181,7 +6375,8 @@ class MultiportSOLT(MultiportCal):
         self.nports = ideals[0].nports
         nports = self.nports
         if nports < 3:
-            raise ValueError("Too few ports in input networks. At least 3 required.")
+            raise ValueError(
+                "Too few ports in input networks. At least 3 required.")
 
         self.switch_terms = switch_terms
 
@@ -6193,7 +6388,7 @@ class MultiportSOLT(MultiportCal):
             else:
                 raise ValueError(
                     "Unable to determine 'thru_pos' automatically. Set it manually to either 'first' or 'last'"
-                    )
+                )
         if thru_pos not in ['last', 'first']:
             raise ValueError("thru_pos must be either 'first' or 'last'")
 
@@ -6210,7 +6405,10 @@ class MultiportSOLT(MultiportCal):
             warn("SixteenTerm calibration is reduced to 8-terms.", stacklevel=2)
 
         if len(ideals) < nports - 1:
-            raise ValueError(f"Invalid number of ideals. Expected at least {nports-1} but got {len(ideals)}.")
+            raise ValueError(
+                f"Invalid number of ideals. Expected at least {
+                    nports - 1} but got {
+                    len(ideals)}.")
 
         self.thru_ports = []
         for thru in ideals[:nports-1]:
@@ -6220,11 +6418,12 @@ class MultiportSOLT(MultiportCal):
                     if thru.s[-1, i, j] != 0:
                         nonzero.append([i, j])
             if len(nonzero) != 1:
-                raise ValueError("Invalid thru ideal. Thru should connect exactly two ports.")
+                raise ValueError(
+                    "Invalid thru ideal. Thru should connect exactly two ports.")
 
             self.thru_ports.append(tuple(nonzero[0]))
 
-        #Generate cal_dict in the format required by MultiportCal.
+        # Generate cal_dict in the format required by MultiportCal.
         nports = self.nports
         nthrus = nports - 1
         cal_dict = {}
@@ -6253,12 +6452,7 @@ class MultiportSOLT(MultiportCal):
 
         super().__init__(cal_dict=cal_dict, isolation=isolation)
 
-## Functions
-
-
-
-
-
+# Functions
 
 
 def ideal_coefs_12term(frequency):
@@ -6272,23 +6466,24 @@ def ideal_coefs_12term(frequency):
     zero = zeros(len(frequency), dtype='complex')
     one = ones(len(frequency), dtype='complex')
     ideal_coefs = {}
-    ideal_coefs.update({k:zero for k in [\
+    ideal_coefs.update({k: zero for k in [
         'forward directivity',
         'forward source match',
         'forward load match',
         'reverse directivity',
         'reverse load match',
         'reverse source match',
-        ]})
+    ]})
 
-    ideal_coefs.update({k:one for k in [\
+    ideal_coefs.update({k: one for k in [
         'forward reflection tracking',
         'forward transmission tracking',
         'reverse reflection tracking',
         'reverse transmission tracking',
-        ]})
+    ]})
 
     return ideal_coefs
+
 
 def unterminate(ntwk, gamma_f, gamma_r):
     r"""
@@ -6339,14 +6534,15 @@ def unterminate(ntwk, gamma_f, gamma_r):
 
     one = np.ones(ntwk.frequency.npoints)
 
-    d = one - m[:,0,1]*m[:,1,0]*gamma_r[:,0,0]*gamma_f[:,0,0]
-    u[:,0,0] = (m[:,0,0] - m[:,0,1]*m[:,1,0]*gamma_f[:,0,0])/(d)
-    u[:,0,1] = (m[:,0,1] - m[:,0,0]*m[:,0,1]*gamma_r[:,0,0])/(d)
-    u[:,1,0] = (m[:,1,0] - m[:,1,1]*m[:,1,0]*gamma_f[:,0,0])/(d)
-    u[:,1,1] = (m[:,1,1] - m[:,0,1]*m[:,1,0]*gamma_r[:,0,0])/(d)
+    d = one - m[:, 0, 1]*m[:, 1, 0]*gamma_r[:, 0, 0]*gamma_f[:, 0, 0]
+    u[:, 0, 0] = (m[:, 0, 0] - m[:, 0, 1]*m[:, 1, 0]*gamma_f[:, 0, 0])/(d)
+    u[:, 0, 1] = (m[:, 0, 1] - m[:, 0, 0]*m[:, 0, 1]*gamma_r[:, 0, 0])/(d)
+    u[:, 1, 0] = (m[:, 1, 0] - m[:, 1, 1]*m[:, 1, 0]*gamma_f[:, 0, 0])/(d)
+    u[:, 1, 1] = (m[:, 1, 1] - m[:, 0, 1]*m[:, 1, 0]*gamma_r[:, 0, 0])/(d)
 
     unterminated.s = u
     return unterminated
+
 
 def terminate(ntwk, gamma_f, gamma_r):
     """
@@ -6383,11 +6579,14 @@ def terminate(ntwk, gamma_f, gamma_r):
 
     m = ntwk.copy()
 
-    m.s[:,0,0] = ntwk.s[:,0,0] + ntwk.s[:,1,0]*ntwk.s[:,0,1]*gamma_f.s[:,0,0]/(1-ntwk.s[:,1,1]*gamma_f.s[:,0,0])
-    m.s[:,1,1] = ntwk.s[:,1,1] + ntwk.s[:,1,0]*ntwk.s[:,0,1]*gamma_r.s[:,0,0]/(1-ntwk.s[:,0,0]*gamma_r.s[:,0,0])
-    m.s[:,1,0] = ntwk.s[:,1,0]/(1-ntwk.s[:,1,1]*gamma_f.s[:,0,0])
-    m.s[:,0,1] = ntwk.s[:,0,1]/(1-ntwk.s[:,0,0]*gamma_r.s[:,0,0])
+    m.s[:, 0, 0] = ntwk.s[:, 0, 0] + ntwk.s[:, 1, 0]*ntwk.s[:, 0, 1] * \
+        gamma_f.s[:, 0, 0]/(1-ntwk.s[:, 1, 1]*gamma_f.s[:, 0, 0])
+    m.s[:, 1, 1] = ntwk.s[:, 1, 1] + ntwk.s[:, 1, 0]*ntwk.s[:, 0, 1] * \
+        gamma_r.s[:, 0, 0]/(1-ntwk.s[:, 0, 0]*gamma_r.s[:, 0, 0])
+    m.s[:, 1, 0] = ntwk.s[:, 1, 0]/(1-ntwk.s[:, 1, 1]*gamma_f.s[:, 0, 0])
+    m.s[:, 0, 1] = ntwk.s[:, 0, 1]/(1-ntwk.s[:, 0, 0]*gamma_r.s[:, 0, 0])
     return m
+
 
 def terminate_nport(ntwk, gammas):
     """
@@ -6428,23 +6627,25 @@ def terminate_nport(ntwk, gammas):
     nports = ntwk.nports
     fpoints = len(ntwk.frequency)
     if len(gammas) != ntwk.nports:
-        raise ValueError("len(gammas) doesn't match the number of network ports")
+        raise ValueError(
+            "len(gammas) doesn't match the number of network ports")
     ones = np.ones(len(ntwk.s))
     for i in range(nports):
         term = np.zeros((fpoints, 2*nports, 2*nports), dtype=complex)
         for j in range(nports):
             if i == j:
-                term[:,nports+j,j] = ones
-                term[:,j,j+nports] = ones
+                term[:, nports+j, j] = ones
+                term[:, j, j+nports] = ones
                 continue
-            term[:,j,j] = gammas[j].s[:,0,0]
-            term[:,nports+j,j] = ones
+            term[:, j, j] = gammas[j].s[:, 0, 0]
+            term[:, nports+j, j] = ones
         net = Network(s=term, frequency=nin.frequency, z0=50)
         net = connect(nin, 0, net, 0, nports)
         for j in range(nports):
-            nout.s[:,j,i] = net.s[:,j,i]
+            nout.s[:, j, i] = net.s[:, j, i]
     nout.z0 = ntwk.z0
     return nout
+
 
 def compute_switch_terms(ntwks):
     """
@@ -6483,22 +6684,28 @@ def compute_switch_terms(ntwks):
         raise ValueError("At least three networks are required.")
 
     fpoints = len(ntwks[0].frequency)
-    Gamma21_fill = np.zeros(shape=(fpoints,), dtype=complex)  # forward switch term
-    Gamma12_fill = np.zeros(shape=(fpoints,), dtype=complex)  # reverse switch term
-    for inx in range(fpoints): # iterate through all frequency points
+    # forward switch term
+    Gamma21_fill = np.zeros(shape=(fpoints,), dtype=complex)
+    # reverse switch term
+    Gamma12_fill = np.zeros(shape=(fpoints,), dtype=complex)
+    for inx in range(fpoints):  # iterate through all frequency points
         # create the system matrix
         H = np.array([
-            [-ntwk.s[inx,0,0]*ntwk.s[inx,0,1]/ntwk.s[inx,1,0], -ntwk.s[inx,1,1], 1, ntwk.s[inx,0,1]/ntwk.s[inx,1,0]]
+            [-ntwk.s[inx, 0, 0]*ntwk.s[inx, 0, 1]/ntwk.s[inx, 1, 0],
+                -ntwk.s[inx, 1, 1], 1, ntwk.s[inx, 0, 1]/ntwk.s[inx, 1, 0]]
             for ntwk in ntwks])
-        _,_,vh = np.linalg.svd(H)    # compute the SVD
-        nullspace = vh[-1,:].conj()   # get the nullspace
+        _, _, vh = np.linalg.svd(H)    # compute the SVD
+        nullspace = vh[-1, :].conj()   # get the nullspace
         Gamma21_fill[inx] = nullspace[1]/nullspace[2]
         Gamma12_fill[inx] = nullspace[0]/nullspace[3]
 
-    Gamma21 = Network(s=Gamma21_fill, frequency=ntwks[0].frequency, name='Gamma21')
-    Gamma12 = Network(s=Gamma12_fill, frequency=ntwks[0].frequency, name='Gamma12')
+    Gamma21 = Network(
+        s=Gamma21_fill, frequency=ntwks[0].frequency, name='Gamma21')
+    Gamma12 = Network(
+        s=Gamma12_fill, frequency=ntwks[0].frequency, name='Gamma12')
 
     return [Gamma21, Gamma12]
+
 
 def determine_line(thru_m, line_m, line_approx=None):
     r"""
@@ -6558,29 +6765,32 @@ def determine_line(thru_m, line_m, line_approx=None):
     if line_approx is None:
         # estimate line length, by assuming error networks are well
         # matched
-        line_approx_s21 = line_m.s[:,1,0] / thru_m.s[:,1,0]
+        line_approx_s21 = line_m.s[:, 1, 0] / thru_m.s[:, 1, 0]
     else:
-        line_approx_s21 = line_approx.s[:,1,0]
+        line_approx_s21 = line_approx.s[:, 1, 0]
 
     C = thru_m.inv**line_m
     # the eigen values of the matrix C, are equal to s12,s12^-1)
     # we need to choose the correct one
-    w,v = linalg.eig(C.t)
-    s12_0, s12_1 = w[:,0], w[:,1]
+    w, v = linalg.eig(C.t)
+    s12_0, s12_1 = w[:, 0], w[:, 1]
     s12 = find_correct_sign(s12_0, s12_1, line_approx_s21)
     found_line = line_m.copy()
-    found_line.s = np.array([[zero, s12],[s12,zero]]).transpose(2,0,1)
+    found_line.s = np.array([[zero, s12], [s12, zero]]).transpose(2, 0, 1)
     return found_line
 
 
-def _regularize_inplace(z : ComplexArray, epsilon : float=1e-7) -> ComplexArray:
+def _regularize_inplace(
+        z: ComplexArray,
+        epsilon: float = 1e-7) -> ComplexArray:
     """ Regularize an array inplace around zero """
-    zero_idx = np.abs(z)<epsilon
+    zero_idx = np.abs(z) < epsilon
     z[zero_idx] = .5*(epsilon * np.exp(np.angle(z[zero_idx])*1j)+z[zero_idx])
     return z
 
+
 def determine_reflect(thru_m, reflect_m, line_m, reflect_approx=None,
-                     line_approx=None, return_all=False):
+                      line_approx=None, return_all=False):
     """
     Determine reflect from a thru, reflect, line measurements.
 
@@ -6618,7 +6828,8 @@ def determine_reflect(thru_m, reflect_m, line_m, reflect_approx=None,
     thru_m.s[:, 0, 0] = _regularize_inplace(thru_m.s[:, 0, 0])
     thru_m.s[:, 1, 1] = _regularize_inplace(thru_m.s[:, 1, 1])
 
-    #Call determine_line first to solve root choice of the propagation constant
+    # Call determine_line first to solve root choice of the propagation
+    # constant
     line = determine_line(thru_m, line_m, line_approx)
 
     inv = linalg.inv
@@ -6628,61 +6839,61 @@ def determine_reflect(thru_m, reflect_m, line_m, reflect_approx=None,
     # tt is equal to T from equation (24) in the paper
     tt = einsum('ijk,ikl -> ijl', rd, inv(rt))
 
-    a = tt[:,1,0]
-    b = tt[:,1,1]-tt[:,0,0]
-    c = -tt[:,0,1]
+    a = tt[:, 1, 0]
+    b = tt[:, 1, 1]-tt[:, 0, 0]
+    c = -tt[:, 0, 1]
     sqrtD = sqrt(b*b-4*a*c)
 
     # The variables a, b, c define a quadratic equation for which the solutions sol1 and sol2 correspond to the
     # ratios (r11/r21) and (r12/r22) from equations (30) and (31) in the paper
     # The quadratic equation has solutions sol1 = (-b-sqrt(b*b-4*a*c))/(2*a), sol2 = (-b+sqrt(b*b-4*a*c))/(2*a)
-    # For a=0 these become degenerate. Also the consecutive equations for x1 and x2 contain singularities for a=0 or c=0
+    # For a=0 these become degenerate. Also the consecutive equations for x1
+    # and x2 contain singularities for a=0 or c=0
 
     sol1 = (-b-sqrtD)/(2*a)
     sol2 = (-b+sqrtD)/(2*a)
 
     # equation (32)
-    x1 = (tt[:,1,0]*sol1 + tt[:,1,1])/(tt[:,0,1]/sol2 + tt[:,0,0])
-    x2 = (tt[:,1,0]*sol2 + tt[:,1,1])/(tt[:,0,1]/sol1 + tt[:,0,0])
+    x1 = (tt[:, 1, 0]*sol1 + tt[:, 1, 1])/(tt[:, 0, 1]/sol2 + tt[:, 0, 0])
+    x2 = (tt[:, 1, 0]*sol2 + tt[:, 1, 1])/(tt[:, 0, 1]/sol1 + tt[:, 0, 0])
 
-    e2 = line.s[:,0,1]**2
-    rootChoice = abs(x1 - e2) < abs(x2 - e2) # see gh-870
+    e2 = line.s[:, 0, 1]**2
+    rootChoice = abs(x1 - e2) < abs(x2 - e2)  # see gh-870
 
     y = sol1*invert(rootChoice) + sol2*rootChoice
     x = sol1*rootChoice + sol2*invert(rootChoice)
     b = y
 
-    e = thru_m.s[:,0,0]
+    e = thru_m.s[:, 0, 0]
     d = -det(thru_m.s)
-    f = -thru_m.s[:,1,1]
+    f = -thru_m.s[:, 1, 1]
 
-    gam = (f-d/x)/(1-e/x) # equation (40)
+    gam = (f-d/x)/(1-e/x)  # equation (40)
     b_A = (e-b)/(d-b*f)  # equation (41): beta/alpha
 
-    w1 = reflect_m.s[:,0,0]
-    w2 = reflect_m.s[:,1,1]
+    w1 = reflect_m.s[:, 0, 0]
+    w2 = reflect_m.s[:, 1, 1]
 
     # equation (45)
-    a = sqrt(((w1-b)*(1+w2*b_A)*(d-b*f))/\
-            ((w2+gam)*(1-w1/x)*(1-e/x)))
+    a = sqrt(((w1-b)*(1+w2*b_A)*(d-b*f)) / ((w2+gam)*(1-w1/x)*(1-e/x)))
 
-    out = [(w1-b)/(a*(1-w1/x)), (w1-b)/(-a*(1-w1/x))] # equation (47)
+    out = [(w1-b)/(a*(1-w1/x)), (w1-b)/(-a*(1-w1/x))]  # equation (47)
 
     if return_all:
-        return [Network(frequency=thru_m.frequency, s = k) for k in out]
+        return [Network(frequency=thru_m.frequency, s=k) for k in out]
 
     if reflect_approx is None:
         reflect_approx = reflect_m.copy()
-        reflect_approx.s[:,0,0]=-1
+        reflect_approx.s[:, 0, 0] = -1
 
     closer = find_closest(out[0], out[1], reflect_approx.s11.s.flatten())
     reflect = reflect_approx.copy()
-    reflect.s[:,0,0] = closer
+    reflect.s[:, 0, 0] = closer
 
     return reflect.s11
 
 
-def convert_12term_2_8term(coefs_12term, redundant_k = False):
+def convert_12term_2_8term(coefs_12term, redundant_k=False):
     """
     Convert the 12-term and 8-term error coefficients.
 
@@ -6704,14 +6915,14 @@ def convert_12term_2_8term(coefs_12term, redundant_k = False):
     Erf = coefs_12term['forward reflection tracking']
     Etf = coefs_12term['forward transmission tracking']
     Elf = coefs_12term['forward load match']
-    Eif = coefs_12term.get('forward isolation',0)  # noqa: F841
+    Eif = coefs_12term.get('forward isolation', 0)  # noqa: F841
 
     Edr = coefs_12term['reverse directivity']
     Esr = coefs_12term['reverse source match']
     Err = coefs_12term['reverse reflection tracking']
     Elr = coefs_12term['reverse load match']
     Etr = coefs_12term['reverse transmission tracking']
-    Eir = coefs_12term.get('reverse isolation',0)  # noqa: F841
+    Eir = coefs_12term.get('reverse isolation', 0)  # noqa: F841
 
     # these are given in eq (30) - (33) in Roger Mark's paper listed in
     # the docstring
@@ -6720,15 +6931,15 @@ def convert_12term_2_8term(coefs_12term, redundant_k = False):
     gamma_f = (Elf - Esr)/(Err + Edr*(Elf - Esr))
     gamma_r = (Elr - Esf)/(Erf + Edf*(Elr - Esf))
 
-    k_first  =   Etf/(Err + Edr*(Elf  - Esr) )
-    k_second =1/(Etr/(Erf + Edf *(Elr - Esf)))
+    k_first = Etf/(Err + Edr*(Elf - Esr))
+    k_second = 1/(Etr/(Erf + Edf * (Elr - Esf)))
     k = (k_first + k_second)/2.
     coefs_8term = {}
-    for l in ['forward directivity','forward source match',
-        'forward reflection tracking','reverse directivity',
-        'reverse reflection tracking','reverse source match',
-        'forward isolation', 'reverse isolation']:
-        coefs_8term[l] = coefs_12term[l].copy()
+    for l_ in ['forward directivity', 'forward source match',
+               'forward reflection tracking', 'reverse directivity',
+               'reverse reflection tracking', 'reverse source match',
+               'forward isolation', 'reverse isolation']:
+        coefs_8term[l_] = coefs_12term[l_].copy()
 
     coefs_8term['forward switch term'] = gamma_f
     coefs_8term['reverse switch term'] = gamma_r
@@ -6737,6 +6948,7 @@ def convert_12term_2_8term(coefs_12term, redundant_k = False):
         coefs_8term['k first'] = k_first
         coefs_8term['k second'] = k_second
     return coefs_8term
+
 
 def convert_8term_2_12term(coefs_8term):
     """
@@ -6772,19 +6984,19 @@ def convert_8term_2_12term(coefs_8term):
         Etr = Erf * 1. / k_second
     else:
         # taken from eq (37),(39) in the Roger Marks paper
-        Elr = Esf  + (Erf *gamma_r)/(1. - Edf  * gamma_r)
-        Etr = ((Elr - Esf )/gamma_r) * 1./k_second
+        Elr = Esf + (Erf * gamma_r)/(1. - Edf * gamma_r)
+        Etr = ((Elr - Esf)/gamma_r) * 1./k_second
 
     coefs_12term['forward load match'] = Elf
     coefs_12term['reverse load match'] = Elr
     coefs_12term['forward transmission tracking'] = Etf
     coefs_12term['reverse transmission tracking'] = Etr
 
-    for l in ['forward directivity', 'forward source match',
-              'forward reflection tracking', 'reverse directivity',
-              'reverse reflection tracking', 'reverse source match',
-              'forward isolation', 'reverse isolation']:
-        coefs_12term[l] = coefs_8term[l].copy()
+    for l_ in ['forward directivity', 'forward source match',
+               'forward reflection tracking', 'reverse directivity',
+               'reverse reflection tracking', 'reverse source match',
+               'forward isolation', 'reverse isolation']:
+        coefs_12term[l_] = coefs_8term[l_].copy()
 
     return coefs_12term
 
@@ -6807,42 +7019,41 @@ def convert_pnacoefs_2_skrf(coefs):
 
     """
 
-    coefs_map ={'Directivity':'directivity',
-                'SourceMatch':'source match',
-                'ReflectionTracking':'reflection tracking',
-                'LoadMatch':'load match',
-                'TransmissionTracking':'transmission tracking',
-                'CrossTalk':'isolation'}
+    coefs_map = {'Directivity': 'directivity',
+                 'SourceMatch': 'source match',
+                 'ReflectionTracking': 'reflection tracking',
+                 'LoadMatch': 'load match',
+                 'TransmissionTracking': 'transmission tracking',
+                 'CrossTalk': 'isolation'}
 
     skrf_coefs = {}
 
-    if len(coefs) ==3:
+    if len(coefs) == 3:
         for k in coefs:
-            coef= k[:-5]
+            coef = k[:-5]
             coef_key = coefs_map[coef]
             skrf_coefs[coef_key] = coefs[k]
 
     else:
         ports = list(set([k[-2] for k in coefs]))
         ports.sort(key=int)
-        port_map ={ports[0]: 'forward',
-                   ports[1]: 'reverse'}
+        port_map = {ports[0]: 'forward',
+                    ports[1]: 'reverse'}
 
         for k in coefs:
-            coef,p1,p2 = k[:-5],k[-4],k[-2]
+            coef, p1, p2 = k[:-5], k[-4], k[-2]
             # the source port has a different position for reflective
             # and transmissive standards
-            if coef in ['Directivity','SourceMatch','ReflectionTracking']:
+            if coef in ['Directivity', 'SourceMatch', 'ReflectionTracking']:
                 coef_key = port_map[p1]+' '+coefs_map[coef]
-            elif coef in ['LoadMatch','TransmissionTracking','CrossTalk']:
+            elif coef in ['LoadMatch', 'TransmissionTracking', 'CrossTalk']:
                 coef_key = port_map[p2]+' '+coefs_map[coef]
             skrf_coefs[coef_key] = coefs[k]
 
-
-
     return skrf_coefs
 
-def convert_skrfcoefs_2_pna(coefs, ports = (1,2)):
+
+def convert_skrfcoefs_2_pna(coefs, ports=(1, 2)):
     """
     Convert  skrf error coefficients to pna error coefficients
 
@@ -6870,96 +7081,90 @@ def convert_skrfcoefs_2_pna(coefs, ports = (1,2)):
     if not hasattr(ports, '__len__'):
         ports = ports,
 
-    coefs_map ={'directivity':'Directivity',
-                'source match':'SourceMatch',
-                'reflection tracking':'ReflectionTracking',
-                'load match':'LoadMatch',
-                'transmission tracking':'TransmissionTracking',
-                'isolation':'CrossTalk'}
+    coefs_map = {'directivity': 'Directivity',
+                 'source match': 'SourceMatch',
+                 'reflection tracking': 'ReflectionTracking',
+                 'load match': 'LoadMatch',
+                 'transmission tracking': 'TransmissionTracking',
+                 'isolation': 'CrossTalk'}
 
     pna_coefs = {}
 
-    if len(coefs)==3:
+    if len(coefs) == 3:
         for k in coefs:
-            coef_key = coefs_map[k] + '(%i,%i)'%(ports[0],ports[0])
+            coef_key = coefs_map[k] + '(%i,%i)' % (ports[0], ports[0])
             pna_coefs[coef_key] = coefs[k]
-
 
     else:
-        port_map_trans ={'forward':ports[1],
-                         'reverse':ports[0]}
-        port_map_refl  ={'forward':ports[0],
-                         'reverse':ports[1]}
+        port_map_trans = {'forward': ports[1],
+                          'reverse': ports[0]}
+        port_map_refl = {'forward': ports[0],
+                         'reverse': ports[1]}
 
         for k in coefs:
-            fr = k.split(' ')[0] # remove 'forward|reverse-ness'
-            eterm = coefs_map[k.lstrip(fr)[1:] ]
+            fr = k.split(' ')[0]  # remove 'forward|reverse-ness'
+            eterm = coefs_map[k.lstrip(fr)[1:]]
             # the source port has a different position for reflective
             # and transmissive standards
-            if eterm  in ['Directivity','SourceMatch','ReflectionTracking']:
-                coef_key= eterm+'(%i,%i)'%(port_map_refl[fr],
-                                           port_map_refl[fr])
+            if eterm in ['Directivity', 'SourceMatch', 'ReflectionTracking']:
+                coef_key = eterm+'(%i,%i)' % (port_map_refl[fr],
+                                              port_map_refl[fr])
 
-
-            elif eterm in ['LoadMatch','TransmissionTracking','CrossTalk']:
+            elif eterm in ['LoadMatch', 'TransmissionTracking', 'CrossTalk']:
                 receiver_port = port_map_trans[fr]
                 source_port = port_map_refl[fr]
-                coef_key= eterm+'(%i,%i)'%(receiver_port,source_port)
+                coef_key = eterm+'(%i,%i)' % (receiver_port, source_port)
             pna_coefs[coef_key] = coefs[k]
 
-
     return pna_coefs
+
 
 def align_measured_ideals(measured, ideals):
     """
     Aligns two lists of networks based on the intersection of their names.
 
     """
-    measured = [ measure for measure in measured\
-        for ideal in ideals if ideal.name in measure.name]
-    ideals = [ ideal for measure in measured\
-        for ideal in ideals if ideal.name in measure.name]
+    measured = [measure for measure in measured
+                for ideal in ideals if ideal.name in measure.name]
+    ideals = [ideal for measure in measured
+              for ideal in ideals if ideal.name in measure.name]
     return measured, ideals
+
 
 def two_port_error_vector_2_Ts(error_coefficients):
     ec = error_coefficients
     npoints = len(ec['k'])
-    one = np.ones(npoints,dtype=complex)
-    zero = np.zeros(npoints,dtype=complex)
-    #T_1 = np.zeros((npoints, 2,2),dtype=complex)
-    #T_1[:,0,0],T_1[:,1,1] = -1*ec['det_X'], -1*ec['k']*ec['det_Y']
-    #T_1[:,1,1] = -1*ec['k']*ec['det_Y']
+    one = np.ones(npoints, dtype=complex)
+    zero = np.zeros(npoints, dtype=complex)
+    # T_1 = np.zeros((npoints, 2,2),dtype=complex)
+    # T_1[:,0,0],T_1[:,1,1] = -1*ec['det_X'], -1*ec['k']*ec['det_Y']
+    # T_1[:,1,1] = -1*ec['k']*ec['det_Y']
+
+    T1 = np.array([[-1*ec['det_X'], zero], [zero, -1*ec['k'] * ec['det_Y']]]).transpose().reshape(-1, 2, 2)
+    T2 = np.array([[ec['e00'], zero], [zero, ec['k']*ec['e33']]]
+                  ).transpose().reshape(-1, 2, 2)
+    T3 = np.array([[-1*ec['e11'], zero], [zero, -1*ec['k'] * ec['e22']]]).transpose().reshape(-1, 2, 2)
+    T4 = np.array([
+        [one, zero],
+        [zero, ec['k']]]).transpose().reshape(-1, 2, 2)
+    return T1, T2, T3, T4
 
 
-    T1 = np.array([\
-            [       -1*ec['det_X'], zero    ],\
-            [       zero,           -1*ec['k']*ec['det_Y']]]).transpose().reshape(-1,2,2)
-    T2 = np.array([\
-            [       ec['e00'], zero ],\
-            [       zero,                   ec['k']*ec['e33']]]).transpose().reshape(-1,2,2)
-    T3 = np.array([\
-            [       -1*ec['e11'], zero      ],\
-            [       zero,                   -1*ec['k']*ec['e22']]]).transpose().reshape(-1,2,2)
-    T4 = np.array([\
-            [       one, zero       ],\
-            [       zero,                   ec['k']]]).transpose().reshape(-1,2,2)
-    return T1,T2,T3,T4
-
-def error_dict_2_network(coefs, frequency,  is_reciprocal=False, **kwargs):
+def error_dict_2_network(coefs, frequency, is_reciprocal=False, **kwargs):
     """
     Create a Network from a dictionary of standard error terms.
     """
 
-    if len (coefs.keys()) == 3:
+    if len(coefs.keys()) == 3:
         # ASSERT: we have one port data
         if is_reciprocal:
-            #TODO: make this better and maybe have phase continuity
+            # TODO: make this better and maybe have phase continuity
             # functionality
-            tracking  = coefs['reflection tracking']
-            #s12 = np.sqrt(tracking)
-            #s21 = np.sqrt(tracking)
-            s12 =  sqrt_phase_unwrap(tracking)
-            s21 =  sqrt_phase_unwrap(tracking)
+            tracking = coefs['reflection tracking']
+            # s12 = np.sqrt(tracking)
+            # s21 = np.sqrt(tracking)
+            s12 = sqrt_phase_unwrap(tracking)
+            s21 = sqrt_phase_unwrap(tracking)
 
         else:
             s21 = coefs['reflection tracking']
@@ -6968,17 +7173,25 @@ def error_dict_2_network(coefs, frequency,  is_reciprocal=False, **kwargs):
         s11 = coefs['directivity']
         s22 = coefs['source match']
         return Network(
-            frequency = frequency,
-            s = np.array([[s11, s21],[s12,s22]]).transpose().reshape(-1,2,2),
+            frequency=frequency,
+            s=np.array([[s11, s21], [s12, s22]]).transpose().reshape(-1, 2, 2),
             **kwargs)
 
     else:
-        p1,p2 = {},{}
-        for k in ['source match','directivity','reflection tracking']:
+        p1, p2 = {}, {}
+        for k in ['source match', 'directivity', 'reflection tracking']:
             p1[k] = coefs['forward '+k]
             p2[k] = coefs['reverse '+k]
-        forward = error_dict_2_network(p1, frequency = frequency,
-            name='forward', is_reciprocal = is_reciprocal,**kwargs)
-        reverse = error_dict_2_network(p2, frequency = frequency,
-            name='reverse', is_reciprocal = is_reciprocal,**kwargs)
+        forward = error_dict_2_network(
+            p1,
+            frequency=frequency,
+            name='forward',
+            is_reciprocal=is_reciprocal,
+            **kwargs)
+        reverse = error_dict_2_network(
+            p2,
+            frequency=frequency,
+            name='reverse',
+            is_reciprocal=is_reciprocal,
+            **kwargs)
         return (forward, reverse)

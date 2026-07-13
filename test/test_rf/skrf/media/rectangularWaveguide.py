@@ -115,15 +115,13 @@ class RectangularWaveguide(Media):
                  rho: None | NumberLike = None,
                  roughness: None | NumberLike = None,
                  *args, **kwargs):
-        Media.__init__(self, frequency = frequency,
-                       z0_port = z0_port, z0_override = z0_override, z0 = z0)
+        Media.__init__(self, frequency=frequency,
+                       z0_port=z0_port, z0_override=z0_override, z0=z0)
 
         if b is None:
             b = a/2.
-        if mode_type.lower() not in ['te','tm']:
+        if mode_type.lower() not in ['te', 'tm']:
             raise ValueError('mode_type must be either \'te\' or \'tm\'')
-
-
 
         self.a = a
         self.b = b
@@ -135,17 +133,15 @@ class RectangularWaveguide(Media):
         self.rho = rho
         self.roughness = roughness
 
-
     def __str__(self):
-        f=self.frequency
+        f = self.frequency
         output = (
-                f'Rectangular Waveguide Media.  {f.f_scaled[0]}-{f.f_scaled[-1]} {f.unit}.  {f.npoints} points'
-                f'\n a= {self.a:.2e}m, b= {self.b:.2e}m')
+            f'Rectangular Waveguide Media.  {f.f_scaled[0]}-{f.f_scaled[-1]} {f.unit}.  {f.npoints} points'
+            f'\n a= {self.a:.2e}m, b= {self.b:.2e}m')
         return output
 
     def __repr__(self):
         return self.__str__()
-
 
     @classmethod
     def from_z0(cls, frequency: Frequency, z0: NumberLike, f: Number,
@@ -171,9 +167,10 @@ class RectangularWaveguide(Media):
         mu = _const.mu_0*mu_r
         ep = _const.epsilon_0*ep_r
         w = 2*pi*f
-        a =pi/(w*mu) * 1./sqrt(1/(z0*1j)**2+ep/mu)
+        a = pi/(w*mu) * 1./sqrt(1/(z0*1j)**2+ep/mu)
 
-        kw.update(dict(frequency=frequency,a=a, m=1, n=0, ep_r=ep_r, mu_r=mu_r))
+        kw.update(dict(frequency=frequency, a=a,
+                  m=1, n=0, ep_r=ep_r, mu_r=mu_r))
 
         return cls(**kw)
 
@@ -279,8 +276,7 @@ class RectangularWaveguide(Media):
         kc : number
                 cut-off wavenumber
         """
-        return sqrt( self.kx**2 + self.ky**2)
-
+        return sqrt(self.kx**2 + self.ky**2)
 
     @property
     def f_cutoff(self) -> NumberLike:
@@ -296,7 +292,7 @@ class RectangularWaveguide(Media):
 
         """
         v = 1/sqrt(self.ep*self.mu)
-        return v* self.kc/(2*np.pi)
+        return v * self.kc/(2*np.pi)
 
     @property
     def f_norm(self) -> NumberLike:
@@ -326,7 +322,7 @@ class RectangularWaveguide(Media):
         """
         if self.roughness is not None:
             delta = skin_depth(self.frequency.f, self._rho, self.mu_r)
-            k_w = 1. +exp(-(delta/(2*self.roughness))**1.6)
+            k_w = 1. + exp(-(delta/(2*self.roughness))**1.6)
             return self._rho*k_w**2
 
         return self._rho
@@ -336,7 +332,7 @@ class RectangularWaveguide(Media):
         if isinstance(val, str):
             self._rho = materials[val.lower()]['resistivity(ohm*m)']
         else:
-            self._rho=val
+            self._rho = val
 
     @property
     def lambda_guide(self) -> NumberLike:
@@ -394,28 +390,26 @@ class RectangularWaveguide(Media):
         gamma :  number
             The propagation constant
         """
-        ## haringtons form
-        if False:  #self.m==1 and self.n==0:
+        # haringtons form
+        if False:  # self.m==1 and self.n==0:
             fs = Freespace(frequency=self.frequency,
                            ep_r=self.ep_r,
                            mu_r=self.mu_r)
 
-
-            g = where(self.f_norm>1.,
-                     sqrt(1-self.f_norm**(-2))*fs.gamma,  # cutton
-                 -1j*sqrt(1-self.f_norm**(2))*fs.gamma)  # cutoff
+            g = where(self.f_norm > 1.,
+                      sqrt(1-self.f_norm**(-2))*fs.gamma,  # cutton
+                      -1j*sqrt(1-self.f_norm**(2))*fs.gamma)  # cutoff
 
         else:
             # TODO:  fix this for lossy ep/mu (remove abs?)
             k0, kc = self.k0, self.kc
-            g =  1j*sqrt(abs(k0**2 - kc**2)) * (k0>kc) +\
-                    sqrt(abs(kc**2- k0**2))*(k0<kc) + \
-                    0*(kc==k0)
+            g = 1j*sqrt(abs(k0**2 - kc**2)) * (k0 > kc) +\
+                sqrt(abs(kc**2 - k0**2))*(k0 < kc) + \
+                0*(kc == k0)
 
-        g = g + self.alpha_c *(self.rho is not None)
+        g = g + self.alpha_c * (self.rho is not None)
 
         return g
-
 
     @property
     def alpha_c(self) -> NumberLike:
@@ -458,10 +452,10 @@ class RectangularWaveguide(Media):
         if self.rho is None:
             return 0
 
-        a,b,w,ep,rho,f_n = self.a, self.b, self.frequency.w, self.ep, \
+        a, b, w, ep, rho, f_n = self.a, self.b, self.frequency.w, self.ep, \
             self.rho, self.f_norm
 
-        return 1./b * sqrt( (w*ep)/(2./rho) ) * (1+2.*b/a*(1/f_n)**2)/\
+        return 1./b * sqrt((w*ep)/(2./rho)) * (1+2.*b/a*(1/f_n)**2) /\
             sqrt(1-(1/f_n)**2)
 
     @property
@@ -478,7 +472,7 @@ class RectangularWaveguide(Media):
         """
         omega = self.frequency.w
         impedance_dict = {'te':   1j*omega*self.mu/(self.gamma),
-                          'tm':   -1j*self.gamma/(omega*self.ep),\
-                         }
+                          'tm': -1j*self.gamma/(omega*self.ep),
+                          }
 
         return impedance_dict[self.mode_type]

@@ -27,6 +27,7 @@ from ..validators import Validator
 
 logger = getLogger(__name__)
 
+
 def _format_cmd(cmd: str, **kwargs) -> str:
     def sub(match_obj):
         prefix = match_obj.group("prefix")
@@ -64,7 +65,8 @@ class Channel:
         This class should not be instantiated directly
     """
 
-    def __init__(self, parent, cnum: int | None = None, cname: str | None = None) -> None:
+    def __init__(self, parent, cnum: int | None = None,
+                 cname: str | None = None) -> None:
         self.parent = parent
         self.cnum = cnum
         self.name = cname
@@ -80,7 +82,11 @@ class Channel:
 class VNA:
     _scpi = True  # Set to false in subclasses that don't use SCPI
 
-    def __init__(self, address: str, backend: str = "@py", timeout: int | None = None) -> None:
+    def __init__(
+            self,
+            address: str,
+            backend: str = "@py",
+            timeout: int | None = None) -> None:
         rm = pyvisa.ResourceManager(backend)
         self._resource = rm.open_resource(address, timeout=timeout)
 
@@ -94,7 +100,8 @@ class VNA:
         self.echo = False
 
     def __init_subclass__(cls):
-        if "Channel" in [c[0] for c in inspect.getmembers(cls, inspect.isclass)]:
+        if "Channel" in [c[0]
+                         for c in inspect.getmembers(cls, inspect.isclass)]:
             cls._add_channel_support()
 
     @classmethod
@@ -117,11 +124,17 @@ class VNA:
             delattr(self, ch_id)
 
         def _channels(self) -> list[Channel]:
-            return [getattr(self, ch) for ch in dir(self) if re.fullmatch(r"ch\d+", ch)]
+            return [
+                getattr(
+                    self,
+                    ch) for ch in dir(self) if re.fullmatch(
+                    r"ch\d+",
+                    ch)]
 
         def __getattr__(self, k):
             if not hasattr(self.Channel, k):
-                raise AttributeError(f"{type(self).__name__} has no attribute {k}")
+                raise AttributeError(
+                    f"{type(self).__name__} has no attribute {k}")
             return getattr(self.active_channel, k)
 
         cls.create_channel = create_channel
@@ -201,7 +214,10 @@ class VNA:
 
             cmd = _format_cmd(get_cmd, self=self)
             if values:
-                arg = self.query_values(cmd, container=values_container, complex_values=complex_values)
+                arg = self.query_values(
+                    cmd,
+                    container=values_container,
+                    complex_values=complex_values)
             else:
                 arg = self.query(cmd)
 
@@ -265,7 +281,12 @@ class VNA:
 
         fn(cmd, **kwargs)
 
-    def write_values(self, cmd, values, complex_values: bool = False, **kwargs) -> None:
+    def write_values(
+            self,
+            cmd,
+            values,
+            complex_values: bool = False,
+            **kwargs) -> None:
         logger.debug(f"Write values with command: {cmd}")
 
         if complex_values:
@@ -277,7 +298,8 @@ class VNA:
             elif self._values_fmt == ValuesFormat.BINARY_32:
                 fn = self._resource.write_binary_values
             elif self._values_fmt == ValuesFormat.BINARY_64:
-                fn = functools.partial(self._resource.write_binary_values, datatype="d")
+                fn = functools.partial(
+                    self._resource.write_binary_values, datatype="d")
 
         elif isinstance(self._resource, pyvisa.resources.RegisterBasedResource):
             raise NotImplementedError()
@@ -297,7 +319,11 @@ class VNA:
 
         return fn(cmd, **kwargs)
 
-    def query_values(self, cmd, complex_values: bool = False, **kwargs) -> None:
+    def query_values(
+            self,
+            cmd,
+            complex_values: bool = False,
+            **kwargs) -> None:
         logger.debug(f"Query values with command: {cmd}")
 
         if isinstance(self._resource, pyvisa.resources.MessageBasedResource):
@@ -306,7 +332,8 @@ class VNA:
             elif self._values_fmt == ValuesFormat.BINARY_32:
                 fn = self._resource.query_binary_values
             elif self._values_fmt == ValuesFormat.BINARY_64:
-                fn = functools.partial(self._resource.query_binary_values, datatype="d")
+                fn = functools.partial(
+                    self._resource.query_binary_values, datatype="d")
         elif isinstance(self._resource, pyvisa.resources.RegisterBasedResource):
             raise NotImplementedError()
         else:

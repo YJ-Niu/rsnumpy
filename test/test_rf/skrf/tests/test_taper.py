@@ -37,7 +37,8 @@ class Taper1DTestCase(unittest.TestCase):
         )
 
     def test_value_vector(self):
-        expected_value_vector = self.f(linspace(0, 1, self.n_sections), 0.3) * (self.stop - self.start) + self.start
+        expected_value_vector = self.f(
+            linspace(0, 1, self.n_sections), 0.3) * (self.stop - self.start) + self.start
         assert_equal(self.taper.value_vector, expected_value_vector)
 
     def test_section_length(self):
@@ -45,11 +46,15 @@ class Taper1DTestCase(unittest.TestCase):
         assert_equal(self.taper.section_length, expected_section_length)
 
     def test_media_at(self):
-        expected_impedances = CPW(frequency=self.frequency, w=123e-6, s=6e-6).z0
+        expected_impedances = CPW(
+            frequency=self.frequency, w=123e-6, s=6e-6).z0
         assert_equal(self.taper.media_at(123e-6).z0, expected_impedances)
 
     def test_section_at(self):
-        expected_impedances = np.repeat(CPW(frequency=self.frequency, w=123e-6, s=6e-6).z0[:, np.newaxis], 2, axis=1)
+        expected_impedances = np.repeat(
+            CPW(frequency=self.frequency, w=123e-6, s=6e-6).z0
+            [:, np.newaxis],
+            2, axis=1)
         assert_equal(self.taper.section_at(123e-6).z0, expected_impedances)
 
 
@@ -72,7 +77,8 @@ class LinearTestCase(unittest.TestCase):
         )
 
     def test_value_vector(self):
-        expected_value_vector = linspace(self.start, self.stop, self.n_sections)
+        expected_value_vector = linspace(
+            self.start, self.stop, self.n_sections)
         assert_allclose(self.taper.value_vector, expected_value_vector)
 
     def test_network(self):
@@ -99,7 +105,8 @@ class ExponentialTestCase(unittest.TestCase):
 
     def test_value_vector(self):
         expected_value_vector = self.start * exp(
-            linspace(0, self.length, self.n_sections) / self.length * log(self.stop / self.start)
+            linspace(0, self.length, self.n_sections) /
+            self.length * log(self.stop / self.start)
         )
         assert_equal(self.taper.value_vector, expected_value_vector)
 
@@ -127,17 +134,20 @@ class SmoothStepTestCase(unittest.TestCase):
         )
 
     def test_value_vector(self):
-        expected_value_vector = self.f(linspace(0, 1, self.n_sections)) * (self.stop - self.start) + self.start
+        expected_value_vector = self.f(
+            linspace(0, 1, self.n_sections)) * (self.stop - self.start) + self.start
         assert_equal(self.taper.value_vector, expected_value_vector)
 
 
 class KlopfensteinTestCase(unittest.TestCase):
     @staticmethod
     def phi(z: NDArray[np.float64], a: float) -> NDArray[np.float64]:
-        return np.array([quad(lambda y: iv(1, a * sqrt(1 - y**2)) / a / sqrt(1 - y**2), 0, zi)[0] for zi in z])
+        return np.array([quad(lambda y: iv(1, a * sqrt(1 - y**2)) /
+                        a / sqrt(1 - y**2), 0, zi)[0] for zi in z])
 
     @staticmethod
-    def f(x: NDArray[np.float64], length: float, start: float, stop: float, rmax: float) -> NDArray[np.float64]:
+    def f(x: NDArray[np.float64], length: float, start: float,
+          stop: float, rmax: float) -> NDArray[np.float64]:
         z = x - length / 2
         log_ratio = log(stop / start) / 2
         a = np.arccosh(1 / rmax)
@@ -179,12 +189,14 @@ class KlopfensteinTestCase(unittest.TestCase):
 
     def test_value_vector(self):
         expected_value_vector = self.f(
-            linspace(0, self.length, self.n_sections), self.length, self.start, self.stop, 0.05
+            linspace(0, self.length,
+                     self.n_sections), self.length, self.start, self.stop, 0.05
         )
         assert_equal(self.taper1.value_vector, expected_value_vector)
 
     def test_rmax_argument(self):
         expected_value_vector = self.f(
-            linspace(0, self.length, self.n_sections), self.length, self.start, self.stop, 0.01
+            linspace(0, self.length,
+                     self.n_sections), self.length, self.start, self.stop, 0.01
         )
         assert_equal(self.taper2.value_vector, expected_value_vector)

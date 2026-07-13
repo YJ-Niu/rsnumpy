@@ -14,6 +14,7 @@ class CircuitTestConstructor(unittest.TestCase):
     """
     Various tests on the Circuit constructor.
     """
+
     def setUp(self):
         # Importing network examples
         self.test_dir = os.path.dirname(os.path.abspath(__file__))+'/'
@@ -25,8 +26,8 @@ class CircuitTestConstructor(unittest.TestCase):
         self.port2 = Circuit.Port(self.freq, name='Port2')
         # circuit connections
         self.connections = [[(self.port1, 0), (self.ntwk1, 0)],
-                       [(self.ntwk1, 1), (self.ntwk2, 0)],
-                       [(self.ntwk2, 1), (self.port2, 0)]]
+                            [(self.ntwk1, 1), (self.ntwk2, 0)],
+                            [(self.ntwk2, 1), (self.port2, 0)]]
         self.circuit = Circuit(self.connections)
 
     def test_all_networks_have_name(self):
@@ -72,9 +73,11 @@ class CircuitTestConstructor(unittest.TestCase):
         Test the active s-parameter of a 2-ports network
         """
         # s_act should be equal to s11 if a = [1,0]
-        assert_array_almost_equal(self.circuit.s_active([1, 0])[:,0], self.circuit.s_external[:,0,0])
+        assert_array_almost_equal(self.circuit.s_active(
+            [1, 0])[:, 0], self.circuit.s_external[:, 0, 0])
         # s_act should be equal to s22 if a = [0,1]
-        assert_array_almost_equal(self.circuit.s_active([0, 1])[:,1], self.circuit.s_external[:,1,1])
+        assert_array_almost_equal(self.circuit.s_active(
+            [0, 1])[:, 1], self.circuit.s_external[:, 1, 1])
 
     def test_auto_reduce(self):
         """
@@ -82,7 +85,8 @@ class CircuitTestConstructor(unittest.TestCase):
         """
         # Explicitly enable the `reduce_circuit` method
         reduced_circuit = Circuit(self.connections, auto_reduce=True)
-        assert_array_almost_equal(self.circuit.s_external, reduced_circuit.s_external)
+        assert_array_almost_equal(
+            self.circuit.s_external, reduced_circuit.s_external)
         self.assertNotEqual(self.circuit.dim, reduced_circuit.dim)
 
         # Implicitly enable the `reduce_circuit` method
@@ -101,7 +105,8 @@ class CircuitTestConstructor(unittest.TestCase):
         # No connections should be reduced
         for key, value in kwargs:
             circuit = Circuit(self.connections, **{key: value})
-            assert_array_almost_equal(self.circuit.s_external, circuit.s_external)
+            assert_array_almost_equal(
+                self.circuit.s_external, circuit.s_external)
             self.assertEqual(circuit.connections, self.connections)
 
     def test_update_networks(self):
@@ -126,7 +131,8 @@ class CircuitTestConstructor(unittest.TestCase):
         # Check the result type and values
         circuit_updated = circuit.update_networks(networks=(ntwk3,))
         self.assertTrue(isinstance(circuit_updated, Circuit))
-        assert_array_almost_equal(self.circuit.s_external, circuit_updated.s_external)
+        assert_array_almost_equal(
+            self.circuit.s_external, circuit_updated.s_external)
 
         # Check the result type and values when updating the circuit inplace
         none_result = circuit.update_networks(networks=(ntwk3,), inplace=True)
@@ -150,7 +156,8 @@ class CircuitTestConstructor(unittest.TestCase):
 
         # Check that the cached attributes are set correctly
         for attr, value in zip(cached_attributes, values):
-            assert_array_almost_equal(init_circuit.__dict__.get(attr, 0.0), value)
+            assert_array_almost_equal(
+                init_circuit.__dict__.get(attr, 0.0), value)
 
         # Modify connections to invalidate the cache
         init_circuit.connections = self.connections
@@ -179,10 +186,12 @@ class CircuitTestConstructor(unittest.TestCase):
         self.assertTrue(self.circuit.X.flags['C_CONTIGUOUS'])
         self.assertTrue(self.circuit.X_F.flags['F_CONTIGUOUS'])
 
+
 class CircuitClassMethods(unittest.TestCase):
     """
     Test the various class methods of Circuit such as Ground, Port, etc.
     """
+
     def setUp(self):
         self.freq = rf.Frequency(start=1, stop=2, npoints=101, unit='GHz')
         self.media = rf.media.DefinedGammaZ0(self.freq)
@@ -198,10 +207,9 @@ class CircuitClassMethods(unittest.TestCase):
         gnd = Circuit.Ground(self.freq, 'gnd')
         gnd_ref = rf.Network(frequency=self.freq,
                              s=np.tile(np.array([[-1,]]),
-                                       (len(self.freq),1,1)))
+                                       (len(self.freq), 1, 1)))
 
         assert_array_almost_equal(gnd.s, gnd_ref.s)
-
 
     def test_open(self):
         """
@@ -214,7 +222,7 @@ class CircuitClassMethods(unittest.TestCase):
         opn = Circuit.Open(self.freq, 'open')
         opn_ref = rf.Network(frequency=self.freq,
                              s=np.tile(np.array([[1]]),
-                                       (len(self.freq),1,1)))
+                                       (len(self.freq), 1, 1)))
 
         assert_array_almost_equal(opn.s, opn_ref.s)
 
@@ -226,13 +234,13 @@ class CircuitClassMethods(unittest.TestCase):
                 assert_array_almost_equal(
                     Circuit.SeriesImpedance(self.freq, Z, 'imp', z0=z0).s,
                     self.media.resistor(Z, z0=z0).s
-                    )
+                )
 
         # Z=0 is a thru
         assert_array_almost_equal(
             Circuit.SeriesImpedance(self.freq, Z=0, name='imp').s,
             self.media.thru().s
-            )
+        )
 
     def test_shunt_admittance(self):
         z0s = [1, 50]
@@ -241,14 +249,16 @@ class CircuitClassMethods(unittest.TestCase):
             for Y in Ys:
                 assert_array_almost_equal(
                     Circuit.ShuntAdmittance(self.freq, Y, 'imp', z0=z0).s,
-                    self.media.shunt(self.media.load(rf.tlineFunctions.zl_2_Gamma0(z0, 1/Y))).s
-                    )
+                    self.media.shunt(self.media.load(
+                        rf.tlineFunctions.zl_2_Gamma0(z0, 1/Y))).s
+                )
 
         # Y=INF is a a 2-ports short
         assert_array_almost_equal(
             Circuit.ShuntAdmittance(self.freq, INF, 'imp').s,
             self.media.short(nports=2).s
-            )
+        )
+
 
 class CircuitTestWilkinson(unittest.TestCase):
     """
@@ -264,6 +274,7 @@ class CircuitTestWilkinson(unittest.TestCase):
 
 
     """
+
     def setUp(self):
         """
         Circuit setup
@@ -275,12 +286,14 @@ class CircuitTestWilkinson(unittest.TestCase):
 
         # resistor
         self.R = 100
-        self.line_resistor = rf.media.DefinedGammaZ0(frequency=self.freq, z0=Z0_ports)
+        self.line_resistor = rf.media.DefinedGammaZ0(
+            frequency=self.freq, z0=Z0_ports)
         self.resistor = self.line_resistor.resistor(self.R, name='resistor')
 
         # branches
         Z0_branches = np.sqrt(2)*Z0_ports
-        self.line_branches = rf.media.DefinedGammaZ0(frequency=self.freq, z0=Z0_branches)
+        self.line_branches = rf.media.DefinedGammaZ0(
+            frequency=self.freq, z0=Z0_branches)
         self.branch1 = self.line_branches.line(90, unit='deg', name='branch1')
         self.branch2 = self.line_branches.line(90, unit='deg', name='branch2')
 
@@ -291,10 +304,10 @@ class CircuitTestWilkinson(unittest.TestCase):
 
         # Connection setup
         self.connections = [
-                   [(port1, 0), (self.branch1, 0), (self.branch2, 0)],
-                   [(port2, 0), (self.branch1, 1), (self.resistor, 0)],
-                   [(port3, 0), (self.branch2, 1), (self.resistor, 1)]
-                ]
+            [(port1, 0), (self.branch1, 0), (self.branch2, 0)],
+            [(port2, 0), (self.branch1, 1), (self.resistor, 0)],
+            [(port3, 0), (self.branch2, 1), (self.resistor, 1)]
+        ]
 
         self.C = Circuit(self.connections)
 
@@ -318,7 +331,6 @@ class CircuitTestWilkinson(unittest.TestCase):
                             [self.X2_m1, 0, self.X2_m3],
                             [self.X2_m1, self.X2_m2, 0]]) + np.diag(self.X2_nn)
 
-
     @unittest.expectedFailure
     def test_sparam_individual_intersection_matrices(self):
         """
@@ -330,9 +342,12 @@ class CircuitTestWilkinson(unittest.TestCase):
         ----------
         .. [#] P. Hallbjörner, Microw. Opt. Technol. Lett. 38, 99 (2003).
         """
-        np.testing.assert_array_almost_equal(self.C._Xk(self.connections[0])[0], self.X1)
-        np.testing.assert_array_almost_equal(self.C._Xk(self.connections[1])[0], self.X2)
-        np.testing.assert_array_almost_equal(self.C._Xk(self.connections[2])[0], self.X2)
+        np.testing.assert_array_almost_equal(
+            self.C._Xk(self.connections[0])[0], self.X1)
+        np.testing.assert_array_almost_equal(
+            self.C._Xk(self.connections[1])[0], self.X2)
+        np.testing.assert_array_almost_equal(
+            self.C._Xk(self.connections[2])[0], self.X2)
 
     @unittest.expectedFailure
     def test_sparam_global_intersection_matrix(self):
@@ -346,7 +361,8 @@ class CircuitTestWilkinson(unittest.TestCase):
         .. [#] P. Hallbjörner, Microw. Opt. Technol. Lett. 38, 99 (2003).
         """
         from scipy.linalg import block_diag
-        assert_array_almost_equal(self.C.X[0], block_diag(self.X1, self.X2, self.X2) )
+        assert_array_almost_equal(
+            self.C.X[0], block_diag(self.X1, self.X2, self.X2))
 
     def test_sparam_circuit(self):
         """
@@ -389,21 +405,26 @@ class CircuitTestWilkinson(unittest.TestCase):
 
         Built as in https://www.microwaves101.com/encyclopedias/wilkinson-power-splitters
         """
-        designer_wilkinson = rf.Network(os.path.join(self.test_dir, 'designer_wilkinson_splitter.s3p'))
+        designer_wilkinson = rf.Network(os.path.join(
+            self.test_dir, 'designer_wilkinson_splitter.s3p'))
         ntw_C = self.C.network
 
-        assert_array_almost_equal(ntw_C.s[0], designer_wilkinson.s[0], decimal=4)
+        assert_array_almost_equal(
+            ntw_C.s[0], designer_wilkinson.s[0], decimal=4)
 
     def test_s_active(self):
         """
         Test the active s-parameter of a 3-ports network
         """
         # s_act should be equal to s11 if a = [1,0,0]
-        assert_array_almost_equal(self.C.network.s_active([1, 0, 0])[:,0], self.C.s_external[:,0,0])
+        assert_array_almost_equal(self.C.network.s_active(
+            [1, 0, 0])[:, 0], self.C.s_external[:, 0, 0])
         # s_act should be equal to s22 if a = [0,1,0]
-        assert_array_almost_equal(self.C.network.s_active([0, 1, 0])[:,1], self.C.s_external[:,1,1])
+        assert_array_almost_equal(self.C.network.s_active(
+            [0, 1, 0])[:, 1], self.C.s_external[:, 1, 1])
         # s_act should be equal to s33 if a = [0,0,1]
-        assert_array_almost_equal(self.C.network.s_active([0, 0, 1])[:,2], self.C.s_external[:,2,2])
+        assert_array_almost_equal(self.C.network.s_active(
+            [0, 0, 1])[:, 2], self.C.s_external[:, 2, 2])
 
     def test_circuit_reduce_with_split_multi(self):
         """
@@ -417,11 +438,13 @@ class CircuitTestWilkinson(unittest.TestCase):
         self.assertNotEqual(self.C.dim, C_reduced.dim)
         assert_array_almost_equal(ntw_C.s, ntw_C_reduced.s)
 
+
 class CircuitTestCascadeNetworks(unittest.TestCase):
     """
     Build a circuit made of two Networks cascaded and compare the result
     to usual cascading of two networks.
     """
+
     def setUp(self):
         # Importing network examples
         self.test_dir = os.path.dirname(os.path.abspath(__file__))+'/'
@@ -443,9 +466,9 @@ class CircuitTestCascadeNetworks(unittest.TestCase):
         """
         Compare ntwk3 to the Circuit of ntwk1 and ntwk2.
         """
-        connections = [  [(self.port1, 0), (self.ntwk1, 0)],
-                         [(self.ntwk1, 1), (self.ntwk2, 0)],
-                         [(self.ntwk2, 1), (self.port2, 0)] ]
+        connections = [[(self.port1, 0), (self.ntwk1, 0)],
+                       [(self.ntwk1, 1), (self.ntwk2, 0)],
+                       [(self.ntwk2, 1), (self.port2, 0)]]
         circuit = Circuit(connections)
 
         assert_array_almost_equal(circuit.s_external, self.ntwk3.s)
@@ -456,9 +479,9 @@ class CircuitTestCascadeNetworks(unittest.TestCase):
         Demonstrate that changing the connections setup order does not change
         the result.
         """
-        connections = [  [(self.port1, 0), (self.ntwk1, 0)],
-                         [(self.ntwk2, 0), (self.ntwk1, 1)],
-                         [(self.port2, 0), (self.ntwk2, 1)] ]
+        connections = [[(self.port1, 0), (self.ntwk1, 0)],
+                       [(self.ntwk2, 0), (self.ntwk1, 1)],
+                       [(self.port2, 0), (self.ntwk2, 1)]]
         circuit = Circuit(connections)
 
         assert_array_almost_equal(circuit.s_external, self.ntwk3.s)
@@ -469,9 +492,9 @@ class CircuitTestCascadeNetworks(unittest.TestCase):
         Demonstrate that changing the connections setup order does not change
         the result (at the requirement that port impedance are the same).
         """
-        connections = [  [(self.port1, 0), (self.ntwk2, 0)],
-                         [(self.ntwk2, 1), (self.ntwk1, 0)],
-                         [(self.port2, 0), (self.ntwk1, 1)] ]
+        connections = [[(self.port1, 0), (self.ntwk2, 0)],
+                       [(self.ntwk2, 1), (self.ntwk1, 0)],
+                       [(self.port2, 0), (self.ntwk1, 1)]]
         circuit = Circuit(connections)
         ntw = self.ntwk2 ** self.ntwk1
         assert_array_almost_equal(circuit.s_external, ntw.s)
@@ -491,16 +514,18 @@ class CircuitTestCascadeNetworks(unittest.TestCase):
         temp = connect(T1, 2, T2, 0)
 
         # Check the s-parameters of the temporary Network
-        assert_array_almost_equal(temp.s, np.array([ [ [-0.5,  0.5,  0.5,  0.5],
-                                                       [ 0.5, -0.5,  0.5,  0.5],
-                                                       [ 0.5,  0.5, -0.5,  0.5],
-                                                       [ 0.5,  0.5,  0.5, -0.5], ]
-                                                    for _ in range(self.tee.frequency.npoints) ]
-                                                    ,dtype=complex))
+        assert_array_almost_equal(
+            temp.s, np.array(
+                [[[-0.5, 0.5, 0.5, 0.5],
+                  [0.5, -0.5, 0.5, 0.5],
+                  [0.5, 0.5, -0.5, 0.5],
+                  [0.5, 0.5, 0.5, -0.5],]
+                 for _ in range(self.tee.frequency.npoints)],
+                dtype=complex))
 
-        connections = [  [(self.port1, 0), (temp, 0)],
-                         [(temp, 1),       (temp, 3)],
-                         [(self.port2, 0), (temp, 2)] ]
+        connections = [[(self.port1, 0), (temp, 0)],
+                       [(temp, 1),       (temp, 3)],
+                       [(self.port2, 0), (temp, 2)]]
 
         # Check the s-parameters of the Circuit, the Network should be equal to the thru Network
         # RuntimeWarning not triggered after the PR #1227
@@ -515,16 +540,16 @@ class CircuitTestCascadeNetworks(unittest.TestCase):
         to a condensed setup that assumes an open termination by default.
         """
         # Conventional setup including open termination
-        cnx_con = [  [(self.port1, 0), (self.ntwk1, 0)],
-                     [(self.ntwk1, 1), (self.ntwk2, 0), (self.port2, 0)],
-                     [(self.ntwk2, 1), (self.open, 0)] ]
+        cnx_con = [[(self.port1, 0), (self.ntwk1, 0)],
+                   [(self.ntwk1, 1), (self.ntwk2, 0), (self.port2, 0)],
+                   [(self.ntwk2, 1), (self.open, 0)]]
         ckt_con = Circuit(cnx_con)
 
         # Condensed setup where open termination is implied
-        cnx_cds = [  [(self.port1, 0), (self.ntwk1, 0)],
-                     [(self.ntwk1, 1), (self.ntwk2, 0), (self.port2, 0)],
-                     [(self.ntwk2, 1)] # Open termination is implied
-                     ]
+        cnx_cds = [[(self.port1, 0), (self.ntwk1, 0)],
+                   [(self.ntwk1, 1), (self.ntwk2, 0), (self.port2, 0)],
+                   [(self.ntwk2, 1)]  # Open termination is implied
+                   ]
 
         ckt_cds = Circuit(cnx_cds)
 
@@ -537,24 +562,26 @@ class CircuitTestCascadeNetworks(unittest.TestCase):
         to a condensed setup that assumes the matching network by default.
         """
         # Conventional setup including matching network
-        cnx_con = [  [(self.port1, 0), (self.ntwk1, 0)],
-                     [(self.ntwk1, 1), (self.ntwk2, 0), (self.port2, 0)],
-                     [(self.ntwk2, 1), (self.match, 0)] ]
+        cnx_con = [[(self.port1, 0), (self.ntwk1, 0)],
+                   [(self.ntwk1, 1), (self.ntwk2, 0), (self.port2, 0)],
+                   [(self.ntwk2, 1), (self.match, 0)]]
         ckt_con = Circuit(cnx_con)
 
         # Condensed setup where matching network is implied
-        cnx_cds = [  [(self.port1, 0), (self.ntwk1, 0)],
-                     [(self.ntwk1, 1), (self.ntwk2, 0), (self.port2, 0)]
-                     ]
+        cnx_cds = [[(self.port1, 0), (self.ntwk1, 0)],
+                   [(self.ntwk1, 1), (self.ntwk2, 0), (self.port2, 0)]
+                   ]
 
         ckt_cds = Circuit(cnx_cds)
 
         assert_array_almost_equal(ckt_con.s_external, ckt_cds.s_external)
 
+
 class CircuitTestMultiPortCascadeNetworks(unittest.TestCase):
     """
     Various 1-ports, 2-ports and 4-ports circuits and associated tests
     """
+
     def test_1port_matched_load(self):
         """
         Connect a matched load directly to the port
@@ -601,7 +628,8 @@ class CircuitTestMultiPortCascadeNetworks(unittest.TestCase):
         freq = rf.Frequency(start=1, npoints=1, unit='GHz')
         port1 = Circuit.Port(freq,  name='port1')
         line = rf.media.DefinedGammaZ0(frequency=freq)
-        gamma = np.random.default_rng().random((1,1)) + 1j*np.random.default_rng().random((1,1))
+        gamma = np.random.default_rng().random((1, 1)) + 1j * \
+            np.random.default_rng().random((1, 1))
         load = line.load(gamma, name='load')
 
         cnx = [
@@ -651,7 +679,7 @@ class CircuitTestMultiPortCascadeNetworks(unittest.TestCase):
 
         # Circuit connecting
         port1 = Circuit.Port(freq, z0=z01, name='port1')
-        connections = [[(port1, 0), (a,0)], [(a, 1), (match_load, 0)]]
+        connections = [[(port1, 0), (a, 0)], [(a, 1), (match_load, 0)]]
         circuit = Circuit(connections)
 
         assert_array_almost_equal(b.s, circuit.s_external)
@@ -723,12 +751,12 @@ class CircuitTestMultiPortCascadeNetworks(unittest.TestCase):
         freq = rf.Frequency(start=1, npoints=1, unit='GHz')
         a = rf.Network(name='a')
         a.frequency = freq
-        a.s = np.random.default_rng().random(4).reshape(2,2)
-        a.z0 = [1, 2]  #  Z0 should never be zero
+        a.s = np.random.default_rng().random(4).reshape(2, 2)
+        a.z0 = [1, 2]  # Z0 should never be zero
 
         b = rf.Network(name='b')
         b.frequency = freq
-        b.s = np.random.default_rng().random(4).reshape(2,2)
+        b.s = np.random.default_rng().random(4).reshape(2, 2)
         b.z0 = [11, 12]
 
         # classic connecting
@@ -740,7 +768,7 @@ class CircuitTestMultiPortCascadeNetworks(unittest.TestCase):
 
         connections = [[(port1, 0), (a, 0)],
                        [(a, 1), (b, 0)],
-                       [(b, 1), (port2, 0)] ]
+                       [(b, 1), (port2, 0)]]
         circuit = Circuit(connections)
 
         assert_array_almost_equal(c.s, circuit.s_external)
@@ -804,12 +832,12 @@ class CircuitTestMultiPortCascadeNetworks(unittest.TestCase):
         port3 = Circuit.Port(freq, z0=z0, name='port3')
         port4 = Circuit.Port(freq, z0=z0, name='port4')
 
-        connections = [ [(port1, 0), (a, 0)],
-                        [(port2, 0), (a, 1)],
-                        [(a, 2), (b, 0)],
-                        [(a, 3), (b, 1)],
-                        [(b, 2), (port3, 0)],
-                        [(b, 3), (port4, 0)]]
+        connections = [[(port1, 0), (a, 0)],
+                       [(port2, 0), (a, 1)],
+                       [(a, 2), (b, 0)],
+                       [(a, 3), (b, 1)],
+                       [(b, 2), (port3, 0)],
+                       [(b, 3), (port4, 0)]]
         circuit = Circuit(connections)
 
         assert_array_almost_equal(c.s, circuit.s_external)
@@ -897,7 +925,8 @@ class CircuitTestMultiPortCascadeNetworks(unittest.TestCase):
         ntwkA_z0 = (60, 70, 80, 90, 100)
         ntwkA_np = len(ntwkA_z0)
         ntwkA.z0 = [ntwkA_z0]*freq_n
-        ntwkA.s = np.random.default_rng().random(freq_n * ntwkA_np**2).reshape(freq_n, ntwkA_np, ntwkA_np)
+        ntwkA.s = np.random.default_rng().random(
+            freq_n * ntwkA_np**2).reshape(freq_n, ntwkA_np, ntwkA_np)
 
         # network B
         ntwkB = rf.Network(name='b')
@@ -905,7 +934,8 @@ class CircuitTestMultiPortCascadeNetworks(unittest.TestCase):
         ntwkB_z0 = (10, 20, 30, 40, 50)
         ntwkB_np = len(ntwkB_z0)
         ntwkB.z0 = [ntwkB_z0]*freq_n
-        ntwkB.s = np.random.default_rng().random(freq_n * ntwkB_np**2).reshape(freq_n, ntwkB_np, ntwkB_np)
+        ntwkB.s = np.random.default_rng().random(
+            freq_n * ntwkB_np**2).reshape(freq_n, ntwkB_np, ntwkB_np)
 
         # Construct the connection
         port1 = Circuit.Port(frequency=freq, name='port1', z0=50)
@@ -940,6 +970,7 @@ class CircuitTestMultiPortCascadeNetworks(unittest.TestCase):
 
         assert_array_almost_equal(circuit.network.s, reduced_circuit.network.s)
 
+
 class CircuitTestVariableCoupler(unittest.TestCase):
     """
     If we use 3 dB hybrid defined as :
@@ -961,6 +992,7 @@ class CircuitTestVariableCoupler(unittest.TestCase):
     example.
 
     """
+
     def setUp(self):
         self.freq = rf.Frequency(start=1.5, stop=1.5, npoints=1, unit='GHz')
         self.coax = rf.media.DefinedGammaZ0(frequency=self.freq)
@@ -970,10 +1002,10 @@ class CircuitTestVariableCoupler(unittest.TestCase):
         return self.coax.line(d=phase_deg, unit='deg')
 
     def hybrid(self, name='hybrid'):
-        Sc = 1/np.sqrt(2)*np.array([[ 0,  1, 1j,  0],
-                                    [ 1,  0,  0, 1j],
+        Sc = 1/np.sqrt(2)*np.array([[0,  1, 1j,  0],
+                                    [1,  0,  0, 1j],
                                     [1j,  0,  0,  1],
-                                    [ 0, 1j,  1,  0]])
+                                    [0, 1j,  1,  0]])
         hybrid = rf.Network(frequency=self.freq, s=Sc, name=name)
         return hybrid
 
@@ -987,7 +1019,8 @@ class CircuitTestVariableCoupler(unittest.TestCase):
         # hybrid2.z0 = [21, 22, 23, 24]
         # ps.z0 = [31, 32]
         # and to make a drawing of each steps.
-        # This is not convenient, that's why the Circuit approach can be easier.
+        # This is not convenient, that's why the Circuit approach can be
+        # easier.
         _temp = connect(hybrid1, 2, ps, 0)
         _temp = connect(_temp, 1, hybrid2, 0)
         _temp = innerconnect(_temp, 1, 5)
@@ -1009,14 +1042,14 @@ class CircuitTestVariableCoupler(unittest.TestCase):
         # then second to appear the second port (1), etc...
         # There is no constraint for the order of the connections.
         connections = [
-                       [(port1, 0), (hybrid1, 3)],
-                       [(port2, 0), (hybrid2, 2)],
-                       [(port3, 0), (hybrid2, 1)],
-                       [(port4, 0), (hybrid1, 0)],
-                       [(hybrid1, 2), (ps, 0)],
-                       [(hybrid1, 1), (hybrid2, 0)],
-                       [(ps, 1), (hybrid2, 3)],
-                      ]
+            [(port1, 0), (hybrid1, 3)],
+            [(port2, 0), (hybrid2, 2)],
+            [(port3, 0), (hybrid2, 1)],
+            [(port4, 0), (hybrid1, 0)],
+            [(hybrid1, 2), (ps, 0)],
+            [(hybrid1, 1), (hybrid2, 0)],
+            [(ps, 1), (hybrid2, 3)],
+        ]
 
         return Circuit(connections)
 
@@ -1037,9 +1070,12 @@ class CircuitTestVariableCoupler(unittest.TestCase):
         Compare with the S-parameters obtained from ANSYS Designer
         """
         for phase_angle in [20, 75]:
-            vc_designer = rf.Network(os.path.join(self.test_dir,
-                                                  f"designer_variable_coupler_ideal_{phase_angle}deg.s4p"))
-            vc_circuit = self.variable_coupler_network_from_circuit(phase_angle)
+            vc_designer = rf.Network(
+                os.path.join(
+                    self.test_dir,
+                    f"designer_variable_coupler_ideal_{phase_angle}deg.s4p"))
+            vc_circuit = self.variable_coupler_network_from_circuit(
+                phase_angle)
             assert_array_almost_equal(vc_designer.s, vc_circuit.s, decimal=4)
 
     def test_compare_connect_and_designer(self):
@@ -1047,9 +1083,12 @@ class CircuitTestVariableCoupler(unittest.TestCase):
         Compare S-parameters obtained from ANSYS Designer with Network.connect
         """
         for phase_angle in [20, 75]:
-            vc_designer = rf.Network(os.path.join(self.test_dir,
-                                                  f"designer_variable_coupler_ideal_{phase_angle}deg.s4p"))
-            vc_connect = self.variable_coupler_network_from_connect(phase_angle)
+            vc_designer = rf.Network(
+                os.path.join(
+                    self.test_dir,
+                    f"designer_variable_coupler_ideal_{phase_angle}deg.s4p"))
+            vc_connect = self.variable_coupler_network_from_connect(
+                phase_angle)
             assert_array_almost_equal(vc_designer.s, vc_connect.s, decimal=4)
 
 
@@ -1068,7 +1107,8 @@ class CircuitTestGraph(unittest.TestCase):
 
         # dummy components
         self.R = 100
-        self.line_resistor = rf.media.DefinedGammaZ0(frequency=self.freq, z0=self.R)
+        self.line_resistor = rf.media.DefinedGammaZ0(
+            frequency=self.freq, z0=self.R)
         resistor1 = self.line_resistor.resistor(self.R, name='resistor1')
         resistor2 = self.line_resistor.resistor(self.R, name='resistor2')
         resistor3 = self.line_resistor.resistor(self.R, name='resistor3')
@@ -1076,10 +1116,10 @@ class CircuitTestGraph(unittest.TestCase):
 
         # Connection setup
         self.connections = [
-                   [(port1, 0), (resistor1, 0), (resistor3, 0)],
-                   [(resistor1, 1), (resistor2, 0)],
-                   [(resistor2, 1), (resistor3, 1)]
-                ]
+            [(port1, 0), (resistor1, 0), (resistor3, 0)],
+            [(resistor1, 1), (resistor2, 0)],
+            [(resistor2, 1), (resistor3, 1)]
+        ]
 
         self.C = Circuit(self.connections)
 
@@ -1101,12 +1141,13 @@ class CircuitTestComplexCharacteristicImpedance(unittest.TestCase):
     """
     Test creating circuits with real and complex port charac.impedances
     """
+
     def setUp(self):
         self.f0 = rf.Frequency(75.8, npoints=1, unit='GHz')
         # initial s-param values of A 2 ports network
         self.s0 = np.array([  # dummy values
-            [-0.1000 -0.2000j, -0.3000 +0.4000j],
-            [-0.3000 +0.4000j, 0.5000 -0.6000j]]).reshape(-1,2,2)
+            [-0.1000 - 0.2000j, -0.3000 + 0.4000j],
+            [-0.3000 + 0.4000j, 0.5000 - 0.6000j]]).reshape(-1, 2, 2)
 
         # build initial network (under z0=50)
         self.ntw0 = rf.Network(frequency=self.f0, s=self.s0, z0=50, name='dut')
@@ -1117,16 +1158,16 @@ class CircuitTestComplexCharacteristicImpedance(unittest.TestCase):
         # reference solutions obtained from ANSYS Circuit or ADS (same res)
         # when z0=[50, zdut]
         self.z_ref = np.array([  # not affected by z0
-            [18.0000 -16.0000j, 20.0000 +40.0000j],
-            [20.0000 +40.0000j, 10.0000 -80.0000j]]).reshape(-1,2,2)
+            [18.0000 - 16.0000j, 20.0000 + 40.0000j],
+            [20.0000 + 40.0000j, 10.0000 - 80.0000j]]).reshape(-1, 2, 2)
 
         self.y_ref = np.array([  # not affected by z0
-            [0.0251 +0.0023j, 0.0123 -0.0066j],
-            [0.0123 -0.0066j, 0.0052 +0.0055j]]).reshape(-1,2,2)
+            [0.0251 + 0.0023j, 0.0123 - 0.0066j],
+            [0.0123 - 0.0066j, 0.0052 + 0.0055j]]).reshape(-1, 2, 2)
 
         self.s_ref = np.array([  # renormalized s (power-waves)
-            [-0.1374 -0.2957j, -0.1995 +0.5340j],
-            [-0.1995 +0.5340j, -0.0464 -0.7006j]]).reshape(-1,2,2)
+            [-0.1374 - 0.2957j, -0.1995 + 0.5340j],
+            [-0.1995 + 0.5340j, -0.0464 - 0.7006j]]).reshape(-1, 2, 2)
 
         # Creating equivalent reference circuit
         port1 = Circuit.Port(self.f0, z0=50, name='port1')
@@ -1136,7 +1177,7 @@ class CircuitTestComplexCharacteristicImpedance(unittest.TestCase):
         cnx = [  # z0=[50,50]
             [(port1, 0), (ntw0, 0)],
             [(ntw0, 1), (port2, 0)]
-            ]
+        ]
         self.cir = Circuit(cnx)
 
         # Creating equivalent circuit with z0 real
@@ -1144,7 +1185,7 @@ class CircuitTestComplexCharacteristicImpedance(unittest.TestCase):
         cnx_real = [  # z0=[50,100]
             [(port1, 0), (ntw0, 0)],
             [(ntw0, 1), (port2_real, 0)]
-            ]
+        ]
         self.cir_real = Circuit(cnx_real)
 
         # Creating equivalent circuit with z0 complex
@@ -1152,18 +1193,18 @@ class CircuitTestComplexCharacteristicImpedance(unittest.TestCase):
         cnx_complex = [  # z0=[50,zdut]
             [(port1, 0), (ntw0, 0)],
             [(ntw0, 1), (port2_complex, 0)]
-            ]
+        ]
         self.cir_complex = Circuit(cnx_complex)
 
         # references for each s-param definition
-        self.s_legacy = renormalize_s(self.s0, [50,50], [50,self.zdut],
-                                         s_def='traveling')
-        self.s_power = renormalize_s(self.s0, [50,50], [50,self.zdut],
-                                         s_def='power')
-        self.s_pseudo = renormalize_s(self.s0, [50,50], [50,self.zdut],
-                                         s_def='pseudo')
+        self.s_legacy = renormalize_s(self.s0, [50, 50], [50, self.zdut],
+                                      s_def='traveling')
+        self.s_power = renormalize_s(self.s0, [50, 50], [50, self.zdut],
+                                     s_def='power')
+        self.s_pseudo = renormalize_s(self.s0, [50, 50], [50, self.zdut],
+                                      s_def='pseudo')
         # for real values, should be = whatever s-param definition
-        self.s_real = renormalize_s(self.s0, [50,50], [50,100])
+        self.s_real = renormalize_s(self.s0, [50, 50], [50, 100])
 
     def test_verify_reference(self):
         ' Check that the reference results comes from power-waves definition'
@@ -1175,30 +1216,37 @@ class CircuitTestComplexCharacteristicImpedance(unittest.TestCase):
 
     def test_real_z0_s(self):
         ' Check real z0 circuit '
-        np.testing.assert_allclose(self.cir_real.network.s, self.s_real, atol=1e-4)
+        np.testing.assert_allclose(
+            self.cir_real.network.s, self.s_real, atol=1e-4)
 
     def test_real_z_params(self):
         ' Check Z-parameters match'
-        np.testing.assert_allclose(self.cir.network.z, self.cir_real.network.z, atol=1e-4)
+        np.testing.assert_allclose(
+            self.cir.network.z, self.cir_real.network.z, atol=1e-4)
 
     def test_complex_z_params(self):
         ' Check Z-parameters match'
-        np.testing.assert_allclose(self.cir_complex.network.z, self.cir_real.network.z, atol=1e-4)
+        np.testing.assert_allclose(
+            self.cir_complex.network.z, self.cir_real.network.z, atol=1e-4)
 
     @unittest.expectedFailure
     def test_complexz0_s_vs_legacy(self):
         ' Check complex z0 circuit vs legacy renormalization '
-        np.testing.assert_allclose(self.cir_complex.network.s, self.s_legacy, atol=1e-4)
+        np.testing.assert_allclose(
+            self.cir_complex.network.s, self.s_legacy, atol=1e-4)
 
     def test_complexz0_s_vs_powerwaves(self):
         ' Check complex z0 circuit vs power-waves renormalization '
-        np.testing.assert_allclose(self.cir_complex.network.s, self.s_ref, atol=1e-4)
-        np.testing.assert_allclose(self.cir_complex.network.s, self.s_power, atol=1e-4)
+        np.testing.assert_allclose(
+            self.cir_complex.network.s, self.s_ref, atol=1e-4)
+        np.testing.assert_allclose(
+            self.cir_complex.network.s, self.s_power, atol=1e-4)
 
     @unittest.expectedFailure
     def test_complexz0_s_vs_pseudo(self):
         ' Check complex z0 circuit vs pseudo-waves renormalization '
-        np.testing.assert_allclose(self.cir_complex.network.s, self.s_pseudo, atol=1e-4)
+        np.testing.assert_allclose(
+            self.cir_complex.network.s, self.s_pseudo, atol=1e-4)
 
     def test_s_external_via_port_indexes(self):
         """
@@ -1210,7 +1258,8 @@ class CircuitTestComplexCharacteristicImpedance(unittest.TestCase):
         a_idx, b_idx = np.meshgrid(port_indexes, port_indexes, indexing='ij')
         s_extracted = self.cir.s[:, a_idx, b_idx]
         # Apply s2s conversion to match s_external
-        s_extracted = s2s(s_extracted, self.cir.port_z0, S_DEF_DEFAULT, 'traveling')
+        s_extracted = s2s(s_extracted, self.cir.port_z0,
+                          S_DEF_DEFAULT, 'traveling')
         np.testing.assert_allclose(s_extracted, self.cir.s_external)
 
         # Test with z0=[50, 100] (real but different)
@@ -1218,7 +1267,8 @@ class CircuitTestComplexCharacteristicImpedance(unittest.TestCase):
         a_idx, b_idx = np.meshgrid(port_indexes, port_indexes, indexing='ij')
         s_extracted = self.cir_real.s[:, a_idx, b_idx]
         # Apply s2s conversion to match s_external
-        s_extracted = s2s(s_extracted, self.cir_real.port_z0, S_DEF_DEFAULT, 'traveling')
+        s_extracted = s2s(s_extracted, self.cir_real.port_z0,
+                          S_DEF_DEFAULT, 'traveling')
         np.testing.assert_allclose(s_extracted, self.cir_real.s_external)
 
         # Test with z0=[50, zdut] (complex)
@@ -1226,8 +1276,10 @@ class CircuitTestComplexCharacteristicImpedance(unittest.TestCase):
         a_idx, b_idx = np.meshgrid(port_indexes, port_indexes, indexing='ij')
         s_extracted = self.cir_complex.s[:, a_idx, b_idx]
         # Apply s2s conversion to match s_external
-        s_extracted = s2s(s_extracted, self.cir_complex.port_z0, S_DEF_DEFAULT, 'traveling')
+        s_extracted = s2s(s_extracted, self.cir_complex.port_z0,
+                          S_DEF_DEFAULT, 'traveling')
         np.testing.assert_allclose(s_extracted, self.cir_complex.s_external)
+
 
 class CircuitTestVoltagesCurrents(unittest.TestCase):
     def setUp(self):
@@ -1235,15 +1287,21 @@ class CircuitTestVoltagesCurrents(unittest.TestCase):
         # setup a test transmission line randomly excited
         self.P_f = rng.random()  # forward power in Watt
         self.phase_f = rng.random()  # forward phase in rad
-        self.Z = rng.random()  # source internal impedance, line characteristic impedance and load impedance
+        # source internal impedance, line characteristic impedance and load
+        # impedance
+        self.Z = rng.random()
         self.L = rng.random()  # line length in [m]
         self.L2 = rng.random()  # line length in [m]
         self.L3 = rng.random()  # line length in [m]
         self.freq = rf.Frequency(1, 10, 10, unit='GHz')
-        self.line_media = rf.media.DefinedGammaZ0(self.freq, z0=self.Z)  # lossless line medium
-        self.line = self.line_media.line(d=self.L, unit='m', name='line')  # transmission line Network
-        self.line2 = self.line_media.line(d=self.L2, unit='m', name='line2')  # transmission line Network
-        self.line3 = self.line_media.line(d=self.L3, unit='m', name='line3')  # transmission line Network
+        self.line_media = rf.media.DefinedGammaZ0(
+            self.freq, z0=self.Z)  # lossless line medium
+        self.line = self.line_media.line(
+            d=self.L, unit='m', name='line')  # transmission line Network
+        self.line2 = self.line_media.line(
+            d=self.L2, unit='m', name='line2')  # transmission line Network
+        self.line3 = self.line_media.line(
+            d=self.L3, unit='m', name='line3')  # transmission line Network
         self.tee = self.line_media.tee(name='tee')
         self.resistor = self.line_media.resistor(50, name='resistor')
 
@@ -1251,8 +1309,10 @@ class CircuitTestVoltagesCurrents(unittest.TestCase):
         self.V_in = np.sqrt(2*self.Z*self.P_f)*np.exp(1j*self.phase_f)
         self.I_in = np.sqrt(2*self.P_f/self.Z)*np.exp(1j*self.phase_f)
         # forward voltages and currents at the output of the test line
-        theta = rf.tlineFunctions.theta(self.line_media.gamma, self.freq.f, self.L)  # electrical length
-        self.V_out, self.I_out = rf.tlineFunctions.voltage_current_propagation(self.V_in, self.I_in, self.Z, theta)
+        theta = rf.tlineFunctions.theta(
+            self.line_media.gamma, self.freq.f, self.L)  # electrical length
+        self.V_out, self.I_out = rf.tlineFunctions.voltage_current_propagation(
+            self.V_in, self.I_in, self.Z, theta)
 
         # Equivalent model with Circuit
         self.port1 = Circuit.Port(frequency=self.freq, name='port1', z0=self.Z)
@@ -1270,17 +1330,17 @@ class CircuitTestVoltagesCurrents(unittest.TestCase):
         ' Test voltages for a simple transmission line '
         V_ports = self.crt.voltages_external(self.power, self.phase)
 
-        np.testing.assert_allclose(self.V_in, V_ports[:,0])
-        np.testing.assert_allclose(self.V_out, V_ports[:,1])
+        np.testing.assert_allclose(self.V_in, V_ports[:, 0])
+        np.testing.assert_allclose(self.V_out, V_ports[:, 1])
 
     def test_tline_currents(self):
         ' Test currents for a simple transmission line '
         I_ports = self.crt.currents_external(self.power, self.phase)
 
-        np.testing.assert_allclose(self.I_in, I_ports[:,0])
+        np.testing.assert_allclose(self.I_in, I_ports[:, 0])
         # output current is * -1 as Circuit definition is opposite
         # (toward the Circuit's Port)
-        np.testing.assert_allclose(self.I_out, -1*I_ports[:,1])
+        np.testing.assert_allclose(self.I_out, -1*I_ports[:, 1])
 
     def test_multiple_ports(self):
         ' Test voltages and currents for a connection with multiple ports '
@@ -1375,12 +1435,14 @@ class CircuitTestVoltagesCurrents(unittest.TestCase):
         # Compare the voltages
         port_order_with_open = (0, 1, 2, 3, 4, 5)
         port_order = (0, 1, 2, 3, 3, 3)
-        np.testing.assert_allclose(V_with_open[:, port_order_with_open], V[:, port_order])
+        np.testing.assert_allclose(
+            V_with_open[:, port_order_with_open], V[:, port_order])
 
         # Compare the currents
         I_extended = np.zeros(shape=I_with_open.shape, dtype=complex)
         I_extended[:, :I.shape[1]] = I
         np.testing.assert_allclose(I_with_open, I_extended, atol=1e-8)
+
 
 class CircuitTestVoltagesNonReciprocal(unittest.TestCase):
     def test_isolator(self):
@@ -1391,21 +1453,21 @@ class CircuitTestVoltagesNonReciprocal(unittest.TestCase):
         port1 = Circuit.Port(frequency=freq, name='port1', z0=50)
         port2 = Circuit.Port(frequency=freq, name='port2', z0=50)
         cnx = [
-            [(network,0),(port1,0)],
-            [(network,1),(port2,0)]
+            [(network, 0), (port1, 0)],
+            [(network, 1), (port2, 0)]
         ]
         crt = Circuit(cnx)
         np.testing.assert_allclose(crt.s_external, s)
 
-        power = [1,0] # 1 Watt at port 1
-        phase = [0,0]
+        power = [1, 0]  # 1 Watt at port 1
+        phase = [0, 0]
         V_at_ports = crt.voltages_external(power, phase)
         I_at_ports = crt.currents_external(power, phase)
         np.testing.assert_allclose(V_at_ports, [[10+0j, 10+0j]])
         # Positive current entering into port
         np.testing.assert_allclose(I_at_ports, [[0.2+0j, -0.2+0j]])
 
-        power = [0,1] # 1 Watt at port 2
+        power = [0, 1]  # 1 Watt at port 2
         V_at_ports = crt.voltages_external(power, phase)
         I_at_ports = crt.currents_external(power, phase)
         np.testing.assert_allclose(V_at_ports, [[0+0j, 10+0j]])
@@ -1419,24 +1481,25 @@ class CircuitTestVoltagesNonReciprocal(unittest.TestCase):
         port1 = Circuit.Port(frequency=freq, name='port1', z0=50)
         port2 = Circuit.Port(frequency=freq, name='port2', z0=50)
         cnx = [
-            [(network,0),(port1,0)],
-            [(network,1),(port2,0)]
+            [(network, 0), (port1, 0)],
+            [(network, 1), (port2, 0)]
         ]
         crt = Circuit(cnx)
         np.testing.assert_allclose(crt.s_external, s)
 
-        power = [1,0] # 1 Watt at port 1
-        phase = [0,0]
+        power = [1, 0]  # 1 Watt at port 1
+        phase = [0, 0]
         V_at_ports = crt.voltages_external(power, phase)
         I_at_ports = crt.currents_external(power, phase)
         np.testing.assert_allclose(V_at_ports, [[10+0j, 0+0j]])
         np.testing.assert_allclose(I_at_ports, [[0.2+0j, 0+0j]])
 
-        power = [0,1] # 1 Watt at port 2
+        power = [0, 1]  # 1 Watt at port 2
         V_at_ports = crt.voltages_external(power, phase)
         I_at_ports = crt.currents_external(power, phase)
         np.testing.assert_allclose(V_at_ports, [[10+0j, 10+0j]])
         np.testing.assert_allclose(I_at_ports, [[-0.2+0j, 0.2+0j]])
+
 
 if __name__ == '__main__':
     unittest.main()

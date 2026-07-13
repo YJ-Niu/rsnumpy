@@ -102,6 +102,7 @@ class CircularWaveguide(Media):
     >>> rf.CircularWaveguide(freq, r=0.5 * 2.39e-3)
 
     """
+
     def __init__(self, frequency: Frequency | None = None,
                  z0_port: NumberLike | None = None,
                  z0_override: NumberLike | None = None,
@@ -111,12 +112,11 @@ class CircularWaveguide(Media):
                  ep_r: NumberLike = 1, mu_r: NumberLike = 1,
                  rho: NumberLike | str | None = None,
                  *args, **kwargs):
-        Media.__init__(self, frequency = frequency,
-                       z0_port = z0_port, z0_override = z0_override, z0 = z0)
+        Media.__init__(self, frequency=frequency,
+                       z0_port=z0_port, z0_override=z0_override, z0=z0)
 
-        if mode_type.lower() not in ['te','tm']:
+        if mode_type.lower() not in ['te', 'tm']:
             raise ValueError('mode_type must be either \'te\' or \'tm\'')
-
 
         self.r = r
         self.mode_type = mode_type.lower()
@@ -127,16 +127,15 @@ class CircularWaveguide(Media):
         self.rho = rho
 
     def __str__(self) -> str:
-        f=self.frequency
+        f = self.frequency
         output =  \
-                'Circular Waveguide Media.  %i-%i %s.  %i points'%\
-                (f.f_scaled[0], f.f_scaled[-1], f.unit, f.npoints) + \
-                f'\n r= {self.r:.2e}m'
+            'Circular Waveguide Media.  %i-%i %s.  %i points' %\
+            (f.f_scaled[0], f.f_scaled[-1], f.unit, f.npoints) + \
+            f'\n r= {self.r:.2e}m'
         return output
 
     def __repr__(self) -> str:
         return self.__str__()
-
 
     @classmethod
     def from_z0(cls, frequency: Frequency, z0: NumberLike,
@@ -167,9 +166,10 @@ class CircularWaveguide(Media):
         w = 2*pi*f
         # if self.mode_type =="te":
         u = scipy.special.jnp_zeros(1, 1)[-1]
-        r =u/(w*mu) * 1./sqrt(1/(z0*1j)**2+ep/mu)
+        r = u/(w*mu) * 1./sqrt(1/(z0*1j)**2+ep/mu)
 
-        kwargs.update(dict(frequency=frequency, r=r, m=1, n=1, ep_r=ep_r, mu_r=mu_r))
+        kwargs.update(dict(frequency=frequency, r=r,
+                      m=1, n=1, ep_r=ep_r, mu_r=mu_r))
 
         return cls(**kwargs)
 
@@ -235,10 +235,10 @@ class CircularWaveguide(Media):
         kc : number
             cut-off wavenumber
         """
-        if self.mode_type =="te":
+        if self.mode_type == "te":
             u = scipy.special.jnp_zeros(self.m, self.n)[-1]
-        elif self.mode_type =="tm":
-            u = scipy.special.jn_zeros(self.m,self.n)[-1]
+        elif self.mode_type == "tm":
+            u = scipy.special.jn_zeros(self.m, self.n)[-1]
         return u/self.r
 
     @property
@@ -258,7 +258,7 @@ class CircularWaveguide(Media):
         and v= 1/sqrt(ep*mu) is the bulk velocity inside the filling material.
         """
         v = 1/sqrt(self.ep*self.mu)
-        return v* self.kc/(2*np.pi)
+        return v * self.kc/(2*np.pi)
 
     @property
     def f_norm(self) -> NumberLike:
@@ -298,7 +298,7 @@ class CircularWaveguide(Media):
         if isinstance(val, str):
             self._rho = materials[val.lower()]['resistivity(ohm*m)']
         else:
-            self._rho=val
+            self._rho = val
 
     @property
     def lambda_guide(self) -> NumberLike:
@@ -351,27 +351,26 @@ class CircularWaveguide(Media):
 
         """
         # This also holds for the circular waveguide
-        ## haringtons form
-        if False: #self.m==1 and self.n==0:
+        # haringtons form
+        if False:  # self.m==1 and self.n==0:
             fs = Freespace(frequency=self.frequency,
                            ep_r=self.ep_r,
                            mu_r=self.mu_r)
 
-            g= where(self.f_norm>1.,
-                     sqrt(1-self.f_norm**(-2))*fs.gamma, # cutton
-                 -1j*sqrt(1-self.f_norm**(2))*fs.gamma)# cutoff
+            g = where(self.f_norm > 1.,
+                      sqrt(1-self.f_norm**(-2))*fs.gamma,  # cutton
+                      -1j*sqrt(1-self.f_norm**(2))*fs.gamma)  # cutoff
 
         else:
             # TODO:  fix this for lossy ep/mu (remove abs?)
-            k0,kc = self.k0, self.kc
-            g=  1j*sqrt(abs(k0**2 - kc**2)) * (k0>kc) +\
-                    sqrt(abs(kc**2- k0**2))*(k0<kc) + \
-                    0*(kc==k0)
+            k0, kc = self.k0, self.kc
+            g = 1j*sqrt(abs(k0**2 - kc**2)) * (k0 > kc) +\
+                sqrt(abs(kc**2 - k0**2))*(k0 < kc) + \
+                0*(kc == k0)
 
-        g = g + self.alpha_c *(self.rho is not None)
+        g = g + self.alpha_c * (self.rho is not None)
 
         return g
-
 
     @property
     def alpha_c(self) -> NumberLike:
@@ -405,9 +404,9 @@ class CircularWaveguide(Media):
             return 0
         r, w, ep, rho, f_n = self.r, self.frequency.w, self.ep, \
             self.rho, self.f_norm
-        u= self.kc*r
-        return 1./r * sqrt( (w*ep)/(2./rho) ) * ( (1/f_n)**2 + 1/(u**2 - 1) ) \
-            /sqrt(1-(1/f_n)**2)
+        u = self.kc*r
+        return 1./r * sqrt((w*ep)/(2./rho)) * ((1/f_n)**2 + 1/(u**2 - 1)) \
+            / sqrt(1-(1/f_n)**2)
 
     @property
     def z0_characteristic(self) -> NumberLike:
@@ -421,7 +420,7 @@ class CircularWaveguide(Media):
         """
         omega = self.frequency.w
         impedance_dict = {'te':   1j*omega*self.mu/(self.gamma),
-                          'tm':   -1j*self.gamma/(omega*self.ep),\
-                         }
+                          'tm': -1j*self.gamma/(omega*self.ep),
+                          }
 
         return impedance_dict[self.mode_type]

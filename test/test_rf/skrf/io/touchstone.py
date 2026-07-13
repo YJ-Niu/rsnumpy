@@ -51,7 +51,7 @@ from ..util import get_fid
 
 def remove_prefix(text: str, prefix: str) -> str:
     if text.startswith(prefix):
-        return text[len(prefix) :]
+        return text[len(prefix):]
     return text
 
 
@@ -92,7 +92,7 @@ class ParserState:
             int: number of impedance values.
         """
         # See https://github.com/scikit-rf/scikit-rf/issues/354 for details.
-        #if self.ansys_data_type == "terminal":
+        # if self.ansys_data_type == "terminal":
         #    return self.rank**2 * 2
 
         return self.rank * 2
@@ -124,7 +124,7 @@ class ParserState:
 
     @property
     def frequency_mult(self) -> float:
-        _units = {k.lower(): v for k,v in FREQ_UNITS.items()}
+        _units = {k.lower(): v for k, v in FREQ_UNITS.items()}
         return _units[self.frequency_unit]
 
     def parse_port(self, line: str):
@@ -162,7 +162,7 @@ class ParserState:
             return
         toks = line.lower()[1:].strip().split()
         # fill the option line with the missing defaults
-        toks.extend(["ghz", "s", "ma", "r", "50"][len(toks) :])
+        toks.extend(["ghz", "s", "ma", "r", "50"][len(toks):])
         self.frequency_unit = toks[0]
         self.parameter = toks[1]
         self.format = toks[2]
@@ -195,7 +195,10 @@ class Touchstone:
     .. [#] https://ibis.org/touchstone_ver2.0/touchstone_ver2_0.pdf
     """
 
-    def __init__(self, file: str | Path | typing.TextIO, encoding: str | None = None):
+    def __init__(
+            self,
+            file: str | Path | typing.TextIO,
+            encoding: str | None = None):
         """
         constructor
 
@@ -232,30 +235,31 @@ class Touchstone:
         >>> horn = rf.Touchstone(stringio)
 
         """
-        ## file format version.
-        # Defined by default to 1.0, since version number can be omitted in V1.0 format
+        # file format version.
+        # Defined by default to 1.0, since version number can be omitted in
+        # V1.0 format
         self._version = "1.0"
-        ## comments in the file header
+        # comments in the file header
         self.comments = ""
-        ## unit of the frequency (Hz, kHz, MHz, GHz)
+        # unit of the frequency (Hz, kHz, MHz, GHz)
         self.frequency_unit = None
-        ## number of frequency points
+        # number of frequency points
         self.frequency_nb = None
-        ## s-parameter type (S,Y,Z,G,H)
+        # s-parameter type (S,Y,Z,G,H)
         self.parameter = None
-        ## s-parameter format (MA, DB, RI)
+        # s-parameter format (MA, DB, RI)
         self.format = None
-        ## reference resistance, global setup
+        # reference resistance, global setup
         self.resistance = None
-        ## reference impedance for each s-parameter
+        # reference impedance for each s-parameter
         self.reference = None
 
-        ## rsnumpy array of original noise data
+        # rsnumpy array of original noise data
         self.noise = None
 
-        ## kind of s-parameter data (s1p, s2p, s3p, s4p)
+        # kind of s-parameter data (s1p, s2p, s3p, s4p)
         self.rank = None
-        ## Store port names in a list if they exist in the file
+        # Store port names in a list if they exist in the file
         self.port_names = None
 
         self.comment_variables = None
@@ -302,7 +306,12 @@ class Touchstone:
             fid.close()
 
     @staticmethod
-    def _parse_n_floats(*, line: str, fid: typing.TextIO, n: int, before_comment: bool) -> list[float]:
+    def _parse_n_floats(
+        *,
+        line: str,
+        fid: typing.TextIO,
+        n: int,
+            before_comment: bool) -> list[float]:
         """Parse a specified number of floats either in our outside a comment.
 
         Args:
@@ -374,7 +383,9 @@ class Touchstone:
         port_style = None
         for line in fid:
             # ex: ! Port [1] = MyPort_VDD; ! Port 60 : P060
-            if re.search(r'!\s*Port\s*[ \[]\d+[ \]]\s*[\=\:]\s*.+', line.strip()):
+            if re.search(
+                r'!\s*Port\s*[ \[]\d+[ \]]\s*[\=\:]\s*.+',
+                    line.strip()):
                 port_style = 'standard'
                 break
             # ex: ! MyPort::VDD
@@ -426,8 +437,8 @@ class Touchstone:
 
                 if not re.search(r'^\[Version\]', line):
                     msg = (f"{self.filename} does not have a s-parameter extension ({extension})."
-                            "Please, correct the extension to of form: 'sNp', where N is any integer for Touchstone v1,"
-                            "or make sure input file is Touchstone v2.")
+                           "Please, correct the extension to of form: 'sNp', where N is any integer for Touchstone v1,"
+                           "or make sure input file is Touchstone v2.")
                     raise ValueError(msg)
                 else:
                     fid.seek(0)
@@ -442,7 +453,8 @@ class Touchstone:
             "[version]": lambda x: setattr(self, "version", x.split()[1]),
             "#": lambda x: state.parse_option_line(x),
             "! gamma": lambda x: state.hfss_gamma.append(
-                self._parse_n_floats(line=x, fid=fid, n=state.rank * 2, before_comment=False)
+                self._parse_n_floats(
+                    line=x, fid=fid, n=state.rank * 2, before_comment=False)
             ),
             "! port impedance": lambda x: state.hfss_impedance.append(
                 self._parse_n_floats(
@@ -461,7 +473,8 @@ class Touchstone:
         self._parse_dict_v2: dict[str, Callable[[str], None]] = {
             "[number of ports]": lambda x: setattr(state, "rank", int(x.split()[3])),
             "[reference]": lambda x: setattr(
-                state, "resistance", self._parse_n_floats(line=x, fid=fid, n=state.rank, before_comment=True)
+                state, "resistance", self._parse_n_floats(
+                    line=x, fid=fid, n=state.rank, before_comment=True)
             ),
             "[number of frequencies]": lambda x: setattr(self, "frequency_nb", int(x.split()[3])),
             "[matrix format]": lambda x: setattr(state, "matrix_format", x.split()[2].lower()),
@@ -523,7 +536,8 @@ class Touchstone:
         if not state.port_names or len(state.port_names) != state.rank:
             port_names = self._parse_port(fid)
             if len(port_names) == state.rank:
-                state.port_names = {i: name for i, name in enumerate(port_names)}
+                state.port_names = {i: name for i,
+                                    name in enumerate(port_names)}
 
         return state
 
@@ -539,8 +553,10 @@ class Touchstone:
 
         state = self._parse_file(fid=fid)
 
-        self.comments = "\n".join([line.strip()[1:] for line in state.comments])
-        self.comments_after_option_line = "\n".join([line.strip()[1:] for line in state.comments_after_option_line])
+        self.comments = "\n".join([line.strip()[1:]
+                                  for line in state.comments])
+        self.comments_after_option_line = "\n".join(
+            [line.strip()[1:] for line in state.comments_after_option_line])
         self.rank = state.rank
         self.frequency_unit = state.frequency_unit
         self.parameter = state.parameter
@@ -555,7 +571,6 @@ class Touchstone:
         if state.hfss_gamma:
             self.gamma = np.array(state.hfss_gamma).view(np.complex128)
 
-
         # Impedance is parsed in the following order:
         # - HFSS comments for each frequency point and each port.
         # - TS v2 Reference keyword for each port.
@@ -564,7 +579,7 @@ class Touchstone:
             self.z0 = np.array(state.hfss_impedance).view(np.complex128)
             # Comment the line in, when we need when to expect port impedances in NxN format.
             # See https://github.com/scikit-rf/scikit-rf/issues/354 for details.
-            #if state.ansys_data_type == "terminal":
+            # if state.ansys_data_type == "terminal":
             #    self.z0 = np.diagonal(self.z0.reshape(-1, self.rank, self.rank), axis1=1, axis2=2)
 
             self.s_def = S_DEF_HFSS_DEFAULT
@@ -574,9 +589,11 @@ class Touchstone:
                 if f'S-parameter uses the {s_def} definition' in self.comments:
                     self.s_def = s_def
         elif self.reference is None:
-            self.z0 = np.broadcast_to(self.resistance, (len(state.f), state.rank)).copy()
+            self.z0 = np.broadcast_to(
+                self.resistance, (len(state.f), state.rank)).copy()
         else:
-            self.z0 = np.empty((len(state.f), state.rank), dtype=complex).fill(self.reference)
+            self.z0 = np.empty((len(state.f), state.rank),
+                               dtype=complex).fill(self.reference)
 
         self.f = np.array(state.f)
         if not len(self.f):
@@ -595,25 +612,31 @@ class Touchstone:
 
         self.s_flat = s_flat
 
-        self.s = np.empty((len(self.f), state.rank * state.rank), dtype=complex)
+        self.s = np.empty(
+            (len(self.f), state.rank * state.rank), dtype=complex)
         if state.matrix_format == "full":
             self.s[:] = s_flat
         else:
-            index = np.tril_indices(state.rank) if state.matrix_format == "lower" else np.triu_indices(state.rank)
+            index = np.tril_indices(
+                state.rank) if state.matrix_format == "lower" else np.triu_indices(
+                state.rank)
             index_flat = np.ravel_multi_index(index, (state.rank, state.rank))
             self.s[:, index_flat] = s_flat
 
         if state.rank == 2 and state.two_port_order_legacy:
-            self.s = np.transpose(self.s.reshape((-1, state.rank, state.rank)), axes=(0, 2, 1))
+            self.s = np.transpose(self.s.reshape(
+                (-1, state.rank, state.rank)), axes=(0, 2, 1))
         else:
             self.s = self.s.reshape((-1, state.rank, state.rank))
 
         if state.matrix_format == "upper":
             index_lower = np.tril_indices(state.rank)
-            self.s[(...,*index_lower)] = self.s.transpose(0, 2, 1)[(...,*index_lower)]
+            self.s[(..., *index_lower)] = self.s.transpose(0,
+                                                           2, 1)[(..., *index_lower)]
         elif state.matrix_format == "lower":
             index_upper = np.triu_indices(state.rank)
-            self.s[(...,*index_upper)] = self.s.transpose(0, 2, 1)[(...,*index_upper)]
+            self.s[(..., *index_upper)] = self.s.transpose(0,
+                                                           2, 1)[(..., *index_upper)]
 
         self.port_modes = np.array(["S"] * state.rank)
         if state.mixed_mode_order:
@@ -638,12 +661,11 @@ class Touchstone:
 
         if self.parameter in ["g", "h", "y", "z"]:
             if self.version == "1.0":
-                self.s = self.s * self.z0[:,:, None]
+                self.s = self.s * self.z0[:, :, None]
 
             func_name = f"{self.parameter}2s"
             from .. import network
             self.s: np.ndarray = getattr(network, func_name)(self.s, self.z0)
-
 
         # multiplier from the frequency unit
         self.frequency_mult = state.frequency_mult
@@ -661,10 +683,12 @@ class Touchstone:
         Returns:
             np.ndarray: Frequency and data array.
         """
-        warnings.warn("This method is deprecated and will be removed.", DeprecationWarning, stacklevel=2)
-        return np.hstack((self.f[:, None], self.s_flat.view(np.float64).reshape(len(self.f), -1)))
+        warnings.warn("This method is deprecated and will be removed.",
+                      DeprecationWarning, stacklevel=2)
+        return np.hstack((self.f[:, None], self.s_flat.view(
+            np.float64).reshape(len(self.f), -1)))
 
-    def get_comments(self, ignored_comments: list[str]=None) -> str:
+    def get_comments(self, ignored_comments: list[str] = None) -> str:
         """
         Returns the comments which appear anywhere in the file.
 
@@ -712,7 +736,9 @@ class Touchstone:
                 pass
         return var_dict
 
-    def get_format(self, format: Literal[SparamFormatT, Literal["orig"]]="ri") -> str:
+    def get_format(self,
+                   format: Literal[SparamFormatT,
+                                   Literal["orig"]] = "ri") -> str:
         """
         Returns the file format string used for the given format.
 
@@ -728,7 +754,10 @@ class Touchstone:
             format = self.format
         else:
             frequency = "hz"
-        return f"{frequency} {self.parameter} {format.upper()} r {self.resistance}"
+        return f"{frequency} {
+            self.parameter} {
+            format.upper()} r {
+            self.resistance}"
 
     def get_sparameter_names(self, format: SparamFormatT = "ri") -> list[str]:
         """
@@ -746,10 +775,12 @@ class Touchstone:
             list of strings
 
         """
-        warnings.warn("This method is deprecated and will be removed.", DeprecationWarning, stacklevel=2)
+        warnings.warn("This method is deprecated and will be removed.",
+                      DeprecationWarning, stacklevel=2)
         return self.get_sparameter_data(format).keys()
 
-    def get_sparameter_data(self, format: SparamFormatT = "ri") -> dict[str, np.ndarray]:
+    def get_sparameter_data(
+            self, format: SparamFormatT = "ri") -> dict[str, np.ndarray]:
         """
         Get the data of the s-parameter with the given format.
 
@@ -769,13 +800,15 @@ class Touchstone:
             list of rsnumpy.arrays
 
         """
-        warnings.warn("This method is deprecated and will be removed.", DeprecationWarning, stacklevel=2)
+        warnings.warn("This method is deprecated and will be removed.",
+                      DeprecationWarning, stacklevel=2)
         ret = {"frequency": self.f}
         for j in range(self.rank):
             for k in range(self.rank):
                 prefix = f"S{j+1}{k+1}"
                 val = self.s[:, j, k]
-                if self.rank == 2 and self.filename.split(".")[-1].lower() == "s2p":
+                if self.rank == 2 and self.filename.split(
+                        ".")[-1].lower() == "s2p":
                     prefix = f"S{k+1}{j+1}"
                     val = self.s[:, k, j]
 
@@ -836,7 +869,8 @@ class Touchstone:
         return self.gamma, self.z0
 
 
-def hfss_touchstone_2_gamma_z0(filename: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def hfss_touchstone_2_gamma_z0(
+        filename: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Extracts Z0 and Gamma comments from touchstone file.
 
@@ -901,7 +935,8 @@ def hfss_touchstone_2_media(filename: str) -> list[DefinedGammaZ0]:
     media_list = []
 
     for port_n in range(gamma.shape[1]):
-        media_list.append(DefinedGammaZ0(frequency=freq, gamma=gamma[:, port_n], z0=z0[:, port_n]))
+        media_list.append(DefinedGammaZ0(
+            frequency=freq, gamma=gamma[:, port_n], z0=z0[:, port_n]))
 
     return media_list
 
@@ -932,7 +967,8 @@ def hfss_touchstone_2_network(filename: str) -> Network:
     return my_network
 
 
-def read_zipped_touchstones(ziparchive: zipfile.ZipFile, dir: str = "") -> dict[str, Network]:
+def read_zipped_touchstones(
+        ziparchive: zipfile.ZipFile, dir: str = "") -> dict[str, Network]:
     """
     similar to skrf.io.read_all_networks, which works for directories but only for Touchstones in ziparchives.
 
@@ -952,7 +988,7 @@ def read_zipped_touchstones(ziparchive: zipfile.ZipFile, dir: str = "") -> dict[
     networks = dict()
     for fname in ziparchive.namelist():  # type: str
         directory = os.path.split(fname)[0]
-        if dir == directory and  re.search(r"s\d+p$", fname.lower()):
+        if dir == directory and re.search(r"s\d+p$", fname.lower()):
             network = Network.zipped_touchstone(fname, ziparchive)
             networks[network.name] = network
     return networks

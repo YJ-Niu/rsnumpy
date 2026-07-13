@@ -200,7 +200,8 @@ def surface_resistivity(f: NumberLike, rho: float, mu_r: float):
     return rho/skin_depth(rho=rho, f=f, mu_r=mu_r)
 
 
-def distributed_circuit_2_propagation_impedance(distributed_admittance: NumberLike,
+def distributed_circuit_2_propagation_impedance(
+        distributed_admittance: NumberLike,
         distributed_impedance: NumberLike):
     r"""
     Convert distributed circuit values to wave quantities.
@@ -232,13 +233,14 @@ def distributed_circuit_2_propagation_impedance(distributed_admittance: NumberLi
         propagation_impedance_2_distributed_circuit : opposite conversion
     """
     propagation_constant = \
-            sqrt(distributed_impedance*distributed_admittance)
+        sqrt(distributed_impedance*distributed_admittance)
     characteristic_impedance = \
-            sqrt(distributed_impedance/distributed_admittance)
+        sqrt(distributed_impedance/distributed_admittance)
     return (propagation_constant, characteristic_impedance)
 
 
-def propagation_impedance_2_distributed_circuit(propagation_constant: NumberLike,
+def propagation_impedance_2_distributed_circuit(
+        propagation_constant: NumberLike,
         characteristic_impedance: NumberLike):
     r"""
     Convert wave quantities to distributed circuit values.
@@ -274,7 +276,11 @@ def propagation_impedance_2_distributed_circuit(propagation_constant: NumberLike
     return (distributed_admittance, distributed_impedance)
 
 
-def electrical_length(gamma: NumberLike, f: NumberLike, d: NumberLike, deg: bool = False):
+def electrical_length(
+        gamma: NumberLike,
+        f: NumberLike,
+        d: NumberLike,
+        deg: bool = False):
     r"""
     Electrical length of a section of transmission line.
 
@@ -311,19 +317,25 @@ def electrical_length(gamma: NumberLike, f: NumberLike, d: NumberLike, deg: bool
     # if gamma is not a function, create a dummy function which return gamma
     if not callable(gamma):
         _gamma = gamma
-        def gamma(f0): return _gamma
+
+        def gamma(f0):
+            return _gamma
 
     # typecast to a 1D array
     f = array(f, dtype=float).reshape(-1)
     d = array(d, dtype=float).reshape(-1)
 
     if not deg:
-        return  gamma(f)*d
+        return gamma(f)*d
     else:
-        return  mf.radian_2_degree(gamma(f)*d )
+        return mf.radian_2_degree(gamma(f)*d)
 
 
-def electrical_length_2_distance(theta: NumberLike, gamma: NumberLike, f0: NumberLike, deg: bool = True):
+def electrical_length_2_distance(
+        theta: NumberLike,
+        gamma: NumberLike,
+        f0: NumberLike,
+        deg: bool = True):
     r"""
     Convert electrical length to a physical distance.
 
@@ -360,7 +372,9 @@ def electrical_length_2_distance(theta: NumberLike, gamma: NumberLike, f0: Numbe
     # if gamma is not a function, create a dummy function which return gamma
     if not callable(gamma):
         _gamma = gamma
-        def gamma(f0): return _gamma
+
+        def gamma(f0):
+            return _gamma
 
     if deg:
         theta = mf.degree_2_radian(theta)
@@ -411,7 +425,8 @@ def load_impedance_2_reflection_coefficient(z0: NumberLike, zl: NumberLike):
     return ((zl - z0)/(zl + z0))
 
 
-def reflection_coefficient_2_input_impedance(z0: NumberLike, Gamma: NumberLike):
+def reflection_coefficient_2_input_impedance(
+        z0: NumberLike, Gamma: NumberLike):
     r"""
     Input impedance from a load reflection coefficient.
 
@@ -469,7 +484,10 @@ def reflection_coefficient_at_theta(Gamma0: NumberLike, theta: NumberLike):
     return Gamma0 * exp(-2*theta)
 
 
-def input_impedance_at_theta(z0: NumberLike, zl: NumberLike, theta: NumberLike):
+def input_impedance_at_theta(
+        z0: NumberLike,
+        zl: NumberLike,
+        theta: NumberLike):
     """
     Input impedance from load impedance at a given electrical length.
 
@@ -496,7 +514,8 @@ def input_impedance_at_theta(z0: NumberLike, zl: NumberLike, theta: NumberLike):
     return reflection_coefficient_2_input_impedance(z0=z0, Gamma=Gamma_in)
 
 
-def load_impedance_2_reflection_coefficient_at_theta(z0: NumberLike, zl: NumberLike, theta: NumberLike):
+def load_impedance_2_reflection_coefficient_at_theta(
+        z0: NumberLike, zl: NumberLike, theta: NumberLike):
     """
     Reflection coefficient of load at a given electrical length.
 
@@ -523,7 +542,8 @@ def load_impedance_2_reflection_coefficient_at_theta(z0: NumberLike, zl: NumberL
     return Gamma_in
 
 
-def reflection_coefficient_2_input_impedance_at_theta(z0: NumberLike, Gamma0: NumberLike, theta: NumberLike):
+def reflection_coefficient_2_input_impedance_at_theta(
+        z0: NumberLike, Gamma0: NumberLike, theta: NumberLike):
     """
     Input impedance from load reflection coefficient at a given electrical length.
 
@@ -550,7 +570,8 @@ def reflection_coefficient_2_input_impedance_at_theta(z0: NumberLike, Gamma0: Nu
     return zin
 
 
-def reflection_coefficient_2_propagation_constant(Gamma_in: NumberLike, Gamma_l: NumberLike, d: NumberLike):
+def reflection_coefficient_2_propagation_constant(
+        Gamma_in: NumberLike, Gamma_l: NumberLike, d: NumberLike):
     r"""
     Propagation constant from line input and load reflection coefficients.
 
@@ -643,7 +664,11 @@ def zl_2_swr(z0: NumberLike, zl: NumberLike):
     return Gamma0_2_swr(Gamma0)
 
 
-def voltage_current_propagation(v1: NumberLike, i1: NumberLike, z0: NumberLike, theta: NumberLike):
+def voltage_current_propagation(
+        v1: NumberLike,
+        i1: NumberLike,
+        z0: NumberLike,
+        theta: NumberLike):
     """
     Voltages and currents calculated on electrical length theta of a transmission line.
 
@@ -692,11 +717,11 @@ def voltage_current_propagation(v1: NumberLike, i1: NumberLike, z0: NumberLike, 
     D = np.cosh(theta)
     # transpose and de-transpose operations are necessary
     # for linalg.inv to inverse square matrices
-    ABCD = np.array([[A, B],[C, D]]).transpose()
+    ABCD = np.array([[A, B], [C, D]]).transpose()
     inv_ABCD = np.linalg.inv(ABCD).transpose()
 
-    v2 = inv_ABCD[0,0] * v1 + inv_ABCD[0,1] * i1
-    i2 = inv_ABCD[1,0] * v1 + inv_ABCD[1,1] * i1
+    v2 = inv_ABCD[0, 0] * v1 + inv_ABCD[0, 1] * i1
+    i2 = inv_ABCD[1, 0] * v1 + inv_ABCD[1, 1] * i1
     return v2, i2
 
 
@@ -731,7 +756,8 @@ def zl_2_total_loss(z0: NumberLike, zl: NumberLike, theta: NumberLike):
 
     """
     Rin = np.real(zl_2_zin(z0, zl, theta))
-    total_loss = Rin/np.real(zl)*np.abs(np.cosh(theta) + zl/z0*np.sinh(theta))**2
+    total_loss = Rin/np.real(zl)*np.abs(np.cosh(theta) +
+                                        zl/z0*np.sinh(theta))**2
     return total_loss
 
 

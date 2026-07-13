@@ -202,6 +202,7 @@ class MLine(Media):
         causality,
         IEEE Trans. on EMC, vol. 43, N4, 2001, p. 662-667.
     """
+
     def __init__(self, frequency: Frequency | None = None,
                  z0_port: NumberLike | None = None,
                  z0_override: NumberLike | None = None,
@@ -219,13 +220,13 @@ class MLine(Media):
                  f_epr_tand: NumberLike = 1e9,
                  compatibility_mode: str | None = None,
                  *args, **kwargs):
-        Media.__init__(self, frequency = frequency,
-                       z0_port = z0_port, z0_override = z0_override, z0 = z0)
+        Media.__init__(self, frequency=frequency,
+                       z0_port=z0_port, z0_override=z0_override, z0=z0)
 
         self.w, self.h, self.t = w, h, t
-        self.ep_r, self.mu_r  = ep_r, mu_r
+        self.ep_r, self.mu_r = ep_r, mu_r
         self.model, self.disp, self.diel = model, disp, diel
-        self.rho, self.tand, self.rough, self.disp =  rho, tand, rough, disp
+        self.rho, self.tand, self.rough, self.disp = rho, tand, rough, disp
         self.f_low, self.f_high, self.f_epr_tand = f_low, f_high, f_epr_tand
         self.compatibility_mode = compatibility_mode
 
@@ -280,15 +281,14 @@ class MLine(Media):
                 self.frequency.f, self.w, self.t, self.rough)
 
     def __str__(self) -> str:
-        f=self.frequency
+        f = self.frequency
         output = (
-                f'Microstripline Media.  {f.f_scaled[0]}-{f.f_scaled[-1]} {f.unit}.  {f.npoints} points'
-                f'\n W= {self.w:.2e}m, H= {self.h:.2e}m')
+            f'Microstripline Media.  {f.f_scaled[0]}-{f.f_scaled[-1]} {f.unit}.  {f.npoints} points'
+            f'\n W= {self.w:.2e}m, H= {self.h:.2e}m')
         return output
 
     def __repr__(self) -> str:
         return self.__str__()
-
 
     @property
     def gamma(self):
@@ -305,7 +305,7 @@ class MLine(Media):
         if self.rho is not None:
             alpha += self.alpha_conductor
 
-        beta  = 2 * pi * f* sqrt(ep_reff) / _const.c
+        beta = 2 * pi * f * sqrt(ep_reff) / _const.c
 
         return alpha + 1j*beta
 
@@ -336,14 +336,14 @@ class MLine(Media):
         """
         warnings.warn(
             "`Z0_f` is deprecated, use `Z0` instead",
-             DeprecationWarning, stacklevel = 2
+            DeprecationWarning, stacklevel=2
         )
         return self._z_characteristic
 
     def analyse_dielectric(self, ep_r: NumberLike, tand: NumberLike,
-                          f_low: NumberLike, f_high: NumberLike,
-                          f_epr_tand: NumberLike, f: NumberLike,
-                          diel: str):
+                           f_low: NumberLike, f_high: NumberLike,
+                           f_epr_tand: NumberLike, f: NumberLike,
+                           diel: str):
         """
         This function calculate the frequency dependent relative permittivity
         of dielectric and and tangential loss factor.
@@ -367,7 +367,7 @@ class MLine(Media):
             # compute the slope for a log frequency scale, tanD dependent.
             k = log((f_high + 1j * f_epr_tand) / (f_low + 1j * f_epr_tand))
             fd = log((f_high + 1j * f) / (f_low + 1j * f))
-            ep_d = -tand * ep_r  / imag(k)
+            ep_d = -tand * ep_r / imag(k)
             # value for frequency above f_high
             ep_inf = ep_r * (1. + tand * real(k) / imag(k))
             # compute complex permitivity
@@ -375,7 +375,7 @@ class MLine(Media):
             # get tand
             tand_f = -imag(ep_r_f) / real(ep_r_f)
         elif diel == 'frequencyinvariant':
-            ep_r_f =  ep_r - 1j * ep_r * tand
+            ep_r_f = ep_r - 1j * ep_r * tand
             tand_f = tand
         else:
             raise ValueError('Unknown dielectric dispersion model')
@@ -383,8 +383,8 @@ class MLine(Media):
         return ep_r_f, tand_f
 
     def analyse_quasi_static(self, ep_r: NumberLike,
-                           w: NumberLike, h: NumberLike, t: NumberLike,
-                           model: str):
+                             w: NumberLike, h: NumberLike, t: NumberLike,
+                             model: str):
         """
         This function calculates the quasi-static impedance of a microstrip
         line, the value of the effective permittivity as per filling factor
@@ -418,7 +418,7 @@ class MLine(Media):
             # compute strip thickness effect
             dw1 = 0
             if t is not None and t > 0:
-                dw1 = t / pi * log(4. * exp(1.) / sqrt((t / h)**2) + \
+                dw1 = t / pi * log(4. * exp(1.) / sqrt((t / h)**2) +
                                    (1. / pi / (w / t + 1.1))**2)
             dwr = (1. + 1. / ep_r) / 2. * dw1
             wr = w + dwr
@@ -435,7 +435,7 @@ class MLine(Media):
                 d = 1. / pi / 2. * (1. + log(pi**2 / 16.)) * (ep_r - 1.) \
                     / ep_r**2
                 x = 2. * log(2.) / pi + wr / h / 2. + (ep_r + 1.) / 2 / pi / \
-                ep_r * cp + d
+                    ep_r * cp + d
                 zl_eff = Z0 / 2 / x / sqrt(ep_r)
 
             # compute effective dielectric constant
@@ -469,7 +469,7 @@ class MLine(Media):
             u = w_eff / h
 
             # effective dielectric constant
-            ep_reff = (ep_r + 1.) / 2. + (ep_r - 1.) / 2. / sqrt (1. + 10. / u)
+            ep_reff = (ep_r + 1.) / 2. + (ep_r - 1.) / 2. / sqrt(1. + 10. / u)
 
             # characteristic impedance
             if u < 1.:
@@ -489,10 +489,11 @@ class MLine(Media):
                 # Qucs formula 11.22 is wrong, normalized w has to be used instead (see Hammerstad and Jensen Article)
                 # Normalized w is named u and is actually used in qucsator source code
                 # coth(alpha) = 1/tanh(alpha)
-                du1 = t / pi * log(1. + 4. * exp(1.) / t * tanh(sqrt(6.517 * u))**2)
+                du1 = t / pi * log(1. + 4. * exp(1.) / t *
+                                   tanh(sqrt(6.517 * u))**2)
 
             # sech(alpha) = 1/cosh(alpha)
-            dur =  du1 * (1. + 1. / cosh(sqrt(ep_r - 1.))) / 2.
+            dur = du1 * (1. + 1. / cosh(sqrt(ep_r - 1.))) / 2.
 
             u1 = u + du1
             ur = u + dur
@@ -503,11 +504,11 @@ class MLine(Media):
             z1 = hammerstad_zl(u1)
 
             # compute effective dielectric constant
-            a, b  = hammerstad_ab(ur, ep_r)
+            a, b = hammerstad_ab(ur, ep_r)
             e = hammerstad_er(ur, ep_r, a, b)
 
             # compute final characteristic impedance and dielectric constant
-            #including strip thickness effects
+            # including strip thickness effects
             zl_eff = zr / sqrt(e)
             ep_reff = e * (z1 / zr)**2
 
@@ -517,102 +518,103 @@ class MLine(Media):
         return zl_eff, ep_reff, w_eff
 
     def analyse_dispersion(self, zl_eff: NumberLike, ep_reff: NumberLike,
-                          ep_r: NumberLike, wr: NumberLike, w_eff: NumberLike,
-                          h: NumberLike, t: NumberLike, f: NumberLike,
-                          disp: str):
-         """
-         This function compute the frequency dependent characteristic
-         impedance and effective permittivity accounting for microstripline
-         frequency dispersion.
+                           ep_r: NumberLike, wr: NumberLike, w_eff: NumberLike,
+                           h: NumberLike, t: NumberLike, f: NumberLike,
+                           disp: str):
+        """
+        This function compute the frequency dependent characteristic
+        impedance and effective permittivity accounting for microstripline
+        frequency dispersion.
 
-         References
-         ----------
-         .. [#] M. Kobayashi,
-             "A Dispersion Formula Satisfying Recent Requirements in Microstrip
-             CAD", IEEE Trans. on Microwave Theory and Techniques, vol. 36,
-             no. 8, pp. 1246-1250, Aug. 1988.
-         .. [#] M. V. Schneider, "Microstrip Dispersion", Proceedings of the
-             IEEE, Letters, vol. 60, Jan. 1972, pp. 144-146.
-         .. [#] M. Kirschning and R. H. Jansen,
-             "Accurate Model for Effective Dielectric Constant of Microstrip
-             with Validity up to Millimeter-Wave Frequencies", Electronics
-             Letters, vol. 8, no. 6, pp. 272-273, Mar. 1982.
-         .. [#] R. H. Jansen and M. Kirschning,
-             "Arguments and an accurate Model for the Power-Current Formulation of
-             Microstrip Characteristic Impedance",
-             Archiv für Elektronik und Übertragungstechnik (AEÜ), vol. 37,
-             pp. 108-112, 1983.
-         .. [#] E. Yamashita, K. Atsuki, and T. Ueda,
-             "An Approximate Dispersion Formula of Microstrip Lines for
-             Computer Aided Design of Microwave Integrated Circuits",
-             IEEE Trans. on Microwave Theory and Techniques, vol. 27,
-             pp. 1036-1038, Dec. 1979.
+        References
+        ----------
+        .. [#] M. Kobayashi,
+            "A Dispersion Formula Satisfying Recent Requirements in Microstrip
+            CAD", IEEE Trans. on Microwave Theory and Techniques, vol. 36,
+            no. 8, pp. 1246-1250, Aug. 1988.
+        .. [#] M. V. Schneider, "Microstrip Dispersion", Proceedings of the
+            IEEE, Letters, vol. 60, Jan. 1972, pp. 144-146.
+        .. [#] M. Kirschning and R. H. Jansen,
+            "Accurate Model for Effective Dielectric Constant of Microstrip
+            with Validity up to Millimeter-Wave Frequencies", Electronics
+            Letters, vol. 8, no. 6, pp. 272-273, Mar. 1982.
+        .. [#] R. H. Jansen and M. Kirschning,
+            "Arguments and an accurate Model for the Power-Current Formulation of
+            Microstrip Characteristic Impedance",
+            Archiv für Elektronik und Übertragungstechnik (AEÜ), vol. 37,
+            pp. 108-112, 1983.
+        .. [#] E. Yamashita, K. Atsuki, and T. Ueda,
+            "An Approximate Dispersion Formula of Microstrip Lines for
+            Computer Aided Design of Microwave Integrated Circuits",
+            IEEE Trans. on Microwave Theory and Techniques, vol. 27,
+            pp. 1036-1038, Dec. 1979.
 
-         Returns
-         -------
-         z : :class:`numpy.ndarray`
-         e : :class:`numpy.ndarray`
-         """
-         u = wr/h
-         if disp == 'schneider':
-             k = sqrt(ep_reff / ep_r)
-             fn = 4. * h * f / _const.c * sqrt(ep_r - 1.)
-             fn2 = fn**2
-             e = ep_reff * ((1. + fn2) / (1. + k * fn2))**2
-             z = zl_eff * sqrt(ep_reff / e)
-         elif disp == 'hammerstadjensen':
-             Z0 = sqrt(_const.mu_0 / _const.epsilon_0)
-             g = pi**2 / 12 * (ep_r - 1) / ep_reff * sqrt(2 * pi * zl_eff / Z0)
-             fp = (2 * _const.mu_0 * h * f) / zl_eff
-             e = ep_r - (ep_r - ep_reff) / (1 + g * fp**2)
-             z =  zl_eff * sqrt(ep_reff / e) * (e - 1) / (ep_reff - 1)
-         elif disp == 'kirschningjansen':
-             fn = f * h * 1e-6
-             e = kirsching_er(u, fn, ep_r, ep_reff)
-             z, _ = kirsching_zl(u, fn, ep_r, ep_reff, e, zl_eff)
-         elif disp == 'yamashita':
-             k = sqrt(ep_r / ep_reff)
-             fp = 4 * h * f / _const.c * sqrt(ep_r - 1) * \
-                 (0.5 + (1 + 2 * log10(1 + u))**2)
-             e = ep_reff * ((1 + k * fp**1.5 / 4) / (1 + fp**1.5 / 4))**2
-             # qucs keep quasi-static impedance here
-             if self.compatibility_mode == 'qucs':
-                 z =  np.ones(f.shape) * zl_eff
-             # use Kirschning Jansen for impedance dispersion by default
-             else:
-                 fn = f * h * 1e-6
-                 z, _ = kirsching_zl(wr / h, fn, ep_r, ep_reff, e, zl_eff)
-         elif disp == 'kobayashi':
-             fk = _const.c * arctan(ep_r * sqrt((ep_reff - 1) / (ep_r - ep_reff)))/ \
-                 (2 * pi * h * sqrt(ep_r - ep_reff))
-             fh = fk / (0.75 + (0.75 - 0.332 / (ep_r**1.73)) * u)
-             no = 1 + 1 / (1 + sqrt(u)) + 0.32 * (1 / (1 + sqrt(u)))**3
-             nc = np.where(u < 0.7,
-                 1 + 1.4 / (1 + u) * (0.15 - 0.235 * exp(-0.45 * f / fh)),
-                 1)
-             n = np.where(no * nc < 2.32, no * nc, 2.32)
-             e =  ep_r - (ep_r - ep_reff) / (1 + (f / fh)**n)
-             # qucs keep quasi-static impedance here
-             if self.compatibility_mode == 'qucs':
-                 z =  np.ones(f.shape) * zl_eff
-             # use Kirschning Jansen for impedance dispersion by default
-             else:
-                 fn = f * h * 1e-6
-                 z, _ = kirsching_zl(wr / h, fn, ep_r, ep_reff, e, zl_eff)
-         elif disp == 'none':
-             e = ones(f.shape) * ep_reff
-             z = ones(f.shape) * zl_eff
+        Returns
+        -------
+        z : :class:`numpy.ndarray`
+        e : :class:`numpy.ndarray`
+        """
+        u = wr/h
+        if disp == 'schneider':
+            k = sqrt(ep_reff / ep_r)
+            fn = 4. * h * f / _const.c * sqrt(ep_r - 1.)
+            fn2 = fn**2
+            e = ep_reff * ((1. + fn2) / (1. + k * fn2))**2
+            z = zl_eff * sqrt(ep_reff / e)
+        elif disp == 'hammerstadjensen':
+            Z0 = sqrt(_const.mu_0 / _const.epsilon_0)
+            g = pi**2 / 12 * (ep_r - 1) / ep_reff * sqrt(2 * pi * zl_eff / Z0)
+            fp = (2 * _const.mu_0 * h * f) / zl_eff
+            e = ep_r - (ep_r - ep_reff) / (1 + g * fp**2)
+            z = zl_eff * sqrt(ep_reff / e) * (e - 1) / (ep_reff - 1)
+        elif disp == 'kirschningjansen':
+            fn = f * h * 1e-6
+            e = kirsching_er(u, fn, ep_r, ep_reff)
+            z, _ = kirsching_zl(u, fn, ep_r, ep_reff, e, zl_eff)
+        elif disp == 'yamashita':
+            k = sqrt(ep_r / ep_reff)
+            fp = 4 * h * f / _const.c * sqrt(ep_r - 1) * \
+                (0.5 + (1 + 2 * log10(1 + u))**2)
+            e = ep_reff * ((1 + k * fp**1.5 / 4) / (1 + fp**1.5 / 4))**2
+            # qucs keep quasi-static impedance here
+            if self.compatibility_mode == 'qucs':
+                z = np.ones(f.shape) * zl_eff
+            # use Kirschning Jansen for impedance dispersion by default
+            else:
+                fn = f * h * 1e-6
+                z, _ = kirsching_zl(wr / h, fn, ep_r, ep_reff, e, zl_eff)
+        elif disp == 'kobayashi':
+            fk = _const.c * arctan(ep_r * sqrt((ep_reff - 1) / (ep_r - ep_reff))
+                                   ) / (2 * pi * h * sqrt(ep_r - ep_reff))
+            fh = fk / (0.75 + (0.75 - 0.332 / (ep_r**1.73)) * u)
+            no = 1 + 1 / (1 + sqrt(u)) + 0.32 * (1 / (1 + sqrt(u)))**3
+            nc = np.where(u < 0.7,
+                          1 + 1.4 / (1 + u) * (0.15 - 0.235 *
+                                               exp(-0.45 * f / fh)),
+                          1)
+            n = np.where(no * nc < 2.32, no * nc, 2.32)
+            e = ep_r - (ep_r - ep_reff) / (1 + (f / fh)**n)
+            # qucs keep quasi-static impedance here
+            if self.compatibility_mode == 'qucs':
+                z = np.ones(f.shape) * zl_eff
+            # use Kirschning Jansen for impedance dispersion by default
+            else:
+                fn = f * h * 1e-6
+                z, _ = kirsching_zl(wr / h, fn, ep_r, ep_reff, e, zl_eff)
+        elif disp == 'none':
+            e = ones(f.shape) * ep_reff
+            z = ones(f.shape) * zl_eff
 
-         else:
-             raise ValueError('Unknown microstripline dispersion model')
+        else:
+            raise ValueError('Unknown microstripline dispersion model')
 
-         return z, e
+        return z, e
 
     def analyse_loss(self, ep_r: NumberLike, ep_reff: NumberLike,
-                    tand: NumberLike, rho: NumberLike, mu_r: NumberLike,
-                    zl_eff_f1: NumberLike, zl_eff_f2: NumberLike,
-                    f: NumberLike, w: NumberLike, t: NumberLike,
-                    D: NumberLike):
+                     tand: NumberLike, rho: NumberLike, mu_r: NumberLike,
+                     zl_eff_f1: NumberLike, zl_eff_f2: NumberLike,
+                     f: NumberLike, w: NumberLike, t: NumberLike,
+                     D: NumberLike):
         """
         The function calculates the conductor and dielectric losses of a
         single microstrip line using wheeler's incremental inductance rule.
@@ -631,33 +633,34 @@ class MLine(Media):
         Z0 = np.sqrt(_const.mu_0/_const.epsilon_0)
 
         # conductor losses
-        if t is not None and  t > 0:
+        if t is not None and t > 0:
             if rho is None:
-                raise(AttributeError('must provide resistivity rho. '
-                                     'see initializer help'))
+                raise (AttributeError('must provide resistivity rho. '
+                                      'see initializer help'))
             else:
-                Rs  = surface_resistivity(f=f, rho=rho, mu_r=1)
+                Rs = surface_resistivity(f=f, rho=rho, mu_r=1)
                 ds = skin_depth(f, rho, mu_r)
-                if(np.any(t < 3 * ds)):
+                if (np.any(t < 3 * ds)):
                     warnings.warn(
                         'Conductor loss calculation invalid for line'
                         f'height t ({t})  < 3 * skin depth ({ds[0]})',
                         RuntimeWarning, stacklevel=2
-                        )
+                    )
                 # current distribution factor
-                Ki  = exp(-1.2 * ((zl_eff_f1 + zl_eff_f2) / 2 / Z0)**0.7)
+                Ki = exp(-1.2 * ((zl_eff_f1 + zl_eff_f2) / 2 / Z0)**0.7)
                 # D is RMS surface roughness
-                Kr  = 1 + 2 / pi * arctan(1.4 * (D/ds)**2)
+                Kr = 1 + 2 / pi * arctan(1.4 * (D/ds)**2)
             a_conductor = Rs / (zl_eff_f1 * w) * Ki * Kr
         else:
             a_conductor = zeros(f.shape)
 
         # dielectric losses
         l0 = _const.c / f
-        a_dielectric =  pi * ep_r / (ep_r - 1) * (ep_reff - 1) / \
+        a_dielectric = pi * ep_r / (ep_r - 1) * (ep_reff - 1) / \
             sqrt(ep_reff) * tand / l0
 
         return a_conductor, a_dielectric
+
 
 def hammerstad_ab(u: NumberLike, ep_r: NumberLike) -> NumberLike:
     """
@@ -670,6 +673,7 @@ def hammerstad_ab(u: NumberLike, ep_r: NumberLike) -> NumberLike:
 
     return a, b
 
+
 def hammerstad_zl(u: NumberLike) -> NumberLike:
     """
     Hammerstad quasi-static impedance.
@@ -678,6 +682,7 @@ def hammerstad_zl(u: NumberLike) -> NumberLike:
     Z0 = sqrt(_const.mu_0/_const.epsilon_0)
     return Z0 / 2. / pi * log(fu / u + sqrt(1. + (2. / u)**2))
 
+
 def hammerstad_er(u: NumberLike, ep_r: NumberLike, a: NumberLike,
                   b: NumberLike) -> NumberLike:
     """
@@ -685,21 +690,22 @@ def hammerstad_er(u: NumberLike, ep_r: NumberLike, a: NumberLike,
     """
     return (ep_r + 1) / 2 + (ep_r - 1) / 2 * (1. + 10. / u)**(-a * b)
 
+
 def kirsching_zl(u: NumberLike, fn: NumberLike,
                  ep_r: NumberLike, ep_reff: NumberLike, ep_reff_f: NumberLike,
                  zl_eff: NumberLike):
     """
     Kirschning Jansen impedance dispersion.
     """
-    #fn = f * h * 1e-6 # GHz-mm
+    # fn = f * h * 1e-6 # GHz-mm
     R1 = np.minimum(0.03891 * ep_r**1.4, 20.)
     R2 = np.minimum(0.2671 * u**7, 20.)
     R3 = 4.766 * exp(-3.228 * u**0.641)
     R4 = 0.016 + (0.0514 * ep_r)**4.524
     R5 = (fn / 28.843)**12
-    R6 = np.minimum(22.20 * u **1.92, 20.)
+    R6 = np.minimum(22.20 * u ** 1.92, 20.)
     R7 = 1.206 - 0.3144 * exp(-R1) * (1 - exp(-R2))
-    R8 = 1 + 1.275 * (1 - exp(-0.004625 * R3 * ep_r**1.674 \
+    R8 = 1 + 1.275 * (1 - exp(-0.004625 * R3 * ep_r**1.674
                               * (fn / 18.365)**2.745))
     R9 = 5.086 * R4 * R5/(0.3838 + 0.386 * R4) \
         * exp(-R6) / (1 + 1.2992 * R5) \
@@ -711,9 +717,10 @@ def kirsching_zl(u: NumberLike, fn: NumberLike,
     R14 = (0.9408 - R9) * ep_reff**R8 - 0.9603
     R15 = 0.707 * R10 * (fn / 12.3)**1.097
     R16 = 1 + 0.0503 * ep_r**2 * R11 * (1 - exp(-(u / 15)**6))
-    R17 = R7 * (1 - 1.1241 * R12 / R16 \
-        *exp(-0.026 * fn**1.15656 - R15))
+    R17 = R7 * (1 - 1.1241 * R12 / R16
+                * exp(-0.026 * fn**1.15656 - R15))
     return zl_eff * (R13 / R14)**R17, R17
+
 
 def kirsching_er(u: NumberLike, fn: NumberLike,
                  ep_r: NumberLike, ep_reff: NumberLike):
@@ -722,9 +729,9 @@ def kirsching_er(u: NumberLike, fn: NumberLike,
     """
     # in the paper fn is in GHz-cm while in Qucs it is GHz-mm, thus a factor
     # 10 for all constant that multiply or divide fn
-    P1 = 0.27488 + (0.6315 + 0.525 / ( 1+ 0.0157 * fn)**20) * u \
-        -0.065683 * exp(-8.7513 * u)
-    P2 = 0.33622 * (1  -exp(-0.03442 * ep_r))
+    P1 = 0.27488 + (0.6315 + 0.525 / (1 + 0.0157 * fn)**20) * u \
+        - 0.065683 * exp(-8.7513 * u)
+    P2 = 0.33622 * (1 - exp(-0.03442 * ep_r))
     P3 = 0.0363 * exp(-4.6 * u) * (1 - exp(-(fn / 38.7)**4.97))
     P4 = 1 + 2.751 * (1 - exp(-(ep_r / 15.916)**8))
     Pf = P1 * P2 * ((0.1844 + P3 * P4) * fn)**1.5763

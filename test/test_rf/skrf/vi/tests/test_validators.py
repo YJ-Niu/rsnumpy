@@ -132,19 +132,20 @@ def test_set_validator():
     with pytest.raises(ValueError):
         validators.SetValidator([1, '2'])
 
+
 def test_dict_validator():
     arg_str = "{a},{b}"
     resp_pat = r"(?P<a>\d),(?P<b>\d)"
     v = validators.DictValidator(arg_str, resp_pat)
 
-    assert v.validate_input({"a":1, "b":2}) == "1,2"
-    assert v.validate_output('1,2') == {"a":'1', "b":'2'}
+    assert v.validate_input({"a": 1, "b": 2}) == "1,2"
+    assert v.validate_output('1,2') == {"a": '1', "b": '2'}
 
     with pytest.raises(ValidationError):
-        v.validate_input({"a":1})
+        v.validate_input({"a": 1})
 
     with pytest.raises(ValidationError):
         v.validate_output('1,2,3')
 
     v = validators.DictValidator(arg_str, re.compile(r"(?P<a>\d),(?P<b>\d)"))
-    assert v.validate_input({"a":1, "b":2}) == "1,2"
+    assert v.validate_input({"a": 1, "b": 2}) == "1,2"

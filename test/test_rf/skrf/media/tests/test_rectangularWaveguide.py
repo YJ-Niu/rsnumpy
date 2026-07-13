@@ -10,6 +10,7 @@ class MediaTestCase(unittest.TestCase):
     """
 
     """
+
     def setUp(self):
         """
 
@@ -17,7 +18,7 @@ class MediaTestCase(unittest.TestCase):
         self.files_dir = os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
             'qucs_prj'
-            )
+        )
         self.pwd = os.path.join(
             os.path.dirname(os.path.abspath(__file__)))
 
@@ -25,19 +26,17 @@ class MediaTestCase(unittest.TestCase):
     def test_line(self):
         """
         """
-        fname = os.path.join(self.files_dir,\
-                'rectangularWaveguideWR10,200mil.s2p')
+        fname = os.path.join(self.files_dir,
+                             'rectangularWaveguideWR10,200mil.s2p')
 
         qucs_ntwk = Network(fname)
         wg = RectangularWaveguide(
-            frequency = qucs_ntwk.frequency,
-            a = 100*mil,
-            z0_override = 50.
-            )
-        skrf_ntwk = wg.line(200*mil,'m')
+            frequency=qucs_ntwk.frequency,
+            a=100*mil,
+            z0_override=50.
+        )
+        skrf_ntwk = wg.line(200*mil, 'm')
         self.assertEqual(qucs_ntwk, skrf_ntwk)
-
-
 
     def test_conductor_loss(self):
         """
@@ -47,13 +46,14 @@ class MediaTestCase(unittest.TestCase):
         """
         ntwk = Network(os.path.join(self.pwd, 'wr1p5_1in_swg_Al_0rough.s2p'))
         wg = RectangularWaveguide(
-            frequency = ntwk.frequency,
+            frequency=ntwk.frequency,
             a=15*mil,
             z0_override=50,
-            rho = 1/(3.8e7),
-            )
+            rho=1/(3.8e7),
+        )
         self.assertTrue(
-            max(abs(wg.line(1,'in').s_mag[:,1,0] - ntwk.s_mag[:,1,0]))<1e-3 )
+            max(abs(wg.line(1, 'in').s_mag[:, 1, 0] - ntwk.s_mag[:, 1, 0])) <
+            1e-3)
 
     def test_roughness(self):
         """
@@ -61,13 +61,15 @@ class MediaTestCase(unittest.TestCase):
         the loss approximation doesn't account for reactance of field on
         sidewalls.
         """
-        ntwk = Network(os.path.join(self.pwd, 'wr1p5_1in_swg_Al_100nm_rough.s2p'))
+        ntwk = Network(os.path.join(
+            self.pwd, 'wr1p5_1in_swg_Al_100nm_rough.s2p'))
         wg = RectangularWaveguide(
             ntwk.frequency,
             a=15*mil,
             z0_override=50,
-            rho = 1/(3.8e7),
-            roughness = 100e-9,
-            )
+            rho=1/(3.8e7),
+            roughness=100e-9,
+        )
         self.assertTrue(
-            max(abs(wg.line(1,'in').s_mag[:,1,0] - ntwk.s_mag[:,1,0]))<1e-3)
+            max(abs(wg.line(1, 'in').s_mag[:, 1, 0] - ntwk.s_mag[:, 1, 0])) <
+            1e-3)

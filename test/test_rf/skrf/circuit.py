@@ -144,7 +144,8 @@ class Circuit:
             import networkx as nx
             return nx
         except ImportError as err:
-            raise ImportError('networkx package as not been installed and is required.') from err
+            raise ImportError(
+                'networkx package as not been installed and is required.') from err
 
     class _REDUCE_OPTIONS(TypedDict):
         """
@@ -179,10 +180,12 @@ class Circuit:
     CACHEDPROPERTIES = ('s', 'X', 'X_F', 'C', 'C_F', 'T')
 
     def __init__(self,
-                 connections: list[list[tuple[Network, int]]],
+                 connections: list[list[tuple[Network,
+                                              int]]],
                  name: str | None = None,
                  *,
-                 auto_reduce: bool = False, **kwargs: Unpack[_REDUCE_OPTIONS]) -> None:
+                 auto_reduce: bool = False,
+                 **kwargs: Unpack[_REDUCE_OPTIONS]) -> None:
         """
         Circuit constructor. Creates a circuit made of a set of N-ports networks.
 
@@ -306,7 +309,8 @@ class Circuit:
         for cnx in self.connections:
             for (ntw, _) in cnx:
                 if not self._is_named(ntw):
-                    raise AttributeError('All Networks must have a name. Faulty network:', ntw)
+                    raise AttributeError(
+                        'All Networks must have a name. Faulty network:', ntw)
 
         # list of networks for initial checks
         ntws = self.networks_list()
@@ -319,15 +323,20 @@ class Circuit:
         # All frequencies are the same, Circuit frequency can be any of the ntw
         self.frequency = ntws[0].frequency
 
-        # Check that a (ntwk, port) combination appears only once in the connection map
+        # Check that a (ntwk, port) combination appears only once in the
+        # connection map
         Circuit.check_duplicate_names(self.connections_list)
 
         # Get the keyword arguments for the reduce_circuit method
-        kwargs_reduce = {k: kwargs[k] for k in self._REDUCE_OPTIONS.__annotations__.keys() if k in kwargs}
+        kwargs_reduce = {k: kwargs[k]
+                         for k in self._REDUCE_OPTIONS.__annotations__.keys()
+                         if k in kwargs}
 
-        # Reduce the circuit if directly requested or any relevant kwargs are provided
+        # Reduce the circuit if directly requested or any relevant kwargs are
+        # provided
         if auto_reduce or any(kwargs_reduce):
-            self.connections = reduce_circuit(self.connections, **kwargs_reduce)
+            self.connections = reduce_circuit(
+                self.connections, **kwargs_reduce)
 
     @property
     def connections(self) -> list[list[tuple[Network, int]]]:
@@ -347,7 +356,8 @@ class Circuit:
         return self._connections
 
     @connections.setter
-    def connections(self, connections: list[list[tuple[Network, int]]]) -> None:
+    def connections(
+            self, connections: list[list[tuple[Network, int]]]) -> None:
         """
         Set the circuit connections.
 
@@ -368,7 +378,8 @@ class Circuit:
         name: str | None = None,
         *,
         inplace: bool = False,
-        auto_reduce: bool = False, **kwargs: Unpack[_REDUCE_OPTIONS]) -> Circuit | None:
+        auto_reduce: bool = False, **kwargs: Unpack[_REDUCE_OPTIONS]
+    ) -> Circuit | None:
         """
         Update the circuit connections with a new set of networks.
 
@@ -462,9 +473,12 @@ class Circuit:
         ]
 
         # Get the keyword arguments for the reduce_circuit method
-        kwargs_reduce = {k: kwargs[k] for k in self._REDUCE_OPTIONS.__annotations__.keys() if k in kwargs}
+        kwargs_reduce = {k: kwargs[k]
+                         for k in self._REDUCE_OPTIONS.__annotations__.keys()
+                         if k in kwargs}
 
-        # Reduce the circuit if directly requested or any relevant kwargs are provided
+        # Reduce the circuit if directly requested or any relevant kwargs are
+        # provided
         if auto_reduce or any(kwargs_reduce):
             connections = reduce_circuit(connections, **kwargs_reduce)
 
@@ -475,15 +489,16 @@ class Circuit:
         return Circuit(connections=connections, name=name)
 
     @classmethod
-    def check_duplicate_names(cls, connections_list: list[tuple[int, tuple[Network, int]]]):
+    def check_duplicate_names(
+            cls, connections_list: list[tuple[int, tuple[Network, int]]]):
         """
         Check that a (ntwk, port) combination appears only once in the connection map
         """
         nodes = [(ntwk.name, port) for (_, (ntwk, port)) in connections_list]
         if len(nodes) > len(set(nodes)):
             duplicate_nodes = [node for node in nodes if nodes.count(node) > 1]
-            raise AttributeError(f'Nodes {duplicate_nodes} appears twice in the connection description.')
-
+            raise AttributeError(
+                f'Nodes {duplicate_nodes} appears twice in the connection description.')
 
     def _is_named(self, ntw: Network):
         """
@@ -552,7 +567,12 @@ class Circuit:
         return port
 
     @classmethod
-    def SeriesImpedance(cls, frequency: Frequency, Z: NumberLike, name: str, z0: float = 50) -> Network:
+    def SeriesImpedance(
+            cls,
+            frequency: Frequency,
+            Z: NumberLike,
+            name: str,
+            z0: float = 50) -> Network:
         """
         Return a 2-port network of a series impedance.
 
@@ -595,7 +615,12 @@ class Circuit:
         return ntw
 
     @classmethod
-    def ShuntAdmittance(cls, frequency: Frequency, Y: NumberLike, name: str, z0: float = 50) -> Network:
+    def ShuntAdmittance(
+            cls,
+            frequency: Frequency,
+            Y: NumberLike,
+            name: str,
+            z0: float = 50) -> Network:
         """
         Return a 2-port network of a shunt admittance.
 
@@ -638,7 +663,11 @@ class Circuit:
         return ntw
 
     @classmethod
-    def Ground(cls, frequency: Frequency, name: str, z0: float = 50) -> Network:
+    def Ground(
+            cls,
+            frequency: Frequency,
+            name: str,
+            z0: float = 50) -> Network:
         """
         Return a 1-port network of a grounded link.
 
@@ -718,7 +747,8 @@ class Circuit:
         return Open
 
     def networks_dict(self,
-                      connections: list[list[tuple[Network, int]]] | None = None,
+                      connections: list[list[tuple[Network, int]]
+                                        ] | None = None,
                       min_nports: int = 1) -> dict[str, Network]:
         """
         Return the dictionary of Networks from the connection setup X.
@@ -742,10 +772,11 @@ class Circuit:
         for cnx in connections:
             for (ntw, _port) in cnx:
                 ntws.append(ntw)
-        return {ntw.name: ntw for ntw in ntws  if ntw.nports >= min_nports}
+        return {ntw.name: ntw for ntw in ntws if ntw.nports >= min_nports}
 
     def networks_list(self,
-                      connections: list[list[tuple[Network, int]]] | None = None,
+                      connections: list[list[tuple[Network, int]]
+                                        ] | None = None,
                       min_nports: int = 1) -> list[Network]:
         """
         Return a list of unique networks (sorted by appearing order in connections).
@@ -859,7 +890,6 @@ class Circuit:
         nx = self._get_nx()
         return nx.algorithms.components.is_connected(self.G)
 
-
     @property
     def intersections_dict(self) -> dict:
         """
@@ -875,8 +905,8 @@ class Circuit:
         #     inter_dict[k] = list(nx.algorithms.boundary.edge_boundary(self.G, ('X'+str(k),) ))
 
         for (k, cnx) in enumerate(self.connections):
-            inter_dict[k] = [(ntw, ntw_port, ntw.z0[0, ntw_port]) \
-                                  for (ntw, ntw_port) in cnx]
+            inter_dict[k] = [(ntw, ntw_port, ntw.z0[0, ntw_port])
+                             for (ntw, ntw_port) in cnx]
         return inter_dict
 
     @property
@@ -908,12 +938,11 @@ class Circuit:
             k, cnx = it
             for idx in range(len(cnx)):
                 ntw, ntw_port, ntw_z0 = cnx[idx]
-                #ntw_z0 = ntw.z0[0,ntw_port]
-                edge_labels[(ntw.name, 'X'+str(k))] = str(ntw_port)+'\n'+\
-                                        str(np.round(ntw_z0, decimals=1))
+                # ntw_z0 = ntw.z0[0,ntw_port]
+                edge_labels[(ntw.name, 'X'+str(k))] = str(ntw_port) + \
+                    '\n' + str(np.round(ntw_z0, decimals=1))
 
         return edge_labels
-
 
     def _Xk(self,
             cnx_k: list[tuple[Network, int]],
@@ -953,24 +982,27 @@ class Circuit:
         .. [#] P. Hallbjörner, Microw. Opt. Technol. Lett. 38, 99 (2003).
         """
 
-        y0s = np.array([1/ntw.z0[:,ntw_port] for (ntw, ntw_port) in cnx_k]).T
+        y0s = np.array([1/ntw.z0[:, ntw_port] for (ntw, ntw_port) in cnx_k]).T
         y_k = y0s.sum(axis=1)
 
-        Xs = np.zeros((len(self.frequency), len(cnx_k), len(cnx_k)), dtype='complex', order=order)
+        Xs = np.zeros((len(self.frequency), len(cnx_k),
+                      len(cnx_k)), dtype='complex', order=order)
 
-        Xs = 2 *np.sqrt(np.einsum('ij,ik->ijk', y0s, y0s)) / y_k[:, None, None]
+        Xs = 2 * np.sqrt(np.einsum('ij,ik->ijk', y0s, y0s)) / \
+            y_k[:, None, None]
         np.einsum('kii->ki', Xs)[:] -= 1  # Sii
 
         if inverse:
             # Check if unitary: all ports have same real admittance
             is_real = np.isreal(y0s).all()
-            is_unitary = is_real and np.isclose(y0s.max(), y0s.min()) if is_real else False
+            is_unitary = is_real and np.isclose(
+                y0s.max(), y0s.min()) if is_real else False
             Xs = np.conjugate(Xs) if is_unitary else np.linalg.inv(Xs)
 
         return np.asfortranarray(Xs) if order == 'F' else Xs
 
-
-    def _X(self, order: MemoryLayoutT = 'C', inverse: bool = False) -> np.ndarray:
+    def _X(self, order: MemoryLayoutT = 'C',
+           inverse: bool = False) -> np.ndarray:
         """
         Return the concatenated intersection matrix [X] of the circuit.
 
@@ -1009,7 +1041,8 @@ class Circuit:
         """
         Xks = [self._Xk(cnx, order, inverse) for cnx in self.connections]
 
-        Xf = np.zeros((len(self.frequency), self.dim, self.dim), dtype='complex', order=order)
+        Xf = np.zeros((len(self.frequency), self.dim, self.dim),
+                      dtype='complex', order=order)
         off = np.array([0, 0])
         for Xk in Xks:
             Xf[:, off[0]:off[0] + Xk.shape[1], off[1]:off[1]+Xk.shape[2]] = Xk
@@ -1119,24 +1152,26 @@ class Circuit:
             Shape `f x (nb_inter*nb_n) x (nb_inter*nb_n)`
         """
         # list all networks which are not considered as "ports",
-        ntws = {k:v for k,v in self.networks_dict().items() if not Circuit._is_port(v)}
+        ntws = {k: v for k, v in self.networks_dict().items()
+                if not Circuit._is_port(v)}
 
         # generate the port reordering indexes from each connections
-        ntws_ports_reordering = {ntw:[] for ntw in ntws}
+        ntws_ports_reordering = {ntw: [] for ntw in ntws}
         for (idx_cnx, (ntw, ntw_port)) in self.connections_list:
             if ntw.name in ntws.keys():
                 ntws_ports_reordering[ntw.name].append([ntw_port, idx_cnx])
 
         # re-ordering scattering parameters
-        S = np.zeros((len(self.frequency), self.dim, self.dim), dtype='complex', order=order)
+        S = np.zeros((len(self.frequency), self.dim, self.dim),
+                     dtype='complex', order=order)
 
         for (ntw_name, ntw_ports) in ntws_ports_reordering.items():
             # get the port re-ordering indexes (from -> to)
             ntw_ports = np.array(ntw_ports)
 
             # port permutations
-            from_port = ntw_ports[:,0]
-            to_port = ntw_ports[:,1]
+            from_port = ntw_ports[:, 0]
+            to_port = ntw_ports[:, 1]
 
             for (_from, _to) in zip(from_port, to_port):
                 S[:, _to, to_port] = ntws[ntw_name].s_traveling[:, _from, from_port]
@@ -1173,7 +1208,8 @@ class Circuit:
 
         # Perform the multiplication
         for j_slice in slices:
-            # Get the Block diagonal part of X and corresponding C matrix buffer
+            # Get the Block diagonal part of X and corresponding C matrix
+            # buffer
             X_jj = - X[:, j_slice, j_slice]
             C_j = C[:, :, j_slice]
 
@@ -1247,7 +1283,10 @@ class Circuit:
         port_indexes : list
         """
         port_indexes = []
-        for (idx_cnx, (ntw, _)) in enumerate(chain.from_iterable(self.connections)):
+        for (
+            idx_cnx, (ntw, _)) in enumerate(
+            chain.from_iterable(
+                self.connections)):
             if Circuit._is_port(ntw):
                 port_indexes.append(idx_cnx)
         return port_indexes
@@ -1268,7 +1307,7 @@ class Circuit:
         """
         z0s = []
         for (ntw, ntw_port) in cnx_k:
-            z0s.append(ntw.z0[:,ntw_port])
+            z0s.append(ntw.z0[:, ntw_port])
 
         return np.array(z0s).T  # shape (nb_freq, nb_ports_at_cnx)
 
@@ -1285,9 +1324,10 @@ class Circuit:
         z0s = []
         for cnx in self.connections:
             for (ntw, ntw_port) in cnx:
-                z0s.append(ntw.z0[:,ntw_port])
+                z0s.append(ntw.z0[:, ntw_port])
 
-        return np.array(z0s)[self.port_indexes, :].T  # shape (nb_freq, nb_ports)
+        # shape (nb_freq, nb_ports)
+        return np.array(z0s)[self.port_indexes, :].T
 
     @property
     def s_external(self) -> np.ndarray:
@@ -1337,15 +1377,22 @@ class Circuit:
         np.einsum('...ii->...i', t)[:] += 1
 
         # Get the sub-matrices of inverse of intermediate temporary matrix t
-        # The method np.linalg.solve(A, B) is equivalent to np.inv(A) @ B, but more efficient
+        # The method np.linalg.solve(A, B) is equivalent to np.inv(A) @ B, but
+        # more efficient
         try:
             tmp_mat = np.linalg.solve(t[D_idx], t[C_idx])
         except np.linalg.LinAlgError:
-            warnings.warn('Singular matrix detected, using rsnumpy.linalg.lstsq instead.', RuntimeWarning, stacklevel=2)
-            # rsnumpy.linalg.lstsq only works for 2D arrays, so we need to loop over frequencies
-            tmp_mat = np.zeros((self.frequency.npoints, len(in_idxs), len(ext_idxs)), dtype='complex')
+            warnings.warn(
+                'Singular matrix detected, using rsnumpy.linalg.lstsq instead.',
+                RuntimeWarning,
+                stacklevel=2)
+            # rsnumpy.linalg.lstsq only works for 2D arrays, so we need to loop
+            # over frequencies
+            tmp_mat = np.zeros((self.frequency.npoints, len(
+                in_idxs), len(ext_idxs)), dtype='complex')
             for i in range(self.frequency.npoints):
-                tmp_mat[i, :, :] = np.linalg.lstsq(t[i, D_idx[1], D_idx[2]], t[i, C_idx[1], C_idx[2]], rcond=None)[0]
+                tmp_mat[i, :, :] = np.linalg.lstsq(
+                    t[i, D_idx[1], D_idx[2]], t[i, C_idx[1], C_idx[2]], rcond=None)[0]
 
         # Get the external S-parameters for the external ports
         # Calculated by multiplying the sub-matrices of x and t
@@ -1366,8 +1413,11 @@ class Circuit:
         ntw : :class:`~skrf.network.Network`
             Network associated to external ports
         """
-        return Network(frequency = self.frequency, z0 = self.port_z0,
-                      s = self.s_external, name = self.name)
+        return Network(
+            frequency=self.frequency,
+            z0=self.port_z0,
+            s=self.s_external,
+            name=self.name)
 
     def s_active(self, a: NumberLike) -> np.ndarray:
         r"""
@@ -1508,7 +1558,7 @@ class Circuit:
         """
         z0s = []
         for _cnx_idx, (ntw, ntw_port) in self.connections_list:
-            z0s.append(ntw.z0[:,ntw_port])
+            z0s.append(ntw.z0[:, ntw_port])
         return np.array(z0s).T
 
     @property
@@ -1525,8 +1575,8 @@ class Circuit:
             list of pair of connections
 
         """
-        return [self.connections_list[i:i+2] for i in range(0, len(self.connections_list), 2)]
-
+        return [self.connections_list[i:i+2]
+                for i in range(0, len(self.connections_list), 2)]
 
     @property
     def _currents_directions(self) -> np.ndarray:
@@ -1544,11 +1594,11 @@ class Circuit:
         This function is used in internal currents and voltages calculations.
 
         """
-        directions = np.zeros((self.dim,2), dtype='int')
+        directions = np.zeros((self.dim, 2), dtype='int')
         for cnx_pair in self.connections_pair:
             (cnx_idx_A, cnx_A), (cnx_idx_B, cnx_B) = cnx_pair
-            directions[cnx_idx_A,:] = cnx_idx_A, cnx_idx_B
-            directions[cnx_idx_B,:] = cnx_idx_B, cnx_idx_A
+            directions[cnx_idx_A, :] = cnx_idx_A, cnx_idx_B
+            directions[cnx_idx_B, :] = cnx_idx_B, cnx_idx_A
         return directions
 
     def _a(self, a_external: NumberLike) -> np.ndarray:
@@ -1599,9 +1649,11 @@ class Circuit:
 
         """
         if len(power) != len(self.port_indexes):
-            raise ValueError('Length of power array does not match the number of ports of the circuit.')
+            raise ValueError(
+                'Length of power array does not match the number of ports of the circuit.')
         if len(phase) != len(self.port_indexes):
-            raise ValueError('Length of phase array does not match the number of ports of the circuit.')
+            raise ValueError(
+                'Length of phase array does not match the number of ports of the circuit.')
         return np.sqrt(2*np.array(power))*np.exp(1j*np.array(phase))
 
     def _b(self, a_internal: NumberLike) -> np.ndarray:
@@ -1655,22 +1707,25 @@ class Circuit:
 
         for cnx in self.connections:
             cnx_len = len(cnx)
-            z0_segment = z0s[:, i : i + cnx_len]
+            z0_segment = z0s[:, i: i + cnx_len]
             tot_shunt_z0 = (1 / z0_segment).sum(axis=1)
             Ij = np.zeros_like(z0_segment)
 
             # Calculate the ports' output current through the output wave
             for j in range(cnx_len):
                 in_z0 = z0_segment[:, j]
-                out_z0 = np.inf if cnx_len == 1 else 1 / (tot_shunt_z0 - 1 / in_z0)
+                out_z0 = np.inf if cnx_len == 1 else 1 / \
+                    (tot_shunt_z0 - 1 / in_z0)
                 tau = 2.0 if cnx_len == 1 else (2 * out_z0) / (out_z0 + in_z0)
                 Ij[:, j] = (b[:, i + j] / np.sqrt(in_z0)) * tau
 
             # The current of each port is different in the same node
-            # The ports' current should take into account the output current of each port in the node
+            # The ports' current should take into account the output current of
+            # each port in the node
             for j in range(cnx_len):
                 in_z0 = z0_segment[:, j]
-                out_z0 = np.inf if cnx_len == 1 else  1 / (tot_shunt_z0 - 1 / in_z0)
+                out_z0 = np.inf if cnx_len == 1 else (
+                    1 / in_z0) / (tot_shunt_z0 - 1 / in_z0)
                 Itmp = np.zeros_like(Is[:, i + j])
                 for k in range(cnx_len):
                     tmp_z0 = z0_segment[:, k]
@@ -1684,7 +1739,6 @@ class Circuit:
             i += cnx_len
 
         return Is
-
 
     def voltages(self, power: NumberLike, phase: NumberLike) -> np.ndarray:
         """
@@ -1710,7 +1764,7 @@ class Circuit:
 
         for cnx in self.connections:
             cnx_len = len(cnx)
-            z0_segment = z0s[:, i : i + cnx_len]
+            z0_segment = z0s[:, i: i + cnx_len]
             tot_shunt_z0 = (1 / z0_segment).sum(axis=1)
             Vk = np.zeros(shape=z0s.shape[0], dtype="complex128")
 
@@ -1718,16 +1772,20 @@ class Circuit:
             # The voltage of each port in the same node is consistent
             for j in range(cnx_len):
                 in_z0 = z0_segment[:, j]
-                out_z0 = np.inf if cnx_len == 1 else 1 / (tot_shunt_z0 - 1 / in_z0)
+                out_z0 = np.inf if cnx_len == 1 else 1 / \
+                    (tot_shunt_z0 - 1 / in_z0)
                 tau = 2.0 if cnx_len == 1 else (2 * out_z0) / (out_z0 + in_z0)
                 Vk += (b[:, i + j] * np.sqrt(in_z0)) * tau
 
-            Vs[:, i : i + cnx_len] = Vk[:, None]
+            Vs[:, i: i + cnx_len] = Vk[:, None]
             i += cnx_len
 
         return Vs
 
-    def currents_external(self, power: NumberLike, phase: NumberLike) -> np.ndarray:
+    def currents_external(
+            self,
+            power: NumberLike,
+            phase: NumberLike) -> np.ndarray:
         """
         Currents at external ports.
 
@@ -1751,10 +1809,13 @@ class Circuit:
         z0s = self.z0
         Is = []
         for port_idx in self.port_indexes:
-            Is.append((a[port_idx] - b[:,port_idx])/np.sqrt(z0s[:,port_idx]))
+            Is.append((a[port_idx] - b[:, port_idx])/np.sqrt(z0s[:, port_idx]))
         return np.array(Is).T
 
-    def voltages_external(self, power: NumberLike, phase: NumberLike) -> np.ndarray:
+    def voltages_external(
+            self,
+            power: NumberLike,
+            phase: NumberLike) -> np.ndarray:
         """
         Voltages at external ports
 
@@ -1776,7 +1837,7 @@ class Circuit:
         z0s = self.z0
         Vs = []
         for port_idx in self.port_indexes:
-            Vs.append((a[port_idx] + b[:,port_idx])*np.sqrt(z0s[:,port_idx]))
+            Vs.append((a[port_idx] + b[:, port_idx])*np.sqrt(z0s[:, port_idx]))
         return np.array(Vs).T
 
     def plot_graph(self, **kwargs):
@@ -1828,29 +1889,33 @@ class Circuit:
         label_shift_x = kwargs.pop('label_shift_x', 0)
         label_shift_y = kwargs.pop('label_shift_y', 0)
 
-
         # sort between network nodes and port nodes
         all_ntw_names = [ntw.name for ntw in self.networks_list()]
-        port_names = [ntw_name for ntw_name in all_ntw_names if 'port' in ntw_name]
-        ntw_names = [ntw_name for ntw_name in all_ntw_names if 'port' not in ntw_name]
+        port_names = [
+            ntw_name for ntw_name in all_ntw_names if 'port' in ntw_name]
+        ntw_names = [
+            ntw_name for ntw_name in all_ntw_names if 'port' not in ntw_name]
         # generate connecting nodes names
         int_names = ['X'+str(k) for k in range(self.connections_nb)]
 
-        fig, ax = subplots(figsize=(10,8))
+        fig, ax = subplots(figsize=(10, 8))
 
         pos = nx.spring_layout(G)
 
         # draw Networks
-        nx.draw_networkx_nodes(G, pos, port_names, ax=ax,
-                            node_size=port_size,
-                            node_color=port_color, node_shape=port_shape)
-        nx.draw_networkx_nodes(G, pos, ntw_names, ax=ax,
-                            node_size=network_size,
-                            node_color=network_color, node_shape=network_shape)
+        nx.draw_networkx_nodes(G, pos, port_names, ax=ax, node_size=port_size,
+                               node_color=port_color, node_shape=port_shape)
+        nx.draw_networkx_nodes(
+            G,
+            pos,
+            ntw_names,
+            ax=ax,
+            node_size=network_size,
+            node_color=network_color,
+            node_shape=network_shape)
         # draw intersections
-        nx.draw_networkx_nodes(G, pos, int_names, ax=ax,
-                            node_size=inter_size,
-                            node_color=inter_color, node_shape=inter_shape)
+        nx.draw_networkx_nodes(G, pos, int_names, ax=ax, node_size=inter_size,
+                               node_color=inter_color, node_shape=inter_shape)
         # labels shifts
         pos_labels = {}
         for node, coords in pos.items():
@@ -1859,21 +1924,22 @@ class Circuit:
 
         # network labels
         if network_labels:
-            network_labels = {lab:lab for lab in ntw_names}
+            network_labels = {lab: lab for lab in ntw_names}
 
             nx.draw_networkx_labels(G, pos_labels, labels=network_labels,
                                     font_size=network_fontsize, ax=ax)
 
         # intersection labels
         if inter_labels:
-            inter_labels = {'X'+str(k):'X'+str(k) for k in range(self.connections_nb)}
+            inter_labels = {'X'+str(k): 'X'+str(k)
+                            for k in range(self.connections_nb)}
 
             nx.draw_networkx_labels(G, pos_labels, labels=inter_labels,
                                     font_size=network_fontsize, ax=ax)
 
         # port labels
         if port_labels:
-            port_labels = {lab:lab for lab in port_names}
+            port_labels = {lab: lab for lab in port_names}
 
             nx.draw_networkx_labels(G, pos_labels, labels=port_labels,
                                     font_size=port_fontsize, ax=ax)
@@ -1882,14 +1948,20 @@ class Circuit:
         nx.draw_networkx_edges(G, pos, ax=ax)
         if edge_labels:
             edge_labels = self.edge_labels
-            nx.draw_networkx_edge_labels(G, pos,
-                                        edge_labels=edge_labels, label_pos=0.5,
-                                        font_size=edge_fontsize, ax=ax)
+            nx.draw_networkx_edge_labels(
+                G,
+                pos,
+                edge_labels=edge_labels,
+                label_pos=0.5,
+                font_size=edge_fontsize,
+                ax=ax)
         # remove x and y axis and labels
         ax.axis('off')
         fig.tight_layout()
 
-## Functions operating on Circuit
+# # Functions operating on Circuit
+
+
 def reduce_circuit(connections: list[list[tuple[Network, int]]],
                    check_duplication: bool = True,
                    split_ground: bool = True,
@@ -1949,21 +2021,21 @@ def reduce_circuit(connections: list[list[tuple[Network, int]]],
         return (
             any(
                 (
-                    Circuit._is_port(ntwk)
-                    or ntwk.nports > max_nports
-                    or ntwk.name in ignore_ntwk_names
+                    Circuit._is_port(
+                        ntwk) or ntwk.nports > max_nports or ntwk.name in ignore_ntwk_names
                 )
                 for ntwk, _ in cnx
-            )
-            or len(cnx) != 2
+            ) or len(cnx) != 2
         )
 
     if split_ground:
         tmp_cnxs = []
         for cnx in connections:
-            ground_ntwk = next((ntwk for ntwk, _ in cnx if Circuit._is_ground(ntwk)), None)
+            ground_ntwk = next(
+                (ntwk for ntwk, _ in cnx if Circuit._is_ground(ntwk)), None)
 
-            # If there is no ground network or if the connection has exactly 2 elements, append it as is
+            # If there is no ground network or if the connection has exactly 2
+            # elements, append it as is
             if not ground_ntwk or len(cnx) == 2:
                 tmp_cnxs.append(cnx)
                 continue
@@ -2021,7 +2093,8 @@ def reduce_circuit(connections: list[list[tuple[Network, int]]],
 
         # If tuples of Networks in 'connections' have the same Networks, they form a loop.
         # Prioritize processing loops in the circuit by reducing the number of ports by 1.
-        # This reduces the computational load during the circuit reduction process.
+        # This reduces the computational load during the circuit reduction
+        # process.
         if ntwks_str in processed_network_names:
             ports -= 1
         else:
@@ -2030,15 +2103,18 @@ def reduce_circuit(connections: list[list[tuple[Network, int]]],
         return ports
 
     # List of tuples containing connection indices and their calculated ports
-    cnx_ports_list = [(idx, calculate_ports(cnx)) for idx, cnx in enumerate(connections)]
-    reorder_indices = [idx for idx, _ in sorted(cnx_ports_list, key=lambda x: x[1])]
+    cnx_ports_list = [(idx, calculate_ports(cnx))
+                      for idx, cnx in enumerate(connections)]
+    reorder_indices = [idx for idx, _ in sorted(
+        cnx_ports_list, key=lambda x: x[1])]
 
     # Reorder connections
     connections = [connections[i] for i in reorder_indices]
 
     # check if the connections are valid
     if check_duplication:
-        connections_list = [conn for conn in enumerate(chain.from_iterable(connections))]
+        connections_list = [conn for conn in enumerate(
+            chain.from_iterable(connections))]
         Circuit.check_duplicate_names(connections_list)
 
     # Use list comprehension to find the connection need to be reduced

@@ -21,7 +21,8 @@ def _modules_loaded_by(import_statement: str) -> set[str]:
 # Explicitly named modules that must never be loaded as a side effect of
 # `import skrf` (optional / heavy dependencies not required for core use).
 # scipy is not included here because it loads submodules lazily. So we need
-# to check for any new scipy submodules dynamically instead of maintaining a static list.
+# to check for any new scipy submodules dynamically instead of maintaining
+# a static list.
 UNWANTED_MODULE_PREFIXES = [
     # Required dependency — should not be eagerly imported
     "pandas",
@@ -60,7 +61,8 @@ def test_no_heavy_modules_on_import():
     skrf_modules = _modules_loaded_by("import skrf")
 
     # Scipy submodules present after `import skrf` but not after `import scipy`.
-    # Collapse to first-level submodule name only (e.g. scipy.fft._basic -> scipy.fft).
+    # Collapse to first-level submodule name only (e.g. scipy.fft._basic ->
+    # scipy.fft).
     extra_scipy = {
         ".".join(m.split(".")[:2])
         for m in skrf_modules
@@ -69,7 +71,8 @@ def test_no_heavy_modules_on_import():
 
     # Explicitly unwanted third-party modules — collapse to the matched prefix.
     explicit_violations = {
-        next(p for p in UNWANTED_MODULE_PREFIXES if m == p or m.startswith(p + "."))
+        next(p for p in UNWANTED_MODULE_PREFIXES if m ==
+             p or m.startswith(p + "."))
         for m in skrf_modules
         for p in UNWANTED_MODULE_PREFIXES
         if m == p or m.startswith(p + ".")

@@ -164,6 +164,12 @@ class ndarray:
                         self._raw_data = list(data) if isinstance(data, (list, tuple)) else [data]
                         self._array = _core.zeros((len(self._raw_data),))
                         _dtype = "string_"
+                        # 记录 (kind, width)，供 dtype/itemsize 与整数索引取标量使用：
+                        # Python str 按 numpy 惯例归为 unicode 'U'，bytes 归为 'S'，宽度取最长元素。
+                        if flat and _py_all(isinstance(v, (bytes, bytearray)) for v in flat):
+                            self._str_dtype = ('S', _py_max((len(bytes(v)) for v in flat), default=0))
+                        else:
+                            self._str_dtype = ('U', _py_max((len(str(v)) for v in flat), default=0))
                     elif has_c:
                         # 包含复数 → 交由 Rust 原生复数解析（保留形状与虚部）
                         self._array = _core.ndarray(data)

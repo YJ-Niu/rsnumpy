@@ -24,6 +24,7 @@ from skrf.vi.vna import VNA, ValuesFormat
 
 logger = getLogger(__name__)
 
+
 class SweepType(Enum):
     LINEAR = "LIN"
     LOG = "LOG"
@@ -178,7 +179,8 @@ class RSVNA(VNA):
 
         @property
         def measurements(self) -> list[tuple[str, str]]:
-            msmnts = self.query(f"CALC{self.cnum}:PAR:CAT?").strip("'").split(",")
+            msmnts = self.query(
+                f"CALC{self.cnum}:PAR:CAT?").strip("'").split(",")
             return list(zip(msmnts[::2], msmnts[1::2]))
 
         @property
@@ -195,10 +197,15 @@ class RSVNA(VNA):
 
         @property
         def active_trace_sdata(self) -> np.ndarray:
-            active_measurement = self.query(f"CALC{self.cnum}:PAR:SEL?").replace("'", "").split(",")[0]
+            active_measurement = self.query(
+                f"CALC{self.cnum}:PAR:SEL?").replace("'", "").split(",")[0]
             if active_measurement == "":
-                raise RuntimeError("No trace is active. Must select measurement first.")
-            return self.query_values(f"CALC{self.cnum}:DATA? SDATA", complex_values=True)
+                raise RuntimeError(
+                    "No trace is active. Must select measurement first.")
+            return self.query_values(
+                f"CALC{
+                    self.cnum}:DATA? SDATA",
+                complex_values=True)
 
         def clear_averaging(self) -> None:
             self.write(f"SENS{self.cnum}:AVER:CLE")
@@ -250,7 +257,8 @@ class RSVNA(VNA):
             return ntwk
 
         def create_sparam_group(self, ports: Sequence[int]) -> None:
-            self.write(f"CALC{self.cnum}:PAR:DEF:SGR {','.join(map(str, ports))}")
+            self.write(
+                f"CALC{self.cnum}:PAR:DEF:SGR {','.join(map(str, ports))}")
 
         def get_snp_network(
             self,
@@ -302,7 +310,8 @@ class RSVNA(VNA):
 
         self.model = self.id.split(",")[1]
         if self.model not in self._models:
-            logger.warning(f"This model ({self.model}) has not been tested with "
+            logger.warning(
+                f"This model ({self.model}) has not been tested with "
                 "scikit-rf. By default, all features are turned on but older "
                 "instruments might be missing SCPI support for some commands "
                 "which will cause errors. Consider submitting an issue on GitHub to "
@@ -373,7 +382,9 @@ class RSVNA(VNA):
 
     @active_measurement.setter
     def active_measurement(self, name: str) -> None:
-        measurements = {name: channel for channel in self.channels for name in channel.measurement_names}
+        measurements = {name: channel
+                        for channel in self.channels
+                        for name in channel.measurement_names}
 
         if name not in measurements:
             raise KeyError(f"{name} does not exist")

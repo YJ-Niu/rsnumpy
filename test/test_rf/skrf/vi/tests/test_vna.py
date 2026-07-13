@@ -10,6 +10,7 @@ except ImportError:
 if "matplotlib" not in sys.modules:
     pytest.skip(allow_module_level=True)
 
+
 @pytest.mark.parametrize(
     "cmd,kwargs,expected",
     [

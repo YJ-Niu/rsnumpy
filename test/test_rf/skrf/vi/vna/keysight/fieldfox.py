@@ -118,7 +118,8 @@ class FieldFox(vna.VNA):
         get_cmd="SENS:BWID?",
         set_cmd="SENS:BWID <arg>",
         doc="""The center frequency [Hz]""",
-        validator=SetValidator([10, 30, 100, 300, 1000, 10_000, 30_000, 100_000]),
+        validator=SetValidator(
+            [10, 30, 100, 300, 1000, 10_000, 30_000, 100_000]),
     )
 
     window_configuration = vna.VNA.command(
@@ -177,7 +178,9 @@ class FieldFox(vna.VNA):
         self._resource.read_termination = "\n"
         self._resource.write_termination = "\n"
 
-        _ = self.query_format # calling the getter sets _values_format to make sure we're in sync with the instrument
+        # calling the getter sets _values_format to make sure we're in sync
+        # with the instrument
+        _ = self.query_format
 
     @property
     def nports(self) -> int:
@@ -194,13 +197,14 @@ class FieldFox(vna.VNA):
         freq = self.frequency
         self.npoints = len(range(int(freq.start), int(freq.stop) + f, f))
 
-
     @property
     def frequency(self) -> skrf.Frequency:
         """The frequency bounds as a :class:`skrf.Frequency`"""
         return skrf.Frequency(
-            start=self.freq_start, stop=self.freq_stop, npoints=self.npoints, unit='Hz'
-        )
+            start=self.freq_start,
+            stop=self.freq_stop,
+            npoints=self.npoints,
+            unit='Hz')
 
     @frequency.setter
     def frequency(self, f: skrf.Frequency):
@@ -213,16 +217,21 @@ class FieldFox(vna.VNA):
         """The currently defined calibration as a :class:`skrf.calibration.calibration.Calibration`"""
         cal_dict = {}
         for cal_key, term in self._cal_term_map.items():
-            vals = self.query_values(f"SENS:CORR:COEF? {term}", container=np.array, complex_values=True)
+            vals = self.query_values(
+                f"SENS:CORR:COEF? {term}",
+                container=np.array,
+                complex_values=True)
             cal_dict[cal_key] = vals
 
-        return skrf.calibration.Calibration.from_coefs(self.frequency, cal_dict)
+        return skrf.calibration.Calibration.from_coefs(
+            self.frequency, cal_dict)
 
     @calibration.setter
     def calibration(self, cal: skrf.calibration.Calibration) -> None:
         cal_dict = cal.coefs_12term
         for cal_key, term in self._cal_term_map.items():
-            self.write_values(f"SENS:CORR:COEF {term},", cal_dict[cal_key], complex_values=True)
+            self.write_values(
+                f"SENS:CORR:COEF {term},", cal_dict[cal_key], complex_values=True)
 
     @property
     def query_format(self) -> vna.ValuesFormat:
@@ -299,7 +308,10 @@ class FieldFox(vna.VNA):
         self.write("INIT")
         self.is_continuous = was_continuous
 
-    def get_snp_network(self, ports=None, restore_settings: bool = True) -> skrf.Network:
+    def get_snp_network(
+            self,
+            ports=None,
+            restore_settings: bool = True) -> skrf.Network:
         """
         Get trace data as an :class:`skrf.Network`
 
@@ -327,8 +339,11 @@ class FieldFox(vna.VNA):
             original_config = {
                 "ntraces": self.ntraces,
                 "window_configuration": self.window_configuration,
-                "trace_params": [self.get_measurement_parameter(i+1) for i in range(self.ntraces)]
-            }
+                "trace_params": [
+                    self.get_measurement_parameter(
+                        i +
+                        1) for i in range(
+                        self.ntraces)]}
 
         self.ntraces = len(msmnts)
         for i, param in enumerate(msmnt_params):
@@ -337,8 +352,11 @@ class FieldFox(vna.VNA):
         ntwk = skrf.Network()
         ntwk.frequency = self.frequency
         ntwk.s = np.empty(
-            shape=(ntwk.frequency.npoints, len(ports), len(ports)), dtype=complex
-        )
+            shape=(
+                ntwk.frequency.npoints,
+                len(ports),
+                len(ports)),
+            dtype=complex)
 
         self.sweep()
         for tr, (i, j) in enumerate(msmnts):

@@ -69,7 +69,8 @@ class NetworkSetTestCase(unittest.TestCase):
         # Test nominal
         self.ns = NetworkSet([self.ntwk1, self.ntwk2, self.ntwk3])
 
-        # Create NetworkSet from a list of Network containing a .params dict parameters
+        # Create NetworkSet from a list of Network containing a .params dict
+        # parameters
         self.ns_params = NetworkSet(self.ntwks_params)
 
     def test_constructor(self):
@@ -89,10 +90,12 @@ class NetworkSetTestCase(unittest.TestCase):
         self.assertRaises(TypeError, NetworkSet, [self.ntwk1, "wrong"])
 
         # all Networks should share the same Frequency
-        self.assertRaises(ValueError, NetworkSet, [self.ntwk_freq1_1p, self.ntwk_freq2_1p])
+        self.assertRaises(ValueError, NetworkSet, [
+                          self.ntwk_freq1_1p, self.ntwk_freq2_1p])
 
         # all Networks should share the same number of ports
-        self.assertRaises(ValueError, NetworkSet, [self.ntwk_freq1_1p, self.ntwk_freq1_2p])
+        self.assertRaises(ValueError, NetworkSet, [
+                          self.ntwk_freq1_1p, self.ntwk_freq1_2p])
 
         # expected situations: same number of ports and frequencies
         ntwk_set1 = NetworkSet([self.ntwk_freq1_1p, self.ntwk_freq1_1p])
@@ -120,7 +123,10 @@ class NetworkSetTestCase(unittest.TestCase):
         """
         Test the `NetworkSet.from_s_dict()` constructor class method.
         """
-        d = {"ntwk1": self.ntwk1.s, "ntwk2": self.ntwk2.s, "ntwk3": self.ntwk3.s}
+        d = {
+            "ntwk1": self.ntwk1.s,
+            "ntwk2": self.ntwk2.s,
+            "ntwk3": self.ntwk3.s}
         ntwk_set = NetworkSet.from_s_dict(d, frequency=self.ntwk1.frequency)
 
     def test_to_dict(self):
@@ -174,7 +180,8 @@ class NetworkSetTestCase(unittest.TestCase):
         self.ntwk3.dummy = 40
         ns_unsorted = NetworkSet([self.ntwk2, self.ntwk1, self.ntwk3])
         ns_unsorted.sort(key=lambda x: x.dummy)  # dummy -> 10, 40, 100
-        self.assertEqual(ns_unsorted, NetworkSet([self.ntwk2, self.ntwk3, self.ntwk1]))
+        self.assertEqual(ns_unsorted, NetworkSet(
+            [self.ntwk2, self.ntwk3, self.ntwk1]))
 
     def test_filter(self):
         """
@@ -191,7 +198,8 @@ class NetworkSetTestCase(unittest.TestCase):
         """
         mat = self.ns.scalar_mat()
         # check the resulting shape
-        self.assertEqual(mat.shape, (len(self.ns[0].f), len(self.ns), 2 * self.ns[0].nports ** 2))
+        self.assertEqual(mat.shape, (len(self.ns[0].f), len(
+            self.ns), 2 * self.ns[0].nports ** 2))
 
     def test_inv(self):
         """
@@ -211,7 +219,8 @@ class NetworkSetTestCase(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tempdir:
             ns.write(file=os.path.join(tempdir, "testing.ns"))
 
-    @pytest.mark.skipif("openpyxl" not in sys.modules, reason="Requires openpyxl in sys.modules.")
+    @pytest.mark.skipif("openpyxl" not in sys.modules,
+                        reason="Requires openpyxl in sys.modules.")
     def test_write_spreadsheet(self):
         """
         Test the `write_spreadsheet` method.
@@ -223,9 +232,10 @@ class NetworkSetTestCase(unittest.TestCase):
         ns.name = "testing"
 
         with tempfile.TemporaryDirectory() as tempdir:
-            #ns.write_spreadsheet()  # write 'testing.xlsx'
+            # ns.write_spreadsheet()  # write 'testing.xlsx'
             # passing a filename
-            ns.write_spreadsheet(file_name=os.path.join(tempdir, "testing2.xlsx"))
+            ns.write_spreadsheet(
+                file_name=os.path.join(tempdir, "testing2.xlsx"))
             # Using pathlib
             ns.write_spreadsheet(file_name=Path(tempdir) / "testing2.xlsx")
 
@@ -272,7 +282,8 @@ class NetworkSetTestCase(unittest.TestCase):
         ns_wo_all_same_params_length = self.ns_params.copy()
         ns_wo_all_same_params_length[0].params = {"a": 0, "c": "A"}
         self.assertFalse(ns_wo_params.has_params())
-        ns_wo_all_same_params_length[0].params = {"a": 0, "b": 10, "c": "A", "d": "hu ho"}
+        ns_wo_all_same_params_length[0].params = {
+            "a": 0, "b": 10, "c": "A", "d": "hu ho"}
         self.assertFalse(ns_wo_params.has_params())
 
         # not all keys of the params are the same
@@ -306,7 +317,8 @@ class NetworkSetTestCase(unittest.TestCase):
         for p in expected_coords.keys():
             expected_coords[p] = list(set(expected_coords[p]))
 
-        self.assertEqual(Counter(self.ns_params.coords), Counter(expected_coords))
+        self.assertEqual(Counter(self.ns_params.coords),
+                         Counter(expected_coords))
 
     def test_params_param(self):
         """Test the params property"""
@@ -335,24 +347,34 @@ class NetworkSetTestCase(unittest.TestCase):
         self.assertEqual(len(self.ns_params.sel({"a": range(0, 2)})), 4)
         # Multiple parameters
         self.assertEqual(len(self.ns_params.sel({"a": 0, "X": [10, 20]})), 2)
-        self.assertEqual(len(self.ns_params.sel({"a": [0, 1], "X": [10, 20]})), 4)
+        self.assertEqual(len(self.ns_params.sel(
+            {"a": [0, 1], "X": [10, 20]})), 4)
 
     def test_interpolate_from_params(self):
         """Tests associated to the .interpolate_from_params method"""
-        ## error handling
+        # error handling
         # param does not exist
-        self.assertRaises(ValueError, self.ns_params.interpolate_from_params, "duh!", 0)
+        self.assertRaises(
+            ValueError, self.ns_params.interpolate_from_params, "duh!", 0)
         # param values should be bounded by bounded by existing param values
-        self.assertRaises(ValueError, self.ns_params.interpolate_from_params, "a", -1, {"X": 10})
-        self.assertRaises(ValueError, self.ns_params.interpolate_from_params, "a", 100, {"X": 10})
+        self.assertRaises(
+            ValueError, self.ns_params.interpolate_from_params, "a", -1,
+            {"X": 10})
+        self.assertRaises(
+            ValueError, self.ns_params.interpolate_from_params, "a", 100, {
+                "X": 10})
         # cannot interpolate string-valued param
-        self.assertRaises(ValueError, self.ns_params.interpolate_from_params, "c", "duh!", {"X": 10})
+        self.assertRaises(
+            ValueError, self.ns_params.interpolate_from_params, "c", "duh!", {
+                "X": 10})
         # ambiguity: could interpolate a for X=10 or X=20...
-        self.assertRaises(ValueError, self.ns_params.interpolate_from_params, "a", 0.5)
+        self.assertRaises(
+            ValueError, self.ns_params.interpolate_from_params, "a", 0.5)
 
-        ## working cases
+        # working cases
         # returns a Network ?
-        self.assertIsInstance(self.ns_params.interpolate_from_params("a", 0.5, {"X": 10}), rf.Network)
+        self.assertIsInstance(self.ns_params.interpolate_from_params(
+            "a", 0.5, {"X": 10}), rf.Network)
 
         # test interpolated values
         f1 = rf.Frequency(1, 1, 1, unit="GHz")
@@ -375,13 +397,15 @@ class NetworkSetTestCase(unittest.TestCase):
 
     def test_from_mdif(self):
         """Create NetworkSets from MDIF files"""
-        mdif_files = glob.glob(self.test_dir + "../io/tests/MDIF_CITI_MDL/test_*.mdf")
+        mdif_files = glob.glob(
+            self.test_dir + "../io/tests/MDIF_CITI_MDL/test_*.mdf")
         for mdif_file in mdif_files:
             print(mdif_file)
             self.assertIsInstance(NetworkSet.from_mdif(mdif_file), NetworkSet)
 
             # With Path objects
-            self.assertIsInstance(NetworkSet.from_mdif(Path(mdif_file)), NetworkSet)
+            self.assertIsInstance(NetworkSet.from_mdif(
+                Path(mdif_file)), NetworkSet)
 
     def test_to_mdif(self):
         """Test is NetworkSet are equal after writing and reading to MDIF"""
@@ -401,33 +425,45 @@ class NetworkSetTestCase(unittest.TestCase):
                 self.assertEqual(ns_params, self.ns_params)
 
                 # with parameters and passing explicitly values but not types
-                self.ns_params.write_mdif(func(test_file), values=self.ns_params.params_values)
+                self.ns_params.write_mdif(
+                    func(test_file), values=self.ns_params.params_values)
                 ns_params = NetworkSet.from_mdif(func(test_file))
                 self.assertEqual(ns_params, self.ns_params)
 
                 # with parameters and passing explicitly types but not values
-                self.ns_params.write_mdif(func(test_file), data_types=self.ns_params.params_types)
+                self.ns_params.write_mdif(
+                    func(test_file), data_types=self.ns_params.params_types)
                 ns_params = NetworkSet.from_mdif(func(test_file))
                 self.assertEqual(ns_params, self.ns_params)
 
                 # with parameters and passing explicitly values and types
                 self.ns_params.write_mdif(
-                    func(test_file), values=self.ns_params.params_values, data_types=self.ns_params.params_types
-                )
+                    func(test_file),
+                    values=self.ns_params.params_values,
+                    data_types=self.ns_params.params_types)
                 ns_params = NetworkSet.from_mdif(func(test_file))
                 self.assertEqual(ns_params, self.ns_params)
 
-                # with parameters and passing explicitly values but not types and ads_compatible
-                self.ns_params.write_mdif(func(test_file), values=self.ns_params.params_values, ads_compatible=True)
+                # with parameters and passing explicitly values but not types
+                # and ads_compatible
+                self.ns_params.write_mdif(
+                    func(test_file),
+                    values=self.ns_params.params_values,
+                    ads_compatible=True)
                 ns_params = NetworkSet.from_mdif(func(test_file))
                 self.assertEqual(ns_params, self.ns_params)
 
-                # with parameters and passing explicitly types but not values and ads_compatible
-                self.ns_params.write_mdif(func(test_file), data_types=self.ns_params.params_types, ads_compatible=True)
+                # with parameters and passing explicitly types but not values
+                # and ads_compatible
+                self.ns_params.write_mdif(
+                    func(test_file),
+                    data_types=self.ns_params.params_types,
+                    ads_compatible=True)
                 ns_params = NetworkSet.from_mdif(func(test_file))
                 self.assertEqual(ns_params, self.ns_params)
 
-                # with parameters and passing explicitly values and types and ads_compatible
+                # with parameters and passing explicitly values and types and
+                # ads_compatible
                 self.ns_params.write_mdif(
                     func(test_file),
                     values=self.ns_params.params_values,
@@ -439,13 +475,15 @@ class NetworkSetTestCase(unittest.TestCase):
 
     def test_from_citi(self):
         """Create NetworkSets from CITI files"""
-        citi_files = glob.glob(self.test_dir + "../io/tests/MDIF_CITI_MDL/test_*.cti")
+        citi_files = glob.glob(
+            self.test_dir + "../io/tests/MDIF_CITI_MDL/test_*.cti")
         for citi_file in citi_files:
             print(citi_file)
             self.assertIsInstance(NetworkSet.from_citi(citi_file), NetworkSet)
 
             # With Path object
-            self.assertIsInstance(NetworkSet.from_citi(Path(citi_file)), NetworkSet)
+            self.assertIsInstance(NetworkSet.from_citi(
+                Path(citi_file)), NetworkSet)
 
 
 suite = unittest.TestLoader().loadTestsFromTestCase(NetworkSetTestCase)

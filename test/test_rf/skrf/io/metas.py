@@ -41,22 +41,23 @@ def ns_2_sdatcv(ns, fname, polar=False):
 
     # make the header and columns information
     top = '\n'.join(['SDATCV',
-                   'Ports',
-                   '\t'.join(['%i\t'%(k+1) for k in range(nports)])])
+                     'Ports',
+                     '\t'.join(['%i\t' % (k+1) for k in range(nports)])])
 
     # port impedance info
     z0ri = complex2Scalar(ntwk.z0[0])
-    zcol ='\t'.join(['Zr[%i]re\tZr[%i]im'%(k+1, k+1) \
-        for k in range(nports)])
+    zcol = '\t'.join(['Zr[%i]re\tZr[%i]im' % (k+1, k+1)
+                     for k in range(nports)])
     zvals = '\t'.join([str(k) for k in z0ri])
-    zhead = '\n'.join([zcol,zvals])
+    zhead = '\n'.join([zcol, zvals])
 
     # s and cov matrix info
-    shead = '\t'.join(['S[%i,%i]%s'%(m+1, n+1, k) \
-        for m,n in ntwk.port_tuples for k in ['re','im'] ])
+    shead = '\t'.join(['S[%i,%i]%s' % (m+1, n+1, k)
+                       for m, n in ntwk.port_tuples for k in ['re', 'im']])
 
-    cvhead = '\t'.join(['CV[%i,%i]'%(n+1, m+1) \
-        for m in range(2*nports**2) for n in range(2*nports**2)])
+    cvhead = '\t'.join(['CV[%i,%i]' % (n + 1, m + 1)
+                        for m in range(2 * nports ** 2)
+                        for n in range(2 * nports ** 2)])
 
     datahead = '\t'.join(['Freq', shead, cvhead])
 

@@ -69,6 +69,7 @@ class MatchedSymmetricCoupler(Device):
         * 2 - coupled
         * 3 - isolated
     """
+
     def __init__(self, media, c=None, t=None, t_phase=0, phase_diff=0,
                  nports=4, *args, **kw):
         Device.__init__(self, media=media, **kw)
@@ -76,14 +77,13 @@ class MatchedSymmetricCoupler(Device):
         if c is None and t is None:
             raise ValueError('Must pass either `c`  or `t`')
 
-        if nports not in [3,4]:
+        if nports not in [3, 4]:
             raise ValueError('nports must be 3 or 4')
 
         self.phase_diff = phase_diff
         self.t_phase = t_phase
         self.i = 0
-        self.nports=nports
-
+        self.nports = nports
 
         if c is not None:
             self.c = c
@@ -91,9 +91,8 @@ class MatchedSymmetricCoupler(Device):
         if t is not None:
             self.t = t
 
-
     @classmethod
-    def from_dbdeg(cls, media, db, deg=0, *args,**kw):
+    def from_dbdeg(cls, media, db, deg=0, *args, **kw):
         r"""
         Create a coupler in terms of couping(dB) and phase offset(deg)
 
@@ -117,12 +116,12 @@ class MatchedSymmetricCoupler(Device):
         return self._c
 
     @c.setter
-    def c(self,c):
+    def c(self, c):
         self._c = c
         t_rad = mf.degree_2_radian(self.t_phase)
         c_rad = t_rad + mf.degree_2_radian(self.phase_diff)
 
-        self._t = np.sqrt(1- np.abs(c)**2)*exp(1j*t_rad)
+        self._t = np.sqrt(1 - np.abs(c)**2)*exp(1j*t_rad)
         self._c = c*exp(1j*c_rad)
 
     @property
@@ -130,22 +129,21 @@ class MatchedSymmetricCoupler(Device):
         return self._t
 
     @t.setter
-    def t(self,t):
+    def t(self, t):
         t_rad = mf.degree_2_radian(self.t_phase)
         c_rad = t_rad + mf.degree_2_radian(self.phase_diff)
-        self._t= t*exp(1j*t_rad)
-        self._c = np.sqrt(1- np.abs(t)**2)*exp(1j*c_rad)
-
+        self._t = t*exp(1j*t_rad)
+        self._c = np.sqrt(1 - np.abs(t)**2)*exp(1j*c_rad)
 
     @property
     def ntwk(self):
         a = self.media.match(nports=4)
-        a.s[:,0,1] = a.s[:,1,0] = a.s[:,3,2] = a.s[:,2,3] = self.t
-        a.s[:,0,2] = a.s[:,2,0] = a.s[:,3,1] = a.s[:,1,3] = self.c
-        a.s[:,0,3] = a.s[:,3,0] = a.s[:,1,2] = a.s[:,2,1] = self.i
-        if self.nports ==3:
+        a.s[:, 0, 1] = a.s[:, 1, 0] = a.s[:, 3, 2] = a.s[:, 2, 3] = self.t
+        a.s[:, 0, 2] = a.s[:, 2, 0] = a.s[:, 3, 1] = a.s[:, 1, 3] = self.c
+        a.s[:, 0, 3] = a.s[:, 3, 0] = a.s[:, 1, 2] = a.s[:, 2, 1] = self.i
+        if self.nports == 3:
             match = self.media.match()
-            a = connect(a,3,match,0)
+            a = connect(a, 3, match, 0)
         return a
 
 
@@ -153,22 +151,23 @@ class Hybrid(MatchedSymmetricCoupler):
     """
     A 3dB Coupler of given phase difference
     """
-    def __init__(self, media, t_phase=180,phase_diff=0, *args, **kw):
-        c = 1/sqrt(2)
-        MatchedSymmetricCoupler.__init__(self,media=media, c=c,
-                                         phase_diff=phase_diff,
-                                         t_phase=t_phase,**kw)
 
+    def __init__(self, media, t_phase=180, phase_diff=0, *args, **kw):
+        c = 1/sqrt(2)
+        MatchedSymmetricCoupler.__init__(self, media=media, c=c,
+                                         phase_diff=phase_diff,
+                                         t_phase=t_phase, **kw)
 
 
 class QuadratureHybrid(MatchedSymmetricCoupler):
     """
     A 3dB Coupler with 90deg phase diff between transmit and coupled arms
     """
-    def __init__(self, media,t_phase=0, *args, **kw):
+
+    def __init__(self, media, t_phase=0, *args, **kw):
         c = 1/sqrt(2)
-        MatchedSymmetricCoupler.__init__(self,media=media,c=c,t_phase=t_phase,
-                                         phase_diff=-90, **kw)
+        MatchedSymmetricCoupler.__init__(
+            self, media=media, c=c, t_phase=t_phase, phase_diff=-90, **kw)
 
 
 class Hybrid180(Device):
@@ -187,22 +186,25 @@ class Hybrid180(Device):
 
     http://www.microwaves101.com/encyclopedias/hybrid-couplers
     """
+
     def __init__(self, media, nports=4, *args, **kw):
         Device.__init__(self, media=media, **kw)
         self.nports = nports
+
     @property
     def ntwk(self):
         a = self.media.match(nports=4)
-        for m,n in [(0,1),(1,0),(2,0),(0,2),(3,2),(2,3)]:
-            a.s[:,m,n]=-1j
-        for m,n in [(3,1),(1,3)]:
-            a.s[:,m,n]=1j
+        for m, n in [(0, 1), (1, 0), (2, 0), (0, 2), (3, 2), (2, 3)]:
+            a.s[:, m, n] = -1j
+        for m, n in [(3, 1), (1, 3)]:
+            a.s[:, m, n] = 1j
 
         a.s = a.s*1/sqrt(2)
-        if self.nports ==3:
+        if self.nports == 3:
             match = self.media.match()
-            a = connect(a,3,match,0)
+            a = connect(a, 3, match, 0)
         return a
+
 
 class DualCoupler(Device):
     """
@@ -214,21 +216,22 @@ class DualCoupler(Device):
         * 2 : coupled on coupler 1
         * 3 : coupled on coupler 2
     """
-    def __init__(self, media, c1=1/sqrt(2), c2=None, c1kw=None,c2kw=None):  # noqa: B008
+
+    def __init__(self, media, c1=1/sqrt(2), c2=None, c1kw=None, c2kw=None):  # noqa: B008
         if c2kw is None:
             c2kw = {}
         if c1kw is None:
             c1kw = {}
-        Device.__init__(self,media=media)
+        Device.__init__(self, media=media)
         if c2 is None:
-            c2= c1
-        self.c1 = MatchedSymmetricCoupler(media=media,c=c1,nports=3,**c1kw)
-        self.c2 = MatchedSymmetricCoupler(media=media,c=c2,nports=3,**c2kw)
+            c2 = c1
+        self.c1 = MatchedSymmetricCoupler(media=media, c=c1, nports=3, **c1kw)
+        self.c2 = MatchedSymmetricCoupler(media=media, c=c2, nports=3, **c2kw)
 
     @property
     def ntwk(self):
         c1ntwk = self.c1.ntwk
         c2ntwk = self.c2.ntwk
-        ntwk = connect(c1ntwk,1,c2ntwk,1)
-        ntwk.renumber([0,1,2,3],[0,2,1,3])
+        ntwk = connect(c1ntwk, 1, c2ntwk, 1)
+        ntwk.renumber([0, 1, 2, 3], [0, 2, 1, 3])
         return ntwk

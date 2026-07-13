@@ -11,7 +11,7 @@ networks = [
     "ring_slot",
     "tee",
     "ring_slot_meas",
-    "wr2p2_line" ,
+    "wr2p2_line",
     "wr2p2_line1",
     "wr2p2_delayshort",
     "wr2p2_short",
@@ -109,6 +109,7 @@ waveguides = [
     "wm86"
 ]
 
+
 @pytest.mark.parametrize("name", networks)
 def test_static_data(name):
     getattr(rf.data, name)
@@ -118,9 +119,11 @@ def test_static_data(name):
 def test_static_airs(name):
     getattr(rf.instances, name)
 
+
 @pytest.mark.parametrize("name", frequencies)
 def test_static_frequencies(name):
     getattr(rf.instances, name)
+
 
 @pytest.mark.parametrize("name", waveguides)
 def test_static_waveguides(name):

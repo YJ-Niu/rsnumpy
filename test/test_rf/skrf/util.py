@@ -106,7 +106,13 @@ def now_string() -> str:
     now_string_2_dt
 
     """
-    return datetime.now().__str__().replace('-','.').replace(':','.').replace(' ','.')
+    return datetime.now().__str__().replace(
+        '-',
+        '.').replace(
+        ':',
+        '.').replace(
+            ' ',
+        '.')
 
 
 def now_string_2_dt(s: str) -> datetime:
@@ -293,14 +299,17 @@ def git_version(modname: str) -> str:
         output of 'git describe'
 
     """
-    warnings.warn("git_version is deprecated and will be removed in a future version.", FutureWarning, stacklevel=2)
+    warnings.warn(
+        "git_version is deprecated and will be removed in a future version.",
+        FutureWarning,
+        stacklevel=2)
     mod = __import__(modname)
     mod_dir = os.path.split(mod.__file__)[0]
     p = Popen(['git', 'describe'], stdout=PIPE, stderr=PIPE, cwd=mod_dir)
 
     try:
         out, er = p.communicate()
-    except(OSError):
+    except (OSError):
         return None
 
     out = out.strip('\n')
@@ -352,9 +361,12 @@ def dict_2_recarray(d: dict, delim: str, dtype: list[tuple]) -> np.ndarray:
            1-Port Network: 'b1,0.0,3.0',  450-800 GHz, 101 pts, z0=[ 50.+0.j],
            1-Port Network: 'a1,0.0,-3.0',  450-800 GHz, 101 pts, z0=[ 50.+0.j],
     """
-    warnings.warn("dict_2_recarray is deprecated and will be removed in a future version.", FutureWarning, stacklevel=2)
+    warnings.warn(
+        "dict_2_recarray is deprecated and will be removed in a future version.",
+        FutureWarning,
+        stacklevel=2)
     split_keys = [tuple(k.split(delim)+[d[k]]) for k in d.keys()]
-    x = np.array(split_keys, dtype=dtype+[('values',object)])
+    x = np.array(split_keys, dtype=dtype+[('values', object)])
     return x
 
 
@@ -383,7 +395,10 @@ def findReplace(directory: str, find: str, replace: str, file_pattern: str):
     ----------
     .. [1] http://stackoverflow.com/questions/4205854/python-way-to-recursively-find-and-replace-string-in-text-files
     """
-    warnings.warn("findReplace is deprecated and will be removed in a future version.", FutureWarning, stacklevel=2)
+    warnings.warn(
+        "findReplace is deprecated and will be removed in a future version.",
+        FutureWarning,
+        stacklevel=2)
     for path, _dirs, files in os.walk(os.path.abspath(directory)):
         for filename in fnmatch.filter(files, file_pattern):
             filepath = os.path.join(path, filename)
@@ -437,28 +452,30 @@ class HomoList(collections.abc.Sequence):
     >>> h[h.prop==value].func()
     """
 
-
     def __init__(self, list_):
-        warnings.warn("HomoList is deprecated and will be removed in a future version.", FutureWarning, stacklevel=2)
+        warnings.warn(
+            "HomoList is deprecated and will be removed in a future version.",
+            FutureWarning,
+            stacklevel=2)
         self.store = list(list_)
 
     def __eq__(self, value):
-        return [k for k in range(len(self)) if self.store[k] == value ]
+        return [k for k in range(len(self)) if self.store[k] == value]
 
     def __ne__(self, value):
-        return [k for k in range(len(self)) if self.store[k] != value ]
+        return [k for k in range(len(self)) if self.store[k] != value]
 
     def __gt__(self, value):
-        return [k for k in range(len(self)) if self.store[k] > value ]
+        return [k for k in range(len(self)) if self.store[k] > value]
 
     def __ge__(self, value):
-        return [k for k in range(len(self)) if self.store[k] >= value ]
+        return [k for k in range(len(self)) if self.store[k] >= value]
 
     def __lt__(self, value):
-        return [k for k in range(len(self)) if self.store[k] < value ]
+        return [k for k in range(len(self)) if self.store[k] < value]
 
     def __le__(self, value):
-        return [k for k in range(len(self)) if self.store[k] <= value ]
+        return [k for k in range(len(self)) if self.store[k] <= value]
 
     def __getattr__(self, name):
         return self.__class__(
@@ -467,13 +484,12 @@ class HomoList(collections.abc.Sequence):
     def __getitem__(self, idx):
         try:
             return self.store[idx]
-        except(TypeError):
+        except (TypeError):
             return self.__class__([self.store[k] for k in idx])
-
 
     def __call__(self, *args, **kwargs):
         return self.__class__(
-            [k(*args,**kwargs) for k in self.store])
+            [k(*args, **kwargs) for k in self.store])
 
     def __setitem__(self, idx, value):
         self.store[idx] = value
@@ -534,41 +550,45 @@ class HomoDict(collections.abc.MutableMapping):
 
     >>> h[h.prop==value].func()
     """
+
     def __init__(self, dict_):
-        warnings.warn("HomoDict is deprecated and will be removed in a future version.", FutureWarning, stacklevel=2)
+        warnings.warn(
+            "HomoDict is deprecated and will be removed in a future version.",
+            FutureWarning,
+            stacklevel=2)
         self.store = dict(dict_)
 
     def __eq__(self, value):
-        return [k for k in self.store if self.store[k] == value ]
+        return [k for k in self.store if self.store[k] == value]
 
     def __ne__(self, value):
-        return [k for k in self.store if self.store[k] != value ]
+        return [k for k in self.store if self.store[k] != value]
 
     def __gt__(self, value):
-        return [k for k in self.store if self.store[k] > value ]
+        return [k for k in self.store if self.store[k] > value]
 
     def __ge__(self, value):
-        return [k for k in self.store if self.store[k] >= value ]
+        return [k for k in self.store if self.store[k] >= value]
 
     def __lt__(self, value):
-        return [k for k in self.store if self.store[k] < value ]
+        return [k for k in self.store if self.store[k] < value]
 
     def __le__(self, value):
-        return [k for k in self.store if self.store[k] <= value ]
+        return [k for k in self.store if self.store[k] <= value]
 
     def __getattr__(self, name):
         return self.__class__(
-            {k: getattr(self.store[k],name) for k in self.store})
+            {k: getattr(self.store[k], name) for k in self.store})
 
     def __getitem__(self, key):
         if isinstance(key, str):
             return self.store[key]
         else:
-            c =   self.__class__({k:self.store[k] for k in key})
+            c = self.__class__({k: self.store[k] for k in key})
         return c
-        #if len(c) == 1:
+        # if len(c) == 1:
         #    return c.store.values()[0]
-        #else:
+        # else:
         #    return c
 
     def __call__(self, *args, **kwargs):
@@ -593,14 +613,12 @@ class HomoDict(collections.abc.MutableMapping):
     def __repr__(self):
         return pprint.pformat(self.store)
 
-
     def copy(self):
         return HomoDict(self.store)
 
-
     def filter_nones(self):
-        self.store =  {k:self.store[k] for k in self.store \
-                        if self.store[k] is not None}
+        self.store = {k: self.store[k] for k in self.store
+                      if self.store[k] is not None}
 
     def filter(self, **kwargs):
         """
@@ -630,7 +648,10 @@ class HomoDict(collections.abc.MutableMapping):
         return a
 
 
-def has_duplicate_value(value: Any, values: Iterable, index: int) -> bool | int:
+def has_duplicate_value(
+        value: Any,
+        values: Iterable,
+        index: int) -> bool | int:
     """
     Check if there is another value of the current index in the list.
 
@@ -655,8 +676,10 @@ def has_duplicate_value(value: Any, values: Iterable, index: int) -> bool | int:
     >>> rf.has_duplicate_value(3, [1, 2, 0, 3, 0], 0)  # -> 3
     >>> rf.has_duplicate_value(3, [1, 2, 0, 3, 0], 3)  # -> False
     """
-    warnings.warn("has_duplicate_value is deprecated and will be removed in a future version.",
-                  FutureWarning, stacklevel=2)
+    warnings.warn(
+        "has_duplicate_value is deprecated and will be removed in a future version.",
+        FutureWarning,
+        stacklevel=2)
 
     for i, val in enumerate(values):
         if i == index:
@@ -701,7 +724,8 @@ def unique_name(name: str, names: list, exclude: int = -1) -> str:
     return name
 
 
-def smooth(x: np.ndarray, window_len: int = 11, window: str = 'flat') -> np.ndarray:
+def smooth(x: np.ndarray, window_len: int = 11,
+           window: str = 'flat') -> np.ndarray:
     """
     Smooth the data using a window with requested size.
 
@@ -760,7 +784,8 @@ def smooth(x: np.ndarray, window_len: int = 11, window: str = 'flat') -> np.ndar
         return x
 
     if window not in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
-        raise ValueError("Window is one of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'")
+        raise ValueError(
+            "Window is one of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'")
 
     s = np.r_[x[window_len - 1:0:-1], x, x[-2:-window_len - 1:-1]]
     if window == 'flat':  # moving average
@@ -787,6 +812,7 @@ class ProgressBar:
     >>>     pb.animate(idx)
 
     """
+
     def __init__(self, iterations: int, label: str = "iterations"):
         """
         Progress bar constructor.
@@ -799,7 +825,10 @@ class ProgressBar:
             Progress bar label, by default "iterations"
         """
 
-        warnings.warn("ProgressBar is deprecated and will be removed in a future version.", FutureWarning, stacklevel=2)
+        warnings.warn(
+            "ProgressBar is deprecated and will be removed in a future version.",
+            FutureWarning,
+            stacklevel=2)
         self.iterations = iterations
         self.label = label
         self.prog_bar = '[]'
@@ -822,13 +851,15 @@ class ProgressBar:
 
     def update_iteration(self, elapsed_iter: int):
         self.__update_amount((elapsed_iter / float(self.iterations)) * 100.0)
-        self.prog_bar += '  %d of %s %s complete' % (elapsed_iter, self.iterations, self.label)
+        self.prog_bar += '  %d of %s %s complete' % (
+            elapsed_iter, self.iterations, self.label)
 
     def __update_amount(self, new_amount: int):
         percent_done = int(round((new_amount / 100.0) * 100.0))
         all_full = self.width - 2
         num_hashes = int(round((percent_done / 100.0) * all_full))
-        self.prog_bar = '[' + self.fill_char * num_hashes + ' ' * (all_full - num_hashes) + ']'
+        self.prog_bar = '[' + self.fill_char * \
+            num_hashes + ' ' * (all_full - num_hashes) + ']'
         pct_place = (len(self.prog_bar) // 2) - len(str(percent_done))
         pct_string = '%d%%' % percent_done
         self.prog_bar = self.prog_bar[0:pct_place] + \

@@ -84,4 +84,5 @@ def use_bokeh():
 
             setattr(network.Network, attribute_name, gen_plot_function(p, t))
 
+
 use_bokeh()  # this function can be called again if we need to switch plotting engines for some reason

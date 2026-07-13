@@ -92,14 +92,18 @@ class Frequency:
     Dictionary to convert unit string with correct capitalization for display.
     """
 
-    multiplier_dict={k.lower(): v for k,v in FREQ_UNITS.items()}
+    multiplier_dict = {k.lower(): v for k, v in FREQ_UNITS.items()}
     """
     Frequency unit multipliers.
     """
 
-
-    def __init__(self, start: float = 0, stop: float = 0, npoints: int = 0,
-        unit: FrequencyUnitT | None = None, sweep_type: SweepTypeT = 'lin') -> None:
+    def __init__(
+            self,
+            start: float = 0,
+            stop: float = 0,
+            npoints: int = 0,
+            unit: FrequencyUnitT | None = None,
+            sweep_type: SweepTypeT = 'lin') -> None:
         """
         Frequency initializer.
 
@@ -154,7 +158,7 @@ class Frequency:
             unit = 'Hz'
         self._unit = unit.lower()
 
-        start =  self.multiplier * start
+        start = self.multiplier * start
         stop = self.multiplier * stop
 
         if npoints == 0:
@@ -171,8 +175,9 @@ class Frequency:
         """
         try:
             output =  \
-                   '%s-%s %s, %i pts' % \
-                   (self.f_scaled[0], self.f_scaled[-1], self.unit, self.npoints)
+                '%s-%s %s, %i pts' % \
+                (self.f_scaled[0], self.f_scaled[-1],
+                    self.unit, self.npoints)
         except (IndexError):
             output = "[no freqs]"
 
@@ -204,38 +209,36 @@ class Frequency:
 
         output = self.copy()
 
-
         if isinstance(key, str):
 
             # they passed a string try and do some interpretation
             re_hyphen = re.compile(r'\s*-\s*')
             re_letters = re.compile('[a-zA-Z]+')
 
-            freq_unit = re.findall(re_letters,key)
+            freq_unit = re.findall(re_letters, key)
 
             if len(freq_unit) == 0:
                 freq_unit = self.unit
             else:
                 freq_unit = freq_unit[0]
 
-            key_nounit = re.sub(re_letters,'',key)
-            edges  = re.split(re_hyphen,key_nounit)
+            key_nounit = re.sub(re_letters, '', key)
+            edges = re.split(re_hyphen, key_nounit)
 
             edges_freq = Frequency.from_f([float(k) for k in edges],
-                                        unit = freq_unit)
-            if len(edges_freq) ==2:
-                slicer=slice_domain(output.f, edges_freq.f)
-            elif len(edges_freq)==1:
+                                          unit=freq_unit)
+            if len(edges_freq) == 2:
+                slicer = slice_domain(output.f, edges_freq.f)
+            elif len(edges_freq) == 1:
                 key = find_nearest_index(output.f, edges_freq.f[0])
-                slicer = slice(key,key+1,1)
+                slicer = slice(key, key+1, 1)
             else:
                 raise ValueError()
             try:
                 output._f = np.array(output.f[slicer]).reshape(-1)
                 return output
-            except(IndexError) as err:
+            except (IndexError) as err:
                 raise IndexError('slicing frequency is incorrect') from err
-
 
         if output.f.shape[0] > 0:
             output._f = np.array(output.f[key]).reshape(-1)
@@ -244,9 +247,9 @@ class Frequency:
 
         return output
 
-
     @classmethod
-    def from_f(cls, f: NumberLike, unit: FrequencyUnitT | None = None) -> Frequency:
+    def from_f(cls, f: NumberLike, unit: FrequencyUnitT |
+               None = None) -> Frequency:
         """
         Construct Frequency object from a frequency vector.
 
@@ -277,14 +280,14 @@ class Frequency:
         """
         if np.isscalar(f):
             f = [f]
-        temp_freq =  cls(0,0,0,unit=unit)
+        temp_freq = cls(0, 0, 0, unit=unit)
         temp_freq._f = np.asarray(f) * temp_freq.multiplier
         temp_freq.check_monotonic_increasing()
 
         return temp_freq
 
     def __eq__(self, other: object) -> bool:
-        #return (list(self.f) == list(other.f))
+        # return (list(self.f) == list(other.f))
         # had to do this out of practicality
         if not isinstance(other, self.__class__):
             return False
@@ -295,7 +298,7 @@ class Frequency:
         else:
             return (max(abs(self.f-other.f)) < ZERO)
 
-    def __ne__(self,other: object) -> bool:
+    def __ne__(self, other: object) -> bool:
         return (not self.__eq__(other))
 
     def __len__(self) -> int:
@@ -354,9 +357,11 @@ class Frequency:
         """
         increase = np.diff(self.f) > 0
         if not increase.all():
-            warnings.warn("Frequency values are not monotonously increasing!\n"
-            "To get rid of the invalid values call `drop_non_monotonic_increasing`",
-                InvalidFrequencyWarning, stacklevel=2)
+            warnings.warn(
+                "Frequency values are not monotonously increasing!\n"
+                "To get rid of the invalid values call `drop_non_monotonic_increasing`",
+                InvalidFrequencyWarning,
+                stacklevel=2)
 
     def drop_non_monotonic_increasing(self) -> list[int]:
         """Drop duplicate and invalid frequency values and return the dropped indices
@@ -381,6 +386,7 @@ class Frequency:
         Starting frequency in :attr:`unit`'s.
         """
         return self.f_scaled[0]
+
     @property
     def stop_scaled(self) -> float:
         """
@@ -494,7 +500,6 @@ class Frequency:
         """
 
         return self._f
-
 
     @property
     def f_scaled(self) -> np.ndarray:
@@ -616,11 +621,12 @@ class Frequency:
         """
         Returns a new copy of this frequency.
         """
-        freq =  Frequency.from_f(self.f, unit='Hz')
+        freq = Frequency.from_f(self.f, unit='Hz')
         freq.unit = self.unit
         return freq
 
-    def _t_padded(self, *, pad: int = 0, n: int | None = None, bandpass: bool | None = None) -> np.ndarray:
+    def _t_padded(self, *, pad: int = 0, n: int | None = None,
+                  bandpass: bool | None = None) -> np.ndarray:
         if bandpass is None:
             bandpass = self.f[0] != 0
 
@@ -636,7 +642,8 @@ class Frequency:
             t = np.linspace(t_start, t_stop, num=n, endpoint=True)
         else:
             dt = 1 / (n * self.step)
-            t = np.linspace(-dt * (n // 2), dt * (n // 2), num=n, endpoint=True)
+            t = np.linspace(-dt * (n // 2), dt * (n // 2),
+                            num=n, endpoint=True)
 
         return t
 
@@ -683,7 +690,7 @@ class Frequency:
 
         self.f = np.round(self.f/val)*val
 
-    def overlap(self,f2: Frequency) -> Frequency:
+    def overlap(self, f2: Frequency) -> Frequency:
         """
         Calculates overlapping frequency  between self and f2.
 
@@ -705,7 +712,8 @@ class Frequency:
             'lin' if linearly increasing, 'log' or 'unknown'.
 
         """
-        if np.allclose(self.f, linspace(self.f[0], self.f[-1], self.npoints), rtol=0.05):
+        if np.allclose(self.f, linspace(
+                self.f[0], self.f[-1], self.npoints), rtol=0.05):
             sweep_type = 'lin'
         elif self.f[0] and np.allclose(self.f, geomspace(self.f[0], self.f[-1], self.npoints), rtol=0.05):
             sweep_type = 'log'
@@ -732,7 +740,7 @@ class Frequency:
         ax.set_xlabel(f'Frequency ({self.unit})')
 
     @axes_kwarg
-    def plot(self, y: NumberLike, *args, ax: Axes=None, **kwargs):
+    def plot(self, y: NumberLike, *args, ax: Axes = None, **kwargs):
         """
         Plot something vs this frequency.
 
@@ -757,8 +765,8 @@ class Frequency:
             else:
 
                 raise IndexError(['thing to plot doesn\'t have same'
-                                ' number of points as f'])
-        except(TypeError):
+                                  ' number of points as f'])
+        except (TypeError):
             y = y * np.ones(len(self))
 
         # plt.plot(self.f_scaled, y, *args, **kwargs)
@@ -768,7 +776,7 @@ class Frequency:
         self.labelXAxis()
 
 
-def overlap_freq(f1: Frequency,f2: Frequency) -> Frequency:
+def overlap_freq(f1: Frequency, f2: Frequency) -> Frequency:
     """
     Calculates overlapping frequency between f1 and f2.
 
@@ -798,10 +806,9 @@ def overlap_freq(f1: Frequency,f2: Frequency) -> Frequency:
     elif f2.start > f1.stop:
         raise ValueError('Out of bounds. f2.start > f1.stop')
 
-
     start = max(f1.start, f2.start)
     stop = min(f1.stop, f2.stop)
-    f = f1.f[(f1.f>=start) & (f1.f<=stop)]
-    freq =  Frequency.from_f(f, unit = 'Hz')
+    f = f1.f[(f1.f >= start) & (f1.f <= stop)]
+    freq = Frequency.from_f(f, unit='Hz')
     freq.unit = f1.unit
     return freq

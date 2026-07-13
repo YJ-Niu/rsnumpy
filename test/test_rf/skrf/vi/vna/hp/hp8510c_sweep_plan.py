@@ -10,6 +10,7 @@ import skrf
 
 logger = getLogger(__name__)
 
+
 class SweepSection(ABC):
     @abstractmethod
     def get_hz(self) -> list[float]:
@@ -24,7 +25,7 @@ class SweepSection(ABC):
     def apply_8510(self, hp8510c):
         pass
 
-    def mask_8510(self, network : skrf.Network) -> skrf.Network:
+    def mask_8510(self, network: skrf.Network) -> skrf.Network:
         return network
 
 
@@ -38,7 +39,8 @@ class LinearBuiltinSweepSection(SweepSection):
         return np.linspace(self.hz_min, self.hz_max, self.n_points)
 
     def apply_8510(self, hp8510c):
-        hp8510c._set_instrument_step_state(self.hz_min, self.hz_max, self.n_points)
+        hp8510c._set_instrument_step_state(
+            self.hz_min, self.hz_max, self.n_points)
 
 
 @dataclasses.dataclass
@@ -55,9 +57,10 @@ class LinearMaskedSweepSection(SweepSection):
         return np.linspace(self.hz_min, self.hz_max, self.n_points)
 
     def apply_8510(self, hp8510c):
-        hp8510c._set_instrument_step_state(self.hz_min, self.hz_max, self.n_points)
+        hp8510c._set_instrument_step_state(
+            self.hz_min, self.hz_max, self.n_points)
 
-    def mask_8510(self, network : skrf.Network) -> skrf.Network:
+    def mask_8510(self, network: skrf.Network) -> skrf.Network:
         return network[self.mask]
 
 
@@ -71,19 +74,20 @@ class LinearCustomSweepSection(SweepSection):
         return np.linspace(self.hz_min, self.hz_max, self.n_points)
 
     def get_raw_hz(self) -> list[float]:
-        if self.n_points==1:
+        if self.n_points == 1:
             return [self.hz_min, self.hz_min+1]
         return np.linspace(self.hz_min, self.hz_max, self.n_points)
 
     def apply_8510(self, hp8510c):
         assert self.n_points <= 792
-        if self.n_points==1:
+        if self.n_points == 1:
             hp8510c._set_instrument_step_state(self.hz_min, self.hz_max, 2)
             return
-        hp8510c._set_instrument_step_state(self.hz_min, self.hz_max, self.n_points)
+        hp8510c._set_instrument_step_state(
+            self.hz_min, self.hz_max, self.n_points)
 
-    def mask_8510(self, network : skrf.Network) -> skrf.Network:
-        if self.n_points==1:
+    def mask_8510(self, network: skrf.Network) -> skrf.Network:
+        if self.n_points == 1:
             return network[0]
         return network
 
@@ -97,17 +101,19 @@ class RandomSweepSection(SweepSection):
 
     def get_raw_hz(self) -> list[float]:
         ''' List of hz fetched from the instrument before applying mask '''
-        if len(self.hz_list)==1:
-            return [self.hz_list[0], self.hz_list[0]+1]  # 8510 treats length 1 like length 2
+        if len(self.hz_list) == 1:
+            # 8510 treats length 1 like length 2
+            return [self.hz_list[0], self.hz_list[0]+1]
         return self.get_hz()
 
     def apply_8510(self, hp8510c):
         hp8510c._set_instrument_cwstep_state(self.hz_list)
 
-    def mask_8510(self, network : skrf.Network) -> skrf.Network:
-        if len(self.hz_list)==1:
+    def mask_8510(self, network: skrf.Network) -> skrf.Network:
+        if len(self.hz_list) == 1:
             return network[0]
         return network
+
 
 def _sweep_sectionsfrom_hz(hz) -> list[SweepSection]:
     """
@@ -125,12 +131,15 @@ def _sweep_sectionsfrom_hz(hz) -> list[SweepSection]:
     def finalize_window(growing_window, misfits, sweep_sections):
         """ When a growing_window has grown as far as it can, finalize_window is called to
         turn it into a sweep section + misfits."""
-        # Runt windows aren't really linear sweeps -- we should just add their points to the misfit pile
+        # Runt windows aren't really linear sweeps -- we should just add their
+        # points to the misfit pile
         if len(growing_window) <= 2:
             misfits.extend(growing_window)
             growing_window.clear()
             return
-        # Certain window lengths are preferred. Try to use these as much as possible
+        # Certain window lengths are preferred. Try to use these as much as
+        # possible
+
         def try_builtin_window_len(builtin_len):
             while len(growing_window) >= builtin_len:
                 chunk = growing_window[0:builtin_len]
@@ -181,6 +190,7 @@ def _sweep_sectionsfrom_hz(hz) -> list[SweepSection]:
         del misfits[:29]
     return sweep_sections
 
+
 class SweepPlan:
     """
     The user requests a big sweep with different spacings in different frequency
@@ -207,7 +217,7 @@ class SweepPlan:
         self._sections = sections
 
     @classmethod
-    def from_hz(cls, hz : list[float]):
+    def from_hz(cls, hz: list[float]):
         sweep_sections = _sweep_sectionsfrom_hz(hz)
         plan = SweepPlan(sweep_sections)
         assert plan._matches_f_list(hz)
@@ -223,7 +233,7 @@ class SweepPlan:
             ret.extend(s.get_hz())
         return ret
 
-    def _matches_f_list(self, golden_hz : list[float]):
+    def _matches_f_list(self, golden_hz: list[float]):
         """
         Returns True iff the frequencies this SweepPlan intends to sweep
         equal those in the list golden_hz.

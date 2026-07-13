@@ -18,7 +18,8 @@ def trace_color_cycle(start=0):
     :return:
     """
     count = start
-    color_list = [colors["blue"], colors["red"], colors["magenta"], colors["green"]]
+    color_list = [colors["blue"], colors["red"],
+                  colors["magenta"], colors["green"]]
     num = len(color_list)
     while count < 1000:
         yield color_list[count % num]

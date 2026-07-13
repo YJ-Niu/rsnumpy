@@ -127,7 +127,8 @@ FrequencyUnitT = Literal["Hz", "kHz", "MHz", "GHz", "THz"]
 """
 Frequency units: "Hz", "kHz", "MHz", "GHz", "THz" (case-insensitive).
 """
-FREQ_UNITS: dict[FrequencyUnitT, float] = {"Hz": 1.0, "kHz": 1e3, "MHz": 1e6, "GHz": 1e9, "THz": 1e12}
+FREQ_UNITS: dict[FrequencyUnitT, float] = {
+    "Hz": 1.0, "kHz": 1e3, "MHz": 1e6, "GHz": 1e9, "THz": 1e12}
 
 SweepTypeT = Literal["lin", "log"]
 """
@@ -135,15 +136,33 @@ Frequency sweep type, either "lin" or "log".
 """
 
 CoordT = Literal["cart", "polar"]
-InterpolKindT = Literal["linear", "cubic", "nearest", "zero", "slinear", "quadratic", "rational"]
+InterpolKindT = Literal["linear", "cubic", "nearest",
+                        "zero", "slinear", "quadratic", "rational"]
 PrimaryPropertiesT = Literal['s', 'z', 'y', 'a', 'g', 'h', 't']
-ComponentFuncT = Literal["re", "im", "mag", "db", "db10", "rad", "deg", "arcl", "rad_unwrap", "deg_unwrap",
-                         "arcl_unwrap", "vswr", "time", "time_db", "time_mag", "time_impulse", "time_step"]
+ComponentFuncT = Literal["re",
+                         "im",
+                         "mag",
+                         "db",
+                         "db10",
+                         "rad",
+                         "deg",
+                         "arcl",
+                         "rad_unwrap",
+                         "deg_unwrap",
+                         "arcl_unwrap",
+                         "vswr",
+                         "time",
+                         "time_db",
+                         "time_mag",
+                         "time_impulse",
+                         "time_step"]
 SparamFormatT = Literal["db", "ri", "ma"]
 PortOrderT = Literal["first", "second", "third", "last", "auto"]
-CircuitComponentT = Literal["_is_circuit_port", "_is_circuit_ground", "_is_circuit_open"]
+CircuitComponentT = Literal["_is_circuit_port",
+                            "_is_circuit_ground", "_is_circuit_open"]
 MemoryLayoutT = Literal["C", "F"]
-ErrorFunctionsT = Literal["average_l1_norm", "average_l2_norm", "maximum_l1_norm", "average_normalized_l1_norm"]
+ErrorFunctionsT = Literal["average_l1_norm", "average_l2_norm",
+                          "maximum_l1_norm", "average_normalized_l1_norm"]
 
 NumberLike = Number | Sequence[Number] | np.ndarray
 
@@ -171,7 +190,10 @@ def get_distance_dict() -> dict[str, float]:
     return distance_dict
 
 
-def to_meters(d: NumberLike, unit: str = 'm', v_g: float | None = None) -> NumberLike:
+def to_meters(
+        d: NumberLike,
+        unit: str = 'm',
+        v_g: float | None = None) -> NumberLike:
     """
     Translate various units of distance into meters.
 
@@ -210,7 +232,7 @@ def to_meters(d: NumberLike, unit: str = 'm', v_g: float | None = None) -> Numbe
     try:
         return _distance_dict[unit]*d
     except KeyError as err:
-        raise(ValueError('Incorrect unit')) from err
+        raise ValueError('Incorrect unit') from err
 
 
 def __getattr__(name: str) -> Any:

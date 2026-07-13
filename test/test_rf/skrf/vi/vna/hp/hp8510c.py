@@ -26,6 +26,7 @@ from .hp8510c_sweep_plan import SweepPlan
 
 logger = getLogger(__name__)
 
+
 class HP8510C(VNA):
     '''
     HP 8510 driver that is capable of compound sweeps, segmented sweeps,
@@ -95,23 +96,26 @@ class HP8510C(VNA):
     max_hz = None  #: Maximum frequency supported by instrument
     compound_sweep_plan = None
     #: If None, get_snp_network()/one_port()/two_port() just ask the VNA for data.
-    # If populated, those methods perform the multiple sweeps in the plan and stitch together the results.
+    # If populated, those methods perform the multiple sweeps in the plan and
+    # stitch together the results.
 
-    def __init__(self, address : str, backend : str = "@py", **kwargs):
+    def __init__(self, address: str, backend: str = "@py", **kwargs):
         super().__init__(address, backend, **kwargs)
         # Tested 2024-03-09:
         #     HP8510C.07.14
         #     AD007 (a VXI11-complaint GPIB-Ethernet adapter)
         #     address="TCPIP::ad007-right.lan::gpib0,16::INSTR", backend="@py"
 
-        # 8510s are slow. This check ensures we won't wait 60s for connection error.
+        # 8510s are slow. This check ensures we won't wait 60s for connection
+        # error.
         self._resource.timeout = 2_000
         id_str = self.query('OUTPIDEN;')
-        assert('HP8510' in id_str) # example: 'HP8510C.07.14: Aug 26  1998 '
+        assert ('HP8510' in id_str)  # example: 'HP8510C.07.14: Aug 26  1998 '
 
         # 8510s are slow. Actual work might take actual 60 seconds.
         self._resource.timeout = 60_000
-        self._resource.read_termination = False # Binary mode doesn't work if we allow premature termination on \n
+        # Binary mode doesn't work if we allow premature termination on \n
+        self._resource.read_termination = False
         self.read_raw = self._resource.read_raw
         self.reset()
         self.min_hz = self.freq_start
@@ -143,16 +147,17 @@ class HP8510C(VNA):
         ''' MAIN METHOD for obtaining S parameters, like get_snp_network((1,)) or get_snp_network((1,2)). '''
         ports = tuple(ports)
         sweep = kwargs.get("sweep", True)
-        if ports==(1,):
+        if ports == (1,):
             self.write('s11;')
             return self.one_port(fresh_sweep=sweep, cw=cw)
-        elif ports==(2,):
+        elif ports == (2,):
             self.write('s22;')
             return self.one_port(fresh_sweep=sweep, cw=cw)
-        elif ports==(1,2) or ports==(2,1):
+        elif ports == (1, 2) or ports == (2, 1):
             return self.two_port(fresh_sweep=sweep, cw=cw)
         else:
-            raise(ValueError("Invalid ports "+str(ports)+". Options: (1,) (2,) (1,2)."))
+            raise (ValueError("Invalid ports "+str(ports) +
+                   ". Options: (1,) (2,) (1,2)."))
 
     def get_switch_terms(self, ports=(1, 2), **kwargs):
         '''
@@ -171,7 +176,7 @@ class HP8510C(VNA):
     @property
     def is_continuous(self):
         ''' True iff sweep mode is continuous. Can be set. '''
-        answer_dict={'\"HOLD\"':False,'\"CONTINUAL\"':True}
+        answer_dict = {'\"HOLD\"': False, '\"CONTINUAL\"': True}
         return answer_dict[self.query('GROU?')]
 
     @is_continuous.setter
@@ -181,7 +186,7 @@ class HP8510C(VNA):
         elif not choice:
             self.write('SING;')
         else:
-            raise(ValueError('takes a boolean'))
+            raise (ValueError('takes a boolean'))
 
     @property
     def averaging(self):
@@ -189,13 +194,14 @@ class HP8510C(VNA):
         raise NotImplementedError
 
     @averaging.setter
-    def averaging(self, factor ):
-        self.write('AVERON %i;'%factor )
+    def averaging(self, factor):
+        self.write('AVERON %i;' % factor)
 
     @property
     def _frequency(self):
         ''' Frequencies of non-compound sweep '''
-        freq=skrf.Frequency( self.freq_start, self.freq_stop, self._npoints, unit='hz' )
+        freq = skrf.Frequency(
+            self.freq_start, self.freq_stop, self._npoints, unit='hz')
         return freq
 
     @property
@@ -203,17 +209,20 @@ class HP8510C(VNA):
         ''' Frequencies of compound sweep '''
         if self.compound_sweep_plan is None:
             return self._frequency
-        return skrf.Frequency.from_f(self.compound_sweep_plan.get_hz(), unit='hz')
+        return skrf.Frequency.from_f(
+            self.compound_sweep_plan.get_hz(), unit='hz')
 
     @frequency.setter
     def frequency(self, frequency_obj: skrf.Frequency):
         ''' List sweep using hz, an array of frequencies.
         If hz is too long, multiple sweeps will automatically be performed.'''
         hz = frequency_obj.f
-        valid = (self.min_hz<=hz) & (hz<=self.max_hz)
+        valid = (self.min_hz <= hz) & (hz <= self.max_hz)
         if not np.all(valid):
-            logger.warning(f"set_frequency called with {np.sum(valid)}/{len(valid)} points out of VNA frequency range. "
-                           "Dropping them.")
+            logger.warning(
+                f"set_frequency called with {
+                    np.sum(valid)}/{
+                    len(valid)} points out of VNA frequency range. " "Dropping them.")
             hz = hz[valid]
         self.compound_sweep_plan = SweepPlan.from_hz(hz)
 
@@ -227,10 +236,10 @@ class HP8510C(VNA):
             hz_cw = f_cw
         if self._resource is not None:
             self._resource.clear()
-        if npoint not in [51,101,201,401,801]:
-            raise(ValueError("Invalid npoints "+str(npoint)+". Options: 51,101,201,401,801."))
-        self.write('SINP; CWFREQ %f;POIN%i;'%(hz_cw, npoint))
-
+        if npoint not in [51, 101, 201, 401, 801]:
+            raise (ValueError("Invalid npoints "+str(npoint) +
+                   ". Options: 51,101,201,401,801."))
+        self.write('SINP; CWFREQ %f;POIN%i;' % (hz_cw, npoint))
 
     def set_frequency_sweep(self, f_start, f_stop, f_npoints, **kwargs):
         ''' Interprets units and calls set_frequency_step '''
@@ -248,14 +257,16 @@ class HP8510C(VNA):
             self.compound_sweep_plan = None
             self._set_instrument_step_state(hz_start, hz_stop, npoint)
         else:
-            self.compound_sweep_plan = SweepPlan.from_ssn(hz_start, hz_stop, npoint)
+            self.compound_sweep_plan = SweepPlan.from_ssn(
+                hz_start, hz_stop, npoint)
 
     def set_frequency_ramp(self, hz_start, hz_stop, npoint=801):
         ''' Ramp (fast, not synthesized) sweep. Must have standard npoint. '''
-        if npoint not in (valid_npoints := [51,101,201,401,801]):
+        if npoint not in (valid_npoints := [51, 101, 201, 401, 801]):
             logger.warning(f"8510C only supports NPOINT in {valid_npoints}")
         self._resource.clear()
-        self.write('RAMP; STAR %f; STOP %f; POIN%i;'%(hz_start,hz_stop,npoint))
+        self.write('RAMP; STAR %f; STOP %f; POIN%i;' %
+                   (hz_start, hz_stop, npoint))
 
     @property
     def freq_start(self):
@@ -299,33 +310,38 @@ class HP8510C(VNA):
             self.compound_sweep_plan = None
             self._set_instrument_step_state(hz_start, hz_stop, npoint)
         else:
-            self.compound_sweep_plan = SweepPlan.from_ssn(hz_start, hz_stop, npoint)
+            self.compound_sweep_plan = SweepPlan.from_ssn(
+                hz_start, hz_stop, npoint)
 
     def _instrument_natively_supports_steps(self, npoint):
-        if npoint in [51,101,201,401,801]:
+        if npoint in [51, 101, 201, 401, 801]:
             return True
-        if npoint<=792: # Supported with a single native list sweep
+        if npoint <= 792:  # Supported with a single native list sweep
             return True
         return False
 
     def _set_instrument_step_state(self, hz_start, hz_stop, npoint=801):
-        assert(self._instrument_natively_supports_steps(npoint))
+        assert (self._instrument_natively_supports_steps(npoint))
         if self._resource is not None:
             self._resource.clear()
-        if npoint in [51,101,201,401,801]:
-            # If it's a directly supported step sweep npoints, use regular sweep
-            self.write('STEP; STAR %f; STOP %f; POIN%i;'%(hz_start,hz_stop,npoint))
-        elif npoint<=792:
+        if npoint in [51, 101, 201, 401, 801]:
+            # If it's a directly supported step sweep npoints, use regular
+            # sweep
+            self.write('STEP; STAR %f; STOP %f; POIN%i;' %
+                       (hz_start, hz_stop, npoint))
+        elif npoint <= 792:
             # List sweep lets us support, for example, 401<npoints<801
             self.write('STEP;')
             self.write('EDITLIST;')
             self.write('CLEL;')
             self.write('SADD;')
-            self.write('STAR %f; STOP %f; POIN %i;'%(hz_start,hz_stop,npoint))
+            self.write('STAR %f; STOP %f; POIN %i;' %
+                       (hz_start, hz_stop, npoint))
             self.write('SDON; EDITDONE; LISFREQ;')
 
     def _set_instrument_cwstep_state(self, hz_list):
-        assert(len(hz_list)<=30) # 8510 only supports CW lists up to length 30
+        # 8510 only supports CW lists up to length 30
+        assert (len(hz_list) <= 30)
         self.write('STEP;')
         self.write('EDITLIST;')
         self.write('CLEL;')
@@ -343,28 +359,28 @@ class HP8510C(VNA):
         self.write('FORM2;')
         self.write(outp_cmd)
         buf = self.read_raw()
-        float_bin = buf[4:] # Skip 4 header bytes and trailing newline
+        float_bin = buf[4:]  # Skip 4 header bytes and trailing newline
         try:
-            floats = np.frombuffer(float_bin, dtype='>f4').reshape((-1,2))
+            floats = np.frombuffer(float_bin, dtype='>f4').reshape((-1, 2))
         except ValueError as e:
             logger.debug(f"Buffer {str(buf)}, len: {len(buf)}")
-            raise(e)
-        cmplxs = (floats[:,0] + 1j*floats[:,1]).flatten()
+            raise (e)
+        cmplxs = (floats[:, 0] + 1j*floats[:, 1]).flatten()
         return cmplxs
 
     def _one_port(self, cw=False, expected_hz=None, fresh_sweep=True):
         ''' Perform a single sweep and return Network data. '''
         if fresh_sweep:
             if cw:
-                self.write('SINP;') # Poll for sweep status
+                self.write('SINP;')  # Poll for sweep status
             else:
-                self.write('SING;') # Poll for sweep status
-        s =  self.ask_for_cmplx('OUTPDATA')
+                self.write('SING;')  # Poll for sweep status
+        s = self.ask_for_cmplx('OUTPDATA')
         ntwk = skrf.Network()
         ntwk.s = s
         hz = expected_hz if expected_hz is not None else self._frequency.f
-        assert(len(s)==len(hz))
-        ntwk.frequency = skrf.Frequency.from_f(hz,unit='hz')
+        assert (len(s) == len(hz))
+        ntwk.frequency = skrf.Frequency.from_f(hz, unit='hz')
         return ntwk
 
     def one_port(self, cw=False, **kwargs):
@@ -375,12 +391,14 @@ class HP8510C(VNA):
         stitched_network = None
         for sweep_section in self.compound_sweep_plan.get_sections():
             sweep_section.apply_8510(self)
-            chunk_net_nomask = self._one_port(expected_hz=sweep_section.get_raw_hz())
+            chunk_net_nomask = self._one_port(
+                expected_hz=sweep_section.get_raw_hz())
             chunk_net = sweep_section.mask_8510(chunk_net_nomask)
-            stitched_network = (chunk_net if stitched_network is None
-                                else skrf.network.stitch(stitched_network, chunk_net))
+            stitched_network = (
+                chunk_net if stitched_network is None else skrf.network.stitch(
+                    stitched_network, chunk_net))
         self.freq_start = old_start_hz
-        self.freq_stop  = old_stop_hz
+        self.freq_stop = old_stop_hz
         return stitched_network
 
     def _two_port(self, cw=False, expected_hz=None, fresh_sweep=True):
@@ -400,24 +418,29 @@ class HP8510C(VNA):
         #  83651   step   4xSxx     52.5s
         #  83651   step   FULL2PORT 52.3s
         #  --------------------------
-        #  Decision: use consecutive Sxx sweeps everywhere for simplicity + max speed of fast sweeps
+        # Decision: use consecutive Sxx sweeps everywhere for simplicity + max
+        # speed of fast sweeps
         self.write('s11;')
-        s11 = self._one_port(expected_hz=expected_hz, cw=cw, fresh_sweep=fresh_sweep).s[:,0,0]
+        s11 = self._one_port(expected_hz=expected_hz, cw=cw,
+                             fresh_sweep=fresh_sweep).s[:, 0, 0]
         self.write('s12;')
-        s12 = self._one_port(expected_hz=expected_hz, cw=cw, fresh_sweep=fresh_sweep).s[:,0,0]
+        s12 = self._one_port(expected_hz=expected_hz, cw=cw,
+                             fresh_sweep=fresh_sweep).s[:, 0, 0]
         self.write('s22;')
-        s22 = self._one_port(expected_hz=expected_hz, cw=cw, fresh_sweep=fresh_sweep).s[:,0,0]
+        s22 = self._one_port(expected_hz=expected_hz, cw=cw,
+                             fresh_sweep=fresh_sweep).s[:, 0, 0]
         self.write('s21;')
-        s21 = self._one_port(expected_hz=expected_hz, cw=cw, fresh_sweep=fresh_sweep).s[:,0,0]
+        s21 = self._one_port(expected_hz=expected_hz, cw=cw,
+                             fresh_sweep=fresh_sweep).s[:, 0, 0]
 
         ntwk = skrf.Network()
-        ntwk.s = np.array(\
-                [[s11,s21],\
-                [ s12, s22]]\
-                ).transpose().reshape(-1,2,2)
+        ntwk.s = np.array(
+            [[s11, s21],
+             [s12, s22]]
+        ).transpose().reshape(-1, 2, 2)
         hz = expected_hz if expected_hz is not None else self._frequency.f
-        assert(len(s11)==len(hz))
-        ntwk.frequency= skrf.Frequency.from_f(hz,unit='hz')
+        assert (len(s11) == len(hz))
+        ntwk.frequency = skrf.Frequency.from_f(hz, unit='hz')
 
         return ntwk
 
@@ -429,12 +452,14 @@ class HP8510C(VNA):
         stitched_network = None
         for sweep_chunk in self.compound_sweep_plan.get_sections():
             sweep_chunk.apply_8510(self)
-            chunk_net_nomask = self._two_port(expected_hz=sweep_chunk.get_raw_hz())
+            chunk_net_nomask = self._two_port(
+                expected_hz=sweep_chunk.get_raw_hz())
             chunk_net = sweep_chunk.mask_8510(chunk_net_nomask)
-            stitched_network = (chunk_net if stitched_network is None
-                                else skrf.network.stitch(stitched_network,chunk_net))
+            stitched_network = (
+                chunk_net if stitched_network is None else skrf.network.stitch(
+                    stitched_network, chunk_net))
         self.freq_start = old_start_hz
-        self.freq_stop  = old_stop_hz
+        self.freq_stop = old_stop_hz
         return stitched_network
 
     def wait_for_status(self, max_wait_seconds=30):
@@ -451,7 +476,7 @@ class HP8510C(VNA):
                 waited = time.time()-t0
                 if waited > max_wait_seconds:
                     raise e
-        return s0,s1
+        return s0, s1
 
     def switch_terms(self):
         '''
@@ -470,4 +495,4 @@ class HP8510C(VNA):
         reverse = self.one_port()
         reverse.name = 'reverse switch term'
 
-        return (forward,reverse)
+        return (forward, reverse)

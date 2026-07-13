@@ -25,6 +25,7 @@ from skrf.vi.vna import VNA, ValuesFormat
 
 logger = getLogger(__name__)
 
+
 class SweepType(Enum):
     LINEAR = "LIN"
     LOG = "LOG"
@@ -78,12 +79,12 @@ class PNA(VNA):
     # - create_calset: SENS<self:cnum>:CORR:CSET:CRE <name>
     # - calset_data: SENS<self:cnum>:CORR:CSET:DATA?  <eterm>,<port a>,<port b> '<receiver>'
 
-
     _models = {
-        "default": {"nports": 2, "unsupported": []},
-        "E8362C": {"nports": 2, "unsupported": ["nports", "freq_step", "fast_sweep"]},
-        "N5227B": {"nports": 4, "unsupported": []},
-    }
+        "default": {
+            "nports": 2, "unsupported": []}, "E8362C": {
+            "nports": 2, "unsupported": [
+                "nports", "freq_step", "fast_sweep"]}, "N5227B": {
+                    "nports": 4, "unsupported": []}, }
 
     class Channel(vna.Channel):
         def __init__(self, parent, cnum: int, cname: str):
@@ -227,7 +228,8 @@ class PNA(VNA):
 
         @property
         def measurements(self) -> list[tuple[str, str]]:
-            msmnts = self.query(f"CALC{self.cnum}:PAR:CAT:EXT?").replace('"', "")
+            msmnts = self.query(
+                f"CALC{self.cnum}:PAR:CAT:EXT?").replace('"', "")
             msmnts = msmnts.split(",")
             return list(zip(msmnts[::2], msmnts[1::2]))
 
@@ -279,10 +281,12 @@ class PNA(VNA):
         @property
         def active_trace_sdata(self) -> np.ndarray:
             active_measurement = (
-                self.query(f"CALC{self.cnum}:PAR:SEL?").replace('"', "").split(",")[0]
+                self.query(f"CALC{self.cnum}:PAR:SEL?").replace(
+                    '"', "").split(",")[0]
             )
             if active_measurement == "":
-                raise RuntimeError("No trace is active. Must select measurement first.")
+                raise RuntimeError(
+                    "No trace is active. Must select measurement first.")
             return self.query_values(
                 f"CALC{self.cnum}:DATA? SDATA", complex_values=True
             )
@@ -294,7 +298,8 @@ class PNA(VNA):
             self.write(f"CALC{self.cnum}:PAR:EXT '{name}',{parameter}")
             # Not all instruments support DISP:WIND:TRAC:NEXT
             traces = self.query("DISP:WIND:CAT?").replace('"', "")
-            traces = [int(tr) for tr in traces.split(",")] if traces != "EMPTY" else [0]
+            traces = [int(tr) for tr in traces.split(",")
+                      ] if traces != "EMPTY" else [0]
             next_tr = traces[-1] + 1
             self.write(f"DISP:WIND:TRAC{next_tr}:FEED '{name}'")
 
@@ -351,9 +356,11 @@ class PNA(VNA):
             self.parent.query_format = ValuesFormat.BINARY_64
             self.parent.active_channel = self
             orig_snp_fmt = self.query("MMEM:STOR:TRAC:FORM:SNP?")
-            self.write("MMEM:STOR:TRACE:FORM:SNP RI") # Expect Real/Imaginary data
+            # Expect Real/Imaginary data
+            self.write("MMEM:STOR:TRACE:FORM:SNP RI")
 
-            msmnt_params = [f"S{a}{b}" for a, b in itertools.product(ports, repeat=2)]
+            msmnt_params = [f"S{a}{b}" for a,
+                            b in itertools.product(ports, repeat=2)]
 
             names = []
             # Make sure the ports specified are driven
@@ -366,8 +373,9 @@ class PNA(VNA):
             self.sweep()
             port_str = ",".join(str(port) for port in ports)
             raw = self.query_values(
-                f"CALC{self.cnum}:DATA:SNP:PORTS? '{port_str}'", container=np.array
-            )
+                f"CALC{
+                    self.cnum}:DATA:SNP:PORTS? '{port_str}'",
+                container=np.array)
             self.parent.wait_for_complete()
 
             for name in names:
@@ -382,7 +390,8 @@ class PNA(VNA):
             #   [s12.imag],
             # ...
             # ]
-            # but flattened. So we recreate the above shape from the flattened data
+            # but flattened. So we recreate the above shape from the flattened
+            # data
             npoints = self.npoints
             nrows = len(raw) // npoints
             nports = len(ports)
@@ -433,7 +442,8 @@ class PNA(VNA):
 
             try:
                 sweep_time *= n_sweeps * 1_000  # 1s per port
-                self.parent._resource.timeout = max(sweep_time, 5_000)  # minimum of 5s
+                self.parent._resource.timeout = max(
+                    sweep_time, 5_000)  # minimum of 5s
                 self.parent.wait_for_complete()
             finally:
                 self.parent._resource.clear()
@@ -452,7 +462,8 @@ class PNA(VNA):
 
         self.model = self.id.split(",")[1]
         if self.model not in self._models:
-            logger.warning(f"This model ({self.model}) has not been tested with "
+            logger.warning(
+                f"This model ({self.model}) has not been tested with "
                 "scikit-rf. By default, all features are turned on but older "
                 "instruments might be missing SCPI support for some commands "
                 "which will cause errors. Consider submitting an issue on GitHub to "
