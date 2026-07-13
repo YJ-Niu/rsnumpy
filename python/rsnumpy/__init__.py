@@ -481,6 +481,9 @@ class ndarray:
         if getattr(self, '_dtype_obj', None) is not None:
             if _struct_setitem(self, key, value):
                 return
+        # 布尔掩码空选择：numpy 语义下为 no-op，避免 Rust 端空索引 panic
+        if _empty_bool_mask_key(key):
+            return
         if isinstance(key, tuple):
             # 将 Python ndarray 索引展平为 list
             key = tuple(
@@ -1124,6 +1127,22 @@ def _ndarray_to_index_list(k):
         return int(v)
 
     return _convert(raw)
+
+
+def _empty_bool_mask_key(key):
+    """检测布尔掩码索引是否选中零个元素；numpy 语义下对空选择赋值为 no-op。"""
+    items = key if isinstance(key, tuple) else (key,)
+
+    def _has_true(v):
+        if isinstance(v, (list, tuple)):
+            return _py_any(_has_true(x) for x in v)
+        return bool(v)
+
+    for k in items:
+        if hasattr(k, '_array') and getattr(k, '_dtype', None) == 'bool':
+            if not _has_true(k._array.tolist()):
+                return True
+    return False
 
 
 def _nested_zeros(shape):

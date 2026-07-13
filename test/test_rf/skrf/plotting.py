@@ -1710,8 +1710,11 @@ def plot_uncertainty_bounds_component(
                 ntwk_mean.plot_s_re(ax=ax, m=m, n=n, **kwargs)
                 if color_error is None:
                     color_error = ax.get_lines()[-1].get_color()
+                # plot the mean via plot_s_re against frequency.f_scaled, so the
+                # fill band must share that same x scale (rsplotlib ignores the
+                # scale_frequency_ticks FuncFormatter, see Network.plot_attribute)
                 ax.fill_between(
-                    ntwk_mean.frequency.f,
+                    ntwk_mean.frequency.f_scaled,
                     lower_bound.real,
                     upper_bound.real,
                     alpha=alpha,
@@ -1723,7 +1726,7 @@ def plot_uncertainty_bounds_component(
                 ntwk_mean.plot_s_re(ax=ax, m=m, n=n, **kwargs)
                 if color_error is None:
                     color_error = ax.get_lines()[-1].get_color()
-                ax.errorbar(ntwk_mean.frequency.f[::markevery_error],
+                ax.errorbar(ntwk_mean.frequency.f_scaled[::markevery_error],
                             ntwk_mean.s_re[:, m, n].squeeze()[
                     ::markevery_error],
                     yerr=ntwk_std.s_mag[:, m, n].squeeze()[

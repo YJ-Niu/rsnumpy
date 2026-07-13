@@ -46,34 +46,106 @@ def _wrap(x):
     return ndarray(x)
 
 
-def _to_np(x):
-    """rsnumpy 数组/列表 → numpy 数组（复数经 tolist 保真）。"""
-    import rsnumpy as _np
-    if isinstance(x, (list, tuple)):
-        return _np.array(x)
-    if hasattr(x, 'tolist'):
-        return _np.array(x.tolist())
-    return _np.array(x)
+def _flatten_scalars(data):
+    """将嵌套列表展平为一维标量列表。"""
+    if isinstance(data, (list, tuple)):
+        out = []
+        for x in data:
+            out.extend(_flatten_scalars(x))
+        return out
+    return [data]
 
 
-def _from_np(arr):
-    """numpy 数组 → rsnumpy 数组；0 维返回标量。"""
-    if getattr(arr, 'ndim', None) == 0:
-        return arr.item()
-    from ..__init__ import ndarray
-    return ndarray(arr.tolist())
+def _is_complex_arr(a):
+    """判断 rsnumpy 数组是否为复数数组。"""
+    return bool(getattr(getattr(a, '_array', None), 'is_complex', False))
 
 
-def _use_numpy(*arrays):
-    """复数或批量（>2 维）输入交由 numpy 委托，其余走 Rust 原生实现。"""
-    for a in arrays:
-        rust = getattr(a, '_array', None)
-        if rust is not None and getattr(rust, 'is_complex', False):
-            return True
-        shp = getattr(a, 'shape', None)
-        if shp is not None and len(shp) > 2:
-            return True
-    return False
+def _matmul_2d(mat_a, mat_b):
+    """朴素二维矩阵乘 A(m×n)·B(n×p)，元素可为 float 或 complex。"""
+    n = len(mat_b)
+    p = len(mat_b[0]) if mat_b and isinstance(mat_b[0], list) else 0
+    out = [[0 for _ in range(p)] for _ in range(len(mat_a))]
+    for i, row_a in enumerate(mat_a):
+        row_o = out[i]
+        for k in range(n):
+            aik = row_a[k]
+            row_b = mat_b[k]
+            for j in range(p):
+                row_o[j] += aik * row_b[j]
+    return out
+
+
+def _matmul_nested(a, na, b, nb):
+    """支持复数与批量（>2 维广播）的 matmul，操作于嵌套列表。"""
+    if na == 2 and nb == 2:
+        return _matmul_2d(a, b)
+    if na == 1 and nb == 1:
+        return sum(x * y for x, y in zip(a, b))
+    if na == 2 and nb == 1:
+        return [sum(a[i][k] * b[k] for k in range(len(b))) for i in range(len(a))]
+    if na == 1 and nb == 2:
+        return [sum(a[k] * b[k][j] for k in range(len(a))) for j in range(len(b[0]))]
+    if na >= 3 and nb == 2:
+        return [_matmul_nested(sub, na - 1, b, 2) for sub in a]
+    if na == 2 and nb >= 3:
+        return [_matmul_nested(a, 2, sub, nb - 1) for sub in b]
+    if na >= 3 and nb >= 3:
+        return [_matmul_nested(sa, na - 1, sb, nb - 1) for sa, sb in zip(a, b)]
+    raise ValueError("unsupported matmul shapes: {}D and {}D".format(na, nb))
+
+
+def _dot_nested(a, na, b, nb):
+    """支持复数的 dot，覆盖 1D/2D 组合（更高维按批量 matmul 处理）。"""
+    if na == 1 and nb == 1:
+        return sum(x * y for x, y in zip(a, b))
+    if na == 2 and nb == 2:
+        return _matmul_2d(a, b)
+    if na == 2 and nb == 1:
+        return [sum(a[i][k] * b[k] for k in range(len(b))) for i in range(len(a))]
+    if na == 1 and nb == 2:
+        return [sum(a[k] * b[k][j] for k in range(len(a))) for j in range(len(b[0]))]
+    return _matmul_nested(a, na, b, nb)
+
+
+def _gauss_jordan_inv(mat):
+    """高斯-约当消元求逆（列主元），元素可为 float 或 complex，支持任意 n×n。"""
+    n = len(mat)
+    work = [list(row) for row in mat]
+    inv = [[(1.0 if i == j else 0.0) for j in range(n)] for i in range(n)]
+    for col in range(n):
+        pivot = max(range(col, n), key=lambda r: abs(work[r][col]))
+        if abs(work[pivot][col]) == 0.0:
+            raise ValueError("Singular matrix")
+        if pivot != col:
+            work[col], work[pivot] = work[pivot], work[col]
+            inv[col], inv[pivot] = inv[pivot], inv[col]
+        pv = work[col][col]
+        wcol = work[col]
+        icol = inv[col]
+        for j in range(n):
+            wcol[j] /= pv
+            icol[j] /= pv
+        for r in range(n):
+            if r == col:
+                continue
+            factor = work[r][col]
+            if factor == 0:
+                continue
+            wr = work[r]
+            ir = inv[r]
+            for j in range(n):
+                wr[j] -= factor * wcol[j]
+                ir[j] -= factor * icol[j]
+    return inv
+
+
+def _inv_nested(data):
+    """对嵌套列表递归求逆：最内两维视为待求逆的方阵，外层为批量维。"""
+    if isinstance(data, list) and data and isinstance(data[0], list) \
+            and (not data[0] or not isinstance(data[0][0], list)):
+        return _gauss_jordan_inv(data)
+    return [_inv_nested(sub) for sub in data]
 
 
 class linalg_module:
@@ -83,9 +155,11 @@ class linalg_module:
     def dot(a, b):
         """计算两个数组的点积。"""
         from ..__init__ import ndarray
-        if _use_numpy(a, b):
-            import rsnumpy as _np
-            return _from_np(_np.dot(_to_np(a), _to_np(b)))
+        a_arr = a if hasattr(a, '_array') else ndarray(a)
+        b_arr = b if hasattr(b, '_array') else ndarray(b)
+        if _is_complex_arr(a_arr) or _is_complex_arr(b_arr):
+            res = _dot_nested(a_arr.tolist(), len(a_arr.shape), b_arr.tolist(), len(b_arr.shape))
+            return ndarray(res) if isinstance(res, list) else res
         result = _core.linalg.dot(_ensure(a), _ensure(b))
         a_dtype = getattr(a, '_dtype', 'float64')
         b_dtype = getattr(b, '_dtype', 'float64')
@@ -114,9 +188,11 @@ class linalg_module:
     def matmul(a, b):
         """计算两个数组的矩阵乘积。"""
         from ..__init__ import ndarray
-        if _use_numpy(a, b):
-            import rsnumpy as _np
-            return _from_np(_np.matmul(_to_np(a), _to_np(b)))
+        a_arr = a if hasattr(a, '_array') else ndarray(a)
+        b_arr = b if hasattr(b, '_array') else ndarray(b)
+        if _is_complex_arr(a_arr) or _is_complex_arr(b_arr):
+            res = _matmul_nested(a_arr.tolist(), len(a_arr.shape), b_arr.tolist(), len(b_arr.shape))
+            return ndarray(res) if isinstance(res, list) else res
         result = _core.linalg.matmul(_ensure(a), _ensure(b))
         a_dtype = getattr(a, '_dtype', 'float64')
         b_dtype = getattr(b, '_dtype', 'float64')
@@ -127,10 +203,12 @@ class linalg_module:
     @staticmethod
     def inv(a):
         """计算矩阵的逆。"""
-        if _use_numpy(a):
-            import rsnumpy as _np
-            return _from_np(_np.linalg.inv(_to_np(a)))
-        return _wrap(_core.linalg.inv(_ensure(a)))
+        from ..__init__ import ndarray
+        a_arr = a if hasattr(a, '_array') else ndarray(a)
+        shape = a_arr.shape
+        if len(shape) == 2 and not _is_complex_arr(a_arr):
+            return _wrap(_core.linalg.inv(_ensure(a_arr)))
+        return ndarray(_inv_nested(a_arr.tolist()))
 
     @staticmethod
     def det(a):
@@ -149,23 +227,82 @@ class linalg_module:
     @staticmethod
     def solve(a, b):
         """求解线性方程组。"""
-        if _use_numpy(a, b):
-            import rsnumpy as _np
-            return _from_np(_np.linalg.solve(_to_np(a), _to_np(b)))
         return _wrap(_core.linalg.solve(_ensure(a), _ensure(b)))
 
     @staticmethod
     def lstsq(a, b, rcond=None):
-        """最小二乘解，委托 numpy（Rust 无原生实现）。"""
-        import rsnumpy as _np
-        x, res, rank, s = _np.linalg.lstsq(_to_np(a), _to_np(b), rcond=rcond)
-        return (_from_np(x), _from_np(res), int(rank), _from_np(s))
+        """最小二乘解 min ||b - a·x||（原生实现，基于正规方程 AᵀA·x = Aᵀb）。
+
+        返回 (x, residuals, rank, s)，与 numpy 语义一致：仅当 a 列满秩且为
+        过定方程组（行数 > 列数）时 residuals 才为各列的残差平方和，否则为空数组。
+        奇异值 s 由 AᵀA 的特征值开方降序得到。
+        """
+        from ..__init__ import ndarray
+        a_arr = a if hasattr(a, '_array') else ndarray(a)
+        b_arr = b if hasattr(b, '_array') else ndarray(b)
+        b_is_1d = len(b_arr.shape) == 1
+        at = a_arr.T
+        ata = linalg_module.matmul(at, a_arr)
+        atb = linalg_module.matmul(at, b_arr)
+        x = linalg_module.solve(ata, atb)
+        rank = linalg_module.matrix_rank(a_arr)
+        evals = _flatten_scalars(linalg_module.eigvals(ata).tolist())
+        svals = sorted((max(float(v), 0.0) ** 0.5 for v in evals), reverse=True)
+        s = ndarray(svals)
+        a_shape = a_arr.shape
+        m, n = (a_shape[0], a_shape[1]) if len(a_shape) == 2 else (0, 0)
+        if m > n and rank == n:
+            diff = _flatten_scalars((b_arr - linalg_module.matmul(a_arr, x)).tolist())
+            b_cols = 1 if b_is_1d else b_arr.shape[1]
+            residuals = [0.0] * b_cols
+            for idx, v in enumerate(diff):
+                residuals[idx % b_cols] += float(v) * float(v)
+            res = ndarray(residuals)
+        else:
+            res = ndarray([])
+        return (x, res, int(rank), s)
 
     @staticmethod
     def matrix_rank(a, tol=None, hermitian=False):
-        """矩阵秩，委托 numpy。"""
-        import rsnumpy as _np
-        return int(_np.linalg.matrix_rank(_to_np(a), tol=tol, hermitian=hermitian))
+        """矩阵秩：高斯消元后非零主元的个数（原生实现，无外部依赖）。"""
+        from ..__init__ import ndarray
+        a_arr = a if hasattr(a, '_array') else ndarray(a)
+        rows = a_arr.tolist()
+        if not isinstance(rows, list):
+            return 0 if float(rows) == 0.0 else 1
+        if not rows:
+            return 0
+        if not isinstance(rows[0], list):
+            rows = [rows]
+        mat = [[float(v) for v in r] for r in rows]
+        nrows = len(mat)
+        ncols = len(mat[0])
+        if tol is None:
+            max_abs = max((abs(v) for r in mat for v in r), default=0.0)
+            tol = max(nrows, ncols) * max_abs * 2.220446049250313e-16
+        rank = 0
+        pivot_row = 0
+        for col in range(ncols):
+            sel = -1
+            best = tol
+            for r in range(pivot_row, nrows):
+                if abs(mat[r][col]) > best:
+                    best = abs(mat[r][col])
+                    sel = r
+            if sel == -1:
+                continue
+            mat[pivot_row], mat[sel] = mat[sel], mat[pivot_row]
+            pv = mat[pivot_row][col]
+            for r in range(nrows):
+                if r != pivot_row and mat[r][col] != 0.0:
+                    factor = mat[r][col] / pv
+                    for c in range(col, ncols):
+                        mat[r][c] -= factor * mat[pivot_row][c]
+            pivot_row += 1
+            rank += 1
+            if pivot_row == nrows:
+                break
+        return rank
 
     @staticmethod
     def eig(a):
