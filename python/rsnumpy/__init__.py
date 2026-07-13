@@ -299,7 +299,7 @@ class ndarray:
         sd = getattr(self, '_str_dtype', None)
         if raw is not None and sd is not None:
             return _string_array_tobytes(_flatten_data(raw), sd)
-        return _numeric_tobytes(self)
+        return _numeric_tobytes(self, order)
 
     def __iter__(self):
         # 一维（及标量）按元素迭代产生 Python 标量；高维按首轴迭代产生子数组，
@@ -323,6 +323,31 @@ class ndarray:
         if typestr is None:
             raise AttributeError('__array_interface__')
         return _core.array_interface(self._array, typestr)
+
+    def __buffer__(self, flags):
+        """PEP 3118 缓冲协议（PEP 688 / Python 3.12+）：转发到底层 Rust `_array`，
+        让 memoryview(a) 与下游（如 rsplotlib 的 PyBuffer::get）零拷贝读取底层连续
+        f64 内存，免去 __array_interface__ 的 bytes 副本开销。
+
+        仅对 float64 暴露缓冲：底层存储恒为 f64，其字节布局与 float64 dtype 完全一致，
+        缓冲 format 'd' 语义正确。int/bool 等 dtype 的底层仍是 f64，若也暴露缓冲，
+        numpy 会优先按缓冲（f8）而非 __array_interface__（如 <i8）解读，导致 dtype 失真；
+        故这些 dtype 不暴露缓冲，消费方自动回退到 dtype 精确的 __array_interface__ bytes。
+        绘图坐标以 float64 为主，快路径覆盖热点场景。
+
+        注：__buffer__ 由 CPython 在 3.12+ 才识别；更早版本上 memoryview(a) 会失败，
+        消费方自动回退到 __array_interface__ bytes，行为安全。
+        """
+        if getattr(self, '_dtype', 'float64') != 'float64':
+            raise BufferError("only float64 arrays expose a zero-copy buffer")
+        if getattr(self, '_raw_data', None) is not None:
+            raise BufferError("string/ragged array does not support the buffer protocol")
+        if getattr(self, '_complex_data', None) is not None:
+            raise BufferError("complex array does not support the buffer protocol")
+        return memoryview(self._array)
+
+    def __release_buffer__(self, view):
+        view.release()
 
     def __bool__(self):
         if self.ndim == 0:
@@ -3197,10 +3222,16 @@ _TOBYTES_STRUCT = {
 }
 
 
-def _numeric_tobytes(arr):
+def _numeric_tobytes(arr, order='C'):
     """将数值数组按 dtype 小端布局编码为字节串。"""
     import struct
     dt = getattr(arr, '_dtype', 'float64')
+    # 快路径：float64 数组的字节布局与底层存储一致，直接从缓冲协议 memcpy，
+    # 避免逐元素 tolist()→float()→struct.pack 的 Python 开销（百万点级差异达百毫秒）。
+    if (dt == 'float64'
+            and getattr(arr, '_raw_data', None) is None
+            and getattr(arr, '_complex_data', None) is None):
+        return memoryview(arr._array).tobytes(order)
     fmt = _TOBYTES_STRUCT.get(dt, 'd')
     flat = _flatten_data(arr.tolist())
     if fmt == '?':

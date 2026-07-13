@@ -1,5 +1,5 @@
 pub(crate) use ndarray::{Array, ArrayViewD, Axis, IxDyn, Slice, Zip};
-pub(crate) use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
+pub(crate) use pyo3::exceptions::{PyBufferError, PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 pub(crate) use pyo3::types::{PyBool, PyBytes, PyDict, PyFloat, PyInt, PyList, PySlice, PyTuple};
 pub(crate) use rayon::prelude::*;
@@ -358,6 +358,13 @@ pub struct NdArray {
     data: Array<f64, IxDyn>,
 }
 
+/// 缓冲协议导出期间随 Py_buffer 存活的 shape/strides（字节步长）。
+/// 在 `__getbuffer__` 中装箱、指针写入 view.internal，`__releasebuffer__` 中释放。
+struct BufferMeta {
+    shape: Vec<pyo3::ffi::Py_ssize_t>,
+    strides: Vec<pyo3::ffi::Py_ssize_t>,
+}
+
 #[pymethods]
 impl NdArray {
     #[new]
@@ -603,6 +610,105 @@ impl NdArray {
     #[getter]
     fn __array_interface__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         build_array_interface(py, &self.data, "<f8")
+    }
+
+    // PEP 3118 缓冲协议：直接暴露底层连续 f64 内存（只读）及其 shape/strides，
+    // 供 rsplotlib 等下游用 PyO3 `PyBuffer<f64>` 零拷贝读取，免去序列化为 bytes 的开销。
+    // 消费方（如 PyBuffer::get）以 PyBUF_FULL_RO 请求，包含 shape/strides，故非连续数组亦可如实描述。
+    unsafe fn __getbuffer__(
+        slf: Bound<'_, Self>,
+        view: *mut pyo3::ffi::Py_buffer,
+        flags: std::ffi::c_int,
+    ) -> PyResult<()> {
+        if view.is_null() {
+            return Err(PyBufferError::new_err("View is null"));
+        }
+        // 仅导出只读视图：避免 Python 侧经缓冲写入而与 Rust 所有权产生别名。
+        if (flags & pyo3::ffi::PyBUF_WRITABLE) == pyo3::ffi::PyBUF_WRITABLE {
+            return Err(PyBufferError::new_err("Object is not writable"));
+        }
+
+        let itemsize = std::mem::size_of::<f64>() as pyo3::ffi::Py_ssize_t;
+        let (buf_ptr, len_elems, ndim, is_c, shape, strides) = {
+            let borrowed = slf.borrow();
+            let data = &borrowed.data;
+            let shape: Vec<pyo3::ffi::Py_ssize_t> = data
+                .shape()
+                .iter()
+                .map(|&d| d as pyo3::ffi::Py_ssize_t)
+                .collect();
+            // ndarray 步长以元素为单位，Py_buffer 需字节步长。
+            let strides: Vec<pyo3::ffi::Py_ssize_t> = data
+                .strides()
+                .iter()
+                .map(|&s| (s as pyo3::ffi::Py_ssize_t) * itemsize)
+                .collect();
+            (
+                data.as_ptr() as *mut std::ffi::c_void,
+                data.len(),
+                data.ndim(),
+                data.is_standard_layout(),
+                shape,
+                strides,
+            )
+        };
+
+        // 消费方不接受 strides 时只能提供 C 连续布局；显式要求 C 连续时同理。
+        let wants_strides = (flags & pyo3::ffi::PyBUF_STRIDES) == pyo3::ffi::PyBUF_STRIDES;
+        if !wants_strides && !is_c {
+            return Err(PyBufferError::new_err(
+                "underlying buffer is not C-contiguous",
+            ));
+        }
+        if (flags & pyo3::ffi::PyBUF_C_CONTIGUOUS) == pyo3::ffi::PyBUF_C_CONTIGUOUS && !is_c {
+            return Err(PyBufferError::new_err(
+                "underlying buffer is not C-contiguous",
+            ));
+        }
+
+        // shape/strides 需活到 __releasebuffer__：装箱后把指针交给 view，原始指针存入 internal。
+        let meta = Box::new(BufferMeta { shape, strides });
+        let shape_ptr = meta.shape.as_ptr() as *mut pyo3::ffi::Py_ssize_t;
+        let strides_ptr = meta.strides.as_ptr() as *mut pyo3::ffi::Py_ssize_t;
+        let meta_ptr = Box::into_raw(meta) as *mut std::ffi::c_void;
+
+        unsafe {
+            // 转移一个强引用给 view.obj，确保缓冲存活期间数组（及其内存）不被回收。
+            (*view).obj = slf.into_any().into_ptr();
+            (*view).buf = buf_ptr;
+            (*view).len = (len_elems as pyo3::ffi::Py_ssize_t) * itemsize;
+            (*view).readonly = 1;
+            (*view).itemsize = itemsize;
+            // f64 的格式字符为 "d"；使用静态 C 字符串，CPython 不会释放它。
+            (*view).format = if (flags & pyo3::ffi::PyBUF_FORMAT) == pyo3::ffi::PyBUF_FORMAT {
+                c"d".as_ptr() as *mut std::ffi::c_char
+            } else {
+                std::ptr::null_mut()
+            };
+            (*view).ndim = ndim as std::ffi::c_int;
+            (*view).shape = if (flags & pyo3::ffi::PyBUF_ND) == pyo3::ffi::PyBUF_ND {
+                shape_ptr
+            } else {
+                std::ptr::null_mut()
+            };
+            (*view).strides = if wants_strides {
+                strides_ptr
+            } else {
+                std::ptr::null_mut()
+            };
+            (*view).suboffsets = std::ptr::null_mut();
+            (*view).internal = meta_ptr;
+        }
+        Ok(())
+    }
+
+    unsafe fn __releasebuffer__(&self, view: *mut pyo3::ffi::Py_buffer) {
+        unsafe {
+            if !(*view).internal.is_null() {
+                drop(Box::from_raw((*view).internal as *mut BufferMeta));
+                (*view).internal = std::ptr::null_mut();
+            }
+        }
     }
 
     #[getter]
