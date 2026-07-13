@@ -77,6 +77,9 @@ pub(crate) fn parse_py_list_to_flat(data: &Bound<'_, PyAny>) -> PyResult<(Vec<f6
         Ok((all_values, shape))
     } else if let Ok(val) = data.extract::<i32>() {
         Ok((vec![val as f64], vec![]))
+    } else if let Ok(listed) = data.call_method0("tolist") {
+        // 数组类对象（如 numpy.ndarray / numpy 标量）：先转为 Python list 再解析。
+        parse_py_list_to_flat(&listed)
     } else {
         Err(PyTypeError::new_err("Unsupported data type"))
     }
@@ -152,6 +155,10 @@ fn parse_py_categorized(data: &Bound<'_, PyAny>) -> PyResult<(Vec<f64>, Vec<usiz
         list.iter().collect()
     } else if let Ok(tuple) = data.cast::<PyTuple>() {
         tuple.iter().collect()
+    } else if let Ok(listed) = data.call_method0("tolist") {
+        // 数组类对象（如 numpy.ndarray / numpy 标量）：转为 Python list 后再解析，
+        // 由 tolist 产出的 int/float/bool 保留原类别以正确推导 dtype。
+        return parse_py_categorized(&listed);
     } else {
         return Err(PyTypeError::new_err("non-numeric element"));
     };
