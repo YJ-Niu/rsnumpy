@@ -22,7 +22,10 @@ fn polyval_rs(coef: &NdArray, x: &NdArray) -> PyResult<NdArray> {
 
     let arr = Array::from_shape_vec(IxDyn(&x_shape), result)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { imag: None, data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 // ========== 多项式求导 ==========
@@ -43,7 +46,10 @@ fn polyder_rs(coef: &NdArray, m: usize) -> PyResult<NdArray> {
     }
     let arr = Array::from_shape_vec(IxDyn(&[c.len()]), c)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { imag: None, data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 // ========== 多项式积分 ==========
@@ -62,7 +68,10 @@ fn polyint_rs(coef: &NdArray, m: usize, k: f64) -> PyResult<NdArray> {
     }
     let arr = Array::from_shape_vec(IxDyn(&[c.len()]), c)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { imag: None, data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 // ========== QR 迭代求特征值（辅助函数） ==========
@@ -115,13 +124,19 @@ fn polyroots_rs(coef: &NdArray) -> PyResult<NdArray> {
     if n == 0 {
         let arr = Array::from_shape_vec(IxDyn(&[0]), vec![])
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        return Ok(NdArray { imag: None, data: arr });
+        return Ok(NdArray {
+            imag: None,
+            data: arr,
+        });
     }
     if n == 1 {
         let root = -c[1] / c[0];
         let arr = Array::from_shape_vec(IxDyn(&[1]), vec![root])
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        return Ok(NdArray { imag: None, data: arr });
+        return Ok(NdArray {
+            imag: None,
+            data: arr,
+        });
     }
     if n == 2 {
         let disc = c[1] * c[1] - 4.0 * c[0] * c[2];
@@ -131,14 +146,20 @@ fn polyroots_rs(coef: &NdArray) -> PyResult<NdArray> {
             let r2 = (-c[1] - sq) / (2.0 * c[0]);
             let arr = Array::from_shape_vec(IxDyn(&[2]), vec![r1, r2])
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            return Ok(NdArray { imag: None, data: arr });
+            return Ok(NdArray {
+                imag: None,
+                data: arr,
+            });
         } else {
             let sq = (-disc).sqrt();
             let r1 = -c[1] / (2.0 * c[0]);
             let r2 = sq / (2.0 * c[0]);
             let arr = Array::from_shape_vec(IxDyn(&[2]), vec![r1, r2])
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            return Ok(NdArray { imag: None, data: arr });
+            return Ok(NdArray {
+                imag: None,
+                data: arr,
+            });
         }
     }
 
@@ -155,7 +176,10 @@ fn polyroots_rs(coef: &NdArray) -> PyResult<NdArray> {
     let roots = qr_iter_eigvals_rs(comp);
     let arr = Array::from_shape_vec(IxDyn(&[roots.len()]), roots)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { imag: None, data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 // ========== 多项式拟合 ==========
@@ -245,7 +269,10 @@ fn polyfit_rs(x: &NdArray, y: &NdArray, deg: usize) -> PyResult<NdArray> {
 
     let arr = Array::from_shape_vec(IxDyn(&[m]), coef)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { imag: None, data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 // ========== 多项式算术运算 ==========
@@ -263,7 +290,10 @@ fn polyadd(a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
     }
     let arr = Array::from_shape_vec(IxDyn(&[out.len()]), out)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { imag: None, data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 #[pyfunction]
@@ -280,7 +310,10 @@ fn polysub(a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
     }
     let arr = Array::from_shape_vec(IxDyn(&[out.len()]), out)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { imag: None, data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 #[pyfunction]
@@ -296,7 +329,10 @@ fn polymul(a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
     }
     let arr = Array::from_shape_vec(IxDyn(&[out.len()]), out)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { imag: None, data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {

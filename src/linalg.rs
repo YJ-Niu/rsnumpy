@@ -35,7 +35,8 @@ fn dot(_py: Python<'_>, a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
             )));
         }
         Ok(NdArray {
-            imag: None, data: a_data.dot(b_data),
+            imag: None,
+            data: a_data.dot(b_data),
         })
     })
 }
@@ -76,7 +77,8 @@ fn inner(_py: Python<'_>, a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
             }
             let result: f64 = a_data.iter().zip(b_data.iter()).map(|(x, y)| x * y).sum();
             return Ok(NdArray {
-                imag: None, data: Array::from_elem(IxDyn(&[]), result),
+                imag: None,
+                data: Array::from_elem(IxDyn(&[]), result),
             });
         }
 
@@ -98,7 +100,10 @@ fn inner(_py: Python<'_>, a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
                 .into_dimensionality::<Ix2>()
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
             let c = a2.dot(&b2.t());
-            return Ok(NdArray { imag: None, data: c.into_dyn() });
+            return Ok(NdArray {
+                imag: None,
+                data: c.into_dyn(),
+            });
         }
 
         Err(PyValueError::new_err(format!(
@@ -128,7 +133,8 @@ fn matmul(_py: Python<'_>, a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
                     )));
                 }
                 return Ok(NdArray {
-                    imag: None, data: a_data.dot(b_data),
+                    imag: None,
+                    data: a_data.dot(b_data),
                 });
             }
             _ => {}
@@ -160,7 +166,10 @@ fn matmul(_py: Python<'_>, a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
             let arr = c
                 .into_shape_with_order(result_shape)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            return Ok(NdArray { imag: None, data: arr });
+            return Ok(NdArray {
+                imag: None,
+                data: arr,
+            });
         }
 
         Err(PyValueError::new_err(format!(
@@ -194,7 +203,8 @@ fn inv(a: &NdArray) -> PyResult<NdArray> {
             let arr = Array::from_shape_vec((2, 2), result)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
             Ok(NdArray {
-                imag: None, data: arr.into_dyn(),
+                imag: None,
+                data: arr.into_dyn(),
             })
         }
         3 => {
@@ -230,7 +240,8 @@ fn inv(a: &NdArray) -> PyResult<NdArray> {
             let arr = Array::from_shape_vec((3, 3), result)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
             Ok(NdArray {
-                imag: None, data: arr.into_dyn(),
+                imag: None,
+                data: arr.into_dyn(),
             })
         }
         _ => Err(PyValueError::new_err(
@@ -513,7 +524,10 @@ fn norm(_py: Python<'_>, x: &NdArray, ord: Option<f64>, axis: Option<isize>) -> 
                     }
                     let arr = Array::from_shape_vec(IxDyn(&[ncols]), result)
                         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-                    Ok(NdArray { imag: None, data: arr })
+                    Ok(NdArray {
+                        imag: None,
+                        data: arr,
+                    })
                 } else {
                     let mut result = vec![0.0; nrows];
                     for i in 0..nrows {
@@ -540,7 +554,10 @@ fn norm(_py: Python<'_>, x: &NdArray, ord: Option<f64>, axis: Option<isize>) -> 
                     }
                     let arr = Array::from_shape_vec(IxDyn(&[nrows]), result)
                         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-                    Ok(NdArray { imag: None, data: arr })
+                    Ok(NdArray {
+                        imag: None,
+                        data: arr,
+                    })
                 }
             } else {
                 Err(PyValueError::new_err(
@@ -551,17 +568,20 @@ fn norm(_py: Python<'_>, x: &NdArray, ord: Option<f64>, axis: Option<isize>) -> 
             if ord == 1.0 {
                 let val: f64 = data.iter().map(|v| v.abs()).sum();
                 Ok(NdArray {
-                    imag: None, data: Array::from_elem(IxDyn(&[]), val),
+                    imag: None,
+                    data: Array::from_elem(IxDyn(&[]), val),
                 })
             } else if ord == 2.0 {
                 let val: f64 = data.iter().map(|v| v * v).sum::<f64>().sqrt();
                 Ok(NdArray {
-                    imag: None, data: Array::from_elem(IxDyn(&[]), val),
+                    imag: None,
+                    data: Array::from_elem(IxDyn(&[]), val),
                 })
             } else if ord == f64::INFINITY {
                 let val = data.iter().fold(0.0f64, |a, b| a.max(b.abs()));
                 Ok(NdArray {
-                    imag: None, data: Array::from_elem(IxDyn(&[]), val),
+                    imag: None,
+                    data: Array::from_elem(IxDyn(&[]), val),
                 })
             } else {
                 Err(PyValueError::new_err(format!(
@@ -580,12 +600,14 @@ fn norm(_py: Python<'_>, x: &NdArray, ord: Option<f64>, axis: Option<isize>) -> 
                     }
                 }
                 Ok(NdArray {
-                    imag: None, data: Array::from_elem(IxDyn(&[]), max_sum),
+                    imag: None,
+                    data: Array::from_elem(IxDyn(&[]), max_sum),
                 })
             } else if ord == 2.0 {
                 let val: f64 = data.iter().map(|v| v * v).sum::<f64>().sqrt();
                 Ok(NdArray {
-                    imag: None, data: Array::from_elem(IxDyn(&[]), val),
+                    imag: None,
+                    data: Array::from_elem(IxDyn(&[]), val),
                 })
             } else if ord == f64::INFINITY {
                 let ncols = shape[1];
@@ -597,7 +619,8 @@ fn norm(_py: Python<'_>, x: &NdArray, ord: Option<f64>, axis: Option<isize>) -> 
                     }
                 }
                 Ok(NdArray {
-                    imag: None, data: Array::from_elem(IxDyn(&[]), max_sum),
+                    imag: None,
+                    data: Array::from_elem(IxDyn(&[]), max_sum),
                 })
             } else {
                 Err(PyValueError::new_err(format!(
@@ -639,7 +662,8 @@ fn solve(a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
                 return Err(PyValueError::new_err("Singular matrix"));
             }
             Ok(NdArray {
-                imag: None, data: solve2x2(&a.data, &b.data),
+                imag: None,
+                data: solve2x2(&a.data, &b.data),
             })
         }
         3 => {
@@ -658,7 +682,8 @@ fn solve(a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
                 return Err(PyValueError::new_err("Singular matrix"));
             }
             Ok(NdArray {
-                imag: None, data: solve3x3(&a.data, &b.data),
+                imag: None,
+                data: solve3x3(&a.data, &b.data),
             })
         }
         _ => Err(PyValueError::new_err(
@@ -689,7 +714,16 @@ fn eig(a: &NdArray) -> PyResult<(NdArray, NdArray)> {
                 ));
             }
             let (evals, evecs) = eig2x2(&a.data);
-            Ok((NdArray { imag: None, data: evals }, NdArray { imag: None, data: evecs }))
+            Ok((
+                NdArray {
+                    imag: None,
+                    data: evals,
+                },
+                NdArray {
+                    imag: None,
+                    data: evecs,
+                },
+            ))
         }
         3 => {
             let a11 = a.data[[0, 0]];
@@ -718,7 +752,16 @@ fn eig(a: &NdArray) -> PyResult<(NdArray, NdArray)> {
                 ));
             }
             let (evals, evecs) = eig3x3(&a.data);
-            Ok((NdArray { imag: None, data: evals }, NdArray { imag: None, data: evecs }))
+            Ok((
+                NdArray {
+                    imag: None,
+                    data: evals,
+                },
+                NdArray {
+                    imag: None,
+                    data: evecs,
+                },
+            ))
         }
         _ => Err(PyValueError::new_err(
             "eig only supports 2x2 and 3x3 matrices",
@@ -752,7 +795,10 @@ fn eigvals(a: &NdArray) -> PyResult<NdArray> {
             let lambda2 = (tr - sqrt_disc) / 2.0;
             let arr = Array::from_shape_vec(IxDyn(&[2]), vec![lambda1, lambda2])
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            Ok(NdArray { imag: None, data: arr })
+            Ok(NdArray {
+                imag: None,
+                data: arr,
+            })
         }
         3 => {
             let a11 = a.data[[0, 0]];
@@ -792,7 +838,10 @@ fn eigvals(a: &NdArray) -> PyResult<NdArray> {
             let eigenvalues = vec![t0 - shift, t1 - shift, t2 - shift];
             let arr = Array::from_shape_vec(IxDyn(&[3]), eigenvalues)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            Ok(NdArray { imag: None, data: arr })
+            Ok(NdArray {
+                imag: None,
+                data: arr,
+            })
         }
         _ => Err(PyValueError::new_err(
             "eigvals only supports 2x2 and 3x3 matrices",
@@ -854,13 +903,16 @@ fn svd(a: &NdArray) -> PyResult<(NdArray, NdArray, NdArray)> {
         Array::from_shape_vec((2, 2), vt_data).map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok((
         NdArray {
-            imag: None, data: u_arr.into_dyn(),
+            imag: None,
+            data: u_arr.into_dyn(),
         },
         NdArray {
-            imag: None, data: s_arr.into_dyn(),
+            imag: None,
+            data: s_arr.into_dyn(),
         },
         NdArray {
-            imag: None, data: vt_arr.into_dyn(),
+            imag: None,
+            data: vt_arr.into_dyn(),
         },
     ))
 }
@@ -914,10 +966,12 @@ fn qr(a: &NdArray) -> PyResult<(NdArray, NdArray)> {
         Array::from_shape_vec((n, n), r_vals).map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok((
         NdArray {
-            imag: None, data: q_arr.into_dyn(),
+            imag: None,
+            data: q_arr.into_dyn(),
         },
         NdArray {
-            imag: None, data: r_arr.into_dyn(),
+            imag: None,
+            data: r_arr.into_dyn(),
         },
     ))
 }
@@ -938,7 +992,8 @@ fn cholesky(a: &NdArray) -> PyResult<NdArray> {
             let arr = Array::from_shape_vec((2, 2), result)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
             Ok(NdArray {
-                imag: None, data: arr.into_dyn(),
+                imag: None,
+                data: arr.into_dyn(),
             })
         }
         3 => {
@@ -952,7 +1007,8 @@ fn cholesky(a: &NdArray) -> PyResult<NdArray> {
             let arr = Array::from_shape_vec((3, 3), result)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
             Ok(NdArray {
-                imag: None, data: arr.into_dyn(),
+                imag: None,
+                data: arr.into_dyn(),
             })
         }
         _ => Err(PyValueError::new_err(
@@ -983,7 +1039,8 @@ fn matrix_power(a: &NdArray, n: i32) -> PyResult<NdArray> {
         let arr = Array::from_shape_vec((n_dim, n_dim), result)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
         return Ok(NdArray {
-            imag: None, data: arr.into_dyn(),
+            imag: None,
+            data: arr.into_dyn(),
         });
     }
     if n > 0 {
@@ -991,17 +1048,24 @@ fn matrix_power(a: &NdArray, n: i32) -> PyResult<NdArray> {
         for _ in 1..n {
             result = matmul_impl(&result, &a.data);
         }
-        Ok(NdArray { imag: None, data: result })
+        Ok(NdArray {
+            imag: None,
+            data: result,
+        })
     } else {
         let inv_arr = inv(&NdArray {
-            imag: None, data: a.data.clone(),
+            imag: None,
+            data: a.data.clone(),
         })?;
         let abs_n = (-n) as u32;
         let mut result = inv_arr.data.clone();
         for _ in 1..abs_n {
             result = matmul_impl(&result, &inv_arr.data);
         }
-        Ok(NdArray { imag: None, data: result })
+        Ok(NdArray {
+            imag: None,
+            data: result,
+        })
     }
 }
 
@@ -1032,7 +1096,8 @@ fn pinv(a: &NdArray) -> PyResult<NdArray> {
     let ata_arr =
         Array::from_shape_vec((n, n), ata).map_err(|e| PyValueError::new_err(e.to_string()))?;
     let ata_nd = NdArray {
-        imag: None, data: ata_arr.into_dyn(),
+        imag: None,
+        data: ata_arr.into_dyn(),
     };
     let ata_inv = inv(&ata_nd)?;
     let mut result = vec![0.0; n * m];
@@ -1048,7 +1113,8 @@ fn pinv(a: &NdArray) -> PyResult<NdArray> {
     let arr =
         Array::from_shape_vec((n, m), result).map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(NdArray {
-        imag: None, data: arr.into_dyn(),
+        imag: None,
+        data: arr.into_dyn(),
     })
 }
 
@@ -1079,7 +1145,10 @@ fn diagonal(a: &NdArray) -> PyResult<NdArray> {
     }
     let arr = Array::from_shape_vec(IxDyn(&[n]), result)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { imag: None, data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 #[pyfunction]
@@ -1114,7 +1183,10 @@ fn svdvals(a: &NdArray) -> PyResult<NdArray> {
             let sigma2 = lambda2.sqrt();
             let arr = Array::from_shape_vec(IxDyn(&[2]), vec![sigma1, sigma2])
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            Ok(NdArray { imag: None, data: arr })
+            Ok(NdArray {
+                imag: None,
+                data: arr,
+            })
         }
         3 => {
             let a11 = a.data[[0, 0]];
@@ -1162,7 +1234,10 @@ fn svdvals(a: &NdArray) -> PyResult<NdArray> {
             let sigma3 = (t2 - shift).sqrt();
             let arr = Array::from_shape_vec(IxDyn(&[3]), vec![sigma1, sigma2, sigma3])
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            Ok(NdArray { imag: None, data: arr })
+            Ok(NdArray {
+                imag: None,
+                data: arr,
+            })
         }
         _ => Err(PyValueError::new_err(
             "svdvals only supports 2x2 and 3x3 matrices",
@@ -1228,7 +1303,8 @@ fn solve_banded(lower: usize, upper: usize, ab: &NdArray, b: &NdArray) -> PyResu
     let full_arr =
         Array::from_shape_vec((n, n), full).map_err(|e| PyValueError::new_err(e.to_string()))?;
     let full_nd = NdArray {
-        imag: None, data: full_arr.into_dyn(),
+        imag: None,
+        data: full_arr.into_dyn(),
     };
 
     solve(&full_nd, b)

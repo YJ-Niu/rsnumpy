@@ -24,7 +24,8 @@ fn partition(a: &NdArray, kth: Vec<i64>, axis: isize) -> PyResult<NdArray> {
 
     if ndim == 0 {
         return Ok(NdArray {
-            imag: None, data: a.data.clone(),
+            imag: None,
+            data: a.data.clone(),
         });
     }
 
@@ -84,7 +85,10 @@ fn partition(a: &NdArray, kth: Vec<i64>, axis: isize) -> PyResult<NdArray> {
             }
         }
     }
-    Ok(NdArray { imag: None, data: result })
+    Ok(NdArray {
+        imag: None,
+        data: result,
+    })
 }
 
 #[pyfunction]
@@ -99,7 +103,8 @@ fn argpartition(a: &NdArray, kth: Vec<i64>, axis: isize) -> PyResult<NdArray> {
 
     if ndim == 0 {
         return Ok(NdArray {
-            imag: None, data: a.data.clone(),
+            imag: None,
+            data: a.data.clone(),
         });
     }
 
@@ -176,14 +181,18 @@ fn argpartition(a: &NdArray, kth: Vec<i64>, axis: isize) -> PyResult<NdArray> {
 
     let arr = Array::from_shape_vec(IxDyn(&shape), indices)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { imag: None, data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 #[pyfunction]
 fn lexsort(keys: Vec<NdArray>) -> PyResult<NdArray> {
     if keys.is_empty() {
         return Ok(NdArray {
-            imag: None, data: Array::from_shape_vec(IxDyn(&[0]), Vec::new()).unwrap(),
+            imag: None,
+            data: Array::from_shape_vec(IxDyn(&[0]), Vec::new()).unwrap(),
         });
     }
 
@@ -206,7 +215,10 @@ fn lexsort(keys: Vec<NdArray>) -> PyResult<NdArray> {
     let result: Vec<f64> = indices.into_iter().map(|i| i as f64).collect();
     let arr = Array::from_shape_vec(IxDyn(&[result.len()]), result)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { imag: None, data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 #[pyfunction]
@@ -216,7 +228,8 @@ fn sort_complex(a: &NdArray) -> PyResult<NdArray> {
 
     if n == 0 {
         return Ok(NdArray {
-            imag: None, data: Array::from_shape_vec(IxDyn(&[0]), Vec::new()).unwrap(),
+            imag: None,
+            data: Array::from_shape_vec(IxDyn(&[0]), Vec::new()).unwrap(),
         });
     }
 
@@ -242,7 +255,10 @@ fn sort_complex(a: &NdArray) -> PyResult<NdArray> {
     let shape = a.data.shape().to_vec();
     let arr = Array::from_shape_vec(IxDyn(&shape), result)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { imag: None, data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 fn introselect(arr: &mut [f64], k: usize) -> f64 {

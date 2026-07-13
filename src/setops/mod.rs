@@ -8,7 +8,10 @@ fn unique(a: &NdArray) -> PyResult<NdArray> {
     let unique_vals: Vec<f64> = values.into_iter().map(f64::from_bits).collect();
     let arr = Array::from_shape_vec(IxDyn(&[unique_vals.len()]), unique_vals)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { imag: None, data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 #[pyfunction]
@@ -82,24 +85,36 @@ fn unique_full(
 
     let unique_arr = Array::from_shape_vec(IxDyn(&[unique_vals.len()]), unique_vals)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    let mut results = vec![NdArray { imag: None, data: unique_arr }];
+    let mut results = vec![NdArray {
+        imag: None,
+        data: unique_arr,
+    }];
 
     if return_index {
         let idx_arr = Array::from_shape_vec(IxDyn(&[first_indices.len()]), first_indices)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        results.push(NdArray { imag: None, data: idx_arr });
+        results.push(NdArray {
+            imag: None,
+            data: idx_arr,
+        });
     }
 
     if return_inverse {
         let inv_arr = Array::from_shape_vec(IxDyn(&[inverse.len()]), inverse)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        results.push(NdArray { imag: None, data: inv_arr });
+        results.push(NdArray {
+            imag: None,
+            data: inv_arr,
+        });
     }
 
     if return_counts {
         let cnt_arr = Array::from_shape_vec(IxDyn(&[counts.len()]), counts)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        results.push(NdArray { imag: None, data: cnt_arr });
+        results.push(NdArray {
+            imag: None,
+            data: cnt_arr,
+        });
     }
 
     Ok(results)
@@ -238,23 +253,35 @@ fn unique_axis(
         .as_standard_layout()
         .to_owned();
 
-    let mut results = vec![NdArray { imag: None, data: unique_arr }];
+    let mut results = vec![NdArray {
+        imag: None,
+        data: unique_arr,
+    }];
 
     if return_index {
         let arr = Array::from_shape_vec(IxDyn(&[index_out.len()]), index_out)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        results.push(NdArray { imag: None, data: arr });
+        results.push(NdArray {
+            imag: None,
+            data: arr,
+        });
     }
     if return_inverse {
         let inv: Vec<f64> = inverse_by_orig.iter().map(|&g| remap[g] as f64).collect();
         let arr = Array::from_shape_vec(IxDyn(&[inv.len()]), inv)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        results.push(NdArray { imag: None, data: arr });
+        results.push(NdArray {
+            imag: None,
+            data: arr,
+        });
     }
     if return_counts {
         let arr = Array::from_shape_vec(IxDyn(&[counts_out.len()]), counts_out)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        results.push(NdArray { imag: None, data: arr });
+        results.push(NdArray {
+            imag: None,
+            data: arr,
+        });
     }
 
     Ok(results)
@@ -305,7 +332,8 @@ fn sorted_unique_vec(vals: &[f64]) -> Vec<f64> {
 fn vec_to_1d(vals: Vec<f64>) -> NdArray {
     let n = vals.len();
     NdArray {
-        imag: None, data: Array::from_shape_vec(IxDyn(&[n]), vals).unwrap(),
+        imag: None,
+        data: Array::from_shape_vec(IxDyn(&[n]), vals).unwrap(),
     }
 }
 

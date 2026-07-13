@@ -35,7 +35,15 @@ fn where_<'py>(
                 .map(|idx_vec| {
                     let data: Vec<f64> = idx_vec.iter().map(|&i| i as f64).collect();
                     let arr = Array::from_shape_vec(IxDyn(&[data.len()]), data).unwrap();
-                    Bound::new(py, NdArray { imag: None, data: arr }).unwrap().into_any()
+                    Bound::new(
+                        py,
+                        NdArray {
+                            imag: None,
+                            data: arr,
+                        },
+                    )
+                    .unwrap()
+                    .into_any()
                 })
                 .collect();
             Ok(PyTuple::new(py, tuples)?.into_any())
@@ -52,7 +60,8 @@ fn where_<'py>(
             let arr = Array::from_shape_vec(condition.data.dim(), result)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
             let nd = NdArray {
-                imag: None, data: arr.into_dyn(),
+                imag: None,
+                data: arr.into_dyn(),
             };
             let bound = Bound::new(py, nd)?;
             Ok(bound.into_any())
@@ -79,7 +88,10 @@ fn extract(condition: &NdArray, a: &NdArray) -> PyResult<NdArray> {
 
     let arr = Array::from_shape_vec(IxDyn(&[result.len()]), result)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { imag: None, data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 #[pyfunction]
@@ -97,7 +109,8 @@ fn nonzero_arrs<'py>(py: Python<'py>, a: &NdArray) -> PyResult<Vec<Bound<'py, Py
         let arr = Array::from_shape_vec(IxDyn(&[data.len()]), data)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
         let nd = NdArray {
-            imag: None, data: arr.into_dyn(),
+            imag: None,
+            data: arr.into_dyn(),
         };
         result.push(Bound::new(py, nd)?.into_any());
     }
@@ -123,7 +136,10 @@ fn ix_rs<'py>(py: Python<'py>, args: &Bound<'_, PyTuple>) -> PyResult<Bound<'py,
         };
         let arr = Array::from_shape_vec(nd_shape, values)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        arrays.push(NdArray { imag: None, data: arr });
+        arrays.push(NdArray {
+            imag: None,
+            data: arr,
+        });
     }
     let mut results: Vec<Bound<'py, PyAny>> = Vec::with_capacity(n);
     for i in 0..n {
@@ -139,7 +155,8 @@ fn ix_rs<'py>(py: Python<'py>, args: &Bound<'_, PyTuple>) -> PyResult<Bound<'py,
             Bound::new(
                 py,
                 NdArray {
-                    imag: None, data: reshaped.into_dyn(),
+                    imag: None,
+                    data: reshaped.into_dyn(),
                 },
             )?
             .into_any(),
@@ -158,7 +175,8 @@ fn _arange_arrays<'py>(py: Python<'py>, shape: &Bound<'_, PyAny>) -> PyResult<Bo
         let arr = Array::from_shape_vec(IxDyn(&[dim]), data)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
         let nd = NdArray {
-            imag: None, data: arr.into_dyn(),
+            imag: None,
+            data: arr.into_dyn(),
         };
         arrays.push(Bound::new(py, nd)?.into_any());
     }
@@ -225,7 +243,8 @@ fn select_rs<'py>(
     let arr = Array::from_shape_vec(IxDyn(&result_shape), result)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     let nd = NdArray {
-        imag: None, data: arr.into_dyn(),
+        imag: None,
+        data: arr.into_dyn(),
     };
     let bound = Bound::new(py, nd)?;
     Ok(bound.into_any())
@@ -239,11 +258,17 @@ fn argwhere(a: &NdArray) -> PyResult<NdArray> {
         if a.data.iter().any(|&v| v != 0.0) {
             let arr = Array::from_shape_vec(IxDyn(&[1, 0]), vec![])
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            return Ok(NdArray { imag: None, data: arr });
+            return Ok(NdArray {
+                imag: None,
+                data: arr,
+            });
         }
         let arr = Array::from_shape_vec(IxDyn(&[0, 0]), vec![])
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        return Ok(NdArray { imag: None, data: arr });
+        return Ok(NdArray {
+            imag: None,
+            data: arr,
+        });
     }
     let mut indices: Vec<Vec<usize>> = (0..ndim)
         .map(|_| Vec::with_capacity(a.data.len()))
@@ -267,7 +292,10 @@ fn argwhere(a: &NdArray) -> PyResult<NdArray> {
     }
     let arr = Array::from_shape_vec(IxDyn(&[num_nonzero, ndim]), flat_result)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { imag: None, data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 #[pyfunction]
@@ -286,7 +314,10 @@ fn flatnonzero(a: &NdArray) -> PyResult<NdArray> {
         .collect();
     let arr = Array::from_shape_vec(IxDyn(&[indices.len()]), indices)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { imag: None, data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {

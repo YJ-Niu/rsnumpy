@@ -10,7 +10,10 @@ fn unary_math_op(py: Python<'_>, x: &NdArray, threshold: usize, op: fn(f64) -> f
             data.mapv(op)
         }
     });
-    NdArray { imag: None, data: out }
+    NdArray {
+        imag: None,
+        data: out,
+    }
 }
 
 /// 复数逐元素一元运算：对 (实部, 虚部) 对应用 op，返回实数数组（如 abs 求模）。
@@ -25,7 +28,10 @@ fn unary_complex_to_real_op(py: Python<'_>, x: &NdArray, op: fn(f64, f64) -> f64
         }
     };
     let out = py.detach(|| Zip::from(re).and(im).map_collect(|&r, &i| op(r, i)));
-    NdArray { imag: None, data: out }
+    NdArray {
+        imag: None,
+        data: out,
+    }
 }
 
 /// 复数逐元素一元运算：对 (实部, 虚部) 对应用 op，返回复数数组。
@@ -211,7 +217,10 @@ fn cross(a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
     ];
     let arr = Array::from_shape_vec(IxDyn(&[3]), result)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { imag: None, data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 #[pyfunction]
@@ -257,7 +266,10 @@ define_cheap_math_func!(reciprocal, |v| 1.0 / v);
 #[pyfunction]
 fn arctan2(y: &NdArray, x: &NdArray) -> PyResult<NdArray> {
     let result = broadcast_binary_op(&y.data, &x.data, |a, b| a.atan2(b))?;
-    Ok(NdArray { imag: None, data: result })
+    Ok(NdArray {
+        imag: None,
+        data: result,
+    })
 }
 
 #[pyfunction]
@@ -273,7 +285,10 @@ fn rad2deg(py: Python<'_>, x: &NdArray) -> NdArray {
 #[pyfunction]
 fn hypot(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
     let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| a.hypot(b))?;
-    Ok(NdArray { imag: None, data: result })
+    Ok(NdArray {
+        imag: None,
+        data: result,
+    })
 }
 
 fn gcd_i64(a: i64, b: i64) -> i64 {
@@ -291,7 +306,10 @@ fn gcd(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
     let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| {
         gcd_i64(a as i64, b as i64) as f64
     })?;
-    Ok(NdArray { imag: None, data: result })
+    Ok(NdArray {
+        imag: None,
+        data: result,
+    })
 }
 
 #[pyfunction]
@@ -304,7 +322,10 @@ fn lcm(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
             ((ai / gcd_i64(ai, bi)) * bi).abs() as f64
         }
     })?;
-    Ok(NdArray { imag: None, data: result })
+    Ok(NdArray {
+        imag: None,
+        data: result,
+    })
 }
 
 #[pyfunction]
@@ -320,25 +341,35 @@ fn nextafter(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
             b
         }
     })?;
-    Ok(NdArray { imag: None, data: result })
+    Ok(NdArray {
+        imag: None,
+        data: result,
+    })
 }
 
 #[pyfunction]
 fn copysign(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
     let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| a.copysign(b))?;
-    Ok(NdArray { imag: None, data: result })
+    Ok(NdArray {
+        imag: None,
+        data: result,
+    })
 }
 
 #[pyfunction]
 fn ldexp(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
     let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| a * (2.0_f64).powi(b as i32))?;
-    Ok(NdArray { imag: None, data: result })
+    Ok(NdArray {
+        imag: None,
+        data: result,
+    })
 }
 
 #[pyfunction]
 fn signbit(x: &NdArray) -> NdArray {
     NdArray {
-        imag: None, data: x
+        imag: None,
+        data: x
             .data
             .mapv(|v| if v.is_sign_negative() { 1.0 } else { 0.0 }),
     }
@@ -347,14 +378,16 @@ fn signbit(x: &NdArray) -> NdArray {
 #[pyfunction]
 fn rint(x: &NdArray) -> NdArray {
     NdArray {
-        imag: None, data: x.data.mapv(|v| v.round_ties_even()),
+        imag: None,
+        data: x.data.mapv(|v| v.round_ties_even()),
     }
 }
 
 #[pyfunction]
 fn spacing(x: &NdArray) -> NdArray {
     NdArray {
-        imag: None, data: x.data.mapv(|v| v.next_up() - v),
+        imag: None,
+        data: x.data.mapv(|v| v.next_up() - v),
     }
 }
 
@@ -362,7 +395,8 @@ fn spacing(x: &NdArray) -> NdArray {
 fn sinc(x: &NdArray) -> NdArray {
     let pi = std::f64::consts::PI;
     NdArray {
-        imag: None, data: x.data.mapv(|v| {
+        imag: None,
+        data: x.data.mapv(|v| {
             if v == 0.0 {
                 1.0
             } else {
@@ -375,7 +409,8 @@ fn sinc(x: &NdArray) -> NdArray {
 #[pyfunction]
 fn heaviside(x: &NdArray, h0: f64) -> NdArray {
     NdArray {
-        imag: None, data: x.data.mapv(|v| {
+        imag: None,
+        data: x.data.mapv(|v| {
             if v > 0.0 {
                 1.0
             } else if v < 0.0 {
@@ -424,7 +459,16 @@ fn frexp(py: Python<'_>, x: &NdArray) -> (NdArray, NdArray) {
             Array::from_shape_vec(IxDyn(shape), expo).unwrap(),
         )
     });
-    (NdArray { imag: None, data: mant }, NdArray { imag: None, data: expo })
+    (
+        NdArray {
+            imag: None,
+            data: mant,
+        },
+        NdArray {
+            imag: None,
+            data: expo,
+        },
+    )
 }
 
 /// 第一类零阶修正贝塞尔函数 I0，级数展开（与 numpy.i0 精度一致）。
@@ -453,7 +497,10 @@ fn i0(py: Python<'_>, x: &NdArray) -> NdArray {
             data.mapv(bessel_i0)
         }
     });
-    NdArray { imag: None, data: out }
+    NdArray {
+        imag: None,
+        data: out,
+    }
 }
 
 /// 一维线性插值：xp 必须单调递增；越界返回 left/right（默认端点值）。输出与 x 同形状。
@@ -500,7 +547,10 @@ fn interp(
             data.mapv(|xi| interp_one(xi, &xpv, &fpv, lo, hi))
         }
     });
-    Ok(NdArray { imag: None, data: out })
+    Ok(NdArray {
+        imag: None,
+        data: out,
+    })
 }
 
 /// 一维离散卷积（full），再按 mode 截取，语义与 numpy.convolve 一致。
@@ -540,7 +590,10 @@ fn convolve(py: Python<'_>, a: &NdArray, v: &NdArray, mode: &str) -> PyResult<Nd
         .map_err(PyValueError::new_err)?;
     let arr = Array::from_shape_vec(IxDyn(&[out.len()]), out)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { imag: None, data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 #[pyfunction]
@@ -554,7 +607,10 @@ fn correlate(py: Python<'_>, a: &NdArray, v: &NdArray, mode: &str) -> PyResult<N
         .map_err(PyValueError::new_err)?;
     let arr = Array::from_shape_vec(IxDyn(&[out.len()]), out)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { imag: None, data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {

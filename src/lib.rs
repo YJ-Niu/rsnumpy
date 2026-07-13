@@ -219,9 +219,7 @@ fn parse_py_categorized(data: &Bound<'_, PyAny>) -> PyResult<(Vec<f64>, Vec<usiz
 
 /// 递归解析可能包含复数的 Python 序列，返回 (实部扁平, 虚部扁平, 形状, 是否含复数)。
 /// 实部/虚部等长（实数元素的虚部填 0）。numpy 复数数组通过 `tolist()` 回退处理。
-fn parse_py_complex(
-    data: &Bound<'_, PyAny>,
-) -> PyResult<(Vec<f64>, Vec<f64>, Vec<usize>, bool)> {
+fn parse_py_complex(data: &Bound<'_, PyAny>) -> PyResult<(Vec<f64>, Vec<f64>, Vec<usize>, bool)> {
     // 标量实数（int/float/bool 均可 extract 为 f64）。
     if let Ok(v) = data.extract::<f64>() {
         return Ok((vec![v], vec![0.0], vec![], false));
@@ -320,8 +318,8 @@ fn coerce_value_to_nd(value: &Bound<'_, PyAny>) -> PyResult<NdArray> {
         return Ok(arr);
     }
     let (re, im, shape, has_c) = parse_py_complex(value)?;
-    let data =
-        Array::from_shape_vec(IxDyn(&shape), re).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let data = Array::from_shape_vec(IxDyn(&shape), re)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
     if has_c {
         let imag = Array::from_shape_vec(IxDyn(&shape), im)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -643,7 +641,10 @@ impl NdArray {
                 ),
                 None => None,
             };
-            let sub = NdArray { imag: imag_arr, data: arr };
+            let sub = NdArray {
+                imag: imag_arr,
+                data: arr,
+            };
             let bound = Bound::new(py, sub)?;
             return Ok(bound.into_any());
         }
@@ -652,7 +653,9 @@ impl NdArray {
             let flat_data: Vec<f64> = data.iter().copied().collect();
             let flat_imag: Option<Vec<f64>> = imag.map(|im| im.iter().copied().collect());
             let mut result = Vec::with_capacity(flat_data.len());
-            let mut result_im = flat_imag.as_ref().map(|_| Vec::with_capacity(flat_data.len()));
+            let mut result_im = flat_imag
+                .as_ref()
+                .map(|_| Vec::with_capacity(flat_data.len()));
             for (i, &v) in arr.data.iter().enumerate() {
                 if v != 0.0 && i < flat_data.len() {
                     result.push(flat_data[i]);
@@ -670,7 +673,10 @@ impl NdArray {
                 ),
                 None => None,
             };
-            let sub = NdArray { imag: imag_arr, data: arr_result };
+            let sub = NdArray {
+                imag: imag_arr,
+                data: arr_result,
+            };
             let bound = Bound::new(py, sub)?;
             return Ok(bound.into_any());
         }
@@ -807,7 +813,10 @@ impl NdArray {
                     let sub_im = imag
                         .as_ref()
                         .map(|im| im.index_axis(Axis(0), i).to_owned().into_dyn());
-                    NdArray { imag: sub_im, data: sub }
+                    NdArray {
+                        imag: sub_im,
+                        data: sub,
+                    }
                 })
                 .collect()
         };
@@ -1107,11 +1116,9 @@ impl NdArray {
 
     fn tolist<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         match &self.imag {
-            Some(im) => to_python_list_complex(
-                py,
-                &self.data.view().into_dyn(),
-                &im.view().into_dyn(),
-            ),
+            Some(im) => {
+                to_python_list_complex(py, &self.data.view().into_dyn(), &im.view().into_dyn())
+            }
             None => to_python_list(py, &self.data.view().into_dyn()),
         }
     }
@@ -1129,7 +1136,10 @@ impl NdArray {
                 }
                 let arr = Array::from_shape_vec(IxDyn(&[result.len()]), result)
                     .map_err(|e| PyValueError::new_err(e.to_string()))?;
-                Ok(NdArray { imag: None, data: arr })
+                Ok(NdArray {
+                    imag: None,
+                    data: arr,
+                })
             }
             Some(ax) => {
                 let ndim = self.data.ndim();
@@ -1158,7 +1168,10 @@ impl NdArray {
                 new_shape[ax] = axis_size * repeats;
                 let arr = Array::from_shape_vec(IxDyn(&new_shape), result)
                     .map_err(|e| PyValueError::new_err(e.to_string()))?;
-                Ok(NdArray { imag: None, data: arr })
+                Ok(NdArray {
+                    imag: None,
+                    data: arr,
+                })
             }
         }
     }
@@ -1201,11 +1214,15 @@ impl NdArray {
             let casted: Vec<f64> = self.data.iter().map(|v| v.trunc()).collect();
             let arr = Array::from_shape_vec(IxDyn(self.data.shape()), casted)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            Ok(NdArray { imag: None, data: arr })
+            Ok(NdArray {
+                imag: None,
+                data: arr,
+            })
         } else {
             // float* 或其它：丢弃虚部（与 numpy astype 到实数类型一致）。
             Ok(NdArray {
-                imag: None, data: self.data.clone(),
+                imag: None,
+                data: self.data.clone(),
             })
         }
     }
@@ -1293,12 +1310,14 @@ impl NdArray {
     fn __round__(&self, ndigits: Option<i32>) -> PyResult<NdArray> {
         match ndigits {
             None => Ok(NdArray {
-                imag: None, data: self.data.mapv(|x| x.round()),
+                imag: None,
+                data: self.data.mapv(|x| x.round()),
             }),
             Some(n) => {
                 let factor = 10.0_f64.powi(n);
                 Ok(NdArray {
-                    imag: None, data: self.data.mapv(|x| (x * factor).round() / factor),
+                    imag: None,
+                    data: self.data.mapv(|x| (x * factor).round() / factor),
                 })
             }
         }
@@ -1344,7 +1363,8 @@ impl NdArray {
             None => {
                 let val = self.data.iter().cloned().fold(1.0_f64, |a, b| a * b);
                 Ok(NdArray {
-                    imag: None, data: Array::from_elem(IxDyn(&[]), val),
+                    imag: None,
+                    data: Array::from_elem(IxDyn(&[]), val),
                 })
             }
             Some(ax) => {
@@ -1383,7 +1403,10 @@ impl NdArray {
                     .collect();
                 let arr = Array::from_shape_vec(IxDyn(&new_shape), results)
                     .map_err(|e| PyValueError::new_err(e.to_string()))?;
-                Ok(NdArray { imag: None, data: arr })
+                Ok(NdArray {
+                    imag: None,
+                    data: arr,
+                })
             }
         }
     }
@@ -1435,7 +1458,10 @@ impl NdArray {
         }
         let arr = Array::from_shape_vec(IxDyn(&[diag.len()]), diag)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Ok(NdArray { imag: None, data: arr })
+        Ok(NdArray {
+            imag: None,
+            data: arr,
+        })
     }
 
     #[pyo3(signature = (offset=0, axis1=0, axis2=1))]
@@ -1482,7 +1508,10 @@ impl NdArray {
                     .collect();
                 let arr = Array::from_shape_vec(IxDyn(&[result.len()]), result)
                     .map_err(|e| PyValueError::new_err(e.to_string()))?;
-                return Ok(NdArray { imag: None, data: arr });
+                return Ok(NdArray {
+                    imag: None,
+                    data: arr,
+                });
             }
             Some(ax) => {
                 if ax < 0 {
@@ -1527,7 +1556,10 @@ impl NdArray {
         new_shape[ax] = new_axis_size;
         let arr = Array::from_shape_vec(IxDyn(&new_shape), result)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Ok(NdArray { imag: None, data: arr })
+        Ok(NdArray {
+            imag: None,
+            data: arr,
+        })
     }
 
     fn put(&mut self, indices: &NdArray, values: &NdArray) -> PyResult<()> {
@@ -1600,7 +1632,8 @@ impl NdArray {
             None => {
                 let val = self.data.sum();
                 Ok(NdArray {
-                    imag: None, data: Array::from_elem(IxDyn(&[]), val),
+                    imag: None,
+                    data: Array::from_elem(IxDyn(&[]), val),
                 })
             }
             Some(ax) => {
@@ -1612,7 +1645,8 @@ impl NdArray {
                 };
                 let result = self.data.sum_axis(Axis(ax));
                 Ok(NdArray {
-                    imag: None, data: result.into_dyn(),
+                    imag: None,
+                    data: result.into_dyn(),
                 })
             }
         }
@@ -1624,7 +1658,8 @@ impl NdArray {
             None => {
                 let val = self.data.mean().unwrap_or(0.0);
                 Ok(NdArray {
-                    imag: None, data: Array::from_elem(IxDyn(&[]), val),
+                    imag: None,
+                    data: Array::from_elem(IxDyn(&[]), val),
                 })
             }
             Some(ax) => {
@@ -1637,7 +1672,8 @@ impl NdArray {
                 let result = self.data.mean_axis(Axis(ax));
                 match result {
                     Some(arr) => Ok(NdArray {
-                        imag: None, data: arr.into_dyn(),
+                        imag: None,
+                        data: arr.into_dyn(),
                     }),
                     None => Err(PyValueError::new_err("Invalid axis")),
                 }
@@ -1652,7 +1688,8 @@ impl NdArray {
                 let m = self.data.mean().unwrap_or(0.0);
                 let var = self.data.mapv(|x| (x - m).powi(2)).mean().unwrap_or(0.0);
                 Ok(NdArray {
-                    imag: None, data: Array::from_elem(IxDyn(&[]), var.sqrt()),
+                    imag: None,
+                    data: Array::from_elem(IxDyn(&[]), var.sqrt()),
                 })
             }
             Some(ax) => {
@@ -1698,12 +1735,16 @@ impl NdArray {
 
                         if new_shape.is_empty() {
                             Ok(NdArray {
-                                imag: None, data: Array::from_elem(IxDyn(&[]), results[0]),
+                                imag: None,
+                                data: Array::from_elem(IxDyn(&[]), results[0]),
                             })
                         } else {
                             let arr = Array::from_shape_vec(IxDyn(&new_shape), results)
                                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-                            Ok(NdArray { imag: None, data: arr })
+                            Ok(NdArray {
+                                imag: None,
+                                data: arr,
+                            })
                         }
                     }
                     None => Err(PyValueError::new_err("Invalid axis")),
@@ -1719,7 +1760,8 @@ impl NdArray {
                 let m = self.data.mean().unwrap_or(0.0);
                 let var = self.data.mapv(|x| (x - m).powi(2)).mean().unwrap_or(0.0);
                 Ok(NdArray {
-                    imag: None, data: Array::from_elem(IxDyn(&[]), var),
+                    imag: None,
+                    data: Array::from_elem(IxDyn(&[]), var),
                 })
             }
             Some(ax) => {
@@ -1765,12 +1807,16 @@ impl NdArray {
 
                         if new_shape.is_empty() {
                             Ok(NdArray {
-                                imag: None, data: Array::from_elem(IxDyn(&[]), results[0]),
+                                imag: None,
+                                data: Array::from_elem(IxDyn(&[]), results[0]),
                             })
                         } else {
                             let arr = Array::from_shape_vec(IxDyn(&new_shape), results)
                                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-                            Ok(NdArray { imag: None, data: arr })
+                            Ok(NdArray {
+                                imag: None,
+                                data: arr,
+                            })
                         }
                     }
                     None => Err(PyValueError::new_err("Invalid axis")),
@@ -1785,7 +1831,8 @@ impl NdArray {
             None => {
                 let val = self.data.iter().cloned().fold(f64::INFINITY, f64::min);
                 Ok(NdArray {
-                    imag: None, data: Array::from_elem(IxDyn(&[]), val),
+                    imag: None,
+                    data: Array::from_elem(IxDyn(&[]), val),
                 })
             }
             Some(ax) => {
@@ -1802,7 +1849,10 @@ impl NdArray {
                         if v < a { v } else { a }
                     })
                     .into_dyn();
-                Ok(NdArray { imag: None, data: result })
+                Ok(NdArray {
+                    imag: None,
+                    data: result,
+                })
             }
         }
     }
@@ -1813,7 +1863,8 @@ impl NdArray {
             None => {
                 let val = self.data.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
                 Ok(NdArray {
-                    imag: None, data: Array::from_elem(IxDyn(&[]), val),
+                    imag: None,
+                    data: Array::from_elem(IxDyn(&[]), val),
                 })
             }
             Some(ax) => {
@@ -1830,7 +1881,10 @@ impl NdArray {
                         if v > a { v } else { a }
                     })
                     .into_dyn();
-                Ok(NdArray { imag: None, data: result })
+                Ok(NdArray {
+                    imag: None,
+                    data: result,
+                })
             }
         }
     }
@@ -1888,7 +1942,8 @@ impl NdArray {
 
     fn clip(&self, a_min: f64, a_max: f64) -> PyResult<NdArray> {
         Ok(NdArray {
-            imag: None, data: self.data.mapv(|v| v.max(a_min).min(a_max)),
+            imag: None,
+            data: self.data.mapv(|v| v.max(a_min).min(a_max)),
         })
     }
 
@@ -1946,7 +2001,10 @@ impl NdArray {
                 Array::from_shape_vec(IxDyn(&shape), data_vec).map_err(|e| e.to_string())
             })
             .map_err(PyValueError::new_err)?;
-        Ok(NdArray { imag: None, data: arr })
+        Ok(NdArray {
+            imag: None,
+            data: arr,
+        })
     }
 
     #[pyo3(signature = (axis=-1))]
@@ -2011,7 +2069,10 @@ impl NdArray {
                 Array::from_shape_vec(IxDyn(&shape), result).map_err(|e| e.to_string())
             })
             .map_err(PyValueError::new_err)?;
-        Ok(NdArray { imag: None, data: arr })
+        Ok(NdArray {
+            imag: None,
+            data: arr,
+        })
     }
 }
 
@@ -2043,7 +2104,10 @@ where
                 data.mapv(|x| op(x, scalar))
             }
         });
-        return Ok(NdArray { imag: None, data: out });
+        return Ok(NdArray {
+            imag: None,
+            data: out,
+        });
     }
     // 常见情形：右操作数就是 ndarray —— 借用而非 extract（后者会整份克隆）。
     if let Ok(other) = b.cast::<NdArray>() {
@@ -2053,7 +2117,10 @@ where
         let out = py
             .detach(|| broadcast_binary_compute(a_data, other_data, op))
             .map_err(PyValueError::new_err)?;
-        return Ok(NdArray { imag: None, data: out });
+        return Ok(NdArray {
+            imag: None,
+            data: out,
+        });
     }
     // 回退：可被强制转换为 ndarray 的其它序列类型（此路径会克隆，但非热点）。
     if let Ok(other) = b.extract::<NdArray>() {
@@ -2062,7 +2129,10 @@ where
         let out = py
             .detach(|| broadcast_binary_compute(a_data, other_data, op))
             .map_err(PyValueError::new_err)?;
-        return Ok(NdArray { imag: None, data: out });
+        return Ok(NdArray {
+            imag: None,
+            data: out,
+        });
     }
     Err(PyTypeError::new_err("Unsupported operand type"))
 }
@@ -2327,7 +2397,6 @@ fn dispatch_binop_r(a: &NdArray, b: &Bound<'_, PyAny>, op: CBinOp) -> PyResult<N
     }
 }
 
-
 /// 沿指定轴做就地累积扫描（cumsum/cumprod 共用）。
 /// axis=None 时在展平后的 C 序上做整体扫描，结果为 1-D。
 /// 单份缓冲上就地更新，并按连续外层块并行；纯计算，主动释放 GIL。
@@ -2353,7 +2422,10 @@ where
             }
             Array::from_shape_vec(IxDyn(&[n]), buf).unwrap()
         });
-        return Ok(NdArray { imag: None, data: arr });
+        return Ok(NdArray {
+            imag: None,
+            data: arr,
+        });
     }
     let ax_raw = axis.unwrap();
     let ax = if ax_raw < 0 {
@@ -2387,7 +2459,10 @@ where
         Array::from_shape_vec(IxDyn(&shape), buf).map_err(|e| e.to_string())
     });
     let arr = arr.map_err(PyValueError::new_err)?;
-    Ok(NdArray { imag: None, data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 /// ArrayFlags - 数组内存布局信息，与 NumPy 的 np.ndarray.flags 兼容

@@ -70,7 +70,13 @@ fn parse_single_index(item: &Bound<'_, PyAny>, dim_size: isize) -> PyResult<Inde
         };
         let arr = Array::from_shape_vec(nd_shape, values)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        return Ok(ndarray_to_index_desc(&NdArray { imag: None, data: arr }, dim_size));
+        return Ok(ndarray_to_index_desc(
+            &NdArray {
+                imag: None,
+                data: arr,
+            },
+            dim_size,
+        ));
     }
 
     if let Ok(arr) = item.extract::<NdArray>() {
@@ -518,7 +524,11 @@ fn scatter(data: &mut [f64], dim_lists: &[Vec<usize>], strides: &[usize], values
             flat_idx += dim_lists[i][idx] * strides[i];
         }
         if flat_idx < data.len() {
-            data[flat_idx] = if broadcast { values[0] } else { values[counter] };
+            data[flat_idx] = if broadcast {
+                values[0]
+            } else {
+                values[counter]
+            };
         }
         counter += 1;
 
@@ -609,7 +619,10 @@ pub fn iscomplex_cpx(data: Vec<Py<PyAny>>, py: Python<'_>) -> PyResult<NdArray> 
 
     let arr = Array::from_shape_vec(IxDyn(&[data.len()]), mask)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { imag: None, data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 /// 布尔掩码选择：掩码覆盖数据前若干维，`block` 为剩余维度元素个数（尾块大小）。
@@ -642,5 +655,8 @@ pub fn masked_select(a: &NdArray, mask: &NdArray, block: usize) -> PyResult<NdAr
     let out_len = out.len();
     let arr = Array::from_shape_vec(IxDyn(&[out_len]), out)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { imag: None, data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }

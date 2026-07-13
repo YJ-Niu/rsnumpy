@@ -3,7 +3,8 @@ use crate::*;
 #[pyfunction]
 fn invert(x: &NdArray) -> NdArray {
     NdArray {
-        imag: None, data: x.data.mapv(|v| if v == 0.0 { 1.0 } else { 0.0 }),
+        imag: None,
+        data: x.data.mapv(|v| if v == 0.0 { 1.0 } else { 0.0 }),
     }
 }
 
@@ -13,7 +14,10 @@ fn bitwise_and(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
         let bits = (a as i64) & (b as i64);
         bits as f64
     })?;
-    Ok(NdArray { imag: None, data: result })
+    Ok(NdArray {
+        imag: None,
+        data: result,
+    })
 }
 
 #[pyfunction]
@@ -22,7 +26,10 @@ fn bitwise_or(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
         let bits = (a as i64) | (b as i64);
         bits as f64
     })?;
-    Ok(NdArray { imag: None, data: result })
+    Ok(NdArray {
+        imag: None,
+        data: result,
+    })
 }
 
 #[pyfunction]
@@ -31,7 +38,10 @@ fn bitwise_xor(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
         let bits = (a as i64) ^ (b as i64);
         bits as f64
     })?;
-    Ok(NdArray { imag: None, data: result })
+    Ok(NdArray {
+        imag: None,
+        data: result,
+    })
 }
 
 #[pyfunction]
@@ -40,7 +50,10 @@ fn left_shift(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
         let bits = (a as i64) << (b as i64);
         bits as f64
     })?;
-    Ok(NdArray { imag: None, data: result })
+    Ok(NdArray {
+        imag: None,
+        data: result,
+    })
 }
 
 #[pyfunction]
@@ -49,13 +62,17 @@ fn right_shift(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
         let bits = (a as i64) >> (b as i64);
         bits as f64
     })?;
-    Ok(NdArray { imag: None, data: result })
+    Ok(NdArray {
+        imag: None,
+        data: result,
+    })
 }
 
 #[pyfunction]
 fn bitwise_not(x: &NdArray) -> NdArray {
     NdArray {
-        imag: None, data: x.data.mapv(|v| {
+        imag: None,
+        data: x.data.mapv(|v| {
             let bits = !(v as i64);
             bits as f64
         }),
