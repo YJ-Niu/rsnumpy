@@ -417,18 +417,21 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
                     value = 1/value
                 ax.annotate(
                     str(value * ref_imm),
-                    xy=(rho * smithR, -0.06),
-                    xytext=(rho * smithR, -0.06),
+                    xy=(rho * smithR, 0),
+                    xytext=(rho * smithR, 0),
                     ha=halignstyle, va="top")
 
             # Annotate imaginary part
-            radialScaleFactor = 1.08  # Scale radius of label position by this
+            if len(xLightList) == 10:
+                radialScaleFactor = [1.02, 1.03, 1.04, 1.05, 1.06, 1.07, 1.08, 1.1, 1.09, 1.08]  # Scale radius of label position by this
+            else:
+                radialScaleFactor = [min(1.02 + i*0.01, 1.1) for i in range(len(xLightList))]
             # factor. Making it >1 places the label
             # outside the Smith chart's circle
-            for value in xLightList:
+            for i, value in enumerate(xLightList):
                 # Transforms from complex to cartesian
                 S = (1j*value - 1) / (1j*value + 1)
-                S *= smithR * radialScaleFactor
+                S *= smithR * radialScaleFactor[i]
                 rhox = S.real
                 rhoy = S.imag * y_flip_sign
 
@@ -457,12 +460,12 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
                 label_left, label_right = '0.0', r'$\infty$'
             else:  # y and yz charts
                 label_left, label_right = r'$\infty$', '0.0'
-            ax.annotate(label_left, xy=(-1.12, 0), xytext=(-1.12, 0),
+            ax.annotate(label_left, xy=(-1.04, -0.03), xytext=(-1.04, -0.03),
                         ha="right", va="center")
             ax.annotate(
                 label_right, xy=(
-                    1.08, 0), xytext=(
-                    1.08, 0), ha="left", va="center")
+                    1.08, -0.03), xytext=(
+                    1.08, -0.03), ha="left", va="center")
 
             # annotate vswr circles
             for vswr in vswrVeryLightList:
