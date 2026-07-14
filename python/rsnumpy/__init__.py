@@ -14,6 +14,7 @@ Examples:
 
 import datetime as _datetime
 import sys as _sys
+import math as _math
 from . import _extra as _extra_module
 
 import rsnumpy._core as _core
@@ -1571,19 +1572,19 @@ def _format_complex_scalar(val):
     imag = val.imag
     real_rounded = _py_round(real, 8)
     if abs(real_rounded) < 1e-10:
-        real_s = "0."
+        real_s = "-0." if _math.copysign(1.0, real) < 0 else "0."
     elif real_rounded == int(real_rounded) and abs(real_rounded) < 1e16:
         real_s = f"{int(real_rounded)}."
     else:
         real_s = f"{real_rounded}"
     imag_rounded = _py_round(imag, 8)
     if abs(imag_rounded) < 1e-10:
-        imag_s = "0."
+        imag_s = "-0." if _math.copysign(1.0, imag) < 0 else "0."
     elif imag_rounded == int(imag_rounded) and abs(imag_rounded) < 1e16:
         imag_s = f"{int(imag_rounded)}."
     else:
         imag_s = f"{imag_rounded}"
-    if imag >= 0:
+    if _math.copysign(1.0, imag) >= 0:
         return f"{real_s}+{imag_s}j"
     return f"{real_s}{imag_s}j"
 
@@ -3762,7 +3763,9 @@ class _RClass:
         arrays = []
         for it in item:
             arrays.append(ndarray(it))
-        return concatenate([a.ravel() for a in arrays])
+        if len(arrays) == 0:
+            return ndarray([])
+        return concatenate(arrays)
 
 
 r_ = _RClass()

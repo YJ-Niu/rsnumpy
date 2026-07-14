@@ -213,7 +213,7 @@ pprint(line1)
 line1 + line
 
 
-# big_line = rf.network.stitch(wr2p2_line, wr1p5_line)
-# pprint(big_line)
+big_line = rf.network.stitch(wr2p2_line, wr1p5_line)
+pprint(big_line)
 pprint(wr2p2_line)
 pprint(wr1p5_line)
