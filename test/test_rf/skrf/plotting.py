@@ -419,11 +419,11 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
                     str(value * ref_imm),
                     xy=(rho * smithR, 0),
                     xytext=(rho * smithR, 0),
-                    ha=halignstyle, va="top")
+                    ha=halignstyle, va="top", fontsize=14)
 
             # Annotate imaginary part
             if len(xLightList) == 10:
-                radialScaleFactor = [1.02, 1.03, 1.04, 1.05, 1.06, 1.07, 1.08, 1.1, 1.09, 1.08]  # Scale radius of label position by this
+                radialScaleFactor = [1.02, 1.03, 1.04, 1.05, 1.06, 1.07, 1.08, 1.1, 1.08, 1.07]  # Scale radius of label position by this
             else:
                 radialScaleFactor = [min(1.02 + i*0.01, 1.1) for i in range(len(xLightList))]
             # factor. Making it >1 places the label
@@ -453,7 +453,7 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
                 ax.annotate(
                     str(value * ref_imm) + 'j', xy=(rhox, rhoy),
                     xytext=(rhox, rhoy),
-                    ha=halignstyle, va=valignstyle)
+                    ha=halignstyle, va=valignstyle, fontsize=14)
 
             # Annotate 0 and inf
             if y_flip_sign == 1:  # z and zy charts
@@ -461,11 +461,11 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
             else:  # y and yz charts
                 label_left, label_right = r'$\infty$', '0.0'
             ax.annotate(label_left, xy=(-1.04, -0.03), xytext=(-1.04, -0.03),
-                        ha="right", va="center")
+                        ha="right", va="center", fontsize=14)
             ax.annotate(
                 label_right, xy=(
                     1.08, -0.03), xytext=(
-                    1.08, -0.03), ha="left", va="center")
+                    1.08, -0.03), ha="left", va="center", fontsize=14)
 
             # annotate vswr circles
             for vswr in vswrVeryLightList:
@@ -473,7 +473,7 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
 
                 ax.annotate(str(vswr), xy=(0, rhoy*smithR),
                             xytext=(0, rhoy*smithR), ha="center", va="bottom",
-                            color='grey', size='smaller')
+                            color='grey', fontsize=14)
 
     # rasterise the collected contours, clipped to the chart boundary
     for cx, cy, radius, color in contour:
@@ -1205,6 +1205,7 @@ def plot_s_smith(
         draw_labels=False,
         label_axes=False,
         draw_vswr=None,
+        draw_chart=True,
         *args,
         **kwargs):
     r"""
@@ -1276,8 +1277,10 @@ def plot_s_smith(
         generate_label = False
 
     # draw the chart once (rsplotlib has no drawn-patch introspection)
-    smith(ax=ax, smithR=r, chart_type=chart_type,
-          draw_labels=draw_labels, draw_vswr=draw_vswr)
+    # only draw the smith chart background if requested
+    if draw_chart:
+        smith(ax=ax, smithR=r, chart_type=chart_type,
+              draw_labels=draw_labels, draw_vswr=draw_vswr)
 
     for m in M:
         for n in N:
@@ -1453,7 +1456,7 @@ def _apply_style(plt, style: dict, font_scale: float = 1.0,
     framealpha = _num('legend.framealpha')
     _STYLE_LEGEND_KW['framealpha'] = 0.5 if framealpha is None else framealpha
     # shrink legend text 30% relative to rsplotlib's default 11pt base size
-    # (rsplotlib ignores legend.fontsize rcParams, so set it explicitly here).
+    # (rsplotlib ignores legend. rcParams, so set it explicitly here).
     _STYLE_LEGEND_KW['fontsize'] = 11.0 * 0.7
 
     tick_kw = {}

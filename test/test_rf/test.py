@@ -312,7 +312,7 @@ cell_text = []
 for l_ in lines:
     m = l_['m']
     n = l_['n']
-    l_['ntw'].plot_s_smith(m=m, n=n, ax=ax, color=l_['color'])
+    l_['ntw'].plot_s_smith(m=m, n=n, ax=ax, color=l_['color'], draw_chart=False)
     # plot markers
     for i, k in enumerate(l_['marker_idx']):
         x = l_['ntw'].s.real[k, m, n]
@@ -326,18 +326,7 @@ for l_ in lines:
         ax.scatter(x, y, marker='v', s=20, color=l_['color'])
         ax.annotate(row_labels[-1], (x, y), xytext=(-7, 7), textcoords='offset points', color=l_['color'])
         cell_text.append([f'{f:.3f} {f_unit}', z])
-leg1 = ax.legend(loc="upper right", fontsize=6)
 
-# plot the table
-the_table = ax.table(cellText=cell_text,
-                     colWidths=[0.4] * 2,
-                     rowLabels=row_labels,
-                     colLabels=col_labels,
-                     rowColours=row_colors,
-                     loc='bottom')
-the_table.auto_set_font_size(False)
-the_table.set_fontsize(6)
-# the_table.scale(1.5, 1.5)
-
+leg1 = ax.legend(fontsize=6)
 plt.savefig("./test/test_rf/test15.png")
 plt.clf()

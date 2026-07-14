@@ -304,7 +304,7 @@ class ndarray:
         if raw is not None:
             return len(raw)
         if self.ndim == 0:
-            raise TypeError("len() of unsized object")
+            return 1
         return len(self._array)
 
     def tolist(self):
