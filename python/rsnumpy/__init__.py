@@ -287,6 +287,14 @@ class ndarray:
             return _format_float_scalar_str(float(self._array.tolist()))
         return _core._format_float_str(self._array)
 
+    def __format__(self, fmt):
+        if self.ndim == 0:
+            val = self.item()
+            if isinstance(val, complex):
+                return format(val, fmt)
+            return format(val, fmt)
+        return format(str(self), fmt)
+
     def __len__(self):
         raw = getattr(self, '_raw_data', None)
         if raw is not None:
@@ -484,6 +492,22 @@ class ndarray:
         # 布尔掩码空选择：numpy 语义下为 no-op，避免 Rust 端空索引 panic
         if _empty_bool_mask_key(key):
             return
+        # 展开省略号（...），补充完整切片以匹配数组维度
+        if key is Ellipsis:
+            key = tuple(slice(None, None, None) for _ in range(self.ndim))
+        elif isinstance(key, tuple):
+            new_key = []
+            ellipsis_count = _core.isum([1 for k in key if k is Ellipsis])
+            if ellipsis_count > 0:
+                non_ellipsis = [k for k in key if k is not Ellipsis]
+                fill = self.ndim - len(non_ellipsis)
+                for k in key:
+                    if k is Ellipsis:
+                        for _ in range(fill):
+                            new_key.append(slice(None, None, None))
+                    else:
+                        new_key.append(k)
+                key = tuple(new_key)
         if isinstance(key, tuple):
             # 将 Python ndarray 索引展平为 list
             key = tuple(
@@ -495,6 +519,34 @@ class ndarray:
             key = (_ndarray_to_index_list(key)
                    if hasattr(key, '_array') else key,)
         if isinstance(key, tuple):
+            # 计算目标形状：将切片/整数索引应用到 self.shape 得到赋值目标的形状
+            target_shape = []
+            key_idx = 0
+            for dim_size in self.shape:
+                if key_idx < len(key):
+                    k = key[key_idx]
+                    key_idx += 1
+                    if isinstance(k, slice):
+                        start = k.start if k.start is not None else 0
+                        stop = k.stop if k.stop is not None else dim_size
+                        step = k.step if k.step is not None else 1
+                        target_shape.append(_py_max(0, (stop - start + step - 1) // step))
+                    elif isinstance(k, int):
+                        continue
+                    elif isinstance(k, list):
+                        target_shape.append(len(k))
+                    else:
+                        target_shape.append(dim_size)
+                else:
+                    target_shape.append(dim_size)
+            # 广播支持：若 value 是数组且形状可广播到目标形状，则先广播
+            if _is_ndarray(value):
+                try:
+                    bcast_shape = _broadcast_shape(tuple(target_shape), value.shape)
+                    if bcast_shape != value.shape:
+                        value = broadcast_to(value, bcast_shape)
+                except ValueError:
+                    pass
             val = _cast_setitem_value(_setitem_value(value), self._dtype)
             _core.setitem_multi(self._array, key, list(self.shape), val)
         else:
@@ -502,42 +554,58 @@ class ndarray:
 
     def __add__(self, other):
         dt = _promote_dtype(self._dtype, other)
+        if self.size == 0:
+            return self.copy()
         if _is_ndarray(other):
             return _wrap_result(self._array + other._array, dt)
         return _wrap_result(self._array + other, dt)
 
     def __radd__(self, other):
         dt = _promote_dtype(self._dtype, other)
+        if self.size == 0:
+            return self.copy()
         return _wrap_result(other + self._array, dt)
 
     def __sub__(self, other):
         dt = _promote_dtype(self._dtype, other)
+        if self.size == 0:
+            return self.copy()
         if _is_ndarray(other):
             return _wrap_result(self._array - other._array, dt)
         return _wrap_result(self._array - other, dt)
 
     def __rsub__(self, other):
         dt = _promote_dtype(self._dtype, other)
+        if self.size == 0:
+            return self.copy()
         return _wrap_result(other - self._array, dt)
 
     def __mul__(self, other):
         dt = _promote_dtype(self._dtype, other)
+        if self.size == 0:
+            return self.copy()
         if _is_ndarray(other):
             return _wrap_result(self._array * other._array, dt)
         return _wrap_result(self._array * other, dt)
 
     def __rmul__(self, other):
         dt = _promote_dtype(self._dtype, other)
+        if self.size == 0:
+            return self.copy()
         return _wrap_result(other * self._array, dt)
 
     def __truediv__(self, other):
         dt = _truediv_dtype(self._dtype)
+        if self.size == 0:
+            return self.copy()
         if _is_ndarray(other):
             return _wrap_result(self._array / other._array, dt)
         return _wrap_result(self._array / other, dt)
 
     def __rtruediv__(self, other):
         dt = _truediv_dtype(self._dtype)
+        if self.size == 0:
+            return self.copy()
         return _wrap_result(other / self._array, dt)
 
     def __mod__(self, other):
@@ -550,7 +618,10 @@ class ndarray:
 
     def __matmul__(self, other):
         if _is_ndarray(other):
-            return _wrap_result(_core.linalg.matmul(self._array, other._array), self._dtype)
+            try:
+                return _wrap_result(_core.linalg.matmul(self._array, other._array), self._dtype)
+            except ValueError:
+                return _matmul_fallback(self, other)
         return _wrap_result(_core.linalg.matmul(self._array, other), self._dtype)
 
     def __pow__(self, other):
@@ -780,6 +851,12 @@ class ndarray:
     def imag(self):
         """数组的虚部（实数数组为全零）。"""
         return _wrap_result(self._array.imag, "float64")
+
+    def conj(self):
+        """返回数组的复共轭。"""
+        if self._dtype == 'complex128':
+            return _wrap_result(self._array.conj(), "complex128")
+        return self.copy()
 
     # ========== 对象方法 ==========
 
@@ -1091,13 +1168,40 @@ def _operand_is_float(other):
     return isinstance(other, float)
 
 
+def _operand_is_complex(other):
+    """判断算术运算的另一操作数是否为复数。"""
+    if _is_ndarray(other):
+        return getattr(other, '_dtype', 'float64') == 'complex128'
+    return isinstance(other, complex)
+
+
 def _promote_dtype(self_dtype, other):
-    """按 numpy 规则推导加/减/乘结果 dtype：整数遇到浮点操作数提升为 float64。"""
+    """按 numpy 规则推导加/减/乘结果 dtype：整数遇到浮点操作数提升为 float64，
+    实数遇到复数操作数提升为 complex128。"""
+    if self_dtype == 'complex128':
+        return 'complex128'
+    if _operand_is_complex(other):
+        return 'complex128'
     if _is_float_dtype(self_dtype):
         return self_dtype
     if _operand_is_float(other):
         return 'float64'
     return self_dtype
+
+
+def _matmul_fallback(a, b):
+    """Fallback for batch matrix multiplication when Rust matmul doesn't support the shapes."""
+    a_shape = a.shape
+    b_shape = b.shape
+    
+    if len(a_shape) == len(b_shape) == 3:
+        batch_size = a_shape[0]
+        result = empty((batch_size, a_shape[1], b_shape[2]), dtype=a._dtype)
+        for i in range(batch_size):
+            result[i] = a[i] @ b[i]
+        return result
+    
+    raise ValueError(f"Unsupported shapes for matmul: {a_shape} and {b_shape}")
 
 
 def _truediv_dtype(self_dtype):
@@ -1465,14 +1569,20 @@ def _format_complex_scalar(val):
     """格式化单个复数为字符串（如 1.+0.j, 2.+6.j）。"""
     real = val.real
     imag = val.imag
-    if real == int(real) and abs(real) < 1e16:
-        real_s = f"{int(real)}."
+    real_rounded = _py_round(real, 8)
+    if abs(real_rounded) < 1e-10:
+        real_s = "0."
+    elif real_rounded == int(real_rounded) and abs(real_rounded) < 1e16:
+        real_s = f"{int(real_rounded)}."
     else:
-        real_s = f"{real}"
-    if imag == int(imag) and abs(imag) < 1e16:
-        imag_s = f"{int(imag)}."
+        real_s = f"{real_rounded}"
+    imag_rounded = _py_round(imag, 8)
+    if abs(imag_rounded) < 1e-10:
+        imag_s = "0."
+    elif imag_rounded == int(imag_rounded) and abs(imag_rounded) < 1e16:
+        imag_s = f"{int(imag_rounded)}."
     else:
-        imag_s = f"{imag}"
+        imag_s = f"{imag_rounded}"
     if imag >= 0:
         return f"{real_s}+{imag_s}j"
     return f"{real_s}{imag_s}j"

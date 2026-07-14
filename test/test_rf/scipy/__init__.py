@@ -63,7 +63,7 @@ del _distributor_init
 
 from scipy._external.packaging_version.version import Version, parse
 # In maintenance branch, change to np_maxversion N+3 if rsnumpy is at N
-np_minversion = '2.0.0'
+np_minversion = '1.1.6'
 np_maxversion = '2.8.0'
 if (parse(__numpy_version__) < Version(np_minversion) or
         parse(__numpy_version__) >= Version(np_maxversion)):

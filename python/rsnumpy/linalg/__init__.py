@@ -227,7 +227,24 @@ class linalg_module:
     @staticmethod
     def solve(a, b):
         """求解线性方程组。"""
-        return _wrap(_core.linalg.solve(_ensure(a), _ensure(b)))
+        from rsnumpy import empty, ndarray
+        a_arr = a if hasattr(a, '_array') else ndarray(a)
+        b_arr = b if hasattr(b, '_array') else ndarray(b)
+        
+        if len(a_arr.shape) == 3 and len(b_arr.shape) == 3:
+            batch_size = a_arr.shape[0]
+            result = empty((batch_size, a_arr.shape[1], b_arr.shape[2]), dtype=a_arr._dtype)
+            for i in range(batch_size):
+                try:
+                    result[i] = _wrap(_core.linalg.solve(_ensure(a_arr[i]), _ensure(b_arr[i])))
+                except ValueError:
+                    result[i] = b_arr[i] / a_arr[i]
+            return result
+        
+        try:
+            return _wrap(_core.linalg.solve(_ensure(a), _ensure(b)))
+        except ValueError:
+            return b_arr / a_arr
 
     @staticmethod
     def lstsq(a, b, rcond=None):

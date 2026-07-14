@@ -93,6 +93,10 @@ def _legend(target, *args, **kwargs):
     """
     for key, value in _STYLE_LEGEND_KW.items():
         kwargs.setdefault(key, value)
+    if 'edgecolor' not in kwargs:
+        kwargs['edgecolor'] = '#999999'
+    if 'facecolor' not in kwargs:
+        kwargs['facecolor'] = '#f5f5f5'
     return target.legend(*args, **kwargs)
 
 
@@ -532,6 +536,11 @@ def plot_rectangular(x: NumberLike, y: NumberLike,
     if axis is not None:
         ax.autoscale(True, 'x', True)
         ax.autoscale(True, 'y', False)
+
+        ylim = ax.get_ylim()
+        y_range = ylim[1] - ylim[0]
+        padding = y_range * 0.1
+        ax.set_ylim(ylim[0] - padding, ylim[1] + padding)
 
     if plt.isinteractive():
         plt.draw()
@@ -1439,9 +1448,11 @@ def _apply_style(plt, style: dict, font_scale: float = 1.0,
     _STYLE_LEGEND_KW.clear()
     if ax_fc:
         _STYLE_LEGEND_KW['facecolor'] = ax_fc
-    legend_edge = _mplstyle_color(style.get('axes.edgecolor'))
+    legend_edge = _mplstyle_color(style.get('legend.edgecolor')) or _mplstyle_color(style.get('axes.edgecolor'))
     if legend_edge:
         _STYLE_LEGEND_KW['edgecolor'] = legend_edge
+    elif ax_fc and ax_fc in ('white', '#ffffff', '#fff', (1.0, 1.0, 1.0), '1', '1.0'):
+        _STYLE_LEGEND_KW['edgecolor'] = '#999999'
     framealpha = _num('legend.framealpha')
     _STYLE_LEGEND_KW['framealpha'] = 0.5 if framealpha is None else framealpha
     # shrink legend text 30% relative to rsplotlib's default 11pt base size

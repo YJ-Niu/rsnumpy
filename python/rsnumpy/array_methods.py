@@ -31,7 +31,10 @@ class NdArrayMethods:
             shape = shape[0]
         else:
             shape = shape
-        result = arr._array.reshape(shape)
+        try:
+            result = arr._array.reshape(shape)
+        except ValueError:
+            result = arr._array.flatten().reshape(shape)
         return ndarray._wrap(result, _dtype=getattr(arr, '_dtype', "float64"), _fields=getattr(arr, '_fields', None), _raw_data=getattr(arr, '_raw_data', None))
     
     @staticmethod
@@ -154,12 +157,18 @@ class NdArrayMethods:
     @staticmethod
     def argmax(arr, axis=None):
         """返回最大值的索引。"""
-        return _wrap_result(_core.argmax_axis(arr._array, axis))
+        result = _wrap_result(_core.argmax_axis(arr._array, axis))
+        if result.ndim == 0:
+            return int(result.item())
+        return result
     
     @staticmethod
     def argmin(arr, axis=None):
         """返回最小值的索引。"""
-        return _wrap_result(_core.argmin_axis(arr._array, axis))
+        result = _wrap_result(_core.argmin_axis(arr._array, axis))
+        if result.ndim == 0:
+            return int(result.item())
+        return result
     
     @staticmethod
     def argsort(arr, axis=-1):

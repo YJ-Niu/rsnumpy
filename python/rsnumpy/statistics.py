@@ -398,6 +398,8 @@ def searchsorted(a, v, side='left', sorter=None):
     """查找元素在有序数组中的插入位置。"""
     _ = sorter
     arr = a if hasattr(a, '_array') else _wrap(a)
+    if hasattr(v, '_array') and len(v.shape) == 0:
+        v = float(v.item())
     return _core.searchsorted(_ensure_raw(arr), v, side)
 
 
