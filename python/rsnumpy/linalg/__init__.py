@@ -140,12 +140,63 @@ def _gauss_jordan_inv(mat):
     return inv
 
 
+def _gauss_jordan_solve(mat, b):
+    """高斯-约当消元求解 Ax = b（列主元），元素可为 float 或 complex，支持任意 n×n。"""
+    n = len(mat)
+    work = [list(row) for row in mat]
+    rhs = []
+    for row in b:
+        if isinstance(row, (list, tuple)):
+            rhs.append(list(row))
+        elif hasattr(row, 'tolist'):
+            rhs.append(row.tolist())
+        else:
+            rhs.append([row])
+    for col in range(n):
+        pivot = max(range(col, n), key=lambda r: abs(work[r][col]))
+        if abs(work[pivot][col]) == 0.0:
+            raise ValueError("Singular matrix")
+        if pivot != col:
+            work[col], work[pivot] = work[pivot], work[col]
+            rhs[col], rhs[pivot] = rhs[pivot], rhs[col]
+        pv = work[col][col]
+        wcol = work[col]
+        rcol = rhs[col]
+        for j in range(n):
+            wcol[j] /= pv
+        for j in range(len(rcol)):
+            rcol[j] /= pv
+        for r in range(n):
+            if r == col:
+                continue
+            factor = work[r][col]
+            if factor == 0:
+                continue
+            wr = work[r]
+            rr = rhs[r]
+            for j in range(n):
+                wr[j] -= factor * wcol[j]
+            for j in range(len(rr)):
+                rr[j] -= factor * rcol[j]
+    if len(rhs[0]) == 1:
+        return [row[0] for row in rhs]
+    return rhs
+
+
 def _inv_nested(data):
     """对嵌套列表递归求逆：最内两维视为待求逆的方阵，外层为批量维。"""
     if isinstance(data, list) and data and isinstance(data[0], list) \
             and (not data[0] or not isinstance(data[0][0], list)):
         return _gauss_jordan_inv(data)
     return [_inv_nested(sub) for sub in data]
+
+
+def _solve_nested(a, b):
+    """对嵌套列表递归求解 Ax = b：最内两维视为矩阵，外层为批量维。"""
+    if isinstance(a, list) and a and isinstance(a[0], list) \
+            and (not a[0] or not isinstance(a[0][0], list)):
+        return _gauss_jordan_solve(a, b)
+    return [_solve_nested(sa, sb) for sa, sb in zip(a, b)]
 
 
 class linalg_module:
@@ -230,6 +281,10 @@ class linalg_module:
         from rsnumpy import empty, ndarray
         a_arr = a if hasattr(a, '_array') else ndarray(a)
         b_arr = b if hasattr(b, '_array') else ndarray(b)
+        
+        if _is_complex_arr(a_arr) or _is_complex_arr(b_arr):
+            res = _solve_nested(a_arr.tolist(), b_arr.tolist())
+            return ndarray(res)
         
         if len(a_arr.shape) == 3 and len(b_arr.shape) == 3:
             batch_size = a_arr.shape[0]
@@ -324,10 +379,53 @@ class linalg_module:
     @staticmethod
     def eig(a):
         """计算矩阵的特征值和特征向量。"""
+        from ..__init__ import ndarray
+        import cmath
+        a = ndarray(a)
+        if a.ndim == 3:
+            n = a.shape[0]
+            eval_list = []
+            evec_list = []
+            for i in range(n):
+                mat = a[i]
+                if mat.dtype == 'complex128':
+                    m = mat.shape[0]
+                    if m == 2:
+                        mat_list = mat.tolist()
+                        a11, a12 = mat_list[0][0], mat_list[0][1]
+                        a21, a22 = mat_list[1][0], mat_list[1][1]
+                        tr = a11 + a22
+                        det = a11 * a22 - a12 * a21
+                        disc = cmath.sqrt(tr * tr - 4.0 * det)
+                        evals = [(tr + disc) / 2.0, (tr - disc) / 2.0]
+                        evecs = [[0.0, 0.0], [0.0, 0.0]]
+                        for idx, lam in enumerate(evals):
+                            if abs(a12) > 1e-12 or abs(lam - a11) > 1e-12:
+                                v0, v1 = a12, lam - a11
+                            else:
+                                v0, v1 = lam - a22, a21
+                            norm = abs(v0)**2 + abs(v1)**2
+                            if norm < 1e-24:
+                                evecs[0][idx] = 1.0
+                                evecs[1][idx] = 0.0
+                            else:
+                                norm = cmath.sqrt(norm)
+                                evecs[0][idx] = v0 / norm
+                                evecs[1][idx] = v1 / norm
+                        eval_list.append(evals)
+                        evec_list.append(evecs)
+                    else:
+                        evals, evecs = _core.linalg.eig(mat._array)
+                        eval_list.append(ndarray._wrap(evals).tolist())
+                        evec_list.append(ndarray._wrap(evecs).tolist())
+                else:
+                    evals, evecs = _core.linalg.eig(mat._array)
+                    eval_list.append(ndarray._wrap(evals).tolist())
+                    evec_list.append(ndarray._wrap(evecs).tolist())
+            return (ndarray(eval_list), ndarray(evec_list))
         evals, evecs = _core.linalg.eig(_ensure(a))
         evals = _round_array(evals)
         evecs = _round_array(evecs)
-        from ..__init__ import ndarray
         return (ndarray._wrap(evals), ndarray._wrap(evecs))
 
     @staticmethod

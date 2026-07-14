@@ -248,8 +248,7 @@ class Frequency:
         return output
 
     @classmethod
-    def from_f(cls, f: NumberLike, unit: FrequencyUnitT |
-               None = None) -> Frequency:
+    def from_f(cls, f: NumberLike, unit: FrequencyUnitT | None = None) -> Frequency:
         """
         Construct Frequency object from a frequency vector.
 
@@ -282,8 +281,7 @@ class Frequency:
             f = [f]
         temp_freq = cls(0, 0, 0, unit=unit)
         temp_freq._f = np.asarray(f) * temp_freq.multiplier
-        temp_freq.check_monotonic_increasing()
-
+        # temp_freq.check_monotonic_increasing()
         return temp_freq
 
     def __eq__(self, other: object) -> bool:

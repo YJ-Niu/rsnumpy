@@ -1085,6 +1085,18 @@ class ndarray:
             return _view_dtype(self, dtype)
         return ndarray(self._array, _dtype=getattr(self, '_dtype', 'float64'))
 
+    def __reduce__(self):
+        """支持 pickle 序列化。"""
+        return (
+            self.__class__,
+            (
+                self.tolist(),
+                getattr(self, '_dtype', 'float64'),
+                getattr(self, '_fields', None),
+                getattr(self, '_raw_data', None),
+            ),
+        )
+
 
 class recarray(ndarray):
     """结构化数组，支持以属性方式访问字段（numpy.recarray 兼容子集）。"""

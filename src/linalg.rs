@@ -122,19 +122,38 @@ fn matmul(_py: Python<'_>, a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
         let a_shape = a_data.shape().to_vec();
         let b_shape = b_data.shape().to_vec();
 
-        // 1D/2D 组合：形状校验后直接交给 ndarray 的优化 gemv/gemm 内核。
+        let a_imag = &a.imag;
+        let b_imag = &b.imag;
+        let has_imag = a_imag.is_some() || b_imag.is_some();
+
         match (a_shape.len(), b_shape.len()) {
             (1, 1) | (2, 2) | (2, 1) | (1, 2) => {
-                // 收缩维：a 的最后一维应等于 b 的第 0 维（四种组合皆如此）。
                 if *a_shape.last().unwrap() != b_shape[0] {
                     return Err(PyValueError::new_err(format!(
                         "Incompatible shapes for matmul: {:?} and {:?}",
                         a_shape, b_shape
                     )));
                 }
+
+                let real_part = a_data.dot(b_data);
+
+                if !has_imag {
+                    return Ok(NdArray {
+                        imag: None,
+                        data: real_part,
+                    });
+                }
+
+                let zero_a = a_data.clone() * 0.0;
+                let zero_b = b_data.clone() * 0.0;
+                let a_i = a_imag.as_ref().unwrap_or(&zero_a);
+                let b_i = b_imag.as_ref().unwrap_or(&zero_b);
+                let real_part = real_part - a_i.dot(b_i);
+                let imag_part = a_data.dot(b_i) + a_i.dot(b_data);
+
                 return Ok(NdArray {
-                    imag: None,
-                    data: a_data.dot(b_data),
+                    imag: Some(imag_part),
+                    data: real_part,
                 });
             }
             _ => {}
@@ -152,23 +171,54 @@ fn matmul(_py: Python<'_>, a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
                 )));
             }
             let batch_size: usize = batch_dims.iter().product();
-            // b 在所有批次间共享：把批次维展平成 (batch*m, n)，与 b(n,p) 做单次大 GEMM，
-            // 再还原成 batch_dims + [m, p]。避免逐元素动态索引的朴素三重循环。
+
             let a2 = a_data
                 .to_shape((batch_size * m, n))
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
             let b2 = b_data
                 .to_shape((n, p))
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            let c = a2.dot(&b2);
-            let mut result_shape = batch_dims;
+
+            if !has_imag {
+                let real_part = a2.dot(&b2);
+                let mut result_shape = batch_dims.clone();
+                result_shape.extend_from_slice(&[m, p]);
+                let real_arr = real_part
+                    .into_shape_with_order(result_shape)
+                    .map_err(|e| PyValueError::new_err(e.to_string()))?;
+                return Ok(NdArray {
+                    imag: None,
+                    data: real_arr,
+                });
+            }
+
+            let zero_a = a_data.clone() * 0.0;
+            let zero_b = b_data.clone() * 0.0;
+            let a_i = a_imag.as_ref().unwrap_or(&zero_a);
+            let b_i = b_imag.as_ref().unwrap_or(&zero_b);
+
+            let a_i_2 = a_i
+                .to_shape((batch_size * m, n))
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            let b_i_2 = b_i
+                .to_shape((n, p))
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+
+            let real_part = a2.dot(&b2) - a_i_2.dot(&b_i_2);
+            let imag_part = a2.dot(&b_i_2) + a_i_2.dot(&b2);
+
+            let mut result_shape = batch_dims.clone();
             result_shape.extend_from_slice(&[m, p]);
-            let arr = c
+            let real_arr = real_part
+                .into_shape_with_order(result_shape.clone())
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            let imag_arr = imag_part
                 .into_shape_with_order(result_shape)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
+
             return Ok(NdArray {
-                imag: None,
-                data: arr,
+                imag: Some(imag_arr),
+                data: real_arr,
             });
         }
 
@@ -655,15 +705,114 @@ fn solve(a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
             a_shape, b_shape
         )));
     }
+
+    let a_has_imag = a.imag.is_some();
+    let b_has_imag = b.imag.is_some();
+    let has_imag = a_has_imag || b_has_imag;
+
     match n {
         2 => {
             let det = a.data[[0, 0]] * a.data[[1, 1]] - a.data[[0, 1]] * a.data[[1, 0]];
             if det == 0.0 {
                 return Err(PyValueError::new_err("Singular matrix"));
             }
+
+            if !has_imag {
+                return Ok(NdArray {
+                    imag: None,
+                    data: solve2x2(&a.data, &b.data),
+                });
+            }
+
+            let zero_a = a.data.clone() * 0.0;
+            let zero_b = b.data.clone() * 0.0;
+            let a_i = a.imag.as_ref().unwrap_or(&zero_a);
+            let b_i = b.imag.as_ref().unwrap_or(&zero_b);
+
+            let det_real = det;
+            let det_imag = a.data[[0, 0]] * a_i[[1, 1]] + a_i[[0, 0]] * a.data[[1, 1]]
+                - a.data[[0, 1]] * a_i[[1, 0]]
+                - a_i[[0, 1]] * a.data[[1, 0]];
+
+            let det_sq = det_real * det_real + det_imag * det_imag;
+            if det_sq < 1e-24 {
+                return Err(PyValueError::new_err("Singular matrix"));
+            }
+
+            let inv_det_real = det_real / det_sq;
+            let inv_det_imag = -det_imag / det_sq;
+
+            let a11 = a.data[[0, 0]];
+            let a12 = a.data[[0, 1]];
+            let a21 = a.data[[1, 0]];
+            let a22 = a.data[[1, 1]];
+            let ai11 = a_i[[0, 0]];
+            let ai12 = a_i[[0, 1]];
+            let ai21 = a_i[[1, 0]];
+            let ai22 = a_i[[1, 1]];
+
+            let inv_a11_r = a22 * inv_det_real + ai22 * inv_det_imag;
+            let inv_a11_i = -a22 * inv_det_imag + ai22 * inv_det_real;
+            let inv_a12_r = -a12 * inv_det_real - ai12 * inv_det_imag;
+            let inv_a12_i = a12 * inv_det_imag - ai12 * inv_det_real;
+            let inv_a21_r = -a21 * inv_det_real - ai21 * inv_det_imag;
+            let inv_a21_i = a21 * inv_det_imag - ai21 * inv_det_real;
+            let inv_a22_r = a11 * inv_det_real + ai11 * inv_det_imag;
+            let inv_a22_i = -a11 * inv_det_imag + ai11 * inv_det_real;
+
+            let b_shape = b.data.shape().to_vec();
+            let real_result: Array<f64, IxDyn>;
+            let imag_result: Array<f64, IxDyn>;
+
+            if b_shape.len() == 1 {
+                let b0 = b.data[0];
+                let b1 = b.data[1];
+                let bi0 = b_i[0];
+                let bi1 = b_i[1];
+
+                let x0_r = inv_a11_r * b0 + inv_a12_r * b1 - inv_a11_i * bi0 - inv_a12_i * bi1;
+                let x0_i = inv_a11_i * b0 + inv_a12_i * b1 + inv_a11_r * bi0 + inv_a12_r * bi1;
+                let x1_r = inv_a21_r * b0 + inv_a22_r * b1 - inv_a21_i * bi0 - inv_a22_i * bi1;
+                let x1_i = inv_a21_i * b0 + inv_a22_i * b1 + inv_a21_r * bi0 + inv_a22_r * bi1;
+
+                real_result = Array::from_shape_vec(IxDyn(&[2]), vec![x0_r, x1_r])
+                    .unwrap()
+                    .into_dyn();
+                imag_result = Array::from_shape_vec(IxDyn(&[2]), vec![x0_i, x1_i])
+                    .unwrap()
+                    .into_dyn();
+            } else {
+                let b_n = b_shape[1];
+                let mut r_result = vec![0.0; 2 * b_n];
+                let mut i_result = vec![0.0; 2 * b_n];
+
+                for j in 0..b_n {
+                    let bj0 = b.data[[0, j]];
+                    let bj1 = b.data[[1, j]];
+                    let bij0 = b_i[[0, j]];
+                    let bij1 = b_i[[1, j]];
+
+                    r_result[j] =
+                        inv_a11_r * bj0 + inv_a12_r * bj1 - inv_a11_i * bij0 - inv_a12_i * bij1;
+                    i_result[j] =
+                        inv_a11_i * bj0 + inv_a12_i * bij0 + inv_a11_r * bj1 + inv_a12_r * bij1;
+                    r_result[b_n + j] =
+                        inv_a21_r * bj0 + inv_a22_r * bj1 - inv_a21_i * bij0 - inv_a22_i * bij1;
+                    i_result[b_n + j] =
+                        inv_a21_i * bj0 + inv_a22_i * bij0 + inv_a21_r * bj1 + inv_a22_r * bij1;
+                }
+
+                real_result = Array::from_shape_vec((2, b_n), r_result)
+                    .unwrap()
+                    .into_dyn();
+                imag_result = Array::from_shape_vec((2, b_n), i_result)
+                    .unwrap()
+                    .into_dyn();
+            }
+
             Ok(NdArray {
-                imag: None,
-                data: solve2x2(&a.data, &b.data),
+                imag: Some(imag_result),
+                data: real_result,
             })
         }
         3 => {
@@ -681,9 +830,186 @@ fn solve(a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
             if det == 0.0 {
                 return Err(PyValueError::new_err("Singular matrix"));
             }
+
+            if !has_imag {
+                return Ok(NdArray {
+                    imag: None,
+                    data: solve3x3(&a.data, &b.data),
+                });
+            }
+
+            let zero_a = a.data.clone() * 0.0;
+            let zero_b = b.data.clone() * 0.0;
+            let a_i = a.imag.as_ref().unwrap_or(&zero_a);
+            let b_i = b.imag.as_ref().unwrap_or(&zero_b);
+
+            let ai11 = a_i[[0, 0]];
+            let ai12 = a_i[[0, 1]];
+            let ai13 = a_i[[0, 2]];
+            let ai21 = a_i[[1, 0]];
+            let ai22 = a_i[[1, 1]];
+            let ai23 = a_i[[1, 2]];
+            let ai31 = a_i[[2, 0]];
+            let ai32 = a_i[[2, 1]];
+            let ai33 = a_i[[2, 2]];
+
+            let det_i = ai11 * (a22 * a33 - a23 * a32)
+                + a11 * (ai22 * a33 + a22 * ai33 - ai23 * a32 - a23 * ai32)
+                - ai12 * (a21 * a33 - a23 * a31)
+                - a12 * (ai21 * a33 + a21 * ai33 - ai23 * a31 - a23 * ai31)
+                + ai13 * (a21 * a32 - a22 * a31)
+                + a13 * (ai21 * a32 + a21 * ai32 - ai22 * a31 - a22 * ai31);
+
+            let det_sq = det * det + det_i * det_i;
+            if det_sq < 1e-24 {
+                return Err(PyValueError::new_err("Singular matrix"));
+            }
+
+            let inv_det_r = det / det_sq;
+            let inv_det_i = -det_i / det_sq;
+
+            let cof11_r = (a22 * a33 - a23 * a32) * inv_det_r
+                - (ai22 * a33 + a22 * ai33 - ai23 * a32 - a23 * ai32) * inv_det_i;
+            let cof11_i = (a22 * a33 - a23 * a32) * inv_det_i
+                + (ai22 * a33 + a22 * ai33 - ai23 * a32 - a23 * ai32) * inv_det_r;
+            let cof12_r = -(a21 * a33 - a23 * a31) * inv_det_r
+                + (ai21 * a33 + a21 * ai33 - ai23 * a31 - a23 * ai31) * inv_det_i;
+            let cof12_i = -(a21 * a33 - a23 * a31) * inv_det_i
+                - (ai21 * a33 + a21 * ai33 - ai23 * a31 - a23 * ai31) * inv_det_r;
+            let cof13_r = (a21 * a32 - a22 * a31) * inv_det_r
+                - (ai21 * a32 + a21 * ai32 - ai22 * a31 - a22 * ai31) * inv_det_i;
+            let cof13_i = (a21 * a32 - a22 * a31) * inv_det_i
+                + (ai21 * a32 + a21 * ai32 - ai22 * a31 - a22 * ai31) * inv_det_r;
+            let cof21_r = -(a12 * a33 - a13 * a32) * inv_det_r
+                + (ai12 * a33 + a12 * ai33 - ai13 * a32 - a13 * ai32) * inv_det_i;
+            let cof21_i = -(a12 * a33 - a13 * a32) * inv_det_i
+                - (ai12 * a33 + a12 * ai33 - ai13 * a32 - a13 * ai32) * inv_det_r;
+            let cof22_r = (a11 * a33 - a13 * a31) * inv_det_r
+                - (ai11 * a33 + a11 * ai33 - ai13 * a31 - a13 * ai31) * inv_det_i;
+            let cof22_i = (a11 * a33 - a13 * a31) * inv_det_i
+                + (ai11 * a33 + a11 * ai33 - ai13 * a31 - a13 * ai31) * inv_det_r;
+            let cof23_r = -(a11 * a32 - a12 * a31) * inv_det_r
+                + (ai11 * a32 + a11 * ai32 - ai12 * a31 - a12 * ai31) * inv_det_i;
+            let cof23_i = -(a11 * a32 - a12 * a31) * inv_det_i
+                - (ai11 * a32 + a11 * ai32 - ai12 * a31 - a12 * ai31) * inv_det_r;
+            let cof31_r = (a12 * a23 - a13 * a22) * inv_det_r
+                - (ai12 * a23 + a12 * ai23 - ai13 * a22 - a13 * ai22) * inv_det_i;
+            let cof31_i = (a12 * a23 - a13 * a22) * inv_det_i
+                + (ai12 * a23 + a12 * ai23 - ai13 * a22 - a13 * ai22) * inv_det_r;
+            let cof32_r = -(a11 * a23 - a13 * a21) * inv_det_r
+                + (ai11 * a23 + a11 * ai23 - ai13 * a21 - a13 * ai21) * inv_det_i;
+            let cof32_i = -(a11 * a23 - a13 * a21) * inv_det_i
+                - (ai11 * a23 + a11 * ai23 - ai13 * a21 - a13 * ai21) * inv_det_r;
+            let cof33_r = (a11 * a22 - a12 * a21) * inv_det_r
+                - (ai11 * a22 + a11 * ai22 - ai12 * a21 - a12 * ai21) * inv_det_i;
+            let cof33_i = (a11 * a22 - a12 * a21) * inv_det_i
+                + (ai11 * a22 + a11 * ai22 - ai12 * a21 - a12 * ai21) * inv_det_r;
+
+            let b_shape = b.data.shape().to_vec();
+            let real_result: Array<f64, IxDyn>;
+            let imag_result: Array<f64, IxDyn>;
+
+            if b_shape.len() == 1 {
+                let b0 = b.data[0];
+                let b1 = b.data[1];
+                let b2 = b.data[2];
+                let bi0 = b_i[0];
+                let bi1 = b_i[1];
+                let bi2 = b_i[2];
+
+                let x0_r = cof11_r * b0 + cof12_r * b1 + cof13_r * b2
+                    - cof11_i * bi0
+                    - cof12_i * bi1
+                    - cof13_i * bi2;
+                let x0_i = cof11_i * b0
+                    + cof12_i * b1
+                    + cof13_i * b2
+                    + cof11_r * bi0
+                    + cof12_r * bi1
+                    + cof13_r * bi2;
+                let x1_r = cof21_r * b0 + cof22_r * b1 + cof23_r * b2
+                    - cof21_i * bi0
+                    - cof22_i * bi1
+                    - cof23_i * bi2;
+                let x1_i = cof21_i * b0
+                    + cof22_i * b1
+                    + cof23_i * b2
+                    + cof21_r * bi0
+                    + cof22_r * bi1
+                    + cof23_r * bi2;
+                let x2_r = cof31_r * b0 + cof32_r * b1 + cof33_r * b2
+                    - cof31_i * bi0
+                    - cof32_i * bi1
+                    - cof33_i * bi2;
+                let x2_i = cof31_i * b0
+                    + cof32_i * b1
+                    + cof33_i * b2
+                    + cof31_r * bi0
+                    + cof32_r * bi1
+                    + cof33_r * bi2;
+
+                real_result = Array::from_shape_vec(IxDyn(&[3]), vec![x0_r, x1_r, x2_r])
+                    .unwrap()
+                    .into_dyn();
+                imag_result = Array::from_shape_vec(IxDyn(&[3]), vec![x0_i, x1_i, x2_i])
+                    .unwrap()
+                    .into_dyn();
+            } else {
+                let b_n = b_shape[1];
+                let mut r_result = vec![0.0; 3 * b_n];
+                let mut i_result = vec![0.0; 3 * b_n];
+
+                for j in 0..b_n {
+                    let bj0 = b.data[[0, j]];
+                    let bj1 = b.data[[1, j]];
+                    let bj2 = b.data[[2, j]];
+                    let bij0 = b_i[[0, j]];
+                    let bij1 = b_i[[1, j]];
+                    let bij2 = b_i[[2, j]];
+
+                    r_result[j] = cof11_r * bj0 + cof12_r * bj1 + cof13_r * bj2
+                        - cof11_i * bij0
+                        - cof12_i * bij1
+                        - cof13_i * bij2;
+                    i_result[j] = cof11_i * bj0
+                        + cof12_i * bij0
+                        + cof13_i * bij2
+                        + cof11_r * bij1
+                        + cof12_r * bj2
+                        + cof13_r * bj1;
+                    r_result[b_n + j] = cof21_r * bj0 + cof22_r * bj1 + cof23_r * bj2
+                        - cof21_i * bij0
+                        - cof22_i * bij1
+                        - cof23_i * bij2;
+                    i_result[b_n + j] = cof21_i * bj0
+                        + cof22_i * bij0
+                        + cof23_i * bij2
+                        + cof21_r * bij1
+                        + cof22_r * bj2
+                        + cof23_r * bj1;
+                    r_result[2 * b_n + j] = cof31_r * bj0 + cof32_r * bj1 + cof33_r * bj2
+                        - cof31_i * bij0
+                        - cof32_i * bij1
+                        - cof33_i * bij2;
+                    i_result[2 * b_n + j] = cof31_i * bj0
+                        + cof32_i * bij0
+                        + cof33_i * bij2
+                        + cof31_r * bij1
+                        + cof32_r * bj2
+                        + cof33_r * bj1;
+                }
+
+                real_result = Array::from_shape_vec((3, b_n), r_result)
+                    .unwrap()
+                    .into_dyn();
+                imag_result = Array::from_shape_vec((3, b_n), i_result)
+                    .unwrap()
+                    .into_dyn();
+            }
+
             Ok(NdArray {
-                imag: None,
-                data: solve3x3(&a.data, &b.data),
+                imag: Some(imag_result),
+                data: real_result,
             })
         }
         _ => Err(PyValueError::new_err(

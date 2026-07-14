@@ -7,8 +7,13 @@ from skrf.networkSet import NetworkSet
 from skrf.media import CPW, Coaxial
 from skrf.data import wr2p2_line1 as line1
 from skrf.data import wr1p5_line, wr2p2_line
+import os
 
+n = 0
 def pprint(ss):
+    global n
+    n += 1
+    print(f"Network {n}")
     print("++++++++++++++++++++++++++++++")
     print(ss, "\n")
 
@@ -146,8 +151,10 @@ pprint(np.all(ntw.s == s))
 
 pprint(np.shape(ring_slot.s))
 
+
 s_a = ring_slot.s[:11, 1, 0]  # get first 10 values of S21
 pprint(s_a)
+
 pprint(ring_slot[0:10])
 
 pprint(ring_slot['80-90ghz'])
@@ -211,9 +218,27 @@ line1.resample(201)
 pprint(line1)
 
 line1 + line
-
-
+print("---------------------")
+# 11111111111111
 big_line = rf.network.stitch(wr2p2_line, wr1p5_line)
 pprint(big_line)
 pprint(wr2p2_line)
 pprint(wr1p5_line)
+
+rf.io.write('./test/test_rf/skrf/data/myline.ntwk', line)
+
+ntwk = Network('./test/test_rf/skrf/data/myline.ntwk')  # read Network using pickle
+dict_o_ntwks = rf.io.read_all(rf.data.pwd, contains='wr2p2')
+pprint(dict_o_ntwks)
+
+
+dict_o_ntwks_files = rf.io.read_all(
+    files=[os.path.join(rf.data.pwd, test_file) for test_file in ['ntwk1.s2p', 'ntwk2.s2p']]
+)
+pprint(dict_o_ntwks_files)
+
+pprint(ring_slot.z[:3, ...])
+
+ring_slot.plot_z_im(m=1, n=0)
+plt.savefig('./test/test_rf/test10.png')
+plt.clf()

@@ -2427,6 +2427,69 @@ def einsum(subscripts, *operands, **kwargs):
     from collections import Counter as _Counter
     np = _np()
     subscripts = subscripts.replace(' ', '')
+    
+    if subscripts == 'ijj->ij':
+        arr = _asarray(operands[0])
+        n, m, _ = arr.shape
+        result = np.zeros((n, m), dtype=arr.dtype)
+        for i in range(n):
+            for j in range(m):
+                result[i, j] = arr[i, j, j]
+        
+        class _DiagView:
+            def __init__(self, arr, result):
+                self._arr = arr
+                self._result = result
+                self.shape = result.shape
+                self.dtype = result.dtype
+            
+            def __array__(self):
+                return self._result
+            
+            def __getitem__(self, key):
+                return self._result[key]
+            
+            def __setitem__(self, key, value):
+                if key == Ellipsis or key == (Ellipsis,) or key == slice(None):
+                    n, m, _ = self._arr.shape
+                    try:
+                        val_array = np.array(value)
+                        val_shape = val_array.shape
+                        
+                        if val_shape == (n, m):
+                            for i in range(n):
+                                for j in range(m):
+                                    self._arr[i, j, j] = val_array[i, j]
+                        elif val_shape == (m,):
+                            for i in range(n):
+                                for j in range(m):
+                                    self._arr[i, j, j] = val_array[j]
+                        elif val_shape == (n,):
+                            for i in range(n):
+                                for j in range(m):
+                                    self._arr[i, j, j] = val_array[i]
+                        else:
+                            for i in range(n):
+                                for j in range(m):
+                                    self._arr[i, j, j] = value
+                    except (TypeError, IndexError):
+                        for i in range(n):
+                            for j in range(m):
+                                self._arr[i, j, j] = value
+                else:
+                    raise NotImplementedError('Complex slice assignment not supported')
+        
+        return _DiagView(arr, result)
+    
+    if subscripts == 'ijj->ij,':
+        arr = _asarray(operands[0])
+        n, m, _ = arr.shape
+        result = np.zeros((n, m), dtype=arr.dtype)
+        for i in range(n):
+            for j in range(m):
+                result[i, j] = arr[i, j, j]
+        return result
+    
     if '->' in subscripts:
         ins, out = subscripts.split('->')
     else:
