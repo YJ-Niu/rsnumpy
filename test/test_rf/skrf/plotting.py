@@ -384,8 +384,7 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
     ax.plot([-smithR, smithR], [0, 0], color='k', lw=0.5)
     ax.grid(False)
     # Set axis limits by plotting white points so zooming works properly
-    ax.plot(smithR*np.array([-1.1, 1.1]), smithR *
-            np.array([-1.1, 1.1]), 'w.', markersize=0)
+    ax.plot(smithR*np.array([-1.1, 1.1]), smithR * np.array([-1.1, 1.1]), 'w.', markersize=0)
     ax.axis('image')  # Combination of 'equal' and 'tight'
 
     if not border:
@@ -393,7 +392,6 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
         ax.set_yticks([])
         for _name, spine in ax.spines.items():
             spine.set_color('none')
-
     if draw_labels:
         # Clear axis
         ax.set_xticks([])
@@ -598,8 +596,7 @@ def plot_polar(theta: NumberLike, r: NumberLike,
             # So, passing a axe projection not polar is probably undesired
             warnings.warn(
                 f"Projection of the Axes passed as `ax` is not 'polar' but is {
-                    ax.name}." +
-                "See rsplotlib documentation to create a polar plot or call this function without the `ax` parameter.",
+                    ax.name}." + "See rsplotlib documentation to create a polar plot or call this function without the `ax` parameter.",
                 stacklevel=2)
 
     ax.plot(theta, r, *args, **kwargs)
@@ -1471,8 +1468,7 @@ def _apply_style(plt, style: dict, font_scale: float = 1.0,
 
     grid_val = style.get('axes.grid', False)
     grid_on = grid_val is True or (
-        isinstance(grid_val, str)
-        and grid_val.strip().lower() in ('true', '1', 'yes', 'on'))
+        isinstance(grid_val, str) and grid_val.strip().lower() in ('true', '1', 'yes', 'on'))
     if grid_on:
         grid_kw = {}
         grid_color = _mplstyle_color(style.get('grid.color'))
@@ -1694,10 +1690,8 @@ def plot_uncertainty_bounds_component(
             ntwk_std = self.__getattribute__('std_'+attribute)
             ntwk_std.s = n_deviations * ntwk_std.s
 
-            upper_bound = (ntwk_mean.s[:, m, n] +
-                           ntwk_std.s[:, m, n]).squeeze()
-            lower_bound = (ntwk_mean.s[:, m, n] -
-                           ntwk_std.s[:, m, n]).squeeze()
+            upper_bound = (ntwk_mean.s[:, m, n] + ntwk_std.s[:, m, n]).squeeze()
+            lower_bound = (ntwk_mean.s[:, m, n] - ntwk_std.s[:, m, n]).squeeze()
 
             if ppf is not None:
                 if type == 'bar':
