@@ -410,9 +410,6 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
 
             # Annotate real part
             for value in rLightList:
-                # Set radius of real part's label; offset slightly left (Z
-                # chart, y_flip_sign == 1) or right (Y chart, y_flip_sign == -1)
-                # so label doesn't overlap chart's circles
                 rho = (value - 1)/(value + 1) - y_flip_sign*0.01
                 if y_flip_sign == 1:
                     halignstyle = "right"
@@ -422,12 +419,12 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
                     value = 1/value
                 ax.annotate(
                     str(value * ref_imm),
-                    xy=(rho * smithR, 0.01),
-                    xytext=(rho * smithR, 0.01),
-                    ha=halignstyle, va="baseline")
+                    xy=(rho * smithR, -0.06),
+                    xytext=(rho * smithR, -0.06),
+                    ha=halignstyle, va="top")
 
             # Annotate imaginary part
-            radialScaleFactor = 1.01  # Scale radius of label position by this
+            radialScaleFactor = 1.08  # Scale radius of label position by this
             # factor. Making it >1 places the label
             # outside the Smith chart's circle
             for value in xLightList:
@@ -462,12 +459,12 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
                 label_left, label_right = '0.0', r'$\infty$'
             else:  # y and yz charts
                 label_left, label_right = r'$\infty$', '0.0'
-            ax.annotate(label_left, xy=(-1.02, 0), xytext=(-1.02, 0),
+            ax.annotate(label_left, xy=(-1.12, 0), xytext=(-1.12, 0),
                         ha="right", va="center")
             ax.annotate(
                 label_right, xy=(
-                    radialScaleFactor, 0), xytext=(
-                    radialScaleFactor, 0), ha="left", va="center")
+                    1.08, 0), xytext=(
+                    1.08, 0), ha="left", va="center")
 
             # annotate vswr circles
             for vswr in vswrVeryLightList:
@@ -1296,7 +1293,7 @@ def plot_s_smith(
     # draw legend
     if show_legend:
         _legend(ax)
-    ax.axis(np.array([-1.1, 1.1, -1.1, 1.1])*r)
+    ax.axis(np.array([-1.25, 1.25, -1.25, 1.25])*r)
 
     if label_axes:
         ax.set_xlabel('Real')

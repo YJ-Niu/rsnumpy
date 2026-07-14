@@ -5955,7 +5955,10 @@ def parallelconnect(ntwks: Sequence[Network] | Network,
     out_ind = np.meshgrid(exter_indices, exter_indices, indexing='ij')
 
     # Update the concatenated intersection matrix
-    C[:, in_ind[0], in_ind[1]] = s
+    n_inter = len(inter_indices)
+    for i in range(n_inter):
+        for j in range(n_inter):
+            C[:, inter_indices[i], inter_indices[j]] = s[:, i, j]
 
     # Get the global scattering matrix
     s = X @ np.linalg.inv(np.identity(dim) - C @ X)

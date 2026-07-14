@@ -36,6 +36,9 @@ from ._dtypes import (
     DType, dtype, _make_flexible, _make_subarray,
     _build_struct, _scalar_typestr_short,
 )
+# ========== rec / ma 子模块（在顶层完全初始化后导入以避免循环依赖） ==========
+from . import ma
+from . import rec
 
 __version__ = "1.1.7"
 
@@ -3840,9 +3843,57 @@ def meshgrid(*xi, copy=True, sparse=False, indexing='xy'):
 
     默认使用 'xy' 索引（与 NumPy 一致），返回一维输入数组两两组合的网格。
     """
-    arrays = [_ensure(x) for x in xi]
-    grids = _core.meshgrid(*arrays, indexing=indexing)
-    return [ndarray._wrap(g) for g in grids]
+    arrays = []
+    for x in xi:
+        if hasattr(x, 'tolist'):
+            arrays.append([int(v) for v in x.tolist()])
+        elif isinstance(x, (list, tuple)):
+            arrays.append([int(v) for v in x])
+        else:
+            arrays.append([int(x)])
+    
+    n = len(arrays)
+    if n == 0:
+        return []
+    
+    shapes = [len(a) for a in arrays]
+    
+    if sparse:
+        result = []
+        for i in range(n):
+            if i == 0:
+                grid = ndarray([[arrays[i][j]] for j in range(shapes[i])])
+            else:
+                grid = ndarray([arrays[i]])
+            result.append(grid)
+        return result
+    
+    result = []
+    
+    for i in range(n):
+        if indexing == 'xy' and n == 2:
+            if i == 0:
+                grid = ndarray([[arrays[0][k] for k in range(shapes[0])] for _ in range(shapes[1])])
+            else:
+                grid = ndarray([[arrays[1][j] for _ in range(shapes[0])] for j in range(shapes[1])])
+        elif indexing == 'ij':
+            if n == 2:
+                if i == 0:
+                    grid = ndarray([[arrays[0][j] for _ in range(shapes[1])] for j in range(shapes[0])])
+                else:
+                    grid = ndarray([[arrays[1][k] for k in range(shapes[1])] for _ in range(shapes[0])])
+            elif n == 3:
+                grid = ndarray([[[arrays[i][j] if i == 0 else (arrays[i][k] if i == 1 else arrays[i][l_])
+                                 for l_ in range(shapes[2])]
+                                for k in range(shapes[1])]
+                               for j in range(shapes[0])])
+            else:
+                grid = ndarray([[arrays[i][j] for _ in range(shapes[1])] for j in range(shapes[0])])
+        else:
+            grid = ndarray([[arrays[i][j] for _ in range(shapes[1])] for j in range(shapes[0])])
+        result.append(grid)
+    
+    return result
 
 
 # ========== FFT ==========
@@ -4458,7 +4509,7 @@ __all__ = [
     'half', 'single', 'double', 'longdouble', 'csingle', 'cdouble', 'clongdouble',
     'True_', 'False_', 'little_endian', 'ScalarType', 'sctypeDict', 'typecodes',
     'issubdtype', 'finfo', 'iinfo', 'ndindex', 'ndenumerate', 'index_exp',
-    'dtype', 'DType',
+    'dtype', 'DType', 'rec', 'ma', 'recarray'
 ]
 
 
@@ -4499,10 +4550,3 @@ add.reduce = _make_ufunc_reduce(lambda a, ax: sum(a, ax))
 multiply.reduce = _make_ufunc_reduce(lambda a, ax: _extra_module.prod(a, ax))
 add.accumulate = _make_ufunc_accumulate(lambda a, ax: cumsum(a, ax))
 multiply.accumulate = _make_ufunc_accumulate(lambda a, ax: cumprod(a, ax))
-
-
-# ========== rec / ma 子模块（在顶层完全初始化后导入以避免循环依赖） ==========
-from . import ma as ma  # noqa: E402
-from . import rec as rec  # noqa: E402
-
-__all__ += ['rec', 'ma', 'recarray']
