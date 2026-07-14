@@ -65,6 +65,7 @@ fn median(x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
                 values[len / 2]
             };
             Ok(NdArray {
+                imag: None,
                 data: Array::from_elem(IxDyn(&[]), median_val),
             })
         }
@@ -113,7 +114,10 @@ fn median(x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
             new_shape.remove(ax);
             let result_arr = Array::from_shape_vec(IxDyn(&new_shape), result)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            Ok(NdArray { data: result_arr })
+            Ok(NdArray {
+                imag: None,
+                data: result_arr,
+            })
         }
     }
 }
@@ -161,11 +165,13 @@ fn average(
             if returned {
                 let data = vec![result_val, sum_weights];
                 Ok(NdArray {
+                    imag: None,
                     data: Array::from_shape_vec(IxDyn(&[2]), data)
                         .map_err(|e| PyValueError::new_err(e.to_string()))?,
                 })
             } else {
                 Ok(NdArray {
+                    imag: None,
                     data: Array::from_elem(IxDyn(&[]), result_val),
                 })
             }
@@ -245,11 +251,13 @@ fn average(
                 let mut result_shape = other_dims.clone();
                 result_shape.push(2);
                 Ok(NdArray {
+                    imag: None,
                     data: Array::from_shape_vec(IxDyn(&result_shape), combined)
                         .map_err(|e| PyValueError::new_err(e.to_string()))?,
                 })
             } else {
                 Ok(NdArray {
+                    imag: None,
                     data: Array::from_shape_vec(IxDyn(&other_dims), avg_results)
                         .map_err(|e| PyValueError::new_err(e.to_string()))?,
                 })
@@ -283,12 +291,14 @@ fn percentile(x: &NdArray, q: f64, axis: Option<isize>, keepdims: bool) -> PyRes
             if lower == upper || upper >= len {
                 let val = values[lower.min(len - 1)];
                 return Ok(NdArray {
+                    imag: None,
                     data: Array::from_elem(IxDyn(&[]), val),
                 });
             }
             let frac = idx - lower as f64;
             let val = values[lower] * (1.0 - frac) + values[upper] * frac;
             Ok(NdArray {
+                imag: None,
                 data: Array::from_elem(IxDyn(&[]), val),
             })
         }
@@ -349,7 +359,10 @@ fn percentile(x: &NdArray, q: f64, axis: Option<isize>, keepdims: bool) -> PyRes
             }
             let result_arr = Array::from_shape_vec(IxDyn(&new_shape), result)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            Ok(NdArray { data: result_arr })
+            Ok(NdArray {
+                imag: None,
+                data: result_arr,
+            })
         }
     }
 }
@@ -393,6 +406,7 @@ fn histogram<'py>(
                 Bound::new(
                     py,
                     NdArray {
+                        imag: None,
                         data: hist_arr.into_dyn(),
                     },
                 )?
@@ -400,6 +414,7 @@ fn histogram<'py>(
                 Bound::new(
                     py,
                     NdArray {
+                        imag: None,
                         data: edges_arr.into_dyn(),
                     },
                 )?
@@ -429,6 +444,7 @@ fn histogram<'py>(
             Bound::new(
                 py,
                 NdArray {
+                    imag: None,
                     data: hist_arr.into_dyn(),
                 },
             )?
@@ -436,6 +452,7 @@ fn histogram<'py>(
             Bound::new(
                 py,
                 NdArray {
+                    imag: None,
                     data: edges_arr.into_dyn(),
                 },
             )?
@@ -453,6 +470,7 @@ fn gradient(f: &NdArray) -> PyResult<NdArray> {
     }
     if n == 1 {
         return Ok(NdArray {
+            imag: None,
             data: Array::from_elem(IxDyn(&[]), 0.0),
         });
     }
@@ -464,7 +482,10 @@ fn gradient(f: &NdArray) -> PyResult<NdArray> {
     grad.push(values[n - 1] - values[n - 2]);
     let arr = Array::from_shape_vec(IxDyn(&[n]), grad)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 #[pyfunction]
@@ -508,7 +529,10 @@ fn diff(a: &NdArray, n: isize, axis: isize) -> PyResult<NdArray> {
         current = Array::from_shape_vec(IxDyn(&new_shape), new_data)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
     }
-    Ok(NdArray { data: current })
+    Ok(NdArray {
+        imag: None,
+        data: current,
+    })
 }
 
 #[pyfunction]
@@ -518,6 +542,7 @@ fn trapz(y: &NdArray, dx: f64) -> PyResult<NdArray> {
     let n = values.len();
     if n < 2 {
         return Ok(NdArray {
+            imag: None,
             data: Array::from_elem(IxDyn(&[]), 0.0),
         });
     }
@@ -526,6 +551,7 @@ fn trapz(y: &NdArray, dx: f64) -> PyResult<NdArray> {
         sum += (values[i] + values[i + 1]) / 2.0 * dx;
     }
     Ok(NdArray {
+        imag: None,
         data: Array::from_elem(IxDyn(&[]), sum),
     })
 }
@@ -549,6 +575,7 @@ fn bincount(x: &NdArray, minlength: usize) -> NdArray {
         }
     }
     NdArray {
+        imag: None,
         data: Array::from_shape_vec(IxDyn(&[n]), counts).unwrap(),
     }
 }
@@ -566,6 +593,7 @@ fn ptp(x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
                     (min.min(v), max.max(v))
                 });
             Ok(NdArray {
+                imag: None,
                 data: Array::from_elem(IxDyn(&[]), max_val - min_val),
             })
         }
@@ -597,7 +625,10 @@ fn ptp(x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
                 .collect();
             let result_arr = Array::from_shape_vec(IxDyn(min_vals.shape()), result)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            Ok(NdArray { data: result_arr })
+            Ok(NdArray {
+                imag: None,
+                data: result_arr,
+            })
         }
     }
 }
@@ -614,7 +645,10 @@ fn digitize(x: &NdArray, bins: &NdArray) -> PyResult<NdArray> {
         .collect();
     let arr = Array::from_shape_vec(IxDyn(&[result.len()]), result)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 // ========== 协方差矩阵 ==========
@@ -674,7 +708,10 @@ fn cov(a: &NdArray, rowvar: bool) -> PyResult<NdArray> {
     }
     let arr = Array::from_shape_vec(IxDyn(&[n_vars, n_vars]), flat)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 // ========== 2D 直方图 ==========
@@ -732,7 +769,13 @@ fn histogram2d_rs(x: &NdArray, y: &NdArray, bins: usize) -> PyResult<Histogram2D
         .map(|i| y_min + (y_max - y_min) * i as f64 / bins as f64)
         .collect();
 
-    Ok((NdArray { data: arr }, (x_edges, y_edges)))
+    Ok((
+        NdArray {
+            imag: None,
+            data: arr,
+        },
+        (x_edges, y_edges),
+    ))
 }
 
 // ========== 相关系数 ==========
@@ -759,7 +802,10 @@ fn corrcoef_rs(a: &NdArray) -> PyResult<NdArray> {
     }
     let arr = Array::from_shape_vec(IxDyn(&[n, n]), result)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 // ========== argmax/argmin 沿指定轴 ==========
@@ -769,7 +815,10 @@ fn argmax_axis(a: &NdArray, axis: Option<i32>) -> PyResult<NdArray> {
     if axis.is_none() {
         let idx = a.argmax()?;
         let arr = Array::from_elem(IxDyn(&[]), idx as f64);
-        return Ok(NdArray { data: arr });
+        return Ok(NdArray {
+            imag: None,
+            data: arr,
+        });
     }
     let ax = axis.unwrap() as usize;
     let shape = a.data.shape().to_vec();
@@ -806,7 +855,10 @@ fn argmax_axis(a: &NdArray, axis: Option<i32>) -> PyResult<NdArray> {
     }
     let arr = Array::from_shape_vec(IxDyn(&result_shape), values)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 #[pyfunction]
@@ -815,7 +867,10 @@ fn argmin_axis(a: &NdArray, axis: Option<i32>) -> PyResult<NdArray> {
     if axis.is_none() {
         let idx = a.argmin()?;
         let arr = Array::from_elem(IxDyn(&[]), idx as f64);
-        return Ok(NdArray { data: arr });
+        return Ok(NdArray {
+            imag: None,
+            data: arr,
+        });
     }
     let ax = axis.unwrap() as usize;
     let shape = a.data.shape().to_vec();
@@ -852,7 +907,10 @@ fn argmin_axis(a: &NdArray, axis: Option<i32>) -> PyResult<NdArray> {
     }
     let arr = Array::from_shape_vec(IxDyn(&result_shape), values)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {

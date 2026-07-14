@@ -15,6 +15,7 @@ fn concatenate(arrays: &Bound<'_, PyAny>, axis: usize) -> PyResult<NdArray> {
     let result = ndarray::concatenate(Axis(axis), &views)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(NdArray {
+        imag: None,
         data: result.into_dyn(),
     })
 }
@@ -52,6 +53,7 @@ fn stack(arrays: &Bound<'_, PyAny>, axis: usize) -> PyResult<NdArray> {
     let result = ndarray::concatenate(Axis(axis), &views)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(NdArray {
+        imag: None,
         data: result.into_dyn(),
     })
 }
@@ -72,7 +74,12 @@ fn swapaxes(a: &NdArray, axis1: usize, axis2: usize) -> PyResult<NdArray> {
     }
     let mut arr = a.data.clone();
     arr.swap_axes(axis1, axis2);
-    Ok(NdArray { data: arr })
+    let imag = a.imag.as_ref().map(|im| {
+        let mut m = im.clone();
+        m.swap_axes(axis1, axis2);
+        m
+    });
+    Ok(NdArray { imag, data: arr })
 }
 
 #[pyfunction]
@@ -84,7 +91,10 @@ fn resize_rs(a: &NdArray, new_shape: Vec<usize>) -> PyResult<NdArray> {
     if flat_data.is_empty() {
         let arr = Array::from_shape_vec(IxDyn(&new_shape), Vec::new())
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        return Ok(NdArray { data: arr });
+        return Ok(NdArray {
+            imag: None,
+            data: arr,
+        });
     }
 
     let mut result = Vec::with_capacity(new_size);
@@ -94,7 +104,10 @@ fn resize_rs(a: &NdArray, new_shape: Vec<usize>) -> PyResult<NdArray> {
 
     let arr = Array::from_shape_vec(IxDyn(&new_shape), result)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 #[pyfunction]
@@ -136,7 +149,10 @@ fn delete_rs(a: &NdArray, indices: Vec<isize>, axis: Option<isize>) -> PyResult<
             .collect();
         let arr = Array::from_shape_vec(IxDyn(&[result.len()]), result)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        return Ok(NdArray { data: arr });
+        return Ok(NdArray {
+            imag: None,
+            data: arr,
+        });
     }
 
     let ax = ax.unwrap();
@@ -164,7 +180,10 @@ fn delete_rs(a: &NdArray, indices: Vec<isize>, axis: Option<isize>) -> PyResult<
     new_shape[ax] = axis_size - idx_set.len();
     let arr = Array::from_shape_vec(IxDyn(&new_shape), result)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 #[pyfunction]
@@ -208,7 +227,10 @@ fn insert_rs(
 
         let arr = Array::from_shape_vec(IxDyn(&[result.len()]), result)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        return Ok(NdArray { data: arr });
+        return Ok(NdArray {
+            imag: None,
+            data: arr,
+        });
     }
 
     let ax = ax.unwrap();
@@ -260,7 +282,10 @@ fn insert_rs(
     new_shape[ax] = new_axis_size;
     let arr = Array::from_shape_vec(IxDyn(&new_shape), result)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 #[pyfunction]
@@ -297,6 +322,7 @@ fn vstack(arrays: &Bound<'_, PyAny>) -> PyResult<NdArray> {
         let arr = Array::from_shape_vec((nrows, ncols), data)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
         return Ok(NdArray {
+            imag: None,
             data: arr.into_dyn(),
         });
     }
@@ -314,6 +340,7 @@ fn vstack(arrays: &Bound<'_, PyAny>) -> PyResult<NdArray> {
     let result =
         ndarray::concatenate(Axis(0), &views).map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(NdArray {
+        imag: None,
         data: result.into_dyn(),
     })
 }
@@ -334,6 +361,7 @@ fn hstack(arrays: &Bound<'_, PyAny>) -> PyResult<NdArray> {
     let result = ndarray::concatenate(Axis(axis), &views)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(NdArray {
+        imag: None,
         data: result.into_dyn(),
     })
 }
@@ -342,6 +370,7 @@ fn hstack(arrays: &Bound<'_, PyAny>) -> PyResult<NdArray> {
 fn tile(a: &NdArray, reps: Vec<usize>) -> PyResult<NdArray> {
     if reps.is_empty() {
         return Ok(NdArray {
+            imag: None,
             data: a.data.clone(),
         });
     }
@@ -365,6 +394,7 @@ fn tile(a: &NdArray, reps: Vec<usize>) -> PyResult<NdArray> {
         }
     }
     Ok(NdArray {
+        imag: None,
         data: result.into_dyn(),
     })
 }
@@ -422,7 +452,10 @@ fn flatten_full(a: &NdArray, order: &str) -> PyResult<NdArray> {
 
         let arr = Array::from_shape_vec(IxDyn(&[flat_f.len()]), flat_f)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Ok(NdArray { data: arr })
+        Ok(NdArray {
+            imag: None,
+            data: arr,
+        })
     } else {
         Ok(a.flatten())
     }
@@ -448,7 +481,10 @@ fn expand_dims(a: &NdArray, axis: isize) -> PyResult<NdArray> {
         .clone()
         .into_shape_with_order(IxDyn(&shape))
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 #[pyfunction]
@@ -480,6 +516,7 @@ fn column_stack(arrays: &Bound<'_, PyAny>) -> PyResult<NdArray> {
     let result =
         ndarray::concatenate(Axis(1), &views).map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(NdArray {
+        imag: None,
         data: result.into_dyn(),
     })
 }
@@ -499,6 +536,7 @@ fn roll(a: &NdArray, shift: isize, axis: Option<isize>) -> PyResult<NdArray> {
     };
     if ndim == 0 {
         return Ok(NdArray {
+            imag: None,
             data: a.data.clone(),
         });
     }
@@ -520,7 +558,10 @@ fn roll(a: &NdArray, shift: isize, axis: Option<isize>) -> PyResult<NdArray> {
     }
     let arr = Array::from_shape_vec(IxDyn(&shape), result)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray { data: arr })
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
 }
 
 #[pyfunction]
@@ -546,7 +587,10 @@ fn rot90(a: &NdArray, k: isize) -> PyResult<NdArray> {
             .map_err(|e| PyValueError::new_err(e.to_string()))?
             .into_dyn();
     }
-    Ok(NdArray { data: result })
+    Ok(NdArray {
+        imag: None,
+        data: result,
+    })
 }
 
 #[pyfunction]
@@ -563,7 +607,10 @@ fn broadcast_to(a: &NdArray, shape: &Bound<'_, PyAny>) -> PyResult<NdArray> {
             ))
         })?
         .to_owned();
-    Ok(NdArray { data: broadcast })
+    Ok(NdArray {
+        imag: None,
+        data: broadcast,
+    })
 }
 
 // ========== 翻转数组 ==========
@@ -582,7 +629,10 @@ fn flip(a: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
             }
             let arr = Array::from_shape_vec(IxDyn(&shape), result)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            Ok(NdArray { data: arr })
+            Ok(NdArray {
+                imag: None,
+                data: arr,
+            })
         }
         Some(ax) => {
             let ax = if ax < 0 {
@@ -607,7 +657,10 @@ fn flip(a: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
             }
             let arr = Array::from_shape_vec(IxDyn(&shape), result)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            Ok(NdArray { data: arr })
+            Ok(NdArray {
+                imag: None,
+                data: arr,
+            })
         }
     }
 }
@@ -686,7 +739,10 @@ fn split_rs(
             let section_data: Vec<f64> = Vec::new();
             let arr = Array::from_shape_vec(IxDyn(&empty_shape), section_data)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            result.push(NdArray { data: arr });
+            result.push(NdArray {
+                imag: None,
+                data: arr,
+            });
             continue;
         }
         let section_size = end - start;
@@ -704,7 +760,10 @@ fn split_rs(
         }
         let arr = Array::from_shape_vec(IxDyn(&new_shape), section_data)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        result.push(NdArray { data: arr });
+        result.push(NdArray {
+            imag: None,
+            data: arr,
+        });
     }
     Ok(result)
 }

@@ -107,6 +107,7 @@ fn complex_vec_to_ndarray(result: Vec<FftComplex<f64>>) -> NdArray {
         flat_data.push(c.im);
     }
     NdArray {
+        imag: None,
         data: Array::from_shape_vec(IxDyn(&[result_len, 2]), flat_data).unwrap(),
     }
 }
@@ -156,6 +157,7 @@ pub fn py_irfft_ndarray(_py: Python<'_>, a: &NdArray, n: Option<usize>) -> PyRes
         }
         let result = irfft_1d(&complex_vec, n);
         Ok(NdArray {
+            imag: None,
             data: Array::from_shape_vec(IxDyn(&[result.len()]), result).unwrap(),
         })
     })

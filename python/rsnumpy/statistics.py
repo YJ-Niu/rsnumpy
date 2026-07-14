@@ -1,5 +1,7 @@
 """统计函数模块 - 所有实现位于 Rust，这里仅保留薄包装。"""
 
+import builtins as _builtins
+
 import rsnumpy._core as _core
 
 
@@ -24,6 +26,89 @@ def _ensure_raw(a):
     return _core.ndarray(a)
 
 
+def _is_complex_raw(a):
+    raw = a._array if hasattr(a, '_array') else a
+    return bool(getattr(raw, 'is_complex', False))
+
+
+def _flatten_c(data):
+    out = []
+
+    def rec(d):
+        if isinstance(d, list):
+            for x in d:
+                rec(x)
+        else:
+            out.append(d)
+
+    rec(data)
+    return out
+
+
+def _reshape_nested(flat, shape):
+    if not shape:
+        return flat[0]
+    if len(shape) == 1:
+        return list(flat)
+    block = 1
+    for s in shape[1:]:
+        block *= s
+    return [_reshape_nested(flat[i * block:(i + 1) * block], shape[1:]) for i in range(shape[0])]
+
+
+def _py_var_std(a, axis, ddof, want_std):
+    """方差/标准差的原生实现（无外部依赖），支持实数与复数数组。
+
+    与 numpy 语义一致：var = mean(|x - mean|^2)，std = sqrt(var)；复数输入结果为实数。
+    支持 axis=None 或整数 axis。用于补齐 Rust 端在高维/复数场景下的能力缺口。
+    """
+    a_arr = a if hasattr(a, '_array') else _nd()(a)
+    shape = list(a_arr.shape)
+    flat = _flatten_c(a_arr.tolist())
+
+    def reduce_vals(vals):
+        n = len(vals)
+        m = _builtins.sum(vals) / n
+        v = _builtins.sum(abs(x - m) ** 2 for x in vals) / (n - ddof)
+        return (v ** 0.5) if want_std else v
+
+    if axis is None:
+        return reduce_vals(flat)
+
+    nd = len(shape)
+    if axis < 0:
+        axis += nd
+    strides = [1] * nd
+    for i in range(nd - 2, -1, -1):
+        strides[i] = strides[i + 1] * shape[i + 1]
+    axis_len = shape[axis]
+    axis_stride = strides[axis]
+    out_shape = shape[:axis] + shape[axis + 1:]
+    out_strides = strides[:axis] + strides[axis + 1:]
+    out_size = 1
+    for s in out_shape:
+        out_size *= s
+
+    result = []
+    idx = [0] * len(out_shape)
+    for _ in range(out_size):
+        base = 0
+        for k, ix in enumerate(idx):
+            base += ix * out_strides[k]
+        vals = [flat[base + t * axis_stride] for t in range(axis_len)]
+        result.append(reduce_vals(vals))
+        for k in range(len(out_shape) - 1, -1, -1):
+            idx[k] += 1
+            if idx[k] < out_shape[k]:
+                break
+            idx[k] = 0
+
+    nested = _reshape_nested(result, out_shape)
+    if not out_shape:
+        return nested
+    return _nd()(nested)
+
+
 def sum(a, axis=None, dtype=None, out=None, keepdims=False, initial=None, where=True):
     """计算数组元素之和。"""
     _ = dtype, out, keepdims, initial, where
@@ -38,9 +123,21 @@ def mean(a, axis=None, dtype=None, out=None, keepdims=False, where=True):
     return _wrap(_core.mean(_ensure_raw(a), axis))
 
 
+def _needs_py_var_std(a, axis):
+    """判断是否需要走原生实现：复数，或 Rust 端不支持的高维（ndim>=3）+ 指定 axis。"""
+    if _is_complex_raw(a):
+        return True
+    if axis is None:
+        return False
+    raw = a._array if hasattr(a, '_array') else None
+    return raw is not None and len(raw.shape) >= 3
+
+
 def std(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False, where=True):
     """计算数组元素的标准差。"""
     _ = dtype, out, keepdims, where
+    if _needs_py_var_std(a, axis):
+        return _py_var_std(a, axis, ddof, want_std=True)
     raw_result = _core.std(_ensure_raw(a), axis)
     arr_dtype = getattr(a, '_dtype', 'float64') if hasattr(a, '_dtype') else 'float64'
     return _nd()(raw_result, _dtype=arr_dtype)
@@ -49,6 +146,8 @@ def std(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False, where=True):
 def var(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False, where=True):
     """计算数组元素的方差。"""
     _ = dtype, out, keepdims, where
+    if _needs_py_var_std(a, axis):
+        return _py_var_std(a, axis, ddof, want_std=False)
     raw_result = _core.var(_ensure_raw(a), axis)
     arr_dtype = getattr(a, '_dtype', 'float64') if hasattr(a, '_dtype') else 'float64'
     return _nd()(raw_result, _dtype=arr_dtype)
@@ -299,6 +398,8 @@ def searchsorted(a, v, side='left', sorter=None):
     """查找元素在有序数组中的插入位置。"""
     _ = sorter
     arr = a if hasattr(a, '_array') else _wrap(a)
+    if hasattr(v, '_array') and len(v.shape) == 0:
+        v = float(v.item())
     return _core.searchsorted(_ensure_raw(arr), v, side)
 
 
