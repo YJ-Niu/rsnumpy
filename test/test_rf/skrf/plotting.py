@@ -51,6 +51,7 @@ Convenience plotting functions
 
 """
 from __future__ import annotations
+import rsplotlib.pyplot as plt
 
 import os
 from collections.abc import Callable
@@ -96,7 +97,7 @@ def _legend(target, *args, **kwargs):
     if 'edgecolor' not in kwargs:
         kwargs['edgecolor'] = '#999999'
     if 'facecolor' not in kwargs:
-        kwargs['facecolor'] = '#f5f5f5'
+        kwargs['facecolor'] = 'white'
     return target.legend(*args, **kwargs)
 
 
@@ -122,7 +123,6 @@ def axes_kwarg(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         try:
-            import rsplotlib.pyplot as plt
             ax = kwargs.pop('ax', None)
             if ax is None:
                 ax = plt.gca()
@@ -144,7 +144,6 @@ def figure(*args, **kwargs) -> Figure:
     """
 
     try:
-        import rsplotlib.pyplot as plt
         return plt.figure(*args, **kwargs)
     except ImportError as err:
         raise RuntimeError("Plotting is not available") from err
@@ -161,14 +160,12 @@ def subplots(*args, **kwargs) -> tuple[Figure, np.ndarray]:
     """
 
     try:
-        import rsplotlib.pyplot as plt
         return plt.subplots(*args, **kwargs)
     except ImportError as err:
         raise RuntimeError("Plotting is not available") from err
 
 
 def _get_label_str(netw: Network, param: str, m: int, n: int) -> str:
-    import rsplotlib.pyplot as plt
 
     label_string = ""
     if netw.name is not None:
@@ -382,14 +379,10 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
 
     # draw the real axis as the chart's horizontal diameter
     ax.plot([-smithR, smithR], [0, 0], color='k', lw=0.5)
-    ax.grid(False)
     # Set axis limits by plotting white points so zooming works properly
-    ax.plot(smithR*np.array([-1.1, 1.1]), smithR * np.array([-1.1, 1.1]), 'w.', markersize=0)
+    ax.plot(smithR*np.array([-1.05, 1.05]), smithR * np.array([-1.05, 1.05]), 'w.', markersize=0)
     ax.axis('image')  # Combination of 'equal' and 'tight'
-
     if not border:
-        ax.set_xticks([])
-        ax.set_yticks([])
         for _name, spine in ax.spines.items():
             spine.set_color('none')
     if draw_labels:
@@ -402,7 +395,7 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
         # Make annotations only if the radius is 1
         if smithR == 1:
             # Make room for annotation
-            ax.plot(np.array([-1.25, 1.25]),
+            ax.plot(np.array([-1.1, 1.1]),
                     np.array([-1.1, 1.1]), 'w.', markersize=0)
             ax.axis('image')
 
@@ -510,8 +503,6 @@ def plot_rectangular(x: NumberLike, y: NumberLike,
     \*args, \*\*kwargs : passed to pylab.plot
 
     """
-    import rsplotlib.pyplot as plt
-
     if ax is None:
         ax = plt.gca()
 
@@ -533,12 +524,22 @@ def plot_rectangular(x: NumberLike, y: NumberLike,
 
     if axis is not None:
         ax.autoscale(True, 'x', True)
-        ax.autoscale(True, 'y', False)
-
-        ylim = ax.get_ylim()
-        y_range = ylim[1] - ylim[0]
+        ax.autoscale(True, 'y', True)
+        
+        y_min_val = np.min(y)
+        y_max_val = np.max(y)
+        if hasattr(y_min_val, 'tolist'):
+            y_min_val = y_min_val.tolist()
+        if hasattr(y_max_val, 'tolist'):
+            y_max_val = y_max_val.tolist()
+        
+        current_ylim = ax.get_ylim()
+        new_ylim_min = min(current_ylim[0], y_min_val)
+        new_ylim_max = max(current_ylim[1], y_max_val)
+        
+        y_range = new_ylim_max - new_ylim_min
         padding = y_range * 0.1
-        ax.set_ylim(ylim[0] - padding, ylim[1] + padding)
+        ax.set_ylim(new_ylim_min - padding, new_ylim_max + padding)
 
     if plt.isinteractive():
         plt.draw()
@@ -581,8 +582,7 @@ def plot_polar(theta: NumberLike, r: NumberLike,
     plot_smith : plot complex data on smith chart
 
     """
-    import rsplotlib.pyplot as plt
-
+ 
     if ax is None:
         # no Axes passed
         # if an existing (polar) plot is already present, grab and use its Axes
@@ -764,10 +764,9 @@ def plot_smith(
     plot_complex_polar : plot complex data on polar plane
     plot_smith : plot complex data on smith chart
     """
-    import rsplotlib.pyplot as plt
-
+ 
     if ax is None:
-        ax = plt.gca()
+        ax = plt.gca(1, 1, figsize=(7, 8))
 
     # rsplotlib exposes no drawn-patch introspection, so (re)draw the chart
     # unless the caller suppresses it via force_chart
@@ -819,8 +818,7 @@ def subplot_params(ntwk: Network, param: str = 's', proj: str = 'db',
         rsplotlib Axes
 
     """
-    import rsplotlib.pyplot as plt
-
+ 
     subplot_kw = subplot_kw if subplot_kw else {}
     if newfig:
         f, axs = plt.subplots(ntwk.nports, ntwk.nports,
@@ -867,8 +865,7 @@ def shade_bands(edges: NumberLike, y_range: tuple | None = None,
     --------
     >>> rf.shade_bands([325,500,750,1100], alpha=.2)
     """
-    import rsplotlib.pyplot as plt
-
+ 
     cmap = plt.cm.get_cmap(cmap)
     if not isinstance(y_range, tuple | list) or (len(y_range) != 2):
         y_range = plt.gca().get_ylim()
@@ -900,8 +897,7 @@ def save_all_figs(dir: str = './', format: None | list[str] = None,
     echo : bool, optional.
         True prints filenames as they are saved. Default is True.
     """
-    import rsplotlib.pyplot as plt
-
+ 
     if echo is not None:
         warnings.warn(
             "`echo` parameter is deprecated and will be removed in future versions. "
@@ -1027,8 +1023,7 @@ def func_on_all_figs(func: Callable, *args, **kwargs):
     --------
     >>> rf.func_on_all_figs(grid, alpha=.3)
     """
-    import rsplotlib.pyplot as plt
-
+ 
     for fig_n in plt.get_fignums():
         fig = plt.figure(fig_n)
         for ax_n in fig.axes:
@@ -1056,8 +1051,7 @@ def plot_vector(a: complex, off: complex = 0+0j, **kwargs):
     -------
     quiver : rsplotlib.pyplot.quiver
     """
-    import rsplotlib.pyplot as plt
-
+ 
     return plt.quiver(off.real, off.imag, a.real, a.imag, scale_units='xy',
                       angles='xy', scale=1, **kwargs)
 
@@ -1070,8 +1064,7 @@ def colors() -> list[str]:
     -------
     colors : List[str]
     """
-    import rsplotlib.pyplot as plt
-
+ 
     return [c['color'] for c in plt.rcParams['axes.prop_cycle']]
 
 
@@ -1097,8 +1090,7 @@ def plot_passivity(netw: Network, port=None, label_prefix=None, **kwargs):
     --------
     passivity
     """
-    import rsplotlib.pyplot as plt
-
+ 
     name = '' if netw.name is None else netw.name
 
     if port is None:
@@ -1127,8 +1119,7 @@ def plot_reciprocity(netw: Network, db=False, *args, **kwargs):
     --------
     reciprocity
     """
-    import rsplotlib.pyplot as plt
-
+ 
     for m in range(netw.nports):
         for n in range(netw.nports):
             if m > n:
@@ -1160,8 +1151,7 @@ def plot_reciprocity2(netw: Network, db=False, *args, **kwargs):
     --------
     reciprocity
     """
-    import rsplotlib.pyplot as plt
-
+ 
     for m in range(netw.nports):
         for n in range(netw.nports):
             if m > n:
@@ -1250,18 +1240,15 @@ def plot_s_smith(
 
     Examples
     --------
-    >>> myntwk.plot_s_smith()
-    >>> myntwk.plot_s_smith(m=0,n=1,color='b', marker='x')
     """
     # TODO: prevent this from re-drawing smith chart if one already
     # exists on current set of axes
 
     # get current axis if user doesn't supply and axis
-    import rsplotlib.pyplot as plt
-
+ 
     if ax is None:
-        ax = plt.gca()
-
+        ax = plt.gca(1, 1, figsize=(8, 8))
+        plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
     if m is None:
         M = range(netw.number_of_ports)
     else:
@@ -1330,8 +1317,7 @@ def plot_it_all(netw: Network, *args, **kwargs):
     >>> from skrf.data import ring_slot
     >>> ring_slot.plot_it_all()
     """
-    import rsplotlib.pyplot as plt
-
+ 
     plt.clf()
     plt.subplot(221)
     netw.plot_s_db(*args, **kwargs)
@@ -1427,7 +1413,7 @@ def _apply_style(plt, style: dict, font_scale: float = 1.0,
     if font_size:
         plt.rcParams['font.size'] = font_size
 
-    ax = plt.gca()
+    ax = plt.gca(1, 1, figsize=(7, 8))
     fig = plt.gcf()
 
     if dpi:
@@ -1520,8 +1506,7 @@ def stylely(rc_dict: dict = None, style_file: str = 'skrf.mplstyle',
     Unsupported keys such as ``axes.prop_cycle`` (line color cycle) are ignored.
     """
     try:
-        import rsplotlib.pyplot as plt
-
+     
         from .data import pwd  # delayed to solve circular import
     except ImportError as e:
         warnings.warn(
@@ -1582,8 +1567,7 @@ def animate(self: NetworkSet, attr: str = 's_deg', ylims: tuple = (-5, 5),
     >>> ns.animate('s_deg', ylims=(-5,5), label=None)
 
     """
-    import rsplotlib.pyplot as plt
-
+ 
     was_interactive = plt.isinteractive()
     plt.ioff()
 
@@ -2026,7 +2010,6 @@ def plot_uncertainty_decomposition(self: NetworkSet, m: int = 0, n: int = 0):
         second s-parameter index
 
     """
-    import rsplotlib.pyplot as plt
     if self.name is not None:
         plt.title(
             f"Uncertainty Decomposition: {
@@ -2056,8 +2039,7 @@ def plot_logsigma(self: NetworkSet, label_axis: bool = True, *args, **kwargs):
     \*args, \*\*kwargs : arguments
         passed to self.std_s.plot_s_db()
     """
-    import rsplotlib.pyplot as plt
-
+ 
     self.std_s.plot_s_db(*args, **kwargs)
     if label_axis:
         plt.ylabel('Standard Deviation(dB)')
@@ -2101,9 +2083,7 @@ def signature(
     \*args,\*\*kw : arguments, keyword arguments
         passed to :func:`~pylab.imshow`
     """
-    import rsplotlib.pyplot as plt
     from rsplotlib.dates import date2num
-
     mat = np.array([self[k].__getattribute__(component)[:, m, n]
                     for k in range(len(self))])
 
@@ -2189,9 +2169,7 @@ def plot_contour(freq: Frequency,
         min or max.
 
     """
-    import rsplotlib.pyplot as plt
     from rsplotlib import tri
-
     from . import Network
 
     ri = np.linspace(0, 1, 50)

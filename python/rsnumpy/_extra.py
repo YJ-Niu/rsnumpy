@@ -1381,18 +1381,59 @@ def vander(x, N=None, increasing=False):
 
 def unwrap(p, discont=None, axis=-1, period=6.283185307179586):
     """相位解卷绕。"""
-    _ = axis
     np = _np()
-    data = _flat(p)
+    arr = _asarray(p)
+    shape = arr.shape
+    ndim = len(shape)
+    
+    if axis < 0:
+        axis = ndim + axis
+    
     if discont is None:
         discont = period / 2.0
-    out = list(data)
-    for i in range(1, len(out)):
-        delta = out[i] - out[i - 1]
-        steps = builtin_round(delta / period)
-        if abs(delta - steps * period) > discont or abs(delta) > discont:
-            out[i] -= steps * period
-    return np.array(out)
+    
+    if ndim == 0:
+        return arr
+    
+    data = arr.tolist()
+    
+    def unwrap_1d(seq):
+        out = list(seq)
+        for i in range(1, len(out)):
+            delta = out[i] - out[i - 1]
+            steps = builtin_round(delta / period)
+            if abs(delta - steps * period) > discont or abs(delta) > discont:
+                out[i] -= steps * period
+        return out
+    
+    if ndim == 1:
+        result = unwrap_1d(data)
+    elif ndim == 2:
+        if axis == 0:
+            result = [unwrap_1d([data[i][j] for i in range(shape[0])]) for j in range(shape[1])]
+            result = [[result[j][i] for j in range(shape[1])] for i in range(shape[0])]
+        else:
+            result = [unwrap_1d(row) for row in data]
+    elif ndim == 3:
+        if axis == 0:
+            result = [[[data[i][j][k] for i in range(shape[0])] for j in range(shape[1])] for k in range(shape[2])]
+            result = [[unwrap_1d(result[k][j]) for j in range(shape[1])] for k in range(shape[2])]
+            result = [[[result[k][j][i] for k in range(shape[2])] for j in range(shape[1])] for i in range(shape[0])]
+        elif axis == 1:
+            result = [[unwrap_1d(data[i][j]) for j in range(shape[1])] for i in range(shape[0])]
+        else:
+            result = [[unwrap_1d(row) for row in data[i]] for i in range(shape[0])]
+    else:
+        data = _flat(arr)
+        out = list(data)
+        for i in range(1, len(out)):
+            delta = out[i] - out[i - 1]
+            steps = builtin_round(delta / period)
+            if abs(delta - steps * period) > discont or abs(delta) > discont:
+                out[i] -= steps * period
+        result = out
+    
+    return np.array(result)
 
 
 # ========== 归约：all / any / round（顶层函数）==========

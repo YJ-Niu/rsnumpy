@@ -120,6 +120,117 @@ if not os.path.exists('odr'):
     submodules.remove('odr')
 del os
 
+import math
+import sys
+import types
+
+
+def _ellipk_scalar(m):
+    m = float(m)
+    a, b = 1.0, math.sqrt(1.0 - m)
+    for _ in range(100):
+        a_next = 0.5 * (a + b)
+        b = math.sqrt(a * b)
+        if abs(a_next - a) <= 1e-16 * abs(a_next):
+            a = a_next
+            break
+        a = a_next
+    return math.pi / (2.0 * a)
+
+
+def _make_scipy_special():
+    special = types.ModuleType("scipy.special")
+
+    def ellipk(m):
+        if hasattr(m, "tolist"):
+            m = m.tolist()
+
+        def _rec(v):
+            if isinstance(v, list):
+                return [_rec(x) for x in v]
+            return _ellipk_scalar(v)
+
+        result = _rec(m)
+        if isinstance(result, list):
+            import rsnumpy as _np
+            return _np.array(result)
+        return result
+
+    special.ellipk = ellipk
+    return special
+
+
+def _make_scipy_constants():
+    constants = types.ModuleType("scipy.constants")
+    constants.c = constants.speed_of_light = 299792458.0
+    constants.mu_0 = 1.25663706127e-06
+    constants.epsilon_0 = 8.8541878188e-12
+    constants.inch = 0.0254
+    constants.mil = constants.inch / 1000
+    return constants
+
+
+sys.modules["scipy.special"] = _make_scipy_special()
+sys.modules["scipy.constants"] = _make_scipy_constants()
+
+
+def _make_scipy_interpolate():
+    import rsnumpy as _np
+
+    interpolate = types.ModuleType("scipy.interpolate")
+
+    class interp1d:
+        def __init__(self, x, y, kind='linear', **kwargs):
+            self.x = x if hasattr(x, 'tolist') else _np.array(x)
+            self.y = y if hasattr(y, 'tolist') else _np.array(y)
+            self.kind = kind
+
+        def __call__(self, x_new):
+            x_new = x_new if hasattr(x_new, 'tolist') else _np.array(x_new)
+
+            x = self.x
+            y = self.y
+
+            if x_new.ndim == 0:
+                x_new_val = float(x_new.item())
+                if x_new_val <= x[0]:
+                    return y[0]
+                if x_new_val >= x[-1]:
+                    return y[-1]
+
+                for i in range(len(x) - 1):
+                    if x[i] <= x_new_val <= x[i+1]:
+                        t = (x_new_val - x[i]) / (x[i+1] - x[i])
+                        return y[i] * (1 - t) + y[i+1] * t
+
+                return y[-1]
+            else:
+                if y.ndim > 1:
+                    result_shape = list(x_new.shape) + list(y.shape[1:])
+                    result = _np.empty(result_shape, dtype=y.dtype)
+                else:
+                    result = _np.empty_like(x_new)
+
+                for i in range(len(x_new)):
+                    xi = float(x_new[i].item())
+                    if xi <= x[0]:
+                        result[i] = y[0]
+                    elif xi >= x[-1]:
+                        result[i] = y[-1]
+                    else:
+                        for j in range(len(x) - 1):
+                            if x[j] <= xi <= x[j+1]:
+                                t = (xi - x[j]) / (x[j+1] - x[j])
+                                result[i] = y[j] * (1 - t) + y[j+1] * t
+                                break
+                return result
+
+    interpolate.interp1d = interp1d
+    return interpolate
+
+
+sys.modules["scipy.interpolate"] = _make_scipy_interpolate()
+
 __all__ = submodules + [
     'LowLevelCallable',
     'test',
