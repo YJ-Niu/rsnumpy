@@ -12,6 +12,7 @@ __pycache__/
 *.so
 *.egg-info/
 dist/
+test_data/
 build/
 *.egg
 .venv/

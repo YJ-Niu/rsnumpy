@@ -28,6 +28,8 @@ Plots and Charts
     plot_uncertainty_bounds_s_db
     plot_uncertainty_bounds_s_time_db
 
+    plot_violin
+
     plot_passivity
     plot_logsigma
 
@@ -98,6 +100,8 @@ def _legend(target, *args, **kwargs):
         kwargs['edgecolor'] = '#999999'
     if 'facecolor' not in kwargs:
         kwargs['facecolor'] = 'white'
+    if len(args) == 0 and 'loc' not in kwargs:
+        kwargs['loc'] = 'upper right'
     return target.legend(*args, **kwargs)
 
 
@@ -1248,7 +1252,7 @@ def plot_s_smith(
  
     if ax is None:
         ax = plt.gca(1, 1, figsize=(8, 8))
-        plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
+        # plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
     if m is None:
         M = range(netw.number_of_ports)
     else:
@@ -1661,7 +1665,6 @@ def plot_uncertainty_bounds_component(
     """
 
     kwargs_error = kwargs_error if kwargs_error else {}
-
     if m is None:
         M = range(self[0].number_of_ports)
     else:
@@ -1699,23 +1702,42 @@ def plot_uncertainty_bounds_component(
                         plot_attribute = 's_time_db'
 
             if type == 'shade':
-                ntwk_mean.plot_s_re(ax=ax, m=m, n=n, **kwargs)
+                plot_kwargs = kwargs.copy()
+                if 'label' not in plot_kwargs:
+                    set_name = getattr(self, 'name', None)
+                    if set_name:
+                        plot_kwargs['label'] = f"{set_name}, S{m+1}{n+1}"
+                    else:
+                        plot_kwargs['label'] = f"S{m+1}{n+1}"
+                if 'linewidth' not in plot_kwargs:
+                    plot_kwargs['linewidth'] = 2
+                
+                # 先绘制线条
+                ntwk_mean.plot_s_re(ax=ax, m=m, n=n, **plot_kwargs)
+                
+                # 获取线条颜色
                 if color_error is None:
-                    color_error = ax.get_lines()[-1].get_color()
-                # plot the mean via plot_s_re against frequency.f_scaled, so the
-                # fill band must share that same x scale (rsplotlib ignores the
-                # scale_frequency_ticks FuncFormatter, see Network.plot_attribute)
+                    color_error = 'blue'
+                
+                # 再绘制填充区域
                 ax.fill_between(
                     ntwk_mean.frequency.f_scaled,
                     lower_bound.real,
                     upper_bound.real,
-                    alpha=alpha,
+                    alpha=0.1,
                     color=color_error,
                     **kwargs_error)
                 # ax.plot(ntwk_mean.frequency.f_scaled, ntwk_mean.s[:,m,n],*args,**kwargs)
-
+                
             elif type == 'bar':
-                ntwk_mean.plot_s_re(ax=ax, m=m, n=n, **kwargs)
+                plot_kwargs = kwargs.copy()
+                if 'label' not in plot_kwargs:
+                    set_name = getattr(self, 'name', None)
+                    if set_name:
+                        plot_kwargs['label'] = f"{set_name}, S{m+1}{n+1}"
+                    else:
+                        plot_kwargs['label'] = f"S{m+1}{n+1}"
+                ntwk_mean.plot_s_re(ax=ax, m=m, n=n, **plot_kwargs, label=plot_kwargs['label'])
                 if color_error is None:
                     color_error = ax.get_lines()[-1].get_color()
                 ax.errorbar(ntwk_mean.frequency.f_scaled[::markevery_error],
@@ -1914,7 +1936,7 @@ def plot_violin(
     similar.  Uncertainty for wrapped phase blows up at +-pi.
     """
 
-    freq = self.ntwk_set[0].f
+    freq = self.ntwk_set[0].frequency.f_scaled
 
     # default widths to 3/4 distance between frequencies
     if not widths and len(freq) > 1:
@@ -1924,17 +1946,21 @@ def plot_violin(
 
     data = np.array([getattr(p, attribute)[:, m, n] for p in self.ntwk_set])
 
-    ax.violinplot(
-        data,
-        freq,
-        widths=widths,
-        showmeans=showmeans,
-        showextrema=showextrema,
-        showmedians=showmedians,
-        quantiles=quantiles,
-        points=points,
-        bw_method=bw_method,
-        **kwargs)
+    try:
+        ax.violinplot(
+            data,
+            freq,
+            widths=widths,
+            showmeans=showmeans,
+            showextrema=showextrema,
+            showmedians=showmedians,
+            quantiles=quantiles,
+            points=points,
+            bw_method=bw_method,
+            **kwargs)
+    except AttributeError:
+        _plot_violin_fallback(
+            ax, data, freq, widths, showmeans, showextrema, showmedians, quantiles, points, bw_method, **kwargs)
 
     ax.set_xlabel(f'Frequency ({self.ntwk_set[0].frequency.unit})')
     # use only the function of the attribute
@@ -2337,3 +2363,82 @@ def plot_prop_polar(netw: Network, prop_name: str,
                 z=getattr(netw, prop_name)[:, m, n],
                 show_legend=show_legend, ax=ax,
                 **kwargs)
+
+
+def _get_scalar(val):
+    try:
+        if hasattr(val, 'item'):
+            return float(val.item())
+        return float(val)
+    except:
+        return float(val[0]) if hasattr(val, '__len__') and len(val) > 0 else 0.0
+
+def _plot_violin_fallback(ax, data, positions, widths, showmeans, showextrema, showmedians, quantiles, points, bw_method, **kwargs):
+    n_freq = len(positions)
+    n_samples = data.shape[0]
+
+    color = kwargs.get('color', 'C0')
+
+    positions_list = [_get_scalar(p) for p in positions]
+    widths_val = _get_scalar(widths)
+    if widths_val <= 0:
+        widths_val = 0.5
+
+    for i in range(n_freq):
+        freq_data = data[:, i]
+        
+        freq_data_list = [_get_scalar(v) for v in freq_data]
+        
+        mean_val = sum(freq_data_list) / len(freq_data_list)
+        variance = sum((v - mean_val)**2 for v in freq_data_list) / len(freq_data_list)
+        std_val = variance ** 0.5
+        
+        y_min_val = min(freq_data_list)
+        y_max_val = max(freq_data_list)
+        y_range = y_max_val - y_min_val
+        if y_range == 0:
+            y_range = std_val if std_val > 0 else 1.0
+        y_min_val -= y_range * 0.1
+        y_max_val += y_range * 0.1
+        
+        y_vals = np.linspace(y_min_val, y_max_val, points)
+        
+        kde_vals = np.zeros_like(y_vals)
+        for val in freq_data_list:
+            kde_vals += np.exp(-(y_vals - val)**2 / (2 * std_val**2))
+        
+        kde_vals = kde_vals / (n_samples * std_val * np.sqrt(2 * np.pi))
+        
+        max_kde_val = _get_scalar(kde_vals.max())
+        if max_kde_val > 0:
+            kde_vals = kde_vals / max_kde_val * widths_val
+        
+        pos_i = positions_list[i]
+        x_left = np.array([pos_i - _get_scalar(k) for k in kde_vals])
+        x_right = np.array([pos_i + _get_scalar(k) for k in kde_vals])
+        
+        try:
+            ax.fill_betweenx(y_vals, x_left, x_right, color=color, alpha=0.3)
+        except AttributeError:
+            try:
+                ax.fill_between(y_vals, x_left, x_right, color=color, alpha=0.3)
+            except:
+                pass
+        
+        ax.plot(x_left, y_vals, color=color, linewidth=0.5)
+        ax.plot(x_right, y_vals, color=color, linewidth=0.5)
+
+        if showextrema:
+            ax.plot(np.array([pos_i, pos_i]), np.array([y_min_val, y_max_val]), color=color, linewidth=1)
+        
+        if showmedians:
+            freq_data_sorted = sorted(freq_data_list)
+            n = len(freq_data_sorted)
+            if n % 2 == 0:
+                median_val = (freq_data_sorted[n//2 - 1] + freq_data_sorted[n//2]) / 2
+            else:
+                median_val = freq_data_sorted[n//2]
+            ax.plot(np.array([pos_i - widths_val*0.2, pos_i + widths_val*0.2]), np.array([median_val, median_val]), color=color, linewidth=1.5)
+        
+        if showmeans:
+            ax.plot(np.array([pos_i - widths_val*0.3, pos_i + widths_val*0.3]), np.array([mean_val, mean_val]), color=color, linewidth=1.5, linestyle='--')

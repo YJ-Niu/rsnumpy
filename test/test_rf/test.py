@@ -3,17 +3,26 @@ from skrf import Frequency, Network
 from skrf.data import ring_slot  # noqa: F811
 import rsnumpy as np
 import rsplotlib.pyplot as plt
+from rsplotlib import style
 from skrf.networkSet import NetworkSet
 from skrf.media import CPW, Coaxial
 from skrf.data import wr2p2_line1 as line1
 from skrf.data import wr1p5_line, wr2p2_line
 import os
 from skrf.data import ring_slot_meas
+from skrf.plotting import save_all_figs
+from skrf import plotting
+from skrf.circuit import Circuit
 
 def pprint(n, ss):
     print(f"Network {n}")
     print("++++++++++++++++++++++++++++++")
     print(ss, "\n")
+
+# 保存当前图
+def ssaver(name):
+    plt.savefig(name)
+    plt.clf()
 
 
 # ring_slot = rf.Network('data/ring slot.s2p')
@@ -45,19 +54,19 @@ pprint(7, f_match)
 
 rf.stylely(figsize=(20, 16), dpi=144)
 ring_slot.plot_s_db()
-plt.savefig('./test/test_rf/test1.png')
-plt.clf()
+# ssaver('./test/test_rf/test1.png')
+
 
 rf.stylely(figsize=(20, 16), dpi=144)
 ring_slot.plot_s_deg(m=0, n=1)
-plt.savefig('./test/test_rf/test2.png')
-plt.clf()
+# ssaver('./test/test_rf/test2.png')
+
 
 rf.stylely(figsize=(20, 16), dpi=144)
 ring_slot.plot_s_smith(lw=2)
 plt.title('Big ole Smith Chart')
-plt.savefig('./test/test_rf/test3.png')
-plt.clf()
+# ssaver('./test/test_rf/test3.png')
+
 
 print(rf.io.read_all('./test/test_rf/skrf/data/', contains='ro'))
 ro_dict = rf.io.read_all('./test/test_rf/skrf/data/', contains='ro')
@@ -70,12 +79,12 @@ ro_ns.std_s.plot_s_mag(label='S11')
 plt.ylabel('Standard Deviation')
 plt.title('Standard Deviation of RO')
 plt.legend()
-plt.savefig('./test/test_rf/ro_std_s.png')
-plt.clf()
+# ssaver('./test/test_rf/ro_std_s.png')
+
 
 ro_ns.plot_uncertainty_bounds_s_db(label='S11')
-plt.savefig('./test/test_rf/test4.png')
-plt.clf()
+# ssaver('./test/test_rf/test4.png')
+
 
 freq = Frequency(75, 110, 101, 'GHz')
 cpw = CPW(freq, w=10e-6, s=5e-6, ep_r=10.6)
@@ -96,8 +105,8 @@ ntwk = Network(frequency=freq, s=s, name='random values 2-port')
 pprint(13, ntwk)
 
 ntwk.plot_s_db()
-plt.savefig('./test/test_rf/test5.png')
-plt.clf()
+# ssaver('./test/test_rf/test5.png')
+
 
 # let's assume we have separate arrays for the frequency and s-parameters
 f = np.array([1, 2, 3, 4])  # in GHz
@@ -160,8 +169,8 @@ pprint(25, ring_slot.s11['80-90ghz'])
 
 rf.stylely()
 ring_slot.plot_s_smith()
-plt.savefig('./test/test_rf/test6.png')
-plt.clf()
+# ssaver('./test/test_rf/test6.png')
+
 
 plt.title('Ring Slot $S_{21}$')
 
@@ -169,9 +178,7 @@ rf.stylely()
 ring_slot.s11.plot_s_db(label='Full Band Response')
 ring_slot.s11['82-90ghz'].plot_s_db(lw=3, label='Band of Interest')
 plt.legend()
-plt.savefig('./test/test_rf/test7.png')
-plt.clf()
-
+# ssaver('./test/test_rf/test7.png')
 
 short - delayshort
 short + delayshort
@@ -180,12 +187,12 @@ pprint(26, short / delayshort)
 
 difference = (short - delayshort)
 difference.plot_s_mag(label='Mag of difference')
-plt.savefig('./test/test_rf/test8.png')
-plt.clf()
+# ssaver('./test/test_rf/test8.png')
+
 
 (delayshort/short).plot_s_deg(label='Detrended Phase')
-plt.savefig('./test/test_rf/test9.png')
-plt.clf()
+# ssaver('./test/test_rf/test9.png')
+
 
 hopen = (short*-1)
 pprint(27, hopen.s[:3, ...])
@@ -237,8 +244,8 @@ pprint(41, dict_o_ntwks_files)
 pprint(42, ring_slot.z[:3, ...])
 
 ring_slot.plot_z_im(m=1, n=0)
-plt.savefig('./test/test_rf/test10.png')
-plt.clf()
+# ssaver('./test/test_rf/test10.png')
+
 
 line = rf.data.wr2p2_line  # 2-port
 short = rf.data.wr2p2_short  # 1-port
@@ -277,21 +284,21 @@ line.z0 = [10, 20]
 pprint(49, rf.network.connect(tee, 1, line, 0))
 
 ring_slot.plot_s_smith()
-plt.savefig("./test/test_rf/test11.png")
-plt.clf()
+# ssaver("./test/test_rf/test11.png")
+
 
 rf.stylely()  # nicer looking. Can be configured with different styles
 ring_slot.plot_s_smith()
-plt.savefig("./test/test_rf/test12.png")
-plt.clf()
+# ssaver("./test/test_rf/test12.png")
+
 
 ring_slot.plot_s_smith(draw_labels=True)
-plt.savefig("./test/test_rf/test13.png")
-plt.clf()
+# ssaver("./test/test_rf/test13.png")
+
 
 ring_slot.plot_s_smith(chart_type='y')
-plt.savefig("./test/test_rf/test14.png")
-plt.clf()
+# ssaver("./test/test_rf/test14.png")
+
 
 # prepare markers
 lines = [
@@ -340,8 +347,8 @@ the_table = ax.table(cellText=cell_text,
 the_table.auto_set_font_size(False)
 the_table.set_fontsize(6)
 # the_table.scale(1.5, 1.5)
-plt.savefig("./test/test_rf/test15.png")
-plt.clf()
+# ssaver("./test/test_rf/test15.png")
+
 
 # prepare figure
 fig, ax = plt.subplots(1, 1, figsize=(8, 8))
@@ -352,62 +359,222 @@ fig, ax = plt.subplots(1, 1, figsize=(8, 8))
 rf.plotting.smith(ax=ax, draw_labels=True, ref_imm=1.0, chart_type='z')
 
 ring_slot.plot_s_smith(ax=ax, draw_chart=False)
-plt.savefig("./test/test_rf/test16.png")
-plt.clf()
+# ssaver("./test/test_rf/test16.png")
+
 
 ring_slot.plot_s_complex()
 
 rf.stylely()
 plt.axis('equal')  # otherwise circles won't be circles
-plt.savefig("./test/test_rf/test17.png")
-plt.clf()
+# ssaver("./test/test_rf/test17.png")
+
 
 rf.stylely()
 ring_slot.plot_s_db()
-plt.savefig("./test/test_rf/test18.png")
-plt.clf()
+# ssaver("./test/test_rf/test18.png")
+
 
 rf.stylely()
 ring_slot.plot_s_db(m=0, n=0, label='Theory')
 ring_slot_meas.plot_s_db(m=0, n=0, label='Measurement')
-plt.savefig("./test/test_rf/test19.png")
-plt.clf()
+# ssaver("./test/test_rf/test19.png")
+
 
 ring_slot.plot_s_deg()
-plt.savefig("./test/test_rf/test20.png")
-plt.clf()
+# ssaver("./test/test_rf/test20.png")
+
 
 ring_slot.plot_s_deg_unwrap()
-plt.savefig("./test/test_rf/test21.png")
-plt.clf()
+# ssaver("./test/test_rf/test21.png")
+
 
 gd = abs(ring_slot.s21.group_delay) * 1e9  # in ns
 
 ring_slot.plot(gd)
 plt.ylabel('Group Delay (ns)')
 plt.title('Group Delay of Ring Slot S21')
-plt.savefig("./test/test_rf/test22.png")
-plt.clf()
+# ssaver("./test/test_rf/test22.png")
+
 
 ring_slot.plot_z_im()
-plt.savefig('./test/test_rf/test23.png')
-plt.clf()
+# ssaver('./test/test_rf/test23.png')
+
 
 ring_slot.plot_y_im()
-plt.savefig('./test/test_rf/test24.png')
-plt.clf()
+# ssaver('./test/test_rf/test24.png')
+
 
 ring_slot.plot_s_db(m=0, n=0, label='Simulation')
-plt.savefig('./test/test_rf/test25.png')
-plt.clf()
+# ssaver('./test/test_rf/test25.png')
+
 
 ring_slot.frequency.unit = 'mhz'
 ring_slot.plot_s_db(0, 0)
-plt.savefig('./test/test_rf/test26.png')
-plt.clf()
+# ssaver('./test/test_rf/test26.png')
+
 
 ring_slot.frequency.unit = 'ghz'
 ring_slot.plot_s_db(m=0, n=0, linewidth=3, linestyle='--', label='Simulation')
-ring_slot_meas.plot_s_db(m=0, n=0, marker='o', markevery=10, label='Measured')
-plt.savefig('./test/test_rf/test27.png')
-plt.clf()
+ring_slot_meas.plot_s_db(m=0, n=0, marker='<', markevery=10, label='Measured')
+# ssaver('./test/test_rf/test27.png')
+
+
+mpl_style = "seaborn-ticks"
+try:
+    mpl_style = mpl_style if mpl_style in style.available else "seaborn-v0_8-ticks"
+except:
+    mpl_style = "seaborn-v0_8-ticks"
+with style.context(mpl_style):
+    ring_slot.plot_s_smith()
+    plt.xlabel('Real Part')
+    plt.ylabel('Imaginary Part')
+    plt.title('Smith Chart With Legend Room')
+    plt.axis([-1.1, 2.1, -1.1, 1.1])
+    plt.legend(loc=5)
+# ssaver('./test/test_rf/test28.png')
+
+
+save_all_figs('./test/test_rf', format=['png'])
+
+
+with plt.style.context('grayscale'):
+    ring_slot.plot_s_deg()
+    plotting.add_markers_to_lines()
+    plt.legend()  # have to re-generate legend
+
+    # ssaver('./test/test_rf/test29.png')
+    
+
+pprint(50, rf.io.read_all(rf.data.pwd, contains='ro'))
+
+ro_dict = rf.io.read_all(rf.data.pwd, contains='ro')
+ro_ns = NetworkSet(ro_dict, name='ro set')
+pprint(51, ro_ns)
+
+pprint(52, ro_ns[0])
+
+rf.stylely()
+ro_ns.plot_s_db()
+# ssaver('./test/test_rf/test30.png')
+
+
+pprint(53, ro_ns.mean_s)
+ro_ns.mean_s.plot_s_db(label='ro')
+# ssaver('./test/test_rf/test31.png')
+
+
+ro_ns.std_s.plot_s_re(y_label='Standard Deviations')
+# ssaver('./test/test_rf/test32.png')
+
+
+ro_ns.mean_s_deg.plot_s_re()
+# ssaver('./test/test_rf/test33.png')
+
+plt.close()
+
+ro_ns.plot_uncertainty_bounds_s_db()
+# ssaver('./test/test_rf/test34.png')
+
+
+ro_ns.plot_uncertainty_bounds_s_deg()
+# ssaver('./test/test_rf/test35.png')
+
+
+rf.stylely()
+ro_ns_interp = ro_ns.interpolate_frequency(rf.Frequency(500, 600, 15, "GHz"))
+ro_ns_interp.plot_violin("s_db")
+# ssaver('./test/test_rf/test36.png')
+
+
+rf.stylely()
+ro_ns_interp.plot_violin("s_deg")
+# ssaver('./test/test_rf/test37.png')
+
+
+pprint(58, ro_ns.write_touchstone(dir='./test/test_rf/test_data'))
+
+rf.io.write('./test/test_rf/test_data/ro set.ns', ro_ns)
+
+ro_ns = rf.io.read('./test/test_rf/test_data/ro set.ns')
+pprint(59, ro_ns)
+
+ro_ns.write_spreadsheet('./test/test_rf/test_data/ro_spreadsheet.csv', form='db')
+
+params = [{'a': 0, 'X': 10, 'c': 'A'},
+          {'a': 1, 'X': 10, 'c': 'A'},
+          {'a': 2, 'X': 10, 'c': 'A'},
+          {'a': 1, 'X': 20, 'c': 'A'},
+          {'a': 0, 'X': 20, 'c': 'A'},
+          ]
+# create a NetworkSet made of dummy Networks, each define for set of parameters
+freq1 = rf.Frequency(75, 110, 101, 'ghz')
+rng = np.random.default_rng()
+ntwks_params = [rf.Network(frequency=freq1, s=rng.uniform(size=(len(freq1), 2, 2)),
+                           name=f'ntwk_{m}', comment=f'ntwk_{m}', params=params) for (m, params) in enumerate(params)]
+ns = rf.networkSet.NetworkSet(ntwks_params)
+pprint(60, ns)
+
+pprint(61, ns.sel({'a': 1}))
+
+pprint(62, ns.sel({'a': 0, 'X': 10}))
+
+pprint(63, ns.sel({'a': 0, 'X': [10, 20]}))
+
+pprint(64, ns.sel({'a': [0, 1], 'X': [10, 20]}))
+pprint(65, ns.dims)
+
+pprint(66, ns.coords)
+
+param_x = [1, 2, 3]  # a parameter associated to each Network
+x0 = 1.5  # parameter value to interpolate for
+interp_ntwk = ro_ns.interpolate_from_network(param_x, x0)
+pprint(67, interp_ntwk)
+
+rf.stylely()
+Z_0 = 50
+Z_L = 75
+theta = 0
+
+# the necessary Frequency description
+freq = rf.Frequency(start=1, stop=2, unit='GHz', npoints=3)
+
+# The combination of a transmission line + a load can be created
+# using the convenience delay_load method
+# important: all the Network must have the parameter "name" defined
+tline_media = rf.media.DefinedGammaZ0(freq, z0=Z_0)
+delay_load = tline_media.delay_load(rf.tlineFunctions.zl_2_Gamma0(Z_0, Z_L), theta, unit='deg', name='delay_load')
+
+# the input port of the circuit is defined with the Circuit.Port method
+port1 = Circuit.Port(freq, 'port1', z0=Z_0)
+
+# connection list
+cnx = [
+    [(port1, 0), (delay_load, 0)]
+]
+# building the circuit
+cir = Circuit(cnx)
+
+# getting the resulting Network from the 'network' parameter:
+ntw = cir.network
+pprint(68, ntw)
+
+# as expected the reflection coefficient is:
+pprint(69, ntw.s[0])
+
+port1 = Circuit.Port(freq, 'port1', z0=Z_0)
+# piece of transmission line and series impedance
+trans_line = tline_media.line(theta, unit='deg', name='trans_line')
+load = tline_media.resistor(Z_L, name='delay_load')
+# ground network (short)
+ground = Circuit.Ground(freq, name='ground')
+
+# connection list
+cnx = [
+    [(port1, 0), (trans_line, 0)],
+    [(trans_line, 1), (load, 0)],
+    [(load, 1), (ground, 0)]
+]
+# building the circuit
+cir = Circuit(cnx)
+# the result if the same :
+pprint(70, cir.network.s[0])

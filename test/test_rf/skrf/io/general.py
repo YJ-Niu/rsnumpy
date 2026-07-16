@@ -333,7 +333,7 @@ def read_all(dir: str | Path = '.', sort=True, contains=None, f_unit=None,
         for filename in glob.iglob(
                 os.path.join(
                     dir,
-                    '*.s*p'),
+                    f'{contains}*.s*p'),
                 recursive=recursive):
             filelist.append(filename)
     else:
@@ -343,8 +343,7 @@ def read_all(dir: str | Path = '.', sort=True, contains=None, f_unit=None,
         filelist.sort()
 
     for filename in filelist:
-        if contains is not None and contains not in filename:
-            continue
+
         fullname = filename
         keyname = os.path.splitext(filename.split(os.path.sep)[-1])[0]
         try:
@@ -662,7 +661,7 @@ def network_2_spreadsheet(
     Write a Network object to a spreadsheet, for your boss.
 
     Write the s-parameters  of a network to a spreadsheet, in a variety
-    of forms. This functions makes use of the pandas module, which in
+    of forms. This functions makes use of the rspandas module, which in
     turn makes use of the xlrd module. These are imported during this
     function call. For more details about the file-writing functions
     see the `pandas.DataFrom.to_???` functions.
@@ -694,7 +693,7 @@ def network_2_spreadsheet(
     --------
     networkset_2_spreadsheet : writes a spreadsheet for many networks
     """
-    from pandas import DataFrame, Series
+    from rspandas import DataFrame, Series
 
     file_extns = {'csv': 'csv', 'excel': 'xls', 'html': 'html'}
 
@@ -734,12 +733,16 @@ def network_2_spreadsheet(
                 Series(ntwk.s_im[:, m, n], index=index)
 
     df = DataFrame(d)
-    df.__getattribute__(
-        f'to_{file_type}')(
-        file_name,
-        index_label=f'Freq({
-            ntwk.frequency.unit})',
-        **kwargs)
+
+    if file_type == 'csv':
+        df.to_csv(file_name)
+    elif file_type == 'excel':
+        if 'excel_writer' in kwargs:
+            df.to_excel(kwargs['excel_writer'], sheet_name=kwargs.get('sheet_name', 'Sheet1'))
+        else:
+            df.to_excel(file_name, sheet_name='Sheet1')
+    elif file_type == 'html':
+        raise NotImplementedError('rspandas does not support to_html')
 
 
 def network_2_dataframe(ntwk: Network,
@@ -748,7 +751,7 @@ def network_2_dataframe(ntwk: Network,
                                           int]] = None,
                         port_sep: str | None = None):
     """
-    Convert one or more attributes of a network to a pandas DataFrame.
+    Convert one or more attributes of a network to a rspandas DataFrame.
 
     Parameters
     ----------
@@ -767,9 +770,9 @@ def network_2_dataframe(ntwk: Network,
 
     Returns
     -------
-    df : pandas DataFrame Object
+    df : rspandas DataFrame Object
     """
-    from pandas import DataFrame
+    from rspandas import DataFrame
 
     if attrs is None:
         attrs = ["s_db"]
@@ -800,7 +803,7 @@ def networkset_2_spreadsheet(
     spreadsheet. If the `excel` file_type is used, then each network,
     is written to its own sheet, with the sheetname taken from the
     network `name` attribute.
-    This functions makes use of the pandas module, which in turn makes
+    This functions makes use of the rspandas module, which in turn makes
     use of the xlrd module. These are imported during this function.
 
 
@@ -830,22 +833,36 @@ def networkset_2_spreadsheet(
     --------
     networkset_2_spreadsheet : writes a spreadsheet for many networks
     """
-    from pandas import ExcelWriter
+    from rspandas import ExcelWriter
+    import os
 
     if ntwkset.name is None and file_name is None:
         raise (ValueError('Either ntwkset must have name or give a file_name'))
     if file_name is None:
         file_name = ntwkset.name
 
-    if file_type == 'excel':
-        # add file extension if missing
+    _, ext = os.path.splitext(file_name)
+    ext = ext.lower().lstrip('.')
+
+    if ext in ['csv', 'xls', 'html']:
+        if ext == 'csv':
+            file_type = 'csv'
+        elif ext == 'xls':
+            file_type = 'excel'
+        elif ext == 'html':
+            file_type = 'html'
+    else:
+        file_type = 'excel'
         if not file_name.endswith('.xlsx'):
             file_name += '.xlsx'
+
+    if file_type == 'excel':
         with ExcelWriter(file_name) as writer:
-            [network_2_spreadsheet(
-                k, writer, sheet_name=k.name, **kwargs) for k in ntwkset]
+            for k in ntwkset:
+                network_2_spreadsheet(k, writer, sheet_name=k.name, **kwargs)
     else:
-        [network_2_spreadsheet(k, *args, **kwargs) for k in ntwkset]
+        for k in ntwkset:
+            network_2_spreadsheet(k, file_name, file_type, *args, **kwargs)
 
 
 StringBuffer = StringIO

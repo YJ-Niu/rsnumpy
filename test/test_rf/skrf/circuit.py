@@ -100,7 +100,7 @@ from itertools import chain
 from typing import TYPE_CHECKING, TypedDict
 
 import rsnumpy as np
-from typing_extensions import NotRequired, Unpack
+from .typing_extensions import NotRequired, Unpack
 
 from .constants import S_DEF_DEFAULT
 from .media import media
