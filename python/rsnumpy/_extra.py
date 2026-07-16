@@ -2550,6 +2550,111 @@ def einsum(subscripts, *operands, **kwargs):
             for j in range(m):
                 result[i, j] = arr[i, j, j]
         return result
+
+    if subscripts == 'kii->ki':
+        arr = _asarray(operands[0])
+        n, m, _ = arr.shape
+        result = np.zeros((n, m), dtype=arr.dtype)
+        for i in range(n):
+            for j in range(m):
+                result[i, j] = arr[i, j, j]
+        
+        class _KiiKiView:
+            def __init__(self, arr, result):
+                self._arr = arr
+                self._result = result
+                self.shape = result.shape
+                self.dtype = result.dtype
+            
+            def __array__(self):
+                return self._result
+            
+            def __getitem__(self, key):
+                return self._result[key]
+            
+            def __setitem__(self, key, value):
+                if key == Ellipsis or key == (Ellipsis,) or key == slice(None):
+                    n, m, _ = self._arr.shape
+                    try:
+                        val_array = np.array(value)
+                        val_shape = val_array.shape
+                        
+                        if val_shape == (n, m):
+                            for i in range(n):
+                                for j in range(m):
+                                    self._arr[i, j, j] = val_array[i, j]
+                        elif val_shape == (m,):
+                            for i in range(n):
+                                for j in range(m):
+                                    self._arr[i, j, j] = val_array[j]
+                        elif val_shape == (n,):
+                            for i in range(n):
+                                for j in range(m):
+                                    self._arr[i, j, j] = val_array[i]
+                        else:
+                            for i in range(n):
+                                for j in range(m):
+                                    self._arr[i, j, j] = value
+                    except (TypeError, IndexError):
+                        for i in range(n):
+                            for j in range(m):
+                                self._arr[i, j, j] = value
+                else:
+                    raise NotImplementedError('Complex slice assignment not supported')
+        
+        return _KiiKiView(arr, result)
+
+    if '...' in subscripts:
+        arr = _asarray(operands[0])
+        ndim = arr.ndim
+        if subscripts == '...ii->...i':
+            diag_dims = arr.shape[-2:]
+            if diag_dims[0] != diag_dims[1]:
+                raise ValueError('Last two dimensions must be equal for ...ii->...i')
+            result_shape = arr.shape[:-2] + (diag_dims[0],)
+            result = np.zeros(result_shape, dtype=arr.dtype)
+            for i in range(diag_dims[0]):
+                result[..., i] = arr[..., i, i]
+            
+            class _EllipsisDiagView:
+                def __init__(self, arr, result):
+                    self._arr = arr
+                    self._result = result
+                    self.shape = result.shape
+                    self.dtype = result.dtype
+                
+                def __array__(self):
+                    return self._result
+                
+                def __getitem__(self, key):
+                    return self._result[key]
+                
+                def __setitem__(self, key, value):
+                    if key == Ellipsis or key == (Ellipsis,) or key == slice(None):
+                        n = arr.shape[-1]
+                        try:
+                            val_array = np.array(value)
+                            val_shape = val_array.shape
+                            
+                            if val_shape == result_shape:
+                                for i in range(n):
+                                    self._arr[..., i, i] = val_array[..., i]
+                            elif val_shape == (n,):
+                                for i in range(n):
+                                    self._arr[..., i, i] = val_array[i]
+                            elif len(val_shape) == len(result_shape) - 1:
+                                for i in range(n):
+                                    self._arr[..., i, i] = val_array[...]
+                            else:
+                                for i in range(n):
+                                    self._arr[..., i, i] = value
+                        except (TypeError, IndexError):
+                            for i in range(n):
+                                self._arr[..., i, i] = value
+                    else:
+                        raise NotImplementedError('Complex slice assignment not supported')
+            
+            return _EllipsisDiagView(arr, result)
     
     if '->' in subscripts:
         ins, out = subscripts.split('->')

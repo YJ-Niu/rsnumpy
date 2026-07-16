@@ -578,3 +578,9 @@ cnx = [
 cir = Circuit(cnx)
 # the result if the same :
 pprint(70, cir.network.s[0])
+
+cir.plot_graph(network_labels=True, network_fontsize=15,
+               port_labels=True, port_fontsize=15,
+               edge_labels=True, edge_fontsize=10)
+
+ssaver('./test/test_rf/test38.png')

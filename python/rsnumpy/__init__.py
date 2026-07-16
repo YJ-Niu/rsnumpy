@@ -534,6 +534,10 @@ class ndarray:
                         start = k.start if k.start is not None else 0
                         stop = k.stop if k.stop is not None else dim_size
                         step = k.step if k.step is not None else 1
+                        if hasattr(start, '__index__'):
+                            start = start.__index__()
+                        if hasattr(stop, '__index__'):
+                            stop = stop.__index__()
                         target_shape.append(_py_max(0, (stop - start + step - 1) // step))
                     elif isinstance(k, int):
                         continue
@@ -562,6 +566,9 @@ class ndarray:
             return self.copy()
         if _is_ndarray(other):
             return _wrap_result(self._array + other._array, dt)
+        if isinstance(other, (tuple, list)):
+            other_arr = ndarray(other)
+            return _wrap_result(self._array + other_arr._array, dt)
         return _wrap_result(self._array + other, dt)
 
     def __radd__(self, other):
@@ -716,7 +723,8 @@ class ndarray:
         raw = getattr(self, '_raw_data', None)
         arr = getattr(self, '_array', None)
         if raw is not None and arr is not None:
-            return self._array.shape
+            rust_shape = self._array.shape
+            return tuple(int(s) if hasattr(s, '__index__') else s for s in rust_shape)
         if raw is not None:
             # 从嵌套列表递归计算形状
             shape = []
@@ -972,6 +980,15 @@ class ndarray:
         """获取单个元素。"""
         return _ndarray_methods().item(self, *args)
 
+    def __index__(self):
+        """支持将 0 维数组用作整数索引或切片参数。"""
+        if self.ndim == 0:
+            val = self.item()
+            if isinstance(val, float):
+                return int(val)
+            return val
+        raise TypeError(f"only 0-dimensional arrays can be converted to integers, got {self.ndim}D")
+
     def take(self, indices, axis=None):
         """根据索引取元素。"""
         return _ndarray_methods().take(self, indices, axis)
@@ -1146,7 +1163,6 @@ def _is_ndarray(obj):
 def _wrap_result(result, dtype="float64"):
     """将原始 ndarray 结果包装到 ndarray 类中。"""
     if hasattr(result, '__class__') and result.__class__.__name__ == 'ndarray':
-        # 原生复数结果：dtype 强制为 complex128，覆盖调用方的推导。
         if getattr(result, 'is_complex', False):
             dtype = "complex128"
         return ndarray._wrap(result, _dtype=dtype)
@@ -1210,12 +1226,51 @@ def _matmul_fallback(a, b):
     a_shape = a.shape
     b_shape = b.shape
     
-    if len(a_shape) == len(b_shape) == 3:
+    if len(a_shape) == 3 and len(b_shape) == 3:
         batch_size = a_shape[0]
         result = empty((batch_size, a_shape[1], b_shape[2]), dtype=a._dtype)
         for i in range(batch_size):
             result[i] = a[i] @ b[i]
         return result
+    
+    if len(a_shape) == 3 and len(b_shape) == 2:
+        batch_size = a_shape[0]
+        a_rows, a_cols = a_shape[1], a_shape[2]
+        b_rows, b_cols = b_shape[0], b_shape[1]
+        
+        if a_cols == b_rows:
+            result = empty((batch_size, a_rows, b_cols), dtype=a._dtype)
+            for i in range(batch_size):
+                result[i] = a[i] @ b
+            return result
+        
+        if batch_size == b_rows and a_cols == b_cols:
+            result = empty((batch_size, a_rows, 1), dtype=a._dtype)
+            for i in range(batch_size):
+                ai = a[i]
+                bi = b[i:i+1].T
+                result[i] = ai @ bi
+            return result
+        
+        if b_rows == 1 and a_cols == b_cols:
+            result = empty((batch_size, a_rows, 1), dtype=a._dtype)
+            for i in range(batch_size):
+                for r in range(a_rows):
+                    s = 0.0
+                    for c in range(a_cols):
+                        s += a[i, r, c] * b[0, c]
+                    result[i, r, 0] = s
+            return result
+    
+    if len(a_shape) == 2 and len(b_shape) == 3:
+        batch_size = b_shape[0]
+        result = empty((batch_size, a_shape[0], b_shape[2]), dtype=a._dtype)
+        for i in range(batch_size):
+            result[i] = a @ b[i]
+        return result
+    
+    if len(a_shape) == 2 and len(b_shape) == 2:
+        return _core.linalg.matmul(a._array, b._array)
     
     raise ValueError(f"Unsupported shapes for matmul: {a_shape} and {b_shape}")
 
