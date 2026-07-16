@@ -79,7 +79,7 @@ def attribute_mixing_matrix(G, attribute, nodes=None, mapping=None, normalized=T
 
     Returns
     -------
-    m: numpy array
+    m: rsnumpy array
        Counts or joint probability of occurrence of attribute pairs.
 
     Notes
@@ -181,7 +181,7 @@ def degree_mixing_matrix(
 
     Returns
     -------
-    m: numpy array
+    m: rsnumpy array
        Counts, or joint probability, of occurrence of node degree.
 
     Notes

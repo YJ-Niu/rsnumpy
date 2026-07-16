@@ -28,7 +28,7 @@ def laplacian_spectrum(G, weight="weight"):
 
     Returns
     -------
-    evals : NumPy array
+    evals : rsnumpy array
       Eigenvalues
 
     Notes
@@ -72,7 +72,7 @@ def normalized_laplacian_spectrum(G, weight="weight"):
 
     Returns
     -------
-    evals : NumPy array
+    evals : rsnumpy array
       Eigenvalues
 
     Notes
@@ -106,7 +106,7 @@ def adjacency_spectrum(G, weight="weight"):
 
     Returns
     -------
-    evals : NumPy array
+    evals : rsnumpy array
       Eigenvalues
 
     Notes
@@ -134,7 +134,7 @@ def modularity_spectrum(G):
 
     Returns
     -------
-    evals : NumPy array
+    evals : rsnumpy array
       Eigenvalues
 
     See Also
@@ -168,7 +168,7 @@ def bethe_hessian_spectrum(G, r=None):
 
     Returns
     -------
-    evals : NumPy array
+    evals : rsnumpy array
       Eigenvalues
 
     See Also

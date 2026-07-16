@@ -6,7 +6,7 @@ import networkx as nx
 from networkx.algorithms import approximation as approx
 from networkx.algorithms import threshold
 
-np = pytest.importorskip("numpy")
+np = pytest.importorskip("rsnumpy")
 
 progress = 0
 

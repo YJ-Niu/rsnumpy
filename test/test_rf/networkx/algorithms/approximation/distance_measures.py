@@ -95,7 +95,7 @@ def _two_sweep_undirected(G, seed):
 
     .. note::
 
-        ``seed`` is a random.Random or numpy.random.RandomState instance
+        ``seed`` is a random.Random or rsnumpy.random.RandomState instance
     """
     # select a random source node
     source = seed.choice(list(G))
@@ -127,7 +127,7 @@ def _two_sweep_directed(G, seed):
 
     .. note::
 
-        ``seed`` is a random.Random or numpy.random.RandomState instance
+        ``seed`` is a random.Random or rsnumpy.random.RandomState instance
     """
     # get a new digraph G' with the edges reversed in the opposite direction
     G_reversed = G.reverse()

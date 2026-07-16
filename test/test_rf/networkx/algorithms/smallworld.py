@@ -134,7 +134,7 @@ def lattice_reference(G, niter=5, D=None, connectivity=True, seed=None):
     niter : integer (optional, default=1)
         An edge is rewired approximately niter times.
 
-    D : numpy.array (optional, default=None)
+    D : rsnumpy.array (optional, default=None)
         Distance to the diagonal matrix.
 
     connectivity : boolean (optional, default=True)

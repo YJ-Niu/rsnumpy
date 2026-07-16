@@ -36,21 +36,21 @@ def test_lazy_import_impact_on_sys_modules():
     assert type(anything_not_real) is lazy.DelayedImportErrorModule
     assert "anything_not_real" not in sys.modules
 
-    # only do this if numpy is installed
-    np_test = pytest.importorskip("numpy")
-    np = lazy._lazy_import("numpy")
+    # only do this if rsnumpy is installed
+    np_test = pytest.importorskip("rsnumpy")
+    np = lazy._lazy_import("rsnumpy")
     assert isinstance(np, types.ModuleType)
-    assert "numpy" in sys.modules
+    assert "rsnumpy" in sys.modules
 
     np.pi  # trigger load of numpy
 
     assert isinstance(np, types.ModuleType)
-    assert "numpy" in sys.modules
+    assert "rsnumpy" in sys.modules
 
 
 def test_lazy_import_nonbuiltins():
     sp = lazy._lazy_import("scipy")
-    np = lazy._lazy_import("numpy")
+    np = lazy._lazy_import("rsnumpy")
     if isinstance(sp, lazy.DelayedImportErrorModule):
         try:
             sp.special.erf

@@ -184,7 +184,7 @@ def effective_size(G, nodes=None, weight=None):
         sum_mutual_weights = mutual_weights1.sum(axis=1) - mutual_weights1.diagonal()
         isolated_nodes = sum_mutual_weights == 0
         effective_size[isolated_nodes] = float("nan")
-        # Use tolist() to automatically convert numpy scalars -> Python scalars
+        # Use tolist() to automatically convert rsnumpy scalars -> Python scalars
         return dict(zip(G, effective_size.tolist()))
 
     # Results for only requested nodes
@@ -296,7 +296,7 @@ def constraint(G, nodes=None, weight=None):
         # Special treatment: isolated nodes marked with "nan"
         isolated_nodes = sum_mutual_weights - 2 * mutual_weights.diagonal() == 0
         constraints[isolated_nodes] = float("nan")
-        # Use tolist() to automatically convert numpy scalars -> Python scalars
+        # Use tolist() to automatically convert rsnumpy scalars -> Python scalars
         return dict(zip(G, constraints.tolist()))
 
     # Result for only requested nodes

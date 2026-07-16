@@ -78,7 +78,7 @@ def _configuration_model(
        ``deg_sequence`` and ``in_deg_sequence`` need not be the same
        length.
 
-    ``seed`` is a random.Random or numpy.random.RandomState instance
+    ``seed`` is a random.Random or rsnumpy.random.RandomState instance
 
     This function returns a graph, directed if and only if ``directed``
     is ``True``, generated according to the configuration model

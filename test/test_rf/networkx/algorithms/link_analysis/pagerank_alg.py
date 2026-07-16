@@ -212,7 +212,7 @@ def google_matrix(
 
     Returns
     -------
-    A : 2D NumPy ndarray
+    A : 2D rsnumpy ndarray
        Google matrix of the graph
 
     Notes
@@ -318,7 +318,7 @@ def _pagerank_numpy(
 
     Notes
     -----
-    The eigenvector calculation uses NumPy's interface to the LAPACK
+    The eigenvector calculation uses rsnumpy's interface to the LAPACK
     eigenvalue solvers.  This will be the fastest and most accurate
     for small graphs.
 
@@ -346,7 +346,7 @@ def _pagerank_numpy(
     M = google_matrix(
         G, alpha, personalization=personalization, weight=weight, dangling=dangling
     )
-    # use numpy LAPACK solver
+    # use rsnumpy LAPACK solver
     eigenvalues, eigenvectors = np.linalg.eig(M.T)
     ind = np.argmax(eigenvalues)
     # eigenvector of largest eigenvalue is at ind, normalized

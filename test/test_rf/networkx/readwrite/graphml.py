@@ -405,7 +405,7 @@ class GraphML:
             (bool, "boolean"),
         ]
 
-        # These additions to types allow writing numpy types
+        # These additions to types allow writing rsnumpy types
         try:
             import rsnumpy as np
         except:

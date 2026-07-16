@@ -953,9 +953,7 @@ class _dispatchable:
                             backend_name, graph_backend_names, args, kwargs
                         )
                         if (
-                            self._returns_graph
-                            and graph_backend_names
-                            and backend_name not in graph_backend_names
+                            self._returns_graph and graph_backend_names and backend_name not in graph_backend_names
                         ):
                             # If the function has graph inputs and graph output, we try
                             # to make it so the backend of the return type will match the
@@ -995,9 +993,7 @@ class _dispatchable:
                     backend_name, graph_backend_names, args, kwargs
                 )
                 if (
-                    self._returns_graph
-                    and graph_backend_names
-                    and backend_name not in graph_backend_names
+                    self._returns_graph and graph_backend_names and backend_name not in graph_backend_names
                 ):
                     _logger.debug(
                         "Call to '%s' is returning a graph from a different "
@@ -1184,10 +1180,7 @@ class _dispatchable:
                 preserve_edge_attrs = True
                 edge_attrs = None
             elif bound.arguments[preserve_edge_attrs] is False and (
-                isinstance(edge_attrs, str)
-                and edge_attrs == preserve_edge_attrs
-                or isinstance(edge_attrs, dict)
-                and preserve_edge_attrs in edge_attrs
+                isinstance(edge_attrs, str) and edge_attrs == preserve_edge_attrs or isinstance(edge_attrs, dict) and preserve_edge_attrs in edge_attrs
             ):
                 # e.g. `preserve_edge_attrs="attr"` and `func(attr=False)`
                 # Treat `False` argument as meaning "preserve_edge_data=False"
@@ -1250,10 +1243,7 @@ class _dispatchable:
                 preserve_node_attrs = True
                 node_attrs = None
             elif bound.arguments[preserve_node_attrs] is False and (
-                isinstance(node_attrs, str)
-                and node_attrs == preserve_node_attrs
-                or isinstance(node_attrs, dict)
-                and preserve_node_attrs in node_attrs
+                isinstance(node_attrs, str) and node_attrs == preserve_node_attrs or isinstance(node_attrs, dict) and preserve_node_attrs in node_attrs
             ):
                 # e.g. `preserve_node_attrs="attr"` and `func(attr=False)`
                 # Treat `False` argument as meaning "preserve_node_data=False"
@@ -1555,8 +1545,7 @@ class _dispatchable:
             # Only log the exception if we are adding an extra message
             # because we don't want to lose any information.
             _logger.debug(
-                "Failed to convert graphs from %s to '%s' backend for call to '%s'"
-                + ("" if extra_message is None else ": %s"),
+                "Failed to convert graphs from %s to '%s' backend for call to '%s'" + ("" if extra_message is None else ": %s"),
                 input_backend_names,
                 backend_name,
                 self.name,
@@ -1622,9 +1611,7 @@ class _dispatchable:
         # We sometimes compare the backend result (or input graphs) to the
         # original result (or input graphs), so we need two sets of arguments.
         compare_result_to_nx = (
-            self._returns_graph
-            and "networkx" in self.backends
-            and self.name
+            self._returns_graph and "networkx" in self.backends and self.name
             not in {
                 # Has graphs as node values (unable to compare)
                 "quotient_graph",
@@ -1661,8 +1648,7 @@ class _dispatchable:
                     else (arg, copy(arg))
                     if isinstance(arg, BytesIO | StringIO | Random | Generator)
                     else tee(arg)
-                    if isinstance(arg, Iterator)
-                    and not isinstance(arg, BufferedReader | TextIOWrapper)
+                    if isinstance(arg, Iterator) and not isinstance(arg, BufferedReader | TextIOWrapper)
                     else (arg, arg)
                     for arg in args
                 )
@@ -1677,8 +1663,7 @@ class _dispatchable:
                     else ((k, v), (k, copy(v)))
                     if isinstance(v, BytesIO | StringIO | Random | Generator)
                     else ((k, (teed := tee(v))[0]), (k, teed[1]))
-                    if isinstance(v, Iterator)
-                    and not isinstance(v, BufferedReader | TextIOWrapper)
+                    if isinstance(v, Iterator) and not isinstance(v, BufferedReader | TextIOWrapper)
                     else ((k, v), (k, v))
                     for k, v in kwargs.items()
                 )
@@ -1751,27 +1736,17 @@ class _dispatchable:
         # to the type expected from `self._returns_graph`. This handles tuple and list
         # return types, but *does not* catch functions that yield graphs.
         if (
-            self._returns_graph
-            != (
-                isinstance(result, nx.Graph)
-                or hasattr(result, "__networkx_backend__")
-                or isinstance(result, tuple | list)
-                and any(
-                    isinstance(x, nx.Graph) or hasattr(x, "__networkx_backend__")
-                    for x in result
-                )
-            )
-            and not (
+            self._returns_graph != (
+                isinstance(result, nx.Graph) or hasattr(result, "__networkx_backend__") or isinstance(
+                    result, tuple | list) and any(isinstance(x, nx.Graph) or hasattr(
+                        x, "__networkx_backend__") for x in result)
+            ) and not (
                 # May return Graph or None
-                self.name in {"check_planarity", "check_planarity_recursive"}
-                and any(x is None for x in result)
-            )
-            and not (
+                self.name in {"check_planarity", "check_planarity_recursive"} and any(x is None for x in result)
+            ) and not (
                 # May return Graph or dict
-                self.name in {"held_karp_ascent"}
-                and any(isinstance(x, dict) for x in result)
-            )
-            and self.name
+                self.name in {"held_karp_ascent"} and any(isinstance(x, dict) for x in result)
+            ) and self.name
             not in {
                 # yields graphs
                 "all_triads",
@@ -1785,7 +1760,7 @@ class _dispatchable:
         def check_result(val, depth=0):
             if isinstance(val, np.number):
                 raise RuntimeError(
-                    f"{self.name} returned a numpy scalar {val} ({type(val)}, depth={depth})"
+                    f"{self.name} returned a rsnumpy scalar {val} ({type(val)}, depth={depth})"
                 )
             if isinstance(val, np.ndarray | sparray):
                 return
@@ -1808,12 +1783,12 @@ class _dispatchable:
                     check_result(val)
                 except RuntimeError as exc:
                     raise RuntimeError(
-                        f"{self.name} returned a numpy scalar {val} ({type(val)})"
+                        f"{self.name} returned a rsnumpy scalar {val} ({type(val)})"
                     ) from exc
                 yield val
 
         if self.name in {"from_edgelist"}:
-            # numpy scalars are explicitly given as values in some tests
+            # rsnumpy scalars are explicitly given as values in some tests
             pass
         elif isinstance(result, Iterator):
             result = check_iterator(result)
@@ -1822,7 +1797,7 @@ class _dispatchable:
                 check_result(result)
             except RuntimeError as exc:
                 raise RuntimeError(
-                    f"{self.name} returned a numpy scalar {result} ({type(result)})"
+                    f"{self.name} returned a rsnumpy scalar {result} ({type(result)})"
                 ) from exc
             check_result(result)
 
@@ -1903,8 +1878,7 @@ class _dispatchable:
 
             # Renaming extra_parameters to additional_parameters
             if extra_parameters := (
-                func_info.get("extra_parameters")
-                or func_info.get("additional_parameters")
+                func_info.get("extra_parameters") or func_info.get("additional_parameters")
             ):
                 if add_gap:
                     lines.append("")
@@ -1947,9 +1921,7 @@ class _dispatchable:
                 example = f' such as "{backends[0]} or "{backends[1]}"'
             else:
                 example = (
-                    " such as "
-                    + ", ".join(f'"{x}"' for x in backends[:-1])
-                    + f', or "{backends[-1]}"'  # Oxford comma
+                    " such as " + ", ".join(f'"{x}"' for x in backends[:-1]) + f', or "{backends[-1]}"'  # Oxford comma
                 )
             to_add = (
                 "\n    .. attention:: This function does not have a default NetworkX implementation.\n"

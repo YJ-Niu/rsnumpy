@@ -1285,7 +1285,7 @@ def simrank_similarity(
     >>> nx.simrank_similarity(G, source=0, target=0)
     1.0
 
-    The result of this function can be converted to a numpy array
+    The result of this function can be converted to a rsnumpy array
     representing the SimRank matrix by using the node order of the
     graph to determine which row and column represent each node.
     Other ordering of nodes is also possible.
@@ -1407,7 +1407,7 @@ def _simrank_similarity_numpy(
     max_iterations=1000,
     tolerance=1e-4,
 ):
-    """Calculate SimRank of nodes in ``G`` using matrices with ``numpy``.
+    """Calculate SimRank of nodes in ``G`` using matrices with ``rsnumpy``.
 
     The SimRank algorithm for determining node similarity is defined in
     [1]_.
@@ -1442,7 +1442,7 @@ def _simrank_similarity_numpy(
 
     Returns
     -------
-    similarity : numpy array or float
+    similarity : rsnumpy array or float
         If ``source`` and ``target`` are both ``None``, this returns a
         2D array containing SimRank scores of the nodes.
 
@@ -1753,7 +1753,7 @@ def panther_similarity(
     top_k_sorted = top_k_unsorted[np.argsort(S[top_k_unsorted])][::-1]
 
     # Add back the similarity scores
-    # Convert numpy scalars to native Python types for dispatch compatibility
+    # Convert rsnumpy scalars to native Python types for dispatch compatibility
     top_k_with_val = dict(
         zip((node_list[i] for i in top_k_sorted), S[top_k_sorted].tolist())
     )
@@ -1947,7 +1947,7 @@ def panther_vector_similarity(
         similarities /= max_sim
 
     # Add back the similarity scores (i.e., distances)
-    # Convert numpy scalars to native Python types for dispatch compatibility
+    # Convert rsnumpy scalars to native Python types for dispatch compatibility
     top_k_with_val = dict(
         zip((node_list[n] for n in nearest_neighbors), similarities.tolist())
     )

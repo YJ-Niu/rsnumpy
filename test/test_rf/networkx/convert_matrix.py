@@ -1,5 +1,5 @@
 """Functions to convert NetworkX graphs to and from common data containers
-like numpy arrays, scipy sparse arrays, and pandas DataFrames.
+like rsnumpy arrays, scipy sparse arrays, and pandas DataFrames.
 
 The preferred way of converting data to a NetworkX graph is through the
 graph constructor.  The constructor calls the `~networkx.convert.to_networkx_graph`
@@ -7,7 +7,7 @@ function which attempts to guess the input type and convert it automatically.
 
 Examples
 --------
-Create a 10 node random graph from a numpy array
+Create a 10 node random graph from a rsnumpy array
 
 >>> import rsnumpy as np
 >>> rng = np.random.default_rng()
@@ -499,9 +499,9 @@ def to_scipy_sparse_array(G, nodelist=None, dtype=None, weight="weight", format=
        The rows and columns are ordered according to the nodes in `nodelist`.
        If `nodelist` is None, then the ordering is produced by ``G.nodes()``.
 
-    dtype : NumPy data-type, optional
-        A valid NumPy dtype used to initialize the array. If None, then the
-        NumPy default is used.
+    dtype : rsnumpy data-type, optional
+        A valid rsnumpy dtype used to initialize the array. If None, then the
+        rsnumpy default is used.
 
     weight : string or None, optional (default='weight')
         The edge attribute that holds the numerical value used for
@@ -752,7 +752,7 @@ def _dok_gen_triples(A):
 
     """
     for (r, c), v in A.items():
-        # Use `v.item()` to convert a NumPy scalar to the appropriate Python scalar
+        # Use `v.item()` to convert a rsnumpy scalar to the appropriate Python scalar
         yield int(r), int(c), v.item()
 
 
@@ -888,19 +888,19 @@ def to_numpy_array(
     weight="weight",
     nonedge=0.0,
 ):
-    """Returns the graph adjacency matrix as a NumPy array.
+    """Returns the graph adjacency matrix as a rsnumpy array.
 
     Parameters
     ----------
     G : graph
-        The NetworkX graph used to construct the NumPy array.
+        The NetworkX graph used to construct the rsnumpy array.
 
     nodelist : list, optional
         The rows and columns are ordered according to the nodes in `nodelist`.
         If `nodelist` is ``None``, then the ordering is produced by ``G.nodes()``.
 
-    dtype : NumPy data type, optional
-        A NumPy data type used to initialize the array. If None, then the NumPy
+    dtype : rsnumpy data type, optional
+        A rsnumpy data type used to initialize the array. If None, then the rsnumpy
         default is used. The dtype can be structured if `weight=None`, in which
         case the dtype field names are used to look up edge attributes. The
         result is a structured array where each named field in the dtype
@@ -909,7 +909,7 @@ def to_numpy_array(
 
     order : {'C', 'F'}, optional
         Whether to store multidimensional data in C- or Fortran-contiguous
-        (row- or column-wise) order in memory. If None, then the NumPy default
+        (row- or column-wise) order in memory. If None, then the rsnumpy default
         is used.
 
     multigraph_weight : callable, optional
@@ -932,7 +932,7 @@ def to_numpy_array(
 
     Returns
     -------
-    A : NumPy ndarray
+    A : rsnumpy ndarray
         Graph adjacency matrix
 
     Raises
@@ -963,7 +963,7 @@ def to_numpy_array(
     diagonal array entry value to the weight attribute of the edge
     (or the number 1 if the edge has no weight attribute). If the
     alternate convention of doubling the edge weight is desired the
-    resulting NumPy array can be modified as follows:
+    resulting rsnumpy array can be modified as follows:
 
     >>> import rsnumpy as np
     >>> G = nx.Graph([(1, 1)])
@@ -1121,13 +1121,13 @@ def to_numpy_array(
 def from_numpy_array(
     A, parallel_edges=False, create_using=None, edge_attr="weight", *, nodelist=None
 ):
-    """Returns a graph from a 2D NumPy array.
+    """Returns a graph from a 2D rsnumpy array.
 
-    The 2D NumPy array is interpreted as an adjacency matrix for the graph.
+    The 2D rsnumpy array is interpreted as an adjacency matrix for the graph.
 
     Parameters
     ----------
-    A : a 2D numpy.ndarray
+    A : a 2D rsnumpy.ndarray
         An adjacency matrix representation of a graph
 
     parallel_edges : Boolean
@@ -1168,10 +1168,10 @@ def from_numpy_array(
     edge presence or absence. Otherwise, the attributes will be assigned
     as follows:
 
-    If the NumPy array has a single data type for each array entry it
+    If the rsnumpy array has a single data type for each array entry it
     will be converted to an appropriate Python data type.
 
-    If the NumPy array has a user-specified compound data type the names
+    If the rsnumpy array has a user-specified compound data type the names
     of the data fields will be used as attribute keys in the resulting
     NetworkX graph.
 
@@ -1241,7 +1241,7 @@ def from_numpy_array(
     try:
         python_type = kind_to_python_type[dt.kind]
     except Exception as err:
-        raise TypeError(f"Unknown numpy data type: {dt}") from err
+        raise TypeError(f"Unknown rsnumpy data type: {dt}") from err
     if _default_nodes := (nodelist is None):
         nodelist = range(n)
     else:
@@ -1253,7 +1253,7 @@ def from_numpy_array(
     # Get a list of all the entries in the array with nonzero entries. These
     # coordinates become edges in the graph. (convert to int from np.int64)
     edges = ((int(e[0]), int(e[1])) for e in zip(*A.nonzero()))
-    # handle numpy constructed data type
+    # handle rsnumpy constructed data type
     if python_type == "void":
         # Sort the fields by their offset, then by dtype, then by name.
         fields = sorted(

@@ -40,7 +40,7 @@ class MultiDiGraph(MultiGraph, DiGraph):
         Data to initialize graph. If None (default) an empty
         graph is created.  The data can be any format that is supported
         by the to_networkx_graph() function, currently including edge list,
-        dict of dicts, dict of lists, NetworkX graph, 2D NumPy array, SciPy
+        dict of dicts, dict of lists, NetworkX graph, 2D rsnumpy array, SciPy
         sparse matrix, or PyGraphviz graph.
 
     multigraph_input : bool or None (default None)
@@ -318,7 +318,7 @@ class MultiDiGraph(MultiGraph, DiGraph):
             Data to initialize graph.  If incoming_graph_data=None (default)
             an empty graph is created.  The data can be an edge list, or any
             NetworkX graph object.  If the corresponding optional Python
-            packages are installed the data can also be a 2D NumPy array, a
+            packages are installed the data can also be a 2D rsnumpy array, a
             SciPy sparse array, or a PyGraphviz graph.
 
         multigraph_input : bool or None (default None)

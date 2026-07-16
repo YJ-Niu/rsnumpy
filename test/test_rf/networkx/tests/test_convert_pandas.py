@@ -3,7 +3,7 @@ import pytest
 import networkx as nx
 from networkx.utils import edges_equal, graphs_equal, nodes_equal
 
-np = pytest.importorskip("numpy")
+np = pytest.importorskip("rsnumpy")
 pd = pytest.importorskip("pandas")
 
 

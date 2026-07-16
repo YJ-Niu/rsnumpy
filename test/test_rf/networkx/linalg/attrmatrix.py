@@ -133,7 +133,7 @@ def _edge_value(G, edge_attr):
         #     edge_attr = lambda u,v: abs(G[u][v]['weight'])
         #
         # Handle Multi(Di)Graphs differently:
-        #     edge_attr = lambda u,v: numpy.prod([d['size'] for d in G[u][v].values()])
+        #     edge_attr = lambda u,v: rsnumpy.prod([d['size'] for d in G[u][v].values()])
         #
         # Ignore multiple edges
         #     edge_attr = lambda u,v: 1 if len(G[u][v]) else 0
@@ -153,7 +153,7 @@ def attr_matrix(
     dtype=None,
     order=None,
 ):
-    """Returns the attribute matrix using attributes from `G` as a numpy array.
+    """Returns the attribute matrix using attributes from `G` as a rsnumpy array.
 
     If only `G` is passed in, then the adjacency matrix is constructed.
 
@@ -195,20 +195,20 @@ def attr_matrix(
 
     Other Parameters
     ----------------
-    dtype : NumPy data-type, optional
-        A valid NumPy dtype used to initialize the array. Keep in mind certain
+    dtype : rsnumpy data-type, optional
+        A valid rsnumpy dtype used to initialize the array. Keep in mind certain
         dtypes can yield unexpected results if the array is to be normalized.
-        The parameter is passed to numpy.zeros(). If unspecified, the NumPy
+        The parameter is passed to rsnumpy.zeros(). If unspecified, the rsnumpy
         default is used.
 
     order : {'C', 'F'}, optional
         Whether to store multidimensional data in C- or Fortran-contiguous
         (row- or column-wise) order in memory. This parameter is passed to
-        numpy.zeros(). If unspecified, the NumPy default is used.
+        rsnumpy.zeros(). If unspecified, the rsnumpy default is used.
 
     Returns
     -------
-    M : 2D NumPy ndarray
+    M : 2D rsnumpy ndarray
         The attribute matrix.
 
     ordering : list
@@ -326,7 +326,7 @@ def attr_sparse_matrix(
     Parameters
     ----------
     G : graph
-        The NetworkX graph used to construct the NumPy matrix.
+        The NetworkX graph used to construct the rsnumpy matrix.
 
     edge_attr : str, optional (default: number of edges for each matrix element)
         Each element of the matrix represents a running total of the
@@ -353,10 +353,10 @@ def attr_sparse_matrix(
 
     Other Parameters
     ----------------
-    dtype : NumPy data-type, optional
-        A valid NumPy dtype used to initialize the array. Keep in mind certain
+    dtype : rsnumpy data-type, optional
+        A valid rsnumpy dtype used to initialize the array. Keep in mind certain
         dtypes can yield unexpected results if the array is to be normalized.
-        The parameter is passed to numpy.zeros(). If unspecified, the NumPy
+        The parameter is passed to rsnumpy.zeros(). If unspecified, the rsnumpy
         default is used.
 
     Returns

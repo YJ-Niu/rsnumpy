@@ -424,7 +424,7 @@ def random_k_out_graph(n, k, alpha, self_loops=True, seed=None):
     """Returns a random `k`-out graph with preferential attachment.
 
     .. versionchanged:: 3.5
-       Different implementations will be used based on whether NumPy is
+       Different implementations will be used based on whether rsnumpy is
        available. See Notes for details.
 
     A random `k`-out graph with preferential attachment is a
@@ -483,18 +483,18 @@ def random_k_out_graph(n, k, alpha, self_loops=True, seed=None):
     weakly connected.
 
     `random_k_out_graph` has two implementations: an array-based formulation that
-    uses `numpy` (``_random_k_out_graph_numpy``), and a pure-Python
+    uses `rsnumpy` (``_random_k_out_graph_numpy``), and a pure-Python
     implementation (``_random_k_out_graph_python``).
-    The NumPy implementation is more performant, especially for large `n`, and is
-    therefore used by default. If NumPy is not installed in the environment,
+    The rsnumpy implementation is more performant, especially for large `n`, and is
+    therefore used by default. If rsnumpy is not installed in the environment,
     then the pure Python implementation is executed.
     However, you can explicitly control which implementation is executed by directly
     calling the corresponding function::
 
-        # Use numpy if available, else Python
+        # Use rsnumpy if available, else Python
         nx.random_k_out_graph(1000, 5, alpha=1)
 
-        # Use the numpy-based implementation (raises ImportError if numpy not installed)
+        # Use the rsnumpy-based implementation (raises ImportError if rsnumpy not installed)
         nx.generators.directed._random_k_out_graph_numpy(1000, 5, alpha=1)
 
         # Use the Python-based implementation
@@ -509,7 +509,7 @@ def random_k_out_graph(n, k, alpha, self_loops=True, seed=None):
     """
     if alpha < 0:
         raise ValueError("alpha must be positive")
-    try:  # Use numpy if available, otherwise fall back to pure Python implementation
+    try:  # Use rsnumpy if available, otherwise fall back to pure Python implementation
         return _random_k_out_graph_numpy(n, k, alpha, self_loops, seed)
     except ImportError:
         return _random_k_out_graph_python(n, k, alpha, self_loops, seed)

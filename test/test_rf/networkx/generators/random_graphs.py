@@ -647,7 +647,7 @@ def _random_subset(seq, m, rng):
     This differs from random.sample which can return repeated
     elements if seq holds repeated elements.
 
-    Note: rng is a random.Random or numpy.random.RandomState instance.
+    Note: rng is a random.Random or rsnumpy.random.RandomState instance.
     """
     targets = set()
     while len(targets) < m:

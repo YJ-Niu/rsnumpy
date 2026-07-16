@@ -99,7 +99,7 @@ def apply_matplotlib_colors(
     mapper.set_clim(vmin, vmax)
 
     def do_map(x):
-        # Cast numpy scalars to float
+        # Cast rsnumpy scalars to float
         return tuple(float(x) for x in mapper.to_rgba(x))
 
     if nodes:
@@ -2453,7 +2453,7 @@ def draw_networkx_edge_labels(
     individual_params = {}
 
     def check_individual_params(p_value, p_name):
-        # TODO should this be list or array (as in a numpy array)?
+        # TODO should this be list or array (as in a rsnumpy array)?
         if isinstance(p_value, list):
             if len(p_value) != len(edgelist):
                 raise ValueError(f"{p_name} must have the same length as edgelist.")
@@ -2934,7 +2934,7 @@ def apply_alpha(colors, alpha, elem_list, cmap=None, vmin=None, vmax=None):
     Returns
     -------
 
-    rgba_colors : numpy ndarray
+    rgba_colors : rsnumpy ndarray
         Array containing RGBA format values for each of the node colours.
 
     """
@@ -2952,7 +2952,7 @@ def apply_alpha(colors, alpha, elem_list, cmap=None, vmin=None, vmax=None):
         mapper.set_clim(vmin, vmax)
         rgba_colors = mapper.to_rgba(colors)
     # Otherwise, convert colors to matplotlib's RGB using the colorConverter
-    # object.  These are converted to numpy ndarrays to be consistent with the
+    # object.  These are converted to rsnumpy ndarrays to be consistent with the
     # to_rgba method of ScalarMappable.
     else:
         try:

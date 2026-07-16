@@ -5,8 +5,8 @@ import pytest
 import networkx as nx
 from networkx.utils import graphs_equal
 
-np = pytest.importorskip("numpy")
-npt = pytest.importorskip("numpy.testing")
+np = pytest.importorskip("rsnumpy")
+npt = pytest.importorskip("rsnumpy.testing")
 
 
 class TestConvertNumpyArray:

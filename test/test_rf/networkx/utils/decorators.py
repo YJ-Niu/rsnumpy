@@ -262,21 +262,21 @@ def nodes_or_number(which_args):
 
 
 def np_random_state(random_state_argument):
-    """Decorator to generate a numpy RandomState or Generator instance.
+    """Decorator to generate a rsnumpy RandomState or Generator instance.
 
     The decorator processes the argument indicated by `random_state_argument`
     using :func:`nx.utils.create_random_state`.
-    The argument value can be a seed (integer), or a `numpy.random.RandomState`
-    or `numpy.random.RandomState` instance or (`None` or `numpy.random`).
-    The latter two options use the global random number generator for `numpy.random`.
+    The argument value can be a seed (integer), or a `rsnumpy.random.RandomState`
+    or `rsnumpy.random.RandomState` instance or (`None` or `rsnumpy.random`).
+    The latter two options use the global random number generator for `rsnumpy.random`.
 
-    The returned instance is a `numpy.random.RandomState` or `numpy.random.Generator`.
+    The returned instance is a `rsnumpy.random.RandomState` or `rsnumpy.random.Generator`.
 
     Parameters
     ----------
     random_state_argument : string or int
         The name or index of the argument to be converted
-        to a `numpy.random.RandomState` instance.
+        to a `rsnumpy.random.RandomState` instance.
 
     Returns
     -------
@@ -319,8 +319,8 @@ def py_random_state(random_state_argument):
         If random.Random instance, return it.
         If None or the `random` package, return the global random number
         generator used by `random`.
-        If np.random package, or the default numpy RandomState instance,
-        return the default numpy random number generator wrapped in a
+        If np.random package, or the default rsnumpy RandomState instance,
+        return the default rsnumpy random number generator wrapped in a
         `PythonRandomViaNumpyBits`  class.
         If np.random.Generator instance, return it wrapped in a
         `PythonRandomViaNumpyBits`  class.
@@ -334,7 +334,7 @@ def py_random_state(random_state_argument):
     ----------
     random_state_argument : string or int
         The name of the argument or the index of the argument in args that is
-        to be converted to the random.Random instance or numpy.random.RandomState
+        to be converted to the random.Random instance or rsnumpy.random.RandomState
         instance that mimics basic methods of random.Random.
 
     Returns

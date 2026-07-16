@@ -37,9 +37,9 @@ def biadjacency_matrix(
        The columns of the matrix are ordered according to the list of nodes.
        If column_order is None, then the ordering of columns is arbitrary.
 
-    dtype : NumPy data-type, optional
-        A valid NumPy dtype used to initialize the array. If None, then the
-        NumPy default is used.
+    dtype : rsnumpy data-type, optional
+        A valid rsnumpy dtype used to initialize the array. If None, then the
+        rsnumpy default is used.
 
     weight : string or None, optional (default='weight')
        The edge data key used to provide each value in the matrix.

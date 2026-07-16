@@ -42,7 +42,7 @@ def incidence_matrix(
        If None, then each edge has weight 1.  Edge weights, if used,
        should be positive so that the orientation can provide the sign.
 
-    dtype : a NumPy dtype or None (default=None)
+    dtype : a rsnumpy dtype or None (default=None)
         The dtype of the output sparse array. This type should be a compatible
         type of the weight argument, eg. if weight would return a float this
         argument should also be a float.
@@ -119,9 +119,9 @@ def adjacency_matrix(G, nodelist=None, dtype=None, weight="weight"):
        If ``nodelist=None`` (the default), then the ordering is produced by
        ``G.nodes()``.
 
-    dtype : NumPy data-type, optional
+    dtype : rsnumpy data-type, optional
         The desired data-type for the array.
-        If `None`, then the NumPy default is used.
+        If `None`, then the rsnumpy default is used.
 
     weight : string or None, optional (default='weight')
        The edge data key used to provide each value in the matrix.

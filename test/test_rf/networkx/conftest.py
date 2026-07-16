@@ -133,9 +133,9 @@ def add_nx(doctest_namespace):
 try:
     import rsnumpy as np
 
-    has_numpy = True
+    has_rsnumpy = True
 except ImportError:
-    has_numpy = False
+    has_rsnumpy = False
 
 try:
     import scipy as sp
@@ -184,7 +184,7 @@ except ImportError:
 
 collect_ignore = []
 
-needs_numpy = [
+needs_rsnumpy = [
     "algorithms/approximation/traveling_salesman.py",
     "algorithms/centrality/current_flow_closeness.py",
     "algorithms/centrality/laplacian.py",
@@ -245,8 +245,8 @@ needs_pygraphviz = ["drawing/nx_agraph.py"]
 needs_pydot = ["drawing/nx_pydot.py"]
 needs_sympy = ["algorithms/polynomials.py"]
 
-if not has_numpy:
-    collect_ignore += needs_numpy
+if not has_rsnumpy:
+    collect_ignore += needs_rsnumpy
 if not has_scipy:
     collect_ignore += needs_scipy
 if not has_matplotlib:

@@ -194,9 +194,9 @@ def _get_label_info(G, label_name):
 
     Returns
     -------
-    labels : numpy array, shape = [n_labeled_samples, 2]
+    labels : rsnumpy array, shape = [n_labeled_samples, 2]
         Array of pairs of labeled node ID and label ID
-    label_dict : numpy array, shape = [n_classes]
+    label_dict : rsnumpy array, shape = [n_classes]
         Array of labels
         i-th element contains the label corresponding label ID `i`
     """

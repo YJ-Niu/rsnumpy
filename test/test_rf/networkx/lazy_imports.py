@@ -106,15 +106,15 @@ def _lazy_import(fullname):
     when the user tries to import from a subpackage of a module before
     the package is fully imported. In particular, this idiom may not work:
 
-      np = lazy_import("numpy")
-      from numpy.lib import recfunctions
+      np = lazy_import("rsnumpy")
+      from rsnumpy.lib import recfunctions
 
     This is due to a difference in the way Python's LazyLoader handles
     subpackage imports compared to the normal import process. Hopefully
     we will get Python's LazyLoader to fix this, or find a workaround.
     In the meantime, this is a potential problem.
 
-    The workaround is to import rsnumpy as numpy before importing from the subpackage.
+    The workaround is to import rsnumpy as rsnumpy before importing from the subpackage.
 
     Notes
     -----

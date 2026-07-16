@@ -276,8 +276,8 @@ def create_random_state(random_state=None):
     ----------
     random_state : int or rsnumpy RandomState or Generator instance, optional (default=None)
         If int, return a rsnumpy.random.RandomState instance set with seed=int.
-        if `numpy.random.RandomState` instance, return it.
-        if `numpy.random.Generator` instance, return it.
+        if `rsnumpy.random.RandomState` instance, return it.
+        if `rsnumpy.random.Generator` instance, return it.
         if None or rsnumpy.random, return the global random number generator used
         by rsnumpy.random.
     """
@@ -293,7 +293,7 @@ def create_random_state(random_state=None):
         return random_state
     msg = (
         f"{random_state} cannot be used to create a rsnumpy.random.RandomState or\n"
-        "numpy.random.Generator instance"
+        "rsnumpy.random.Generator instance"
     )
     raise ValueError(msg)
 
@@ -308,7 +308,7 @@ class PythonRandomViaNumpyBits(random.Random):
 
     This implementation supersedes that of `PythonRandomInterface` which rewrote
     methods to account for subtle differences in API between `random` and
-    `numpy.random`. Instead this subclasses `random.Random` and overwrites
+    `rsnumpy.random`. Instead this subclasses `random.Random` and overwrites
     the methods `random`, `getrandbits`, `getstate`, `setstate` and `seed`.
     It makes them use the rng values from an input rsnumpy `RandomState` or `Generator`.
     Those few methods allow the rest of the `random.Random` methods to provide
@@ -320,7 +320,7 @@ class PythonRandomViaNumpyBits(random.Random):
         try:
             import rsnumpy as np
         except ImportError:
-            msg = "numpy not found, only random.random available."
+            msg = "rsnumpy not found, only random.random available."
             warnings.warn(msg, ImportWarning)
 
         if rng is None:
@@ -365,7 +365,7 @@ class PythonRandomInterface:
         try:
             import rsnumpy as np
         except ImportError:
-            msg = "numpy not found, only random.random available."
+            msg = "rsnumpy not found, only random.random available."
             warnings.warn(msg, ImportWarning)
 
         if rng is None:

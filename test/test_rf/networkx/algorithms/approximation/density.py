@@ -65,15 +65,15 @@ def _greedy_plus_plus(G, iterations):
 
 def _fractional_peeling(G, b, x, node_to_idx, edge_to_idx):
     """
-    Optimized fractional peeling using NumPy arrays.
+    Optimized fractional peeling using rsnumpy arrays.
 
     Parameters
     ----------
     G : networkx.Graph
         The input graph.
-    b : numpy.ndarray
+    b : rsnumpy.ndarray
         Induced load vector.
-    x : numpy.ndarray
+    x : rsnumpy.ndarray
         Fractional edge values.
     node_to_idx : dict
         Mapping from node to index.
@@ -154,7 +154,7 @@ def _fista(G, iterations):
     for idx in range(num_undirected_edges, 2 * num_undirected_edges):
         reverse_edge_idx[idx] = idx - num_undirected_edges
 
-    # 4. Initialize Variables as NumPy Arrays
+    # 4. Initialize Variables as rsnumpy Arrays
     x = np.full(num_edges, 0.5, dtype=np.float32)
     y = x.copy()
     z = np.zeros(num_edges, dtype=np.float32)

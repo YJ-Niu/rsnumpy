@@ -294,7 +294,7 @@ def directed_laplacian_matrix(
 
     Returns
     -------
-    L : NumPy matrix
+    L : rsnumpy matrix
       Normalized Laplacian of G.
 
     Notes
@@ -391,7 +391,7 @@ def directed_combinatorial_laplacian_matrix(
 
     Returns
     -------
-    L : NumPy matrix
+    L : rsnumpy matrix
       Combinatorial Laplacian of G.
 
     Notes
@@ -466,7 +466,7 @@ def _transition_matrix(G, nodelist=None, weight="weight", walk_type=None, alpha=
 
     Returns
     -------
-    P : numpy.ndarray
+    P : rsnumpy.ndarray
       transition matrix of G.
 
     Raises

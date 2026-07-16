@@ -261,7 +261,7 @@ def attribute_ac(M):
 
     Parameters
     ----------
-    M : numpy.ndarray
+    M : rsnumpy.ndarray
         2D ndarray representing the attribute mixing matrix.
 
     Notes
@@ -284,7 +284,7 @@ def attribute_ac(M):
 
 
 def _numeric_ac(M, mapping):
-    # M is a 2D numpy array
+    # M is a 2D rsnumpy array
     # numeric assortativity coefficient, pearsonr
     import rsnumpy as np
 

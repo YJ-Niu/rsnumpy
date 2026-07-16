@@ -174,7 +174,7 @@ def _tracemin_fiedler(L, X, normalized, tol, method):
 
     Returns
     -------
-    sigma, X : Two NumPy arrays of floats.
+    sigma, X : Two rsnumpy arrays of floats.
         The lowest eigenvalues and corresponding eigenvectors of L.
         The size of input X determines the size of these outputs.
         As this is for Fiedler vectors, the zero eigenvalue (and
@@ -448,7 +448,7 @@ def fiedler_vector(
 
     Returns
     -------
-    fiedler_vector : NumPy array of floats.
+    fiedler_vector : rsnumpy array of floats.
         Fiedler vector.
 
     Raises
@@ -545,7 +545,7 @@ def spectral_ordering(
 
     Returns
     -------
-    spectral_ordering : NumPy array of floats.
+    spectral_ordering : rsnumpy array of floats.
         Spectral ordering of nodes.
 
     Raises

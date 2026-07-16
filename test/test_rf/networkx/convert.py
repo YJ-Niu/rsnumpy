@@ -56,7 +56,7 @@ def to_networkx_graph(data, create_using=None, multigraph_input=False):
          iterator (e.g. itertools.chain) that produces edges
          generator of edges
          Pandas DataFrame (row per edge)
-         2D numpy array
+         2D rsnumpy array
          scipy sparse array
          pygraphviz agraph
 
@@ -142,7 +142,7 @@ def to_networkx_graph(data, create_using=None, multigraph_input=False):
     except ImportError:
         pass
 
-    # numpy array
+    # rsnumpy array
     try:
         import rsnumpy as np
 

@@ -190,7 +190,7 @@ def _hits_numpy(G, normalized=True):
 
     Notes
     -----
-    The eigenvector calculation uses NumPy's interface to LAPACK.
+    The eigenvector calculation uses rsnumpy's interface to LAPACK.
 
     The HITS algorithm was designed for directed graphs but this
     algorithm does not check if the input graph is directed and will

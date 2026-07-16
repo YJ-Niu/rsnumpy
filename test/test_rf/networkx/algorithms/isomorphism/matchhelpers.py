@@ -37,7 +37,7 @@ def allclose(x, y, rtol=1.0000000000000001e-05, atol=1e-08):
         The absolute error tolerance.
 
     """
-    # assume finite weights, see numpy.allclose() for reference
+    # assume finite weights, see rsnumpy.allclose() for reference
     return all(math.isclose(xi, yi, rel_tol=rtol, abs_tol=atol) for xi, yi in zip(x, y))
 
 

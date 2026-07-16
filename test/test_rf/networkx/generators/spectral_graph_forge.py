@@ -28,7 +28,7 @@ def spectral_graph_forge(G, alpha, transformation="identity", seed=None):
         Represents the intended matrix linear transformation, possible values
         are 'identity' and 'modularity'
     seed : integer, random_state, or None (default)
-        Indicator of numpy random number generation state.
+        Indicator of rsnumpy random number generation state.
         See :ref:`Randomness<randomness>`.
 
     Returns

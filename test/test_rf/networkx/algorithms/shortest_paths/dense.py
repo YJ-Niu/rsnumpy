@@ -17,7 +17,7 @@ def floyd_warshall_numpy(G, nodelist=None, weight="weight"):
     This algorithm for finding shortest paths takes advantage of
     matrix representations of a graph and works well for dense
     graphs where all-pairs shortest path lengths are desired.
-    The results are returned as a NumPy array, distance[i, j],
+    The results are returned as a rsnumpy array, distance[i, j],
     where i and j are the indexes of two nodes in nodelist.
     The entry distance[i, j] is the distance along a shortest
     path from i to j. If no path exists the distance is Inf.
@@ -36,8 +36,8 @@ def floyd_warshall_numpy(G, nodelist=None, weight="weight"):
 
     Returns
     -------
-    distance : 2D numpy.ndarray
-        A numpy array of shortest path distances between nodes.
+    distance : 2D rsnumpy.ndarray
+        A rsnumpy array of shortest path distances between nodes.
         If there is no path between two nodes the value is Inf.
 
     Examples

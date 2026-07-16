@@ -3,7 +3,7 @@ import pytest
 import networkx as nx
 from networkx.utils import graphs_equal
 
-np = pytest.importorskip("numpy")
+np = pytest.importorskip("rsnumpy")
 sp = pytest.importorskip("scipy")
 
 
