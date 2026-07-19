@@ -366,7 +366,7 @@ def tanhsinh(f, a, b, *, args=(), kwargs=None, log=False, maxlevel=None, minleve
     aerr = xp_ravel(xp.full(shape, xp.nan, dtype=dtype))  # absolute error
     status = xp_ravel(xp.full(shape, eim._EINPROGRESS, dtype=xp.int32))
     h0 = _get_base_step(dtype, xp)
-    h0 = xp.real(h0) # base step
+    h0 = xp.real(h0)  # base step
 
     # For term `d4` of error estimate ([1] Section 5), we need to keep the
     # most extreme abscissae and corresponding `fj`s, `wj`s in Euler-Maclaurin
@@ -449,7 +449,7 @@ def tanhsinh(f, a, b, *, args=(), kwargs=None, log=False, maxlevel=None, minleve
             # Terminate if convergence criterion is met
             rerr, aerr = _estimate_error(work, xp)
             i = (rerr < rtol) | (aerr < atol)
-            work.aerr =  xp.reshape(xp.astype(aerr, work.dtype), work.Sn.shape)
+            work.aerr = xp.reshape(xp.astype(aerr, work.dtype), work.Sn.shape)
             work.status[i] = eim._ECONVERGED
             stop[i] = True
 
@@ -583,9 +583,9 @@ def _get_pairs(k, h0, inclusive, dtype, xp, work):
     # Retrieve the specified abscissa-weight pairs from the cache
     # If `inclusive`, return all up to and including the specified level
     if (len(work.pair_cache.indices) <= k+2
-        or not isinstance (h0, type(work.pair_cache.h0))
-        or h0 != work.pair_cache.h0):
-            _pair_cache(k, h0, xp, work)
+        or not isinstance(h0, type(work.pair_cache.h0))
+            or h0 != work.pair_cache.h0):
+        _pair_cache(k, h0, xp, work)
 
     xjc = work.pair_cache.xjc
     wj = work.pair_cache.wj
@@ -646,7 +646,7 @@ def _euler_maclaurin_sum(fj, work, xp):
     xr[invalid_r] = -xp.inf
     ir = xp.argmax(xp.real(xr), axis=0, keepdims=True)
     # abscissa, function value, and weight at this index
-    ### Not Array API Compatible... yet ###
+    # Not Array API Compatible... yet
     xr_max = xp.take_along_axis(xr, ir, axis=0)[0]
     fr_max = xp.take_along_axis(fr, ir, axis=0)[0]
     wr_max = xp.take_along_axis(wr, ir, axis=0)[0]
@@ -1145,7 +1145,7 @@ def nsum(f, a, b, *, step=1, args=(), kwargs=None,
     >>> res.sum, res.sum - np.log(2)  # result, difference vs analytical sum
     (np.float64(0.6931471805598691), np.float64(-7.616129948928574e-14))
 
-    """ # noqa: E501
+    """  # noqa: E501
     # Potential future work:
     # - improve error estimate of `_direct` sum
     # - add other methods for convergence acceleration (Richardson, epsilon)
@@ -1236,13 +1236,13 @@ def nsum(f, a, b, *, step=1, args=(), kwargs=None,
         # (especially getting the status message right)
         if log:
             def _f(x, *args):
-                log_factor = xp.where(x==0, math.log(0.5), 0)
+                log_factor = xp.where(x == 0, math.log(0.5), 0)
                 out = xp.stack([f(x, *args), f(-x, *args)], axis=0)
                 return special.logsumexp(out, axis=0) + log_factor
 
         else:
             def _f(x, *args):
-                factor = xp.where(x==0, 0.5, 1)
+                factor = xp.where(x == 0, 0.5, 1)
                 return (f(x, *args) + f(-x, *args)) * factor
 
         zero = xp.zeros_like(a[i4])

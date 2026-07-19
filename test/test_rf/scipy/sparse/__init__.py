@@ -244,29 +244,13 @@ when passing data to other libraries).
 # Modified and extended by Ed Schofield, Robert Cimrman,
 # Nathan Bell, and Jake Vanderplas.
 
+from scipy._lib._testutils import PytestTester
 import warnings as _warnings
 import importlib as _importlib
 
-from ._base import *
-from ._csr import *
-from ._csc import *
-from ._lil import *
-from ._dok import *
-from ._coo import *
-from ._dia import *
-from ._bsr import *
-from ._construct import *
-from ._extract import *
-from ._matrix import spmatrix
-from ._matrix_io import *
-from ._sputils import get_index_dtype, safely_cast_index_arrays
 
 
 # Deprecated namespaces, to be removed in v2.0.0
-from . import (
-    base, bsr, compressed, construct, coo, csc, csr, data, dia, dok, extract,
-    lil, sparsetools, sputils
-)
 
 _submodules = ["csgraph", "linalg"]
 
@@ -276,8 +260,9 @@ __all__ = [s for s in dir() if not s.startswith('_')] + _submodules
 msg = 'the matrix subclass is not the recommended way'
 _warnings.filterwarnings('ignore', message=msg)
 
+
 def __dir__():
-   return __all__
+    return __all__
 
 
 def __getattr__(name):
@@ -291,6 +276,6 @@ def __getattr__(name):
                 f"Module 'scipy.sparse' has no attribute '{name}'"
             )
 
-from scipy._lib._testutils import PytestTester
+
 test = PytestTester(__name__)
 del PytestTester

@@ -135,30 +135,30 @@ Maximal values ell_m of ||2**-s A|| such that the backward error bound
 does not exceed 2**-53.
 """
 ell_table_61 = (
-        None,
-        # 1
-        2.11e-8,
-        3.56e-4,
-        1.08e-2,
-        6.49e-2,
-        2.00e-1,
-        4.37e-1,
-        7.83e-1,
-        1.23e0,
-        1.78e0,
-        2.42e0,
-        # 11
-        3.13e0,
-        3.90e0,
-        4.74e0,
-        5.63e0,
-        6.56e0,
-        7.52e0,
-        8.53e0,
-        9.56e0,
-        1.06e1,
-        1.17e1,
-        )
+    None,
+    # 1
+    2.11e-8,
+    3.56e-4,
+    1.08e-2,
+    6.49e-2,
+    2.00e-1,
+    4.37e-1,
+    7.83e-1,
+    1.23e0,
+    1.78e0,
+    2.42e0,
+    # 11
+    3.13e0,
+    3.90e0,
+    4.74e0,
+    5.63e0,
+    6.56e0,
+    7.52e0,
+    8.53e0,
+    9.56e0,
+    1.06e1,
+    1.17e1,
+)
 
 
 # The b vectors and U and V are copypasted
@@ -185,7 +185,7 @@ def _diff_pade5(A, E, ident):
     U = A.dot(b[5]*A4 + b[3]*A2 + b[1]*ident)
     V = b[4]*A4 + b[2]*A2 + b[0]*ident
     Lu = (A.dot(b[5]*M4 + b[3]*M2) +
-            E.dot(b[5]*A4 + b[3]*A2 + b[1]*ident))
+          E.dot(b[5]*A4 + b[3]*A2 + b[1]*ident))
     Lv = b[4]*M4 + b[2]*M2
     return U, V, Lu, Lv
 
@@ -201,14 +201,14 @@ def _diff_pade7(A, E, ident):
     U = A.dot(b[7]*A6 + b[5]*A4 + b[3]*A2 + b[1]*ident)
     V = b[6]*A6 + b[4]*A4 + b[2]*A2 + b[0]*ident
     Lu = (A.dot(b[7]*M6 + b[5]*M4 + b[3]*M2) +
-            E.dot(b[7]*A6 + b[5]*A4 + b[3]*A2 + b[1]*ident))
+          E.dot(b[7]*A6 + b[5]*A4 + b[3]*A2 + b[1]*ident))
     Lv = b[6]*M6 + b[4]*M4 + b[2]*M2
     return U, V, Lu, Lv
 
 
 def _diff_pade9(A, E, ident):
     b = (17643225600., 8821612800., 2075673600., 302702400., 30270240.,
-            2162160., 110880., 3960., 90., 1.)
+         2162160., 110880., 3960., 90., 1.)
     A2 = A.dot(A)
     M2 = np.dot(A, E) + np.dot(E, A)
     A4 = np.dot(A2, A2)
@@ -220,7 +220,7 @@ def _diff_pade9(A, E, ident):
     U = A.dot(b[9]*A8 + b[7]*A6 + b[5]*A4 + b[3]*A2 + b[1]*ident)
     V = b[8]*A8 + b[6]*A6 + b[4]*A4 + b[2]*A2 + b[0]*ident
     Lu = (A.dot(b[9]*M8 + b[7]*M6 + b[5]*M4 + b[3]*M2) +
-            E.dot(b[9]*A8 + b[7]*A6 + b[5]*A4 + b[3]*A2 + b[1]*ident))
+          E.dot(b[9]*A8 + b[7]*A6 + b[5]*A4 + b[3]*A2 + b[1]*ident))
     Lv = b[8]*M8 + b[6]*M6 + b[4]*M4 + b[2]*M2
     return U, V, Lu, Lv
 
@@ -231,10 +231,10 @@ def expm_frechet_algo_64(A, E):
     ident = np.identity(n)
     A_norm_1 = scipy.linalg.norm(A, 1)
     m_pade_pairs = (
-            (3, _diff_pade3),
-            (5, _diff_pade5),
-            (7, _diff_pade7),
-            (9, _diff_pade9))
+        (3, _diff_pade3),
+        (5, _diff_pade5),
+        (7, _diff_pade7),
+        (9, _diff_pade9))
     for m, pade in m_pade_pairs:
         if A_norm_1 <= ell_table_61[m]:
             U, V, Lu, Lv = pade(A, E, ident)
@@ -253,9 +253,9 @@ def expm_frechet_algo_64(A, E):
         A6 = np.dot(A2, A4)
         M6 = np.dot(A4, M2) + np.dot(M4, A2)
         b = (64764752532480000., 32382376266240000., 7771770303897600.,
-                1187353796428800., 129060195264000., 10559470521600.,
-                670442572800., 33522128640., 1323241920., 40840800., 960960.,
-                16380., 182., 1.)
+             1187353796428800., 129060195264000., 10559470521600.,
+             670442572800., 33522128640., 1323241920., 40840800., 960960.,
+             16380., 182., 1.)
         W1 = b[13]*A6 + b[11]*A4 + b[9]*A2
         W2 = b[7]*A6 + b[5]*A4 + b[3]*A2 + b[1]*ident
         Z1 = b[12]*A6 + b[10]*A4 + b[8]*A2
@@ -348,7 +348,7 @@ def expm_frechet_kronform(A, method=None, check_finite=True):
         for j in range(n):
             E = np.outer(ident[i], ident[j])
             F = expm_frechet(A, E,
-                    method=method, compute_expm=False, check_finite=False)
+                             method=method, compute_expm=False, check_finite=False)
             cols.append(vec(F))
     return np.vstack(cols).T
 

@@ -149,8 +149,8 @@ def _unpack_CorrelationResult(res, _):
 # note that `weights` are paired with `x`
 @xp_capabilities(marray=True)
 @_axis_nan_policy_factory(
-        lambda x: x, n_samples=1, n_outputs=1, too_small=0, paired=True,
-        result_to_tuple=lambda x, _: (x,), kwd_samples=['weights'])
+    lambda x: x, n_samples=1, n_outputs=1, too_small=0, paired=True,
+    result_to_tuple=lambda x, _: (x,), kwd_samples=['weights'])
 def gmean(a, axis=0, dtype=None, weights=None):
     r"""Compute the weighted geometric mean along the specified axis.
 
@@ -236,8 +236,8 @@ def gmean(a, axis=0, dtype=None, weights=None):
 
 @xp_capabilities(marray=True)
 @_axis_nan_policy_factory(
-        lambda x: x, n_samples=1, n_outputs=1, too_small=0, paired=True,
-        result_to_tuple=lambda x, _: (x,), kwd_samples=['weights'])
+    lambda x: x, n_samples=1, n_outputs=1, too_small=0, paired=True,
+    result_to_tuple=lambda x, _: (x,), kwd_samples=['weights'])
 def hmean(a, axis=0, dtype=None, *, weights=None):
     r"""Calculate the weighted harmonic mean along the specified axis.
 
@@ -335,8 +335,8 @@ def hmean(a, axis=0, dtype=None, *, weights=None):
 
 @xp_capabilities(marray=True)
 @_axis_nan_policy_factory(
-        lambda x: x, n_samples=1, n_outputs=1, too_small=0, paired=True,
-        result_to_tuple=lambda x, _: (x,), kwd_samples=['weights'])
+    lambda x: x, n_samples=1, n_outputs=1, too_small=0, paired=True,
+    result_to_tuple=lambda x, _: (x,), kwd_samples=['weights'])
 def pmean(a, p, *, axis=0, dtype=None, weights=None):
     r"""Calculate the weighted power mean along the specified axis.
 
@@ -1022,9 +1022,9 @@ def tsem(a, limits=None, inclusive=(True, True), axis=0, ddof=1):
     return sd / n_obs**0.5
 
 
-#####################################
+###################################
 #              MOMENTS              #
-#####################################
+###################################
 
 
 def _moment_outputs(kwds, default_order=1):
@@ -1172,7 +1172,7 @@ def _demean(a, mean, axis, *, xp, precision_warning=True):
     a_zero_mean = a - mean
 
     if (xp_size(a_zero_mean) == 0 or not precision_warning
-        or is_lazy_array(a_zero_mean)):
+            or is_lazy_array(a_zero_mean)):
         return a_zero_mean
 
     eps = xp.finfo(mean.dtype).eps * 10
@@ -1210,7 +1210,7 @@ def _moment(a, order, axis, *, center=None, xp=None):
     a_zero_mean = _demean(a, center, axis, xp=xp)
     res = xp.mean(a_zero_mean**order, axis=axis, keepdims=True)
     if a.shape[-1] > 0 and (is_lazy_array(res)
-                                or xp.any(order_0) or xp.any(order_1)):
+                            or xp.any(order_0) or xp.any(order_1)):
         res = xp.where(order_0, xp.ones_like(res), res)
         res = xp.where(order_1, xp.zeros_like(res), res)
 
@@ -1543,9 +1543,9 @@ def describe(a, axis=0, ddof=1, bias=True, nan_policy='propagate'):
 
     return DescribeResult(n, mm, m, v, sk, kurt)
 
-#####################################
+###################################
 #         NORMALITY TESTS           #
-#####################################
+###################################
 
 
 def _get_pvalue(statistic, distribution, alternative, symmetric=True, xp=None):
@@ -1944,9 +1944,9 @@ def jarque_bera(x, *, axis=None):
     return SignificanceResult(statistic, pvalue)
 
 
-#####################################
+###################################
 #        FREQUENCY FUNCTIONS        #
-#####################################
+###################################
 
 
 @xp_capabilities(np_only=True)
@@ -2293,7 +2293,7 @@ def _histogram(a, numbins=10, defaultlimits=None, weights=None, *,
             s = (data_max - data_min) / (2. * (numbins - 1.))
             defaultlimits = (data_min - s, data_max + s)
     else:
-        if not (np.iterable(defaultlimits) and len(defaultlimits)==2
+        if not (np.iterable(defaultlimits) and len(defaultlimits) == 2
                 and defaultlimits[0] < defaultlimits[1]):
             message = ('If specified, `defaultreallimits` must be given as an iterable '
                        'in the order (lower limit, upper limit).')
@@ -2502,9 +2502,9 @@ def relfreq(a, numbins=10, defaultreallimits=None, weights=None):
     return RelfreqResult(h, l, b, e)
 
 
-#####################################
+###################################
 #        VARIABILITY FUNCTIONS      #
-#####################################
+###################################
 
 @xp_capabilities()
 def obrientransform(*samples, nan_policy='propagate'):
@@ -3050,6 +3050,7 @@ def gstd(a, axis=0, ddof=1, *, keepdims=False, nan_policy='propagate'):
 
     return res
 
+
 # Private dictionary initialized only once at module level
 # See https://en.wikipedia.org/wiki/Robust_measures_of_scale
 _scale_conversions = {'normal': float(special.erfinv(0.5) * 2.0 * math.sqrt(2.0))}
@@ -3366,9 +3367,9 @@ def median_abs_deviation(x, axis=0, center=None, scale=1.0,
     return mad / scale
 
 
-#####################################
+###################################
 #         TRIMMING FUNCTIONS        #
-#####################################
+###################################
 
 
 SigmaclipResult = namedtuple('SigmaclipResult', ('clipped', 'lower', 'upper'))
@@ -4022,10 +4023,10 @@ def f_oneway(*samples, axis=0, equal_var=True):
 
         # adjust f statistic
         # ref.[4] p.334 eq.29
-        numerator =  xp.vecdot(w_t, (y_t - y_hat)**2, axis=axis_zero) / (k - 1)
+        numerator = xp.vecdot(w_t, (y_t - y_hat)**2, axis=axis_zero) / (k - 1)
         denominator = (
-                1 + 2 * (k - 2) / (k**2 - 1) *
-                xp.vecdot(1 / (n_t - 1), (1 - w_t / s_w_t)**2, axis=axis_zero)
+            1 + 2 * (k - 2) / (k**2 - 1) *
+            xp.vecdot(1 / (n_t - 1), (1 - w_t / s_w_t)**2, axis=axis_zero)
         )
         f = numerator / denominator
 
@@ -4036,8 +4037,8 @@ def f_oneway(*samples, axis=0, equal_var=True):
         # adjusted degree of freedom 2
         # ref.[4] p.334 eq.30
         hat_f2 = (
-                (k**2 - 1) /
-                (3 * xp.vecdot(1 / (n_t - 1), (1 - w_t / s_w_t)**2, axis=axis_zero))
+            (k**2 - 1) /
+            (3 * xp.vecdot(1 / (n_t - 1), (1 - w_t / s_w_t)**2, axis=axis_zero))
         )
 
         dfn, dfd = hat_f1, hat_f2
@@ -4319,6 +4320,7 @@ class PearsonRResult(PearsonRResultBase):
         coefficient `statistic` for the given confidence level.
 
     """
+
     def __init__(self, statistic, pvalue, alternative, n, x, y, axis):
         super().__init__(statistic, pvalue)
         self._alternative = alternative
@@ -4396,7 +4398,7 @@ class PearsonRResult(PearsonRResultBase):
 
 # Missing special.betainc on torch
 @xp_capabilities(cpu_only=True, exceptions=['cupy', 'jax.numpy'], marray=True,
-    extra_note='Only the default `method` is compatible with MArray input.')
+                 extra_note='Only the default `method` is compatible with MArray input.')
 def pearsonr(x, y, *, alternative='two-sided', method=None, axis=0):
     r"""
     Pearson correlation coefficient and p-value for testing non-correlation.
@@ -4789,7 +4791,7 @@ def pearsonr(x, y, *, alternative='two-sided', method=None, axis=0):
             # the loss of precision that occurs in the subtraction xm = x - xmean
             # might result in large errors in r.
             msg = ("An input array is nearly constant; the computed "
-                "correlation coefficient may be inaccurate.")
+                   "correlation coefficient may be inaccurate.")
             warnings.warn(stats.NearConstantInputWarning(msg), stacklevel=2)
 
     with np.errstate(invalid='ignore', divide='ignore'):
@@ -4806,9 +4808,10 @@ def pearsonr(x, y, *, alternative='two-sided', method=None, axis=0):
     dist = _SimpleBeta(ab, ab, loc=-1, scale=2)
     pvalue = _get_pvalue(r, dist, alternative, xp=xp)
 
-    mask = (n == 2)   #  return exactly 1.0 or -1.0 values for n == 2 case as promised
+    mask = (n == 2)  # return exactly 1.0 or -1.0 values for n == 2 case as promised
     # data-apis/array-api-extra#196
     mxp = array_namespace(r._meta) if is_dask(xp) else xp
+
     def special_case(r):
         return mxp.where(mxp.isnan(r), mxp.nan, mxp.ones_like(r))
     r = xpx.apply_where(mask, r, mxp.round, fill_value=r)
@@ -5111,7 +5114,7 @@ def fisher_exact(table, alternative=None, *, method=None):
 def _fisher_exact_rxc(table, alternative, method):
     if alternative is not None:
         message = ('`alternative` must be the default (None) unless '
-                  '`table` has shape `(2, 2)` and `method is None`.')
+                   '`table` has shape `(2, 2)` and `method is None`.')
         raise ValueError(message)
 
     if table.size == 0:
@@ -6019,9 +6022,9 @@ def weightedtau(x, y, rank=True, weigher=None, additive=True):
     return res
 
 
-#####################################
+###################################
 #       INFERENTIAL STATISTICS      #
-#####################################
+###################################
 
 TtestResultBase = _make_tuple_bunch('TtestResultBase',
                                     ['statistic', 'pvalue'], ['df'])
@@ -6066,7 +6069,6 @@ class TtestResult(TtestResultBase):
         self._statistic_np = statistic if statistic_np is None else statistic_np
         self._dtype = statistic.dtype
         self._xp = array_namespace(statistic, pvalue) if xp is None else xp
-
 
     def confidence_interval(self, confidence_level=0.95):
         """
@@ -6838,7 +6840,7 @@ def ttest_ind(a, b, *, axis=0, equal_var=True, nan_policy='propagate',
 
     # when nan_policy='omit', `df` can be different for different axis-slices
     df = xp.broadcast_to(df, t.shape)
-    df = df[()] if df.ndim ==0 else df
+    df = df[()] if df.ndim == 0 else df
     estimate = m1 - m2
 
     return TtestResult(t, prob, df=df, alternative=alternative_nums[alternative],
@@ -7293,13 +7295,12 @@ def _power_divergence(f_obs, f_exp, ddof, axis, lambda_, sum_check=True):
 
     df = num_obs - 1 - ddof
     chi2 = _SimpleChi2(df)
-    pvalue = _get_pvalue(stat, chi2 , alternative='greater', symmetric=False, xp=xp)
+    pvalue = _get_pvalue(stat, chi2, alternative='greater', symmetric=False, xp=xp)
 
     stat = stat[()] if stat.ndim == 0 else stat
     pvalue = pvalue[()] if pvalue.ndim == 0 else pvalue
 
     return Power_divergenceResult(stat, pvalue)
-
 
 
 @xp_capabilities(marray=True)
@@ -8784,7 +8785,7 @@ BrunnerMunzelResult = namedtuple('BrunnerMunzelResult',
                                  ('statistic', 'pvalue'))
 
 
-@xp_capabilities(cpu_only=True, # torch GPU can't use `stdtr`
+@xp_capabilities(cpu_only=True,  # torch GPU can't use `stdtr`
                  marray=True,
                  skip_backends=[('dask.array', 'needs rankdata')])
 @_axis_nan_policy_factory(BrunnerMunzelResult, n_samples=2)
@@ -8926,8 +8927,8 @@ def brunnermunzel(x, y, alternative="two-sided", distribution="t",
 
 
 @xp_capabilities(cpu_only=True, exceptions=['cupy', 'jax.numpy'],
-    reason='Delegation for `special.stdtr` only implemented for CuPy and JAX.',
-    marray=True)
+                 reason='Delegation for `special.stdtr` only implemented for CuPy and JAX.',
+                 marray=True)
 @_axis_nan_policy_factory(SignificanceResult, kwd_samples=['weights'], paired=True)
 def combine_pvalues(pvalues, method='fisher', weights=None, *, axis=0):
     """
@@ -9139,18 +9140,17 @@ class QuantileTestResult:
     statistic_type: int
     pvalue: float
     _alternative: list[str] = field(repr=False)
-    _x : np.ndarray = field(repr=False)
-    _p : float = field(repr=False)
-    _statistic : float = field(repr=False)
-    _statistic_type : int = field(repr=False)
-    _pvalue : float = field(repr=False)
-    _axis : int = field(repr=False)
-    _axis_none : bool = field(repr=False)
-    _keepdims : bool = field(repr=False)
-    _ndim : int = field(repr=False)
-    _nan_out : bool = field(repr=False)
-    _xp : bool = field(repr=False)
-
+    _x: np.ndarray = field(repr=False)
+    _p: float = field(repr=False)
+    _statistic: float = field(repr=False)
+    _statistic_type: int = field(repr=False)
+    _pvalue: float = field(repr=False)
+    _axis: int = field(repr=False)
+    _axis_none: bool = field(repr=False)
+    _keepdims: bool = field(repr=False)
+    _ndim: int = field(repr=False)
+    _nan_out: bool = field(repr=False)
+    _xp: bool = field(repr=False)
 
     def confidence_interval(self, confidence_level=0.95):
         """
@@ -9704,9 +9704,9 @@ def quantile_test(x, *, q=0.0, p=0.5, alternative='two-sided', axis=0, keepdims=
     )
 
 
-#####################################
+###################################
 #       STATISTICAL DISTANCES       #
-#####################################
+###################################
 
 
 @xp_capabilities(np_only=True)
@@ -10463,9 +10463,9 @@ def _rankdata(x, method, return_sorted=False, return_ties=False, xp=None):
 
 
 @xp_capabilities(marray=True,
-    skip_backends=[('dask.array', 'uses `optimize.elementwise.find_root`'),
-                   ('array_api_strict', 'uses `optimize.elementwise.find_root`'),
-                   ('jax.numpy', 'uses `optimize.elementwise.find_root`')])
+                 skip_backends=[('dask.array', 'uses `optimize.elementwise.find_root`'),
+                                ('array_api_strict', 'uses `optimize.elementwise.find_root`'),
+                                ('jax.numpy', 'uses `optimize.elementwise.find_root`')])
 @_axis_nan_policy_factory(
     lambda x: x, n_outputs=1, result_to_tuple=lambda x, _: (x,),
     kwd_samples=['weights'], paired=True
@@ -10578,7 +10578,7 @@ def expectile(a, alpha=0.5, *, weights=None, axis=None):
             "The expectile level alpha must be in the range [0, 1]."
         )
 
-    if a.shape[-1] == 0:  #  Only for *testing* _axis_nan_policy decorator
+    if a.shape[-1] == 0:  # Only for *testing* _axis_nan_policy decorator
         return _get_nan(a, xp=xp)
 
     # for simplicity, ensure that shape is (batch size, sample size) and at least 2d
@@ -10934,7 +10934,7 @@ def linregress(x, y, alternative='two-sided', *, axis=0):
         ~degenerate,
         (ssxym, ssxm, ssym),
         lambda ssxym, ssxm, ssym: xp.clip(ssxym / xp.sqrt(ssxm * ssym), -1.0, 1.0),
-        lambda ssxym, ssxm, ssym: xp.where(ssxym==0, NaN, 0.0)
+        lambda ssxym, ssxm, ssym: xp.where(ssxym == 0, NaN, 0.0)
     )
 
     slope = ssxym / ssxm
@@ -10965,6 +10965,7 @@ def linregress(x, y, alternative='two-sided', *, axis=0):
     return LinregressResult(slope=slope, intercept=intercept, rvalue=r,
                             pvalue=prob, stderr=slope_stderr,
                             intercept_stderr=intercept_stderr)
+
 
 def _linearized_pmean(a, p, *, axis=None, weights=None, xp=None):
     # pmean linearized as a function of p about p = 0; see gh-23407

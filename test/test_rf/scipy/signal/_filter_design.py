@@ -39,7 +39,6 @@ __all__ = ['findfreqs', 'freqs', 'freqz', 'tf2zpk', 'zpk2tf', 'normalize',
 
 class BadCoefficients(UserWarning):
     """Warning about badly conditioned filter coefficients."""
-    pass
 
 
 abs = np.absolute
@@ -156,7 +155,7 @@ def findfreqs(num, den, N, kind='ba'):
         tz[(xp.abs(tz) < 1e5) & (xp.imag(tz) >= 0)]
     ))
 
-    integ = xp.astype(xp.abs(ez) < 1e-10, ez.dtype) # XXX True->1, False->0
+    integ = xp.astype(xp.abs(ez) < 1e-10, ez.dtype)  # XXX True->1, False->0
     hfreq = xp.round(
         xp.log10(xp.max(3*xp.abs(xp.real(ez) + integ) + 1.5*xp.imag(ez))) + 0.5
     )
@@ -530,8 +529,8 @@ def freqz(b, a=1, worN=512, whole=False, plot=None, fs=2*pi,
                 and n_fft > 0):  # TODO: review threshold acc. to benchmark?
 
             if (xp.isdtype(b.dtype, "real floating") and
-                xp.isdtype(a.dtype, "real floating")
-            ):
+                    xp.isdtype(a.dtype, "real floating")
+                    ):
                 fft_func = sp_fft.rfft
             else:
                 fft_func = sp_fft.fft
@@ -2463,7 +2462,7 @@ def bilinear(b, a, fs=1.0):
     # Note that rsnumpy's Polynomial coefficient order is backward compared to a and b.
 
     N = max(len(a), len(b)) - 1
-    numerator   = sum(b_ * zp1**(N-q) * zm1**q for q, b_ in enumerate(b[::-1]))
+    numerator = sum(b_ * zp1**(N-q) * zm1**q for q, b_ in enumerate(b[::-1]))
     denominator = sum(a_ * zp1**(N-p) * zm1**p for p, a_ in enumerate(a[::-1]))
 
     return normalize(
@@ -2644,7 +2643,7 @@ def iirdesign(wp, ws, gpass, gstop, analog=False, ftype='ellip', output='ba',
 
     if wp.shape[0] == 2:
         if not ((ws[0] < wp[0] and wp[1] < ws[1]) or
-               (wp[0] < ws[0] and ws[1] < wp[1])):
+                (wp[0] < ws[0] and ws[1] < wp[1])):
             raise ValueError("Passband must lie strictly inside stopband "
                              "or vice versa")
 
@@ -4180,7 +4179,7 @@ def _find_nat_freq(stopb, passb, gpass, gstop, filter_type, filter_kind, *, xp):
         nat = ((stopb ** 2 - passb[0] * passb[1]) /
                (stopb * (passb[0] - passb[1])))
     else:
-        raise ValueError(f"should not happen: {filter_type =}.")
+        raise ValueError(f"should not happen: {filter_type=}.")
 
     nat = xp.min(xp.abs(nat))
     return nat, passb
@@ -4308,7 +4307,7 @@ def buttord(wp, ws, gpass, gstop, analog=False, fs=None):
         WN = passb / W0
     elif filter_type == 3:  # stop
         discr = xp.sqrt((passb[1] - passb[0]) ** 2 +
-                     4 * W0 ** 2 * passb[0] * passb[1])
+                        4 * W0 ** 2 * passb[0] * passb[1])
         WN0 = ((passb[1] - passb[0]) + discr) / (2 * W0)
         WN1 = ((passb[1] - passb[0]) - discr) / (2 * W0)
         WN = xp.asarray([float(WN0), float(WN1)])
@@ -4318,7 +4317,7 @@ def buttord(wp, ws, gpass, gstop, analog=False, fs=None):
         W0 = xp.asarray([-W0, W0], dtype=xp.float64)
         WN = (-W0 * (passb[1] - passb[0]) / 2.0 +
               xp.sqrt(W0 ** 2 / 4.0 * (passb[1] - passb[0]) ** 2 +
-                   passb[0] * passb[1]))
+                      passb[0] * passb[1]))
         WN = xp.sort(xp.abs(WN))
     else:
         raise ValueError(f"Bad type: {filter_type}")
@@ -4528,14 +4527,14 @@ def cheb2ord(wp, ws, gpass, gstop, analog=False, fs=None):
         nat = passb * new_freq
     elif filter_type == 3:
         nat0 = (new_freq / 2.0 * (passb[0] - passb[1]) +
-                  math.sqrt(new_freq ** 2 * (passb[1] - passb[0]) ** 2 / 4.0 +
-                       passb[1] * passb[0]))
+                math.sqrt(new_freq ** 2 * (passb[1] - passb[0]) ** 2 / 4.0 +
+                          passb[1] * passb[0]))
         nat1 = passb[1] * passb[0] / nat0
         nat = xp.asarray([float(nat0), float(nat1)])
     elif filter_type == 4:
         nat0 = (1.0 / (2.0 * new_freq) * (passb[0] - passb[1]) +
-                  math.sqrt((passb[1] - passb[0]) ** 2 / (4.0 * new_freq ** 2) +
-                       passb[1] * passb[0]))
+                math.sqrt((passb[1] - passb[0]) ** 2 / (4.0 * new_freq ** 2) +
+                          passb[1] * passb[0]))
         nat1 = passb[0] * passb[1] / nat0
         nat = xp.asarray([float(nat0), float(nat1)])
 
@@ -4798,7 +4797,7 @@ def cheb2ap(N, rs, *, xp=None, device=None):
         m = xp.concat(
             (xp.arange(-N + 1, 0, 2, dtype=xp.float64, device=device),
              xp.arange(2, N, 2, dtype=xp.float64, device=device)
-            )
+             )
         )
     else:
         m = xp.arange(-N+1, N, 2, dtype=xp.float64, device=device)
@@ -6000,7 +5999,7 @@ def gammatone(freq, ftype, order=None, numtaps=None, fs=None, *, xp=None, device
         g = math.hypot(g.real, g.imag)
 
         # Create empty filter coefficient lists
-        b = [None] * 5  #np.empty(5)
+        b = [None] * 5  # np.empty(5)
         a = [None] * 9  # np.empty(9)
 
         # Calculate the numerator coefficients
@@ -6075,9 +6074,9 @@ bessel_norms = {'bessel': 'phase',
                 'bessel_mag': 'mag'}
 
 
-########## complete the docstrings, on import
+# complete the docstrings, on import
 _xp_device_snippet = {'xp_device_snippet':
-"""\
+                      """\
 xp : array_namespace, optional
     Optional array namespace.
     Should be compatible with the array API standard, or supported by array-api-compat.
@@ -6086,12 +6085,12 @@ device : any
     optional device specification for output. Should match one of the
     supported device specification in ``xp``.
 """
-}
+                      }
 
 
 _names = ["buttap", "cheb1ap", "cheb2ap", "ellipap", "besselap",
           "iirnotch", "iirpeak", "iircomb", "gammatone",
-]
+          ]
 for name in _names:
     window = vars()[name]
     window.__doc__ = doccer.docformat(window.__doc__, _xp_device_snippet)

@@ -154,7 +154,7 @@ def _with_cache_optimization(
         f"""def {name}({arg_str}):
             return _wrapper({arg_str})
         """
-        )
+    )
     namespace = {"_wrapper": _wrapper}
     exec(code, namespace)
     wrapper = namespace[name]

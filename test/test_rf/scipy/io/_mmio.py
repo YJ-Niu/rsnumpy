@@ -15,7 +15,7 @@ from warnings import warn
 
 import rsnumpy as np
 from rsnumpy import (asarray, real, imag, conj, zeros, ndarray, concatenate,
-                   ones, can_cast)
+                     ones, can_cast)
 
 from scipy.sparse import coo_array, issparse, coo_matrix
 from scipy._lib.deprecation import _NoValue
@@ -249,7 +249,7 @@ def mmwrite(target, a, comment='', field=None, precision=None, symmetry=None):
     MMFile().write(target, a, comment, field, precision, symmetry)
 
 
-###############################################################################
+#############################################################################
 class MMFile:
     __slots__ = ('_rows',
                  '_cols',
@@ -558,7 +558,7 @@ class MMFile:
                 MMFile.FIELD_INTEGER: '%i\n',
                 MMFile.FIELD_UNSIGNED: '%u\n',
                 MMFile.FIELD_COMPLEX: '%%.%ie %%.%ie\n' %
-                    (precision, precision)
+                (precision, precision)
                 }.get(field, None)
 
     # -------------------------------------------------------------------------
@@ -617,8 +617,8 @@ class MMFile:
             data = coo_matrix(data)
         return data
 
-
     # -------------------------------------------------------------------------
+
     def write(self, target, a, comment='', field=None, precision=None,
               symmetry=None):
         """

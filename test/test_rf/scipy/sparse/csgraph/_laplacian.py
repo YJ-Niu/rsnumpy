@@ -8,7 +8,7 @@ from scipy.sparse.linalg import LinearOperator
 from scipy.sparse._sputils import convert_pydata_sparse_to_scipy, is_pydata_spmatrix
 
 
-###############################################################################
+#############################################################################
 # Graph laplacian
 def laplacian(
     csgraph,

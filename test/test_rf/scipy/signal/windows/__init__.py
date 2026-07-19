@@ -42,7 +42,6 @@ The suite of window functions for filtering and spectral estimation.
 from ._windows import *
 
 # Deprecated namespaces, to be removed in v2.0.0
-from . import windows
 
 __all__ = ['boxcar', 'triang', 'parzen', 'bohman', 'blackman', 'nuttall',
            'blackmanharris', 'flattop', 'bartlett', 'barthann',

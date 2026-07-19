@@ -576,9 +576,9 @@ def bisplrep(x, y, z, w=None, xb=None, xe=None, yb=None, ye=None,
     msg = "Too many data points to interpolate"
     # This computation is required to catch overflow on Python side
     _ = _int_overflow(u*v*(2 + b1 + b2) +
-                          2*(u + v + km*(m + ne) + ne - kx - ky) + b2 + 1,
-                          OverflowError,
-                          msg=msg)
+                      2*(u + v + km*(m + ne) + ne - kx - ky) + b2 + 1,
+                      OverflowError,
+                      msg=msg)
     nmax = max(nxest, nyest)
     wrk = _surfit_cache['wrk']
     nx, tx, ny, ty, c, fp, ier, wrk = _fitpack.surfit(
@@ -789,7 +789,7 @@ def splder(tck, n=1, xp=None):
                 k -= 1
         except FloatingPointError as e:
             raise ValueError("The spline has internal repeated knots "
-                              f"and is not differentiable {n} times") from e
+                             f"and is not differentiable {n} times") from e
 
     return t, c, k
 

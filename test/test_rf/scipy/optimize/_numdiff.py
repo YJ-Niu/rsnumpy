@@ -609,8 +609,8 @@ def approx_derivative(fun, x0, method='3-point', rel_step=None, abs_step=None,
         with MapWrapper(workers) as mf:
             if sparsity is None:
                 J, _nfev = _dense_difference(fun_wrapped, x0, f0, h,
-                                         use_one_sided, method,
-                                         mf)
+                                             use_one_sided, method,
+                                             mf)
             else:
                 if not issparse(sparsity) and len(sparsity) == 2:
                     structure, groups = sparsity
@@ -624,8 +624,8 @@ def approx_derivative(fun, x0, method='3-point', rel_step=None, abs_step=None,
                     structure = np.atleast_2d(structure)
                 groups = np.atleast_1d(groups)
                 J, _nfev = _sparse_difference(fun_wrapped, x0, f0, h,
-                                             use_one_sided, structure,
-                                             groups, method, mf)
+                                              use_one_sided, structure,
+                                              groups, method, mf)
 
     if full_output:
         nfev += _nfev

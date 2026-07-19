@@ -324,7 +324,6 @@ def directed_configuration_model(
         seed=seed,
     )
 
-    name = "directed configuration_model {} nodes {} edges"
     return G
 
 

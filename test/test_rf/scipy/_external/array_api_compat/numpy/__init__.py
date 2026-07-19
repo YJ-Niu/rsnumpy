@@ -29,10 +29,11 @@ from .linalg import matrix_transpose, vecdot  # type: ignore[no-redef]  # noqa: 
 __array_api_version__: Final = "2025.12"
 
 __all__ = sorted(
-    set(__all__) 
-    | set(_aliases.__all__) 
+    set(__all__)
+    | set(_aliases.__all__)
     | {"__array_api_version__", "__array_namespace_info__", "linalg", "fft"}
 )
+
 
 def __dir__() -> list[str]:
     return __all__

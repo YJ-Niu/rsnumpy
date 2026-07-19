@@ -26,8 +26,8 @@ which has a similar API.
 # instances of ``netcdf_file`` and ``netcdf_variable``. To differentiate
 # between user-set attributes and instance attributes, user-set attributes
 # are automatically stored in the ``_attributes`` attribute by overloading
-#``__setattr__``. This is the reason why the code sometimes uses
-#``obj.__dict__['key'] = value``, instead of simply ``obj.key = value``;
+# ``__setattr__``. This is the reason why the code sometimes uses
+# ``obj.__dict__['key'] = value``, instead of simply ``obj.key = value``;
 # otherwise the key would be inserted into userspace attributes.
 
 
@@ -229,6 +229,7 @@ class netcdf_file:
     b'Created for a test'
 
     """
+
     def __init__(self, filename, mode='r', mmap=None, version=1,
                  maskandscale=False):
         """Initialize netcdf_file from fileobj (str or file-like)."""
@@ -388,8 +389,8 @@ class netcdf_file:
         # convert to big endian always for NetCDF 3
         data = empty(shape_, dtype=type.newbyteorder("B"))
         self.variables[name] = netcdf_variable(
-                data, typecode, size, shape, dimensions,
-                maskandscale=self.maskandscale)
+            data, typecode, size, shape, dimensions,
+            maskandscale=self.maskandscale)
         return self.variables[name]
 
     def flush(self):
@@ -466,8 +467,8 @@ class netcdf_file:
             # Now that we have the metadata, we know the vsize of
             # each record variable, so we can calculate recsize.
             self.__dict__['_recsize'] = sum([
-                    var._vsize for var in self.variables.values()
-                    if var.isrec])
+                var._vsize for var in self.variables.values()
+                if var.isrec])
             # Set the data for all variables.
             for name in variables:
                 self._write_var_data(name)
@@ -539,7 +540,7 @@ class netcdf_file:
                 # try to convert a ``=i4`` scalar to, say, '>i4' the dtype
                 # will remain as ``=i4``.
                 if not rec.shape and (rec.dtype.byteorder == '<' or
-                        (rec.dtype.byteorder == '=' and LITTLE_ENDIAN)):
+                                      (rec.dtype.byteorder == '=' and LITTLE_ENDIAN)):
                     rec = rec.byteswap()
                 self.fp.write(rec.tobytes())
                 # Padding
@@ -589,7 +590,7 @@ class netcdf_file:
         self._pack_int(nelems)
 
         if not values.shape and (values.dtype.byteorder == '<' or
-                (values.dtype.byteorder == '=' and LITTLE_ENDIAN)):
+                                 (values.dtype.byteorder == '=' and LITTLE_ENDIAN)):
             values = values.byteswap()
         self.fp.write(values.tobytes())
         count = values.size * values.itemsize
@@ -701,8 +702,8 @@ class netcdf_file:
 
             # Add variable.
             self.variables[name] = netcdf_variable(
-                    data, typecode, size, shape, dimensions, attributes,
-                    maskandscale=self.maskandscale)
+                data, typecode, size, shape, dimensions, attributes,
+                maskandscale=self.maskandscale)
 
         if rec_vars:
             # Remove padding when only one record variable.
@@ -861,6 +862,7 @@ class netcdf_variable:
     `netcdf4-python <https://unidata.github.io/netcdf4-python/>`_.
 
     """
+
     def __init__(self, data, typecode, size, shape, dimensions,
                  attributes=None,
                  maskandscale=False):
@@ -995,8 +997,8 @@ class netcdf_variable:
     def __setitem__(self, index, data):
         if self.maskandscale:
             missing_value = (
-                    self._get_missing_value() or
-                    getattr(data, 'fill_value', 999999))
+                self._get_missing_value() or
+                getattr(data, 'fill_value', 999999))
             self._attributes.setdefault('missing_value', missing_value)
             self._attributes.setdefault('_FillValue', missing_value)
             data = ((data - self._attributes.get('add_offset', 0.0)) /

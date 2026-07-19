@@ -20,6 +20,8 @@ from ..common._typing import JustInt, JustFloat
 
 # torch.cross also does not support broadcasting when it would add new
 # dimensions https://github.com/pytorch/pytorch/issues/39656
+
+
 def cross(x1: Array, x2: Array, /, *, axis: int = -1) -> Array:
     x1, x2 = _fix_promotion(x1, x2, only_scalar=False)
     if not (-min(x1.ndim, x2.ndim) <= axis < max(x1.ndim, x2.ndim)):
@@ -28,6 +30,7 @@ def cross(x1: Array, x2: Array, /, *, axis: int = -1) -> Array:
         raise ValueError(f"cross product axis must have size 3, got {x1.shape[axis]} and {x2.shape[axis]}")
     x1, x2 = torch.broadcast_tensors(x1, x2)
     return torch.linalg.cross(x1, x2, dim=axis)
+
 
 def vecdot(x1: Array, x2: Array, /, *, axis: int = -1, **kwargs: object) -> Array:
     from ._aliases import isdtype
@@ -51,6 +54,7 @@ def vecdot(x1: Array, x2: Array, /, *, axis: int = -1, **kwargs: object) -> Arra
         return res[..., 0, 0]
     return torch.linalg.vecdot(x1, x2, dim=axis, **kwargs)
 
+
 def solve(x1: Array, x2: Array, /, **kwargs: object) -> Array:
     x1, x2 = _fix_promotion(x1, x2, only_scalar=False)
     # Torch tries to emulate rsnumpy 1 solve behavior by using batched 1-D solve
@@ -72,9 +76,12 @@ def solve(x1: Array, x2: Array, /, **kwargs: object) -> Array:
     return torch.linalg.solve(x1, x2, **kwargs)
 
 # torch.trace doesn't support the offset argument and doesn't support stacking
+
+
 def trace(x: Array, /, *, offset: int = 0, dtype: DType | None = None) -> Array:
     # Use our wrapped sum to make sure it does upcasting correctly
     return sum(torch.diagonal(x, offset=offset, dim1=-2, dim2=-1), axis=-1, dtype=dtype)
+
 
 def vector_norm(
     x: Array,
@@ -107,8 +114,10 @@ def vector_norm(
         return out
     return torch.linalg.vector_norm(x, ord=ord, axis=axis, keepdim=keepdims, **kwargs)
 
+
 __all__ += ['outer', 'matmul', 'matrix_transpose', 'tensordot',
             'cross', 'vecdot', 'solve', 'trace', 'vector_norm']
+
 
 def __dir__() -> list[str]:
     return __all__

@@ -4888,7 +4888,7 @@ class Network:
         Example
         --------
         >>> import skrf as rf
-        >>> import rsplotlib.pyplot as plt
+        >>> import matplotlib.pyplot as plt
 
         Create a two-port network object
 
@@ -5005,7 +5005,7 @@ class Network:
         Example
         --------
         >>> import skrf as rf
-        >>> import rsplotlib.pyplot as plt
+        >>> import matplotlib.pyplot as plt
 
         Create a two-port network object
 
@@ -5114,7 +5114,7 @@ class Network:
         Example
         --------
         >>> import skrf as rf
-        >>> import rsplotlib.pyplot as plt
+        >>> import matplotlib.pyplot as plt
 
         Create a two-port network object
 
@@ -5293,7 +5293,7 @@ class Network:
                     else:
                         xlabel = f'Frequency ({self.frequency.unit})'
                         # Plot the frequency already scaled to `unit` (e.g. GHz).
-                        # rsplotlib does not honor the FuncFormatter that
+                        # matplotlib does not honor the FuncFormatter that
                         # scale_frequency_ticks would set, so plotting raw Hz
                         # leaves the ticks in Hz while the label says GHz.
                         x = self.frequency.f_scaled

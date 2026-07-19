@@ -110,16 +110,16 @@ def minres(A, b, x0=None, *, rtol=1e-5, shift=0.0, maxiter=None,
         maxiter = 5 * n
 
     msg = [' beta2 = 0.  If M = I, b and x are eigenvectors    ',   # -1
-            ' beta1 = 0.  The exact solution is x0          ',   # 0
-            ' A solution to Ax = b was found, given rtol        ',   # 1
-            ' A least-squares solution was found, given rtol    ',   # 2
-            ' Reasonable accuracy achieved, given eps           ',   # 3
-            ' x has converged to an eigenvector                 ',   # 4
-            ' acond has exceeded 0.1/eps                        ',   # 5
-            ' The iteration limit was reached                   ',   # 6
-            ' A  does not define a symmetric matrix             ',   # 7
-            ' M  does not define a symmetric matrix             ',   # 8
-            ' M  does not define a pos-def preconditioner       ']   # 9
+           ' beta1 = 0.  The exact solution is x0          ',   # 0
+           ' A solution to Ax = b was found, given rtol        ',   # 1
+           ' A least-squares solution was found, given rtol    ',   # 2
+           ' Reasonable accuracy achieved, given eps           ',   # 3
+           ' x has converged to an eigenvector                 ',   # 4
+           ' acond has exceeded 0.1/eps                        ',   # 5
+           ' The iteration limit was reached                   ',   # 6
+           ' A  does not define a symmetric matrix             ',   # 7
+           ' M  does not define a symmetric matrix             ',   # 8
+           ' M  does not define a pos-def preconditioner       ']   # 9
 
     if show:
         print(first + 'Solution of symmetric Ax = b')
@@ -168,8 +168,8 @@ def minres(A, b, x0=None, *, rtol=1e-5, shift=0.0, maxiter=None,
         # see if A is symmetric
         w = matvec(y)
         r2 = matvec(w)
-        s = dotprod(w,w)
-        t = dotprod(y,r2)
+        s = dotprod(w, w)
+        t = dotprod(y, r2)
         z = abs(s - t)
         epsa = (s + eps) * eps**(1.0/3.0)
         if z > epsa:
@@ -177,8 +177,8 @@ def minres(A, b, x0=None, *, rtol=1e-5, shift=0.0, maxiter=None,
 
         # see if M is symmetric
         r2 = psolve(y)
-        s = dotprod(y,y)
-        t = dotprod(r1,r2)
+        s = dotprod(y, y)
+        t = dotprod(r1, r2)
         z = abs(s - t)
         epsa = (s + eps) * eps**(1.0/3.0)
         if z > epsa:
@@ -219,13 +219,13 @@ def minres(A, b, x0=None, *, rtol=1e-5, shift=0.0, maxiter=None,
         if itn >= 2:
             y = y - (beta/oldb)*r1
 
-        alfa = dotprod(v,y)
+        alfa = dotprod(v, y)
         y = y - (alfa/beta)*r2
         r1 = r2
         r2 = y
         y = psolve(r2)
         oldb = beta
-        beta = dotprod(r2,y)
+        beta = dotprod(r2, y)
         if beta < 0:
             raise ValueError('non-symmetric matrix')
         beta = sqrt(beta.real)
@@ -376,4 +376,4 @@ def minres(A, b, x0=None, *, rtol=1e-5, shift=0.0, maxiter=None,
     else:
         info = 0
 
-    return (x,info)
+    return (x, info)

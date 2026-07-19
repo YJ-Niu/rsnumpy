@@ -676,9 +676,9 @@ def _parse_network_text(lines):
     is_ascii = None
     is_directed = None
 
-    ##############
+    ############
     # Initial Pass
-    ##############
+    ############
 
     # Do an initial pass over the lines to determine what type of graph it is.
     # Remember what these lines were, so we can reiterate over them in the
@@ -755,9 +755,9 @@ def _parse_network_text(lines):
     # Reconstruct an iterator over all of the lines.
     parsing_line_iter = chain(initial_lines, initial_line_iter)
 
-    ##############
+    ############
     # Parsing Pass
-    ##############
+    ############
 
     edges = []
     nodes = []

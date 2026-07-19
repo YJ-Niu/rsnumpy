@@ -16,7 +16,6 @@ class IntegrationWarning(UserWarning):
     """
     Warning on issues during integration.
     """
-    pass
 
 
 @xp_capabilities(np_only=True)
@@ -287,7 +286,7 @@ def quad(func, a, b, args=(), full_output=0, epsabs=1.49e-8, epsrel=1.49e-8,
         is an integrator based on globally adaptive interval
         subdivision in connection with extrapolation, which will
         eliminate the effects of integrand singularities of
-        several types. The integration is performed using a 21-point Gauss-Kronrod 
+        several types. The integration is performed using a 21-point Gauss-Kronrod
         quadrature within each subinterval.
     qagie
         handles integration over infinite intervals. The infinite range is
@@ -442,7 +441,7 @@ def quad(func, a, b, args=(), full_output=0, epsabs=1.49e-8, epsrel=1.49e-8,
                         "blist": np.full(limit, np.nan, dtype=np.float64),
                         "rlist": np.zeros(limit, dtype=np.float64),
                         "elist": np.zeros(limit, dtype=np.float64),
-                        "iord" : np.zeros(limit, dtype=np.int32)}
+                        "iord": np.zeros(limit, dtype=np.int32)}
             if complex_func:
                 return (0.+0.j, 0.+0.j, {"real": infodict, "imag": infodict})
             else:
@@ -494,30 +493,30 @@ def quad(func, a, b, args=(), full_output=0, epsabs=1.49e-8, epsrel=1.49e-8,
         return retval[:-1]
 
     msgs = {80: "A Python error occurred possibly while calling the function.",
-             1: f"The maximum number of subdivisions ({limit}) has been achieved.\n  "
+            1: f"The maximum number of subdivisions ({limit}) has been achieved.\n  "
                 f"If increasing the limit yields no improvement it is advised to "
                 f"analyze \n  the integrand in order to determine the difficulties.  "
                 f"If the position of a \n  local difficulty can be determined "
                 f"(singularity, discontinuity) one will \n  probably gain from "
                 f"splitting up the interval and calling the integrator \n  on the "
                 f"subranges.  Perhaps a special-purpose integrator should be used.",
-             2: "The occurrence of roundoff error is detected, which prevents \n  "
+            2: "The occurrence of roundoff error is detected, which prevents \n  "
                 "the requested tolerance from being achieved.  "
                 "The error may be \n  underestimated.",
-             3: "Extremely bad integrand behavior occurs at some points of the\n  "
+            3: "Extremely bad integrand behavior occurs at some points of the\n  "
                 "integration interval.",
-             4: "The algorithm does not converge.  Roundoff error is detected\n  "
+            4: "The algorithm does not converge.  Roundoff error is detected\n  "
                 "in the extrapolation table.  It is assumed that the requested "
                 "tolerance\n  cannot be achieved, and that the returned result "
                 "(if full_output = 1) is \n  the best which can be obtained.",
-             5: "The integral is probably divergent, or slowly convergent.",
-             6: "The input is invalid.",
-             7: "Abnormal termination of the routine.  The estimates for result\n  "
+            5: "The integral is probably divergent, or slowly convergent.",
+            6: "The input is invalid.",
+            7: "Abnormal termination of the routine.  The estimates for result\n  "
                 "and error are less reliable.  It is assumed that the requested "
                 "accuracy\n  has not been achieved.",
             'unknown': "Unknown error."}
 
-    if weight in ['cos','sin'] and (b == np.inf or a == -np.inf):
+    if weight in ['cos', 'sin'] and (b == np.inf or a == -np.inf):
         msgs[1] = (
             "The maximum number of cycles allowed has been achieved., e.e.\n  of "
             "subintervals (a+(k-1)c, a+kc) where c = (2*int(abs(omega)+1))\n  "
@@ -554,7 +553,7 @@ def quad(func, a, b, args=(), full_output=0, epsabs=1.49e-8, epsrel=1.49e-8,
     except KeyError:
         msg = msgs['unknown']
 
-    if ier in [1,2,3,4,5,7]:
+    if ier in [1, 2, 3, 4, 5, 7]:
         if full_output:
             if weight in ['cos', 'sin'] and (b == np.inf or a == -np.inf):
                 return retval[:-1] + (msg, explain)
@@ -605,7 +604,7 @@ def quad(func, a, b, args=(), full_output=0, epsabs=1.49e-8, epsrel=1.49e-8,
     raise ValueError(msg)
 
 
-def _quad(func,a,b,args,full_output,epsabs,epsrel,limit,points):
+def _quad(func, a, b, args, full_output, epsabs, epsrel, limit, points):
     infbounds = 0
     if (b != np.inf and a != -np.inf):
         pass   # standard integration
@@ -623,15 +622,15 @@ def _quad(func,a,b,args,full_output,epsabs,epsrel,limit,points):
 
     if points is None:
         if infbounds == 0:
-            return _quadpack._qagse(func,a,b,args,full_output,epsabs,epsrel,limit)
+            return _quadpack._qagse(func, a, b, args, full_output, epsabs, epsrel, limit)
         else:
-            return _quadpack._qagie(func, bound, infbounds, args, full_output, 
+            return _quadpack._qagie(func, bound, infbounds, args, full_output,
                                     epsabs, epsrel, limit)
     else:
         if infbounds != 0:
             raise ValueError("Infinity inputs cannot be used with break points.")
         else:
-            #Duplicates force function evaluation at singular points
+            # Duplicates force function evaluation at singular points
             the_points = np.unique(points)
             the_points = the_points[a < the_points]
             the_points = the_points[the_points < b]
@@ -641,23 +640,23 @@ def _quad(func,a,b,args,full_output,epsabs,epsrel,limit,points):
 
 
 def _quad_weight(func, a, b, args, full_output, epsabs, epsrel,
-                 limlst, limit, maxp1,weight, wvar, wopts):
-    if weight not in ['cos','sin','alg','alg-loga','alg-logb','alg-log','cauchy']:
+                 limlst, limit, maxp1, weight, wvar, wopts):
+    if weight not in ['cos', 'sin', 'alg', 'alg-loga', 'alg-logb', 'alg-log', 'cauchy']:
         raise ValueError(f"{weight} not a recognized weighting function.")
 
-    strdict = {'cos':1,'sin':2,'alg':1,'alg-loga':2,'alg-logb':3,'alg-log':4}
+    strdict = {'cos': 1, 'sin': 2, 'alg': 1, 'alg-loga': 2, 'alg-logb': 3, 'alg-log': 4}
 
-    if weight in ['cos','sin']:
+    if weight in ['cos', 'sin']:
         integr = strdict[weight]
         if (b != np.inf and a != -np.inf):  # finite limits
             if wopts is None:         # no precomputed Chebyshev moments
                 return _quadpack._qawoe(func, a, b, wvar, integr, args, full_output,
-                                        epsabs, epsrel, limit, maxp1,1)
+                                        epsabs, epsrel, limit, maxp1, 1)
             else:                     # precomputed Chebyshev moments
                 momcom = wopts[0]
                 chebcom = wopts[1]
                 return _quadpack._qawoe(func, a, b, wvar, integr, args,
-                                        full_output,epsabs, epsrel, limit, maxp1, 2,
+                                        full_output, epsabs, epsrel, limit, maxp1, 2,
                                         momcom, chebcom)
 
         elif (b == np.inf and a != -np.inf):
@@ -665,13 +664,13 @@ def _quad_weight(func, a, b, args, full_output, epsabs, epsrel,
                                     epsabs, limlst, limit, maxp1)
         elif (b != np.inf and a == -np.inf):  # remap function and interval
             if weight == 'cos':
-                def thefunc(x,*myargs):
+                def thefunc(x, *myargs):
                     y = -x
                     func = myargs[0]
                     myargs = (y,) + myargs[1:]
                     return func(*myargs)
             else:
-                def thefunc(x,*myargs):
+                def thefunc(x, *myargs):
                     y = -x
                     func = myargs[0]
                     myargs = (y,) + myargs[1:]
@@ -766,7 +765,7 @@ def dblquad(func, a, b, gfun, hfun, args=(), epsabs=1.49e-8, epsrel=1.49e-8):
         is an integrator based on globally adaptive interval
         subdivision in connection with extrapolation, which will
         eliminate the effects of integrand singularities of
-        several types. The integration is is performed using a 21-point Gauss-Kronrod 
+        several types. The integration is is performed using a 21-point Gauss-Kronrod
         quadrature within each subinterval.
     qagie
         handles integration over infinite intervals. The infinite range is
@@ -826,7 +825,7 @@ def dblquad(func, a, b, gfun, hfun, args=(), epsabs=1.49e-8, epsrel=1.49e-8):
                 hfun(args[0]) if callable(hfun) else hfun]
 
     return nquad(func, [temp_ranges, [a, b]], args=args,
-            opts={"epsabs": epsabs, "epsrel": epsrel})
+                 opts={"epsabs": epsabs, "epsrel": epsrel})
 
 
 @xp_capabilities(np_only=True)
@@ -900,7 +899,7 @@ def tplquad(func, a, b, gfun, hfun, qfun, rfun, args=(), epsabs=1.49e-8,
         is an integrator based on globally adaptive interval
         subdivision in connection with extrapolation, which will
         eliminate the effects of integrand singularities of
-        several types. The integration is is performed using a 21-point Gauss-Kronrod 
+        several types. The integration is is performed using a 21-point Gauss-Kronrod
         quadrature within each subinterval.
     qagie
         handles integration over infinite intervals. The infinite range is
@@ -975,7 +974,7 @@ def tplquad(func, a, b, gfun, hfun, qfun, rfun, args=(), epsabs=1.49e-8,
 
     ranges = [ranges0, ranges1, [a, b]]
     return nquad(func, ranges, args=args,
-            opts={"epsabs": epsabs, "epsrel": epsrel})
+                 opts={"epsabs": epsabs, "epsrel": epsrel})
 
 
 @xp_capabilities(np_only=True)

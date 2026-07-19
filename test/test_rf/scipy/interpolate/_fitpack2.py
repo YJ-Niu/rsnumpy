@@ -232,9 +232,9 @@ def _regrid_smth(x, y, z, xb, xe, yb, ye, kx, ky, s, maxit):
 
     # Workspace
     lwrk = 4 + mx + my + nxest * (my + 2 * kx + 5) \
-           + nyest * (2 * ky + 5) + mx * (kx + 1) \
-           + my * (ky + 1) + \
-           max((nxest - kx - 1) * (nyest - ky - 1), my)
+        + nyest * (2 * ky + 5) + mx * (kx + 1) \
+        + my * (ky + 1) + \
+        max((nxest - kx - 1) * (nyest - ky - 1), my)
 
     wrk = np.zeros(lwrk, dtype=np.float64)
     kwrk = 3 + mx + my + nxest + nyest
@@ -353,7 +353,7 @@ def _regrid_smth_spher(iopt, ider, u, v, r, r0, r1, s, nuest, nvest, eps):
     return nu, tu, nv, tv, c, fp, ier
 
 
-# ############### Univariate spline ####################
+# ############### Univariate spline ##################
 
 _curfit_messages = {1: """
 The required storage space exceeds the available storage space, as
@@ -1095,7 +1095,7 @@ class InterpolatedUnivariateSpline(UnivariateSpline):
                  ext=0, check_finite=False):
 
         x, y, w, bbox, self.ext = self.validate_input(x, y, w, bbox, k, None,
-                                            ext, check_finite)
+                                                      ext, check_finite)
         if not np.all(diff(x) > 0.0):
             raise ValueError('x must be strictly increasing')
 
@@ -1268,7 +1268,7 @@ class LSQUnivariateSpline(UnivariateSpline):
         self._reset_class()
 
 
-# ############### Bivariate spline ####################
+# ############### Bivariate spline ##################
 
 class _BivariateSplineBase:
     """ Base class for Bivariate spline s(x,y) interpolation on the rectangle

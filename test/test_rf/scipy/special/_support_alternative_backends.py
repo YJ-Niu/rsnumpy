@@ -17,6 +17,7 @@ from . import _ufuncs
 
 # mypy: disable-error-code=dict-item
 
+
 def _special_namespace_for(xp):
     spx = scipy_namespace_for(xp)
     return getattr(spx, "special", None)
@@ -163,6 +164,7 @@ class _FuncInfo:
             # general rule for mask propagation.
 
             _f = globals()[self.name]  # Allow nested wrapping
+
             def f(*args, _f=_f, xp=xp, **kwargs):
                 data_args = [getattr(arg, 'data', arg) for arg in args]
                 out = _f(*data_args, **kwargs)
@@ -180,6 +182,7 @@ class _FuncInfo:
             # output depending on chunking!
 
             _f = globals()[self.name]  # Allow nested wrapping
+
             def f(*args, _f=_f, xp=xp, **kwargs):
                 # Hide dtype kwarg from map_blocks
                 return xp.map_blocks(functools.partial(_f, **kwargs), *args)
@@ -270,7 +273,6 @@ def _xlogy(xp, spsx):
     return __xlogy
 
 
-
 def _chdtr(xp, spsx):
     # The difference between this and just using `gammainc`
     # defined by `get_array_special_func` is that if `gammainc`
@@ -343,7 +345,7 @@ def _stdtrit(xp, spsx):
     from scipy.optimize.elementwise import bracket_root, find_root
 
     def __stdtrit(df, p):
-        def fun(t, df, p):  return stdtr(df, t) - p
+        def fun(t, df, p): return stdtr(df, t) - p
         res_bracket = bracket_root(fun, xp.zeros_like(p), args=(df, p))
         res_root = find_root(fun, res_bracket.bracket, args=(df, p))
         return res_root.x
@@ -818,9 +820,9 @@ _special_funcs = (
     ),
     _FuncInfo(
         _basic.polygamma, 2, int_only=(True, False), is_ufunc=False,
-              scalar_or_0d_only={"torch": (True, False)}, produces_0d=True,
-              positive_only={"torch": (True, False), "jax.numpy": True},
-              test_large_ints=False,
+        scalar_or_0d_only={"torch": (True, False)}, produces_0d=True,
+        positive_only={"torch": (True, False), "jax.numpy": True},
+        test_large_ints=False,
     ),
     _FuncInfo(_ufuncs.psi, 1, alt_names_map={"jax.numpy": "digamma"}),
     _FuncInfo(

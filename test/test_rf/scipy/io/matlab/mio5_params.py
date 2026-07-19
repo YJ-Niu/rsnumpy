@@ -8,6 +8,7 @@ __all__ = [  # noqa: F822
     'MatlabFunction', 'MatlabObject', 'MatlabOpaque', 'mat_struct',
 ]
 
+
 def __dir__():
     return __all__
 

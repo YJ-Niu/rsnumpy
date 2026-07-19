@@ -547,7 +547,7 @@ class OutDegreeView(DiDegreeView):
     """A DegreeView class to report out_degree for a DiGraph; See DegreeView"""
 
     def __getitem__(self, n):
-        weight = self._weight
+        self._weight
         nbrs = self._succ[n]
         if self._weight is None:
             return len(nbrs)

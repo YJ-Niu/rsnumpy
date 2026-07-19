@@ -39,6 +39,7 @@ def binary_closing_signature(
 ):
     return array_namespace(input, structure, _skip_if_dtype(output))
 
+
 binary_opening_signature = binary_closing_signature
 
 
@@ -46,6 +47,7 @@ def binary_dilation_signature(
     input, structure=None, iterations=1, mask=None, output=None, *args, **kwds
 ):
     return array_namespace(input, structure, _skip_if_dtype(output), mask)
+
 
 binary_erosion_signature = binary_dilation_signature
 
@@ -75,11 +77,13 @@ def binary_propagation_signature(
 def convolve_signature(input, weights, output=None, *args, **kwds):
     return array_namespace(input, weights, _skip_if_dtype(output))
 
+
 correlate_signature = convolve_signature
 
 
 def convolve1d_signature(input, weights, axis=-1, output=None, *args, **kwds):
     return array_namespace(input, weights, _skip_if_dtype(output))
+
 
 correlate1d_signature = convolve1d_signature
 
@@ -112,11 +116,13 @@ def find_objects_signature(input, max_label=0):
 def fourier_ellipsoid_signature(input, size, n=-1, axis=-1, output=None):
     return array_namespace(input, _skip_if_dtype(output))
 
+
 fourier_uniform_signature = fourier_ellipsoid_signature
 
 
 def fourier_gaussian_signature(input, sigma, n=-1, axis=-1, output=None):
     return array_namespace(input, _skip_if_dtype(output))
+
 
 def fourier_shift_signature(input, shift, n=-1, axis=-1, output=None):
     return array_namespace(input, _skip_if_dtype(output))
@@ -134,6 +140,7 @@ def gaussian_filter1d_signature(
 
 def gaussian_gradient_magnitude_signature(input, sigma, output=None, *args, **kwds):
     return array_namespace(input, _skip_if_dtype(output))
+
 
 gaussian_laplace_signature = gaussian_gradient_magnitude_signature
 
@@ -197,12 +204,14 @@ def map_coordinates_signature(input, coordinates, output=None, *args, **kwds):
 def maximum_filter1d_signature(input, size, axis=-1, output=None, *args, **kwds):
     return array_namespace(input, _skip_if_dtype(output))
 
+
 minimum_filter1d_signature = maximum_filter1d_signature
 uniform_filter1d_signature = maximum_filter1d_signature
 
 
 def maximum_signature(input, labels=None, index=None):
     return array_namespace(input, labels, index)
+
 
 minimum_signature = maximum_signature
 median_signature = maximum_signature
@@ -224,6 +233,7 @@ def median_filter_signature(
 ):
     return array_namespace(input, footprint, _skip_if_dtype(output))
 
+
 minimum_filter_signature = median_filter_signature
 maximum_filter_signature = median_filter_signature
 
@@ -232,6 +242,7 @@ def morphological_gradient_signature(
     input, size=None, footprint=None, structure=None, output=None, *args, **kwds
 ):
     return array_namespace(input, footprint, structure, _skip_if_dtype(output))
+
 
 morphological_laplace_signature = morphological_gradient_signature
 white_tophat_signature = morphological_gradient_signature
@@ -251,6 +262,7 @@ def percentile_filter_signature(
 def prewitt_signature(input, axis=-1, output=None, *args, **kwds):
     return array_namespace(input, _skip_if_dtype(output))
 
+
 sobel_signature = prewitt_signature
 
 
@@ -261,7 +273,7 @@ def rank_filter_signature(
 
 
 def rotate_signature(
-    input, angle, axes=(1, 0), reshape=True, output=None , *args, **kwds
+    input, angle, axes=(1, 0), reshape=True, output=None, *args, **kwds
 ):
     return array_namespace(input, _skip_if_dtype(output))
 
@@ -300,4 +312,3 @@ def watershed_ift_signature(input, markers, structure=None, output=None):
 
 def zoom_signature(input, zoom, output=None, *args, **kwds):
     return array_namespace(input, _skip_if_dtype(output))
-

@@ -70,7 +70,6 @@ def trstlp(A, b, delta, g):
         assert np.size(b) == num_constraints
         assert delta > 0
 
-
     vmultc = np.zeros(num_constraints + 1)
     iact = np.zeros(num_constraints + 1, dtype=int)
     nact = 0
@@ -86,11 +85,10 @@ def trstlp(A, b, delta, g):
     A_aug = np.hstack([A, g.reshape((num_vars, 1))])
     b_aug = np.hstack([b, 0])
 
-
     # Scale the problem if A contains large values. Otherwise floating point exceptions may occur.
     # Note that the trust-region step is scale invariant.
     for i in range(num_constraints+1):  # Note that A_aug.shape[1] == num_constraints+1
-        if (maxval:=max(abs(A_aug[:, i]))) > 1e12:
+        if (maxval := max(abs(A_aug[:, i]))) > 1e12:
             modscal = max(2*REALMIN, 1/maxval)
             A_aug[:, i] *= modscal
             b_aug[i] *= modscal
@@ -112,6 +110,7 @@ def trstlp(A, b, delta, g):
         assert np.linalg.norm(d) <= 2 * delta
 
     return d
+
 
 def trstlp_sub(iact: npt.NDArray, nact: int, stage, A, b, delta, d, vmultc, z):
     '''
@@ -148,7 +147,6 @@ def trstlp_sub(iact: npt.NDArray, nact: int, stage, A, b, delta, d, vmultc, z):
             assert nact >= 0 and nact <= np.minimum(mcon, num_vars)
             assert all(vmultc[:mcon]) >= 0
             # N.B.: Stage 1 defines only VMULTC(1:M); VMULTC(M+1) is undefined!
-
 
     # Initialize according to stage
     if stage == 1:
@@ -423,9 +421,9 @@ def trstlp_sub(iact: npt.NDArray, nact: int, stage, A, b, delta, d, vmultc, z):
             # fracmult contains only nan, which should not happen; icon >= mcon should never occur.
             break
 
-    #==================#
+    # ==================#
     # Calculation ends #
-    #==================#
+    # ==================#
 
     # Postconditions
     if DEBUGGING:
@@ -456,9 +454,9 @@ def trrad(delta_in, dnorm, eta1, eta2, gamma1, gamma2, ratio):
         # barrier.
         assert not np.isnan(ratio)
 
-    #====================#
+    # ====================#
     # Calculation starts #
-    #====================#
+    # ====================#
 
     if ratio <= eta1:
         delta = gamma1 * dnorm  # Powell's UOBYQA/NEWUOA
@@ -482,9 +480,9 @@ def trrad(delta_in, dnorm, eta1, eta2, gamma1, gamma2, ratio):
     # else:  # Ensure DELTA > DELTA_IN with a constant factor
     #     delta = max(delta_in * (1 + gamma2) / 2, gamma2 * dnorm)
 
-    #==================#
+    # ==================#
     # Calculation ends #
-    #==================#
+    # ==================#
 
     # Postconditions
     if DEBUGGING:

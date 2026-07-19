@@ -13,6 +13,7 @@ __all__ = clone_module("torch.fft", globals())
 
 # Several torch fft functions do not map axes to dim
 
+
 def fftn(
     x: Array,
     /,
@@ -23,6 +24,7 @@ def fftn(
     **kwargs: object,
 ) -> Array:
     return torch.fft.fftn(x, s=s, dim=axes, norm=norm, **kwargs)
+
 
 def ifftn(
     x: Array,
@@ -35,6 +37,7 @@ def ifftn(
 ) -> Array:
     return torch.fft.ifftn(x, s=s, dim=axes, norm=norm, **kwargs)
 
+
 def rfftn(
     x: Array,
     /,
@@ -45,6 +48,7 @@ def rfftn(
     **kwargs: object,
 ) -> Array:
     return torch.fft.rfftn(x, s=s, dim=axes, norm=norm, **kwargs)
+
 
 def irfftn(
     x: Array,
@@ -57,6 +61,7 @@ def irfftn(
 ) -> Array:
     return torch.fft.irfftn(x, s=s, dim=axes, norm=norm, **kwargs)
 
+
 def fftshift(
     x: Array,
     /,
@@ -65,6 +70,7 @@ def fftshift(
     **kwargs: object,
 ) -> Array:
     return torch.fft.fftshift(x, dim=axes, **kwargs)
+
 
 def ifftshift(
     x: Array,
@@ -77,6 +83,7 @@ def ifftshift(
 
 
 __all__ += ["fftn", "ifftn", "rfftn", "irfftn", "fftshift", "ifftshift"]
+
 
 def __dir__() -> list[str]:
     return __all__

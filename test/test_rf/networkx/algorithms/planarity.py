@@ -459,7 +459,7 @@ class LRPlanarity:
             v = dfs_stack.pop()
             e = self.parent_edge[v]
 
-            for w in self.adjs[v][ind[v] :]:
+            for w in self.adjs[v][ind[v]:]:
                 vw = (v, w)
 
                 if not skip_init[vw]:
@@ -547,7 +547,7 @@ class LRPlanarity:
             # to indicate whether to skip the final block after the for loop
             skip_final = False
 
-            for w in self.ordered_adjs[v][ind[v] :]:
+            for w in self.ordered_adjs[v][ind[v]:]:
                 ei = (v, w)
 
                 if not skip_init[ei]:
@@ -701,7 +701,7 @@ class LRPlanarity:
         while dfs_stack:
             v = dfs_stack.pop()
 
-            for w in self.ordered_adjs[v][ind[v] :]:
+            for w in self.ordered_adjs[v][ind[v]:]:
                 ind[v] += 1
                 ei = (v, w)
 

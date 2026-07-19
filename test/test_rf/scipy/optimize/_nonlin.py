@@ -26,15 +26,14 @@ __all__ = [
     'diagbroyden', 'excitingmixing', 'newton_krylov',
     'BroydenFirst', 'KrylovJacobian', 'InverseJacobian', 'NoConvergence']
 
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Utility functions
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 
 class NoConvergence(Exception):
     """Exception raised when nonlinear solver fails to converge within the specified
     `maxiter`."""
-    pass
 
 
 def maxnorm(x):
@@ -61,9 +60,9 @@ def _safe_norm(v):
         return np.array(np.inf)
     return norm(v)
 
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Generic nonlinear solver machinery
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 
 _doc_parts = dict(
@@ -182,6 +181,7 @@ def nonlin_solve(F, x0, jacobian='krylov', iter=None, verbose=False,
                                      iter=iter, norm=tol_norm)
 
     x0 = _as_inexact(x0)
+
     def func(z):
         return _as_inexact(F(_array_like(z, x0))).flatten()
     x = x0.flatten()
@@ -338,6 +338,7 @@ class TerminationCondition:
     - |dx| < x_tol
 
     """
+
     def __init__(self, f_tol=None, f_rtol=None, x_tol=None, x_rtol=None,
                  iter=None, norm=maxnorm):
 
@@ -385,9 +386,9 @@ class TerminationCondition:
                         and dx_norm/self.x_rtol <= x_norm))
 
 
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Generic Jacobian approximation
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 class Jacobian:
     """
@@ -438,7 +439,6 @@ class Jacobian:
                 raise ValueError(f"Unknown keyword argument {name}")
             if value is not None:
                 setattr(self, name, kw[name])
-
 
         if hasattr(self, "todense"):
             def __array__(self, dtype=None, copy=None):
@@ -599,9 +599,9 @@ def asjacobian(J):
         raise TypeError('Cannot convert object to a Jacobian')
 
 
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Broyden
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 class GenericBroyden(Jacobian):
     # generic type compatibility with scipy-stubs
@@ -678,7 +678,7 @@ class LowRankMatrix:
         A = alpha * np.identity(len(cs), dtype=c0.dtype)
         for i, d in enumerate(ds):
             for j, c in enumerate(cs):
-                A[i,j] += dotc(d, c)
+                A[i, j] += dotc(d, c)
 
         q = np.zeros(len(cs), dtype=c0.dtype)
         for j, d in enumerate(ds):
@@ -718,7 +718,7 @@ class LowRankMatrix:
 
     def append(self, c, d):
         if self.collapsed is not None:
-            self.collapsed += c[:,None] * d[None,:].conj()
+            self.collapsed += c[:, None] * d[None, :].conj()
             return
 
         self.cs.append(c)
@@ -741,7 +741,7 @@ class LowRankMatrix:
 
         Gm = self.alpha*np.identity(self.n, dtype=self.dtype)
         for c, d in zip(self.cs, self.ds):
-            Gm += c[:,None]*d[None,:].conj()
+            Gm += c[:, None]*d[None, :].conj()
         return Gm
 
     def collapse(self):
@@ -832,8 +832,8 @@ class LowRankMatrix:
         D = dot(D, WH.T.conj())
 
         for k in range(q):
-            self.cs[k] = C[:,k].copy()
-            self.ds[k] = D[:,k].copy()
+            self.cs[k] = C[:, k].copy()
+            self.ds[k] = D[:, k].copy()
 
         del self.cs[q:]
         del self.ds[q:]
@@ -1035,9 +1035,9 @@ class BroydenSecond(BroydenFirst):
         self.Gm.append(c, d)
 
 
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Broyden-like (restricted memory)
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 class Anderson(GenericBroyden):
     """
@@ -1156,9 +1156,9 @@ class Anderson(GenericBroyden):
         b = np.empty((n, n), dtype=f.dtype)
         for i in range(n):
             for j in range(n):
-                b[i,j] = vdot(self.df[i], self.dx[j])
+                b[i, j] = vdot(self.df[i], self.dx[j])
                 if i == j and self.w0 != 0:
-                    b[i,j] -= vdot(self.df[i], self.df[i])*self.w0**2*self.alpha
+                    b[i, j] -= vdot(self.df[i], self.df[i])*self.w0**2*self.alpha
         gamma = solve(b, df_f)
 
         for m in range(n):
@@ -1185,14 +1185,14 @@ class Anderson(GenericBroyden):
                     wd = self.w0**2
                 else:
                     wd = 0
-                a[i,j] = (1+wd)*vdot(self.df[i], self.df[j])
+                a[i, j] = (1+wd)*vdot(self.df[i], self.df[j])
 
         a += np.triu(a, 1).T.conj()
         self.a = a
 
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Simple iterations
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 
 class DiagBroyden(GenericBroyden):
@@ -1368,9 +1368,9 @@ class ExcitingMixing(GenericBroyden):
         np.clip(self.beta, 0, self.alphamax, out=self.beta)
 
 
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Iterative/Krylov approximated Jacobians
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 class KrylovJacobian(Jacobian):
     """
@@ -1487,7 +1487,7 @@ class KrylovJacobian(Jacobian):
             cgs=scipy.sparse.linalg.cgs,
             minres=scipy.sparse.linalg.minres,
             tfqmr=scipy.sparse.linalg.tfqmr,
-            ).get(method, method)
+        ).get(method, method)
 
         self.method_kw = dict(maxiter=inner_maxiter, M=self.preconditioner)
 
@@ -1598,9 +1598,9 @@ class KrylovJacobian(Jacobian):
                 self.preconditioner.setup(x, f, func)
 
 
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Wrapper functions
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 def _nonlin_wrapper(name, jac):
     """

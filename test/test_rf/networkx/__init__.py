@@ -11,46 +11,25 @@ See https://networkx.org for complete documentation.
 __version__ = "3.6.1"
 
 
-# These are imported in order as listed
-from networkx.lazy_imports import _lazy_import
-
-from networkx.exception import *
-
 from networkx import utils
-from networkx.utils import _clear_cache, _dispatchable
 
-# load_and_call entry_points, set configs
 config = utils.backends._set_configs_from_environment()
-utils.config = utils.configs.config = config  # type: ignore[attr-defined]
+utils.config = utils.configs.config = config
 
-from networkx import classes
-from networkx.classes import filters
-from networkx.classes import *
+_dispatchable = utils.backends._dispatchable
 
+
+from networkx.exception import NetworkXError, NetworkXException, NetworkXNotImplemented
+from networkx.classes.graph import Graph
+from networkx.classes.digraph import DiGraph
+from networkx.classes.multigraph import MultiGraph
+from networkx.classes.multidigraph import MultiDiGraph
 from networkx import convert
-from networkx.convert import *
-
-from networkx import convert_matrix
-from networkx.convert_matrix import *
-
-from networkx import relabel
-from networkx.relabel import *
-
-from networkx import generators
-from networkx.generators import *
-
-from networkx import readwrite
-from networkx.readwrite import *
-
-# Need to test with SciPy, when available
-from networkx import algorithms
-from networkx.algorithms import *
-
-from networkx import linalg
-from networkx.linalg import *
-
-from networkx import drawing
-from networkx.drawing import *
+from networkx.utils.misc import _clear_cache
+from networkx.drawing.layout import spring_layout, circular_layout, random_layout, shell_layout, spectral_layout
+from networkx.drawing.nx_pylab import draw_networkx_nodes, draw_networkx_edges, draw_networkx_labels, draw_networkx_edge_labels
+from networkx.convert_matrix import to_numpy_array
+from networkx.classes.function import selfloop_edges, nodes, edges
 
 
 def __getattr__(name):

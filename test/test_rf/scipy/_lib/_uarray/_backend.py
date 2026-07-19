@@ -46,6 +46,7 @@ ArgumentReplacerType = typing.Callable[
     [tuple, dict, tuple], tuple[tuple, dict]
 ]
 
+
 def unpickle_function(mod_name, qname, self_):
     import importlib
 

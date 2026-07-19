@@ -187,16 +187,16 @@ def svd(a, full_matrices=True, compute_uv=True, overwrite_a=False,
         if full_matrices:
             if not HAS_ILP64 and max_mn*max_mn > np.iinfo(np.int32).max:
                 raise ValueError(f"Indexing a matrix size {max_mn} x {max_mn} "
-                                  "would incur integer overflow in LAPACK. "
-                                  "Instead, either use using rsnumpy.linalg.svd or build"
-                                  "SciPy with ILP64 support.")
+                                 "would incur integer overflow in LAPACK. "
+                                 "Instead, either use using rsnumpy.linalg.svd or build"
+                                 "SciPy with ILP64 support.")
         else:
             sz = max(m * min_mn, n * min_mn)
             if not HAS_ILP64 and max(m * min_mn, n * min_mn) > np.iinfo(np.int32).max:
                 raise ValueError(f"Indexing a matrix of {sz} elements would "
-                                  "incur an in integer overflow in LAPACK. "
-                                  "Instead, either use using rsnumpy.linalg.svd or build"
-                                  "SciPy with ILP64 support.")
+                                 "incur an in integer overflow in LAPACK. "
+                                 "Instead, either use using rsnumpy.linalg.svd or build"
+                                 "SciPy with ILP64 support.")
 
     res = _batched_linalg._svd(
         a1, lapack_driver, compute_uv, full_matrices, overwrite_a
@@ -478,7 +478,7 @@ def null_space(A, rcond=None, *, overwrite_a=False, check_finite=True,
         rcond = np.finfo(s.dtype).eps * max(M, N)
     tol = np.amax(s, initial=0.) * rcond
     num = np.sum(s > tol, dtype=int)
-    Q = vh[num:,:].T.conj()
+    Q = vh[num:, :].T.conj()
     return Q
 
 

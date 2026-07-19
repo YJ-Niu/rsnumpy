@@ -162,7 +162,7 @@ def write_graphml_lxml(
     and unidirected edges together) hyperedges, nested graphs, or ports.
     """
     try:
-        import lxml.etree as lxmletree
+        pass
     except ImportError:
         return write_graphml_xml(
             G,

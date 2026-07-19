@@ -108,14 +108,15 @@ def count_nonzero(
     axis: int | tuple[int, ...] | None = None,
     keepdims: py_bool = False,
 ) -> Array:
-   result = cp.count_nonzero(x, axis)
-   if keepdims:
-       if axis is None:
+    result = cp.count_nonzero(x, axis)
+    if keepdims:
+        if axis is None:
             return cp.reshape(result, [1]*x.ndim)
-       return cp.expand_dims(result, axis)
-   return result
+        return cp.expand_dims(result, axis)
+    return result
 
 # ceil, floor, and trunc return integers for integer inputs
+
 
 def ceil(x: Array, /) -> Array:
     if cp.issubdtype(x.dtype, cp.integer):
@@ -201,7 +202,7 @@ __all__ = _aliases.__all__ + ['asarray', 'astype',
                               'ceil', 'floor', 'trunc', 'take_along_axis',
                               'broadcast_arrays', 'meshgrid',
                               'searchsorted', 'isin',
-]
+                              ]
 
 
 def __dir__() -> list[str]:

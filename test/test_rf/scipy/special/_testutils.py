@@ -12,9 +12,9 @@ import scipy.special as sc
 __all__ = ['with_special_errors', 'assert_func_equal', 'FuncData']
 
 
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Check if a module is present to be used in tests
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 class MissingModule:
     def __init__(self, name):
@@ -30,9 +30,9 @@ def check_version(module, min_ver):
     )
 
 
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Enable convergence and loss of precision warnings -- turn off one by one
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 def with_special_errors(func):
     """
@@ -47,10 +47,10 @@ def with_special_errors(func):
     return wrapper
 
 
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Comparing function values at many data points at once, with helpful
 # error reports
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 def assert_func_equal(func, results, points, rtol=None, atol=None,
                       param_filter=None, knownfailure=None,
@@ -62,7 +62,7 @@ def assert_func_equal(func, results, points, rtol=None, atol=None,
 
     points = np.asarray(points)
     if points.ndim == 1:
-        points = points[:,None]
+        points = points[:, None]
     nparams = points.shape[1]
 
     if hasattr(results, '__name__'):
@@ -196,7 +196,7 @@ class FuncData:
             param_mask = np.ones((data.shape[0],), np.bool_)
             for j, filter in zip(self.param_columns, self.param_filter):
                 if filter:
-                    param_mask &= list(filter(data[:,j]))
+                    param_mask &= list(filter(data[:, j]))
             data = data[param_mask]
 
         # Pick parameters from the correct columns
@@ -204,11 +204,11 @@ class FuncData:
         for idx, j in enumerate(self.param_columns):
             if np.iscomplexobj(j):
                 j = int(j.imag)
-                params.append(data[:,j].astype(complex))
+                params.append(data[:, j].astype(complex))
             elif dtypes and idx < len(dtypes):
                 params.append(data[:, j].astype(dtypes[idx]))
             else:
-                params.append(data[:,j])
+                params.append(data[:, j])
 
         # Helper for evaluating results
         def eval_func_at_params(func, skip_mask=None):
@@ -232,7 +232,7 @@ class FuncData:
         # Grab the correct results
         if self.result_columns is not None:
             # Correct results passed in with the data
-            wanted = tuple([data[:,icol] for icol in self.result_columns])
+            wanted = tuple([data[:, icol] for icol in self.result_columns])
         else:
             # Function producing correct results passed in
             skip_mask = None
@@ -299,6 +299,7 @@ class FuncData:
                            f"(in output {output_num}):")
                 for j in np.nonzero(bad_j)[0]:
                     j = int(j)
+
                     def fmt(x):
                         return f'{np.array2string(x[j], precision=18):30s}'
                     a = "  ".join(map(fmt, params))

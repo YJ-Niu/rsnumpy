@@ -260,7 +260,7 @@ class IterativeSubproblem(BaseQuadraticSubproblem):
 
         # Get info about Hessian
         self.dimension = len(self.hess)
-        self.hess_gershgorin_lb,\
+        self.hess_gershgorin_lb, \
             self.hess_gershgorin_ub = gershgorin_bounds(self.hess)
         self.hess_inf = norm(self.hess, np.inf)
         self.hess_fro = norm(self.hess, 'fro')
@@ -424,7 +424,7 @@ class IterativeSubproblem(BaseQuadraticSubproblem):
                 p = step_len * z_min
                 # Check stop criteria
                 if (step_len**2 * s_min**2
-                    <= self.k_hard * lambda_current * tr_radius**2):
+                        <= self.k_hard * lambda_current * tr_radius**2):
                     break
 
                 # Update uncertainty bounds

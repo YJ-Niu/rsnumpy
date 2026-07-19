@@ -279,6 +279,7 @@ WHICH_DICT = {
 # The enum values for the parameter HOWMNY in _NEUPD and _SEUPD
 HOWMNY_DICT = {'A': 0, 'P': 1, 'S': 2}
 
+
 class ArpackError(RuntimeError):
     """
     ARPACK error.
@@ -297,7 +298,6 @@ class ArpackError(RuntimeError):
 
         msg = infodict.get(info, "Unknown error")
         super().__init__(f"ARPACK error {info}: {msg}")
-
 
 
 class ArpackNoConvergence(ArpackError):
@@ -364,7 +364,7 @@ class _ArpackParams:
             info = 0
 
         if sigma is None:
-            #sigma not used
+            # sigma not used
             self.sigma = 0
         else:
             self.sigma = sigma
@@ -657,7 +657,7 @@ class _SymmetricArpackParams(_ArpackParams):
 
         self._arpack_extract(
             self.arpack_dict, rvec, howmny, sselect, d, z, self.sigma,
-            self.resid, self.v, self.ipntr, self.workd, #[0:2 * self.n],
+            self.resid, self.v, self.ipntr, self.workd,  # [0:2 * self.n],
             self.workl
         )
 
@@ -836,7 +836,7 @@ class _UnsymmetricArpackParams(_ArpackParams):
             else:
                 # Generate complex random vector into resid
                 self.resid[:] = self.rng.uniform(low=-1.0, high=1.0, size=[self.n, 2]
-                ).view(np.complex128).astype(self.tp).ravel()
+                                                 ).view(np.complex128).astype(self.tp).ravel()
 
         elif self.arpack_dict['ido'] == 5:
             self.workd[yslice] = self.OP(self.workd[xslice])
@@ -907,9 +907,9 @@ class _UnsymmetricArpackParams(_ArpackParams):
                             z[:, i + 1] = z[:, i].conjugate()
                             i += 1
                         else:
-                            #last eigenvalue is complex: the imaginary part of
+                            # last eigenvalue is complex: the imaginary part of
                             # the eigenvector has not been returned
-                            #this can only happen if nreturned > k, so we'll
+                            # this can only happen if nreturned > k, so we'll
                             # throw out this case.
                             nreturned -= 1
                     i += 1
@@ -937,9 +937,9 @@ class _UnsymmetricArpackParams(_ArpackParams):
                             d[i + 1] = d[i].conj()
                             i += 1
                         else:
-                            #last eigenvalue is complex: the imaginary part of
+                            # last eigenvalue is complex: the imaginary part of
                             # the eigenvector has not been returned
-                            #this can only happen if nreturned > k, so we'll
+                            # this can only happen if nreturned > k, so we'll
                             # throw out this case.
                             nreturned -= 1
                     i += 1
@@ -995,6 +995,7 @@ class _UnsymmetricArpackParams(_ArpackParams):
             return d, z
         else:
             return d
+
 
 class SpLuInv(LinearOperator):
     """
@@ -1151,7 +1152,7 @@ def get_OPinv_matvec(A, M, sigma, hermitian=False, tol=0):
         return get_inv_matvec(A, hermitian=hermitian, tol=tol)
 
     if M is None:
-        #M is the identity matrix
+        # M is the identity matrix
         if isdense(A):
             if (np.issubdtype(A.dtype, np.complexfloating)
                     or np.imag(sigma) == 0):
@@ -1382,7 +1383,7 @@ def eigs(A, k=6, M=None, sigma=None, which='LM', v0=None,
                              "sigma = None or complex A")
 
         if M is None:
-            #standard eigenvalue problem
+            # standard eigenvalue problem
             mode = 1
             M_matvec = None
             Minv_matvec = None
@@ -1390,7 +1391,7 @@ def eigs(A, k=6, M=None, sigma=None, which='LM', v0=None,
                 raise ValueError("Minv should not be "
                                  "specified with M = None.")
         else:
-            #general eigenvalue problem
+            # general eigenvalue problem
             mode = 2
             if Minv is None:
                 Minv_matvec = get_inv_matvec(M, hermitian=True, tol=tol)
@@ -1399,7 +1400,7 @@ def eigs(A, k=6, M=None, sigma=None, which='LM', v0=None,
                 Minv_matvec = Minv.matvec
             M_matvec = aslinearoperator(M).matvec
     else:
-        #sigma is not None: shift-invert mode
+        # sigma is not None: shift-invert mode
         if np.issubdtype(A.dtype, np.complexfloating):
             if OPpart is not None:
                 raise ValueError("OPpart should not be specified "
@@ -1713,14 +1714,14 @@ def eigsh(A, k=6, M=None, sigma=None, which='LM', v0=None,
         if OPinv is not None:
             raise ValueError("OPinv should not be specified with sigma = None.")
         if M is None:
-            #standard eigenvalue problem
+            # standard eigenvalue problem
             mode = 1
             M_matvec = None
             Minv_matvec = None
             if Minv is not None:
                 raise ValueError("Minv should not be specified with M = None.")
         else:
-            #general eigenvalue problem
+            # general eigenvalue problem
             mode = 2
             if Minv is None:
                 Minv_matvec = get_inv_matvec(M, hermitian=True, tol=tol)

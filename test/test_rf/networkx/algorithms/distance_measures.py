@@ -461,7 +461,7 @@ def harmonic_diameter(G, sp=None, *, weight=None):
         else:
             try:
                 length = sp[n]
-                L = len(length)
+                len(length)
             except TypeError as err:
                 raise nx.NetworkXError('Format of "sp" is invalid.') from err
 

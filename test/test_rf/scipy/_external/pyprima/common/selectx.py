@@ -15,6 +15,7 @@ import rsnumpy.typing as npt
 from .consts import DEBUGGING, EPS, CONSTRMAX, REALMAX, FUNCMAX
 from .present import present
 
+
 def isbetter(f1: float, c1: float, f2: float, c2: float, ctol: float) -> bool:
     '''
     This function compares whether FC1 = (F1, C1) is (strictly) better than FC2 = (F2, C2), which
@@ -32,9 +33,9 @@ def isbetter(f1: float, c1: float, f2: float, c2: float, ctol: float) -> bool:
         assert c1 >= 0 and c2 >= 0
         assert ctol >= 0
 
-    #====================#
+    # ====================#
     # Calculation starts #
-    #====================#
+    # ====================#
 
     is_better = False
     # Even though NaN/+Inf should not occur in FC1 or FC2 due to the moderated extreme barrier, for
@@ -50,9 +51,9 @@ def isbetter(f1: float, c1: float, f2: float, c2: float, ctol: float) -> bool:
     cref = 10 * max(EPS, min(ctol, 1.0E-2 * CONSTRMAX))  # The MIN avoids overflow.
     is_better = is_better or (f1 < REALMAX and c1 <= ctol and (c2 > max(ctol, cref) or np.isnan(c2)))
 
-    #==================#
+    # ==================#
     # Calculation ends #
-    #==================#
+    # ==================#
 
     # Postconditions
     if DEBUGGING:
@@ -118,13 +119,13 @@ def savefilt(cstrv, ctol, cweight, f, x, nfilt, cfilt, ffilt, xfilt, constr=None
             assert np.size(confilt, 0) == num_constraints and np.size(confilt, 1) == maxfilt
             assert not (np.isnan(confilt[:, :nfilt]) | np.isneginf(confilt[:, :nfilt])).any()
 
-    #====================#
+    # ====================#
     # Calculation starts #
-    #====================#
+    # ====================#
 
     # Return immediately if any column of XFILT is better than X.
     if any((isbetter(ffilt_i, cfilt_i, f, cstrv, ctol) for ffilt_i, cfilt_i in zip(ffilt[:nfilt], cfilt[:nfilt]))) or \
-        any(np.logical_and(ffilt[:nfilt] <= f, cfilt[:nfilt] <= cstrv)):
+            any(np.logical_and(ffilt[:nfilt] <= f, cfilt[:nfilt] <= cstrv)):
         return nfilt, cfilt, ffilt, xfilt, confilt
 
     # Decide which columns of XFILT to keep.
@@ -156,7 +157,7 @@ def savefilt(cstrv, ctol, cweight, f, x, nfilt, cfilt, ffilt, xfilt, constr=None
         cref = max(cfilt_shifted[phi >= phimax])
         fref = max(ffilt[cfilt_shifted >= cref])
         kworst = np.ma.array(cfilt, mask=(ffilt > fref)).argmax()
-        if kworst < 0 or kworst >= len(keep):  #  For security. Should not happen.
+        if kworst < 0 or kworst >= len(keep):  # For security. Should not happen.
             kworst = 0
         keep[kworst] = False
 
@@ -178,9 +179,9 @@ def savefilt(cstrv, ctol, cweight, f, x, nfilt, cfilt, ffilt, xfilt, constr=None
         confilt[:, nfilt] = constr
     nfilt += 1  # In Python we need to increment the index afterwards
 
-    #==================#
+    # ==================#
     # Calculation ends #
-    #==================#
+    # ==================#
 
     # Postconditions
     if DEBUGGING:
@@ -200,7 +201,6 @@ def savefilt(cstrv, ctol, cweight, f, x, nfilt, cfilt, ffilt, xfilt, constr=None
         if present(confilt):
             assert np.size(confilt, 0) == num_constraints and np.size(confilt, 1) == maxfilt
             assert not (np.isnan(confilt[:, :nfilt]) | np.isneginf(confilt[:, :nfilt])).any()
-
 
     return nfilt, cfilt, ffilt, xfilt, confilt
 
@@ -227,9 +227,9 @@ def selectx(fhist: npt.NDArray, chist: npt.NDArray, cweight: float, ctol: float)
         assert cweight >= 0
         assert ctol >= 0
 
-    #====================#
+    # ====================#
     # Calculation starts #
-    #====================#
+    # ====================#
 
     # We select X among the points with F < FREF and CSTRV < CREF.
     # Do NOT use F <= FREF, because F == FREF (FUNCMAX or REALMAX) may mean F == INF in practice!
@@ -284,9 +284,9 @@ def selectx(fhist: npt.NDArray, chist: npt.NDArray, cweight: float, ctol: float)
         # Can't use argmin here because using it with a mask throws off the index
         kopt = np.ma.array(chist, mask=(fhist > fref)).argmin()
 
-    #==================#
+    # ==================#
     # Calculation ends #
-    #==================#
+    # ==================#
 
     # Postconditions
     if DEBUGGING:

@@ -1032,9 +1032,9 @@ class RigidTransform:
         return RigidTransform._from_raw_matrix(matrix, xp, None)
 
     def mean(self,
-        weights: ArrayLike | None = None,
-        axis: None | int | tuple[int, ...] = None
-    ) -> RigidTransform:
+             weights: ArrayLike | None = None,
+             axis: None | int | tuple[int, ...] = None
+             ) -> RigidTransform:
         """Get the mean of the transforms.
 
         The mean of a set of transforms is the same as the mean of its

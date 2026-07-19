@@ -8,30 +8,30 @@ Functions
 
 """
 
-## License for the Python wrapper
-## ==============================
+# License for the Python wrapper
+# ==============================
 
-## Copyright (c) 2004 David M. Cooke <cookedm@physics.mcmaster.ca>
+# Copyright (c) 2004 David M. Cooke <cookedm@physics.mcmaster.ca>
 
-## Permission is hereby granted, free of charge, to any person obtaining a
-## copy of this software and associated documentation files (the "Software"),
-## to deal in the Software without restriction, including without limitation
-## the rights to use, copy, modify, merge, publish, distribute, sublicense,
-## and/or sell copies of the Software, and to permit persons to whom the
-## Software is furnished to do so, subject to the following conditions:
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation
+# the rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Software, and to permit persons to whom the
+# Software is furnished to do so, subject to the following conditions:
 
-## The above copyright notice and this permission notice shall be included in
-## all copies or substantial portions of the Software.
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
 
-## THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-## IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-## FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-## AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-## LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-## FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-## DEALINGS IN THE SOFTWARE.
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+# DEALINGS IN THE SOFTWARE.
 
-## Modifications by Travis Oliphant and Enthought, Inc. for inclusion in SciPy
+# Modifications by Travis Oliphant and Enthought, Inc. for inclusion in SciPy
 
 import rsnumpy as np
 from rsnumpy import asarray, array, zeros   # noqa: F401
@@ -48,47 +48,48 @@ __all__ = ['fmin_l_bfgs_b', 'LbfgsInvHessProduct']
 
 
 status_messages = {
-    0 : "START",
-    1 : "NEW_X",
-    2 : "RESTART",
-    3 : "FG",
-    4 : "CONVERGENCE",
-    5 : "STOP",
-    6 : "WARNING",
-    7 : "ERROR",
-    8 : "ABNORMAL"
+    0: "START",
+    1: "NEW_X",
+    2: "RESTART",
+    3: "FG",
+    4: "CONVERGENCE",
+    5: "STOP",
+    6: "WARNING",
+    7: "ERROR",
+    8: "ABNORMAL"
 }
 
 
 task_messages = {
-    0 : "",
-    301 : "",
-    302 : "",
-    401 : "NORM OF PROJECTED GRADIENT <= PGTOL",
-    402 : "RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
-    501 : "CPU EXCEEDING THE TIME LIMIT",
-    502 : "TOTAL NO. OF F,G EVALUATIONS EXCEEDS LIMIT",
-    503 : "PROJECTED GRADIENT IS SUFFICIENTLY SMALL",
-    504 : "TOTAL NO. OF ITERATIONS REACHED LIMIT",
-    505 : "CALLBACK REQUESTED HALT",
-    601 : "ROUNDING ERRORS PREVENT PROGRESS",
-    602 : "STP = STPMAX",
-    603 : "STP = STPMIN",
-    604 : "XTOL TEST SATISFIED",
-    701 : "NO FEASIBLE SOLUTION",
-    702 : "FACTR < 0",
-    703 : "FTOL < 0",
-    704 : "GTOL < 0",
-    705 : "XTOL < 0",
-    706 : "STP < STPMIN",
-    707 : "STP > STPMAX",
-    708 : "STPMIN < 0",
-    709 : "STPMAX < STPMIN",
-    710 : "INITIAL G >= 0",
-    711 : "M <= 0",
-    712 : "N <= 0",
-    713 : "INVALID NBD",
+    0: "",
+    301: "",
+    302: "",
+    401: "NORM OF PROJECTED GRADIENT <= PGTOL",
+    402: "RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+    501: "CPU EXCEEDING THE TIME LIMIT",
+    502: "TOTAL NO. OF F,G EVALUATIONS EXCEEDS LIMIT",
+    503: "PROJECTED GRADIENT IS SUFFICIENTLY SMALL",
+    504: "TOTAL NO. OF ITERATIONS REACHED LIMIT",
+    505: "CALLBACK REQUESTED HALT",
+    601: "ROUNDING ERRORS PREVENT PROGRESS",
+    602: "STP = STPMAX",
+    603: "STP = STPMIN",
+    604: "XTOL TEST SATISFIED",
+    701: "NO FEASIBLE SOLUTION",
+    702: "FACTR < 0",
+    703: "FTOL < 0",
+    704: "GTOL < 0",
+    705: "XTOL < 0",
+    706: "STP < STPMIN",
+    707: "STP > STPMAX",
+    708: "STPMIN < 0",
+    709: "STPMAX < STPMIN",
+    710: "INITIAL G >= 0",
+    711: "M <= 0",
+    712: "N <= 0",
+    713: "INVALID NBD",
 }
+
 
 def fmin_l_bfgs_b(func, x0, fprime=None, args=(), approx_grad=0, bounds=None, m=10,
                   factr=1e7, pgtol=1e-5, epsilon=1e-8, maxfun=15000, maxiter=15000,

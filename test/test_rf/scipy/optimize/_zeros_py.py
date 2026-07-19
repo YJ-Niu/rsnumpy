@@ -987,7 +987,7 @@ def brenth(f, a, b, args=(),
     return results_c(full_output, r, "brenth")
 
 
-################################
+##############################
 # TOMS "Algorithm 748: Enclosing Zeros of Continuous Functions", by
 #  Alefeld, G. E. and Potra, F. A. and Shi, Yixun,
 #  See [1]
@@ -996,9 +996,9 @@ def brenth(f, a, b, args=(),
 def _notclose(fs, rtol=_rtol, atol=_xtol):
     # Ensure not None, not 0, all finite, and not very close to each other
     notclosefvals = (
-            all(fs) and all(np.isfinite(fs)) and
-            not any(any(np.isclose(_f, fs[i + 1:], rtol=rtol, atol=atol))
-                    for i, _f in enumerate(fs[:-1])))
+        all(fs) and all(np.isfinite(fs)) and
+        not any(any(np.isclose(_f, fs[i + 1:], rtol=rtol, atol=atol))
+                for i, _f in enumerate(fs[:-1])))
     return notclosefvals
 
 

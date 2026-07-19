@@ -5,7 +5,7 @@ import warnings
 
 import rsnumpy as np
 from rsnumpy import (dot, diag, prod, logical_not, ravel, transpose,
-                   conjugate, absolute, amax, sign, isfinite, triu)
+                     conjugate, absolute, amax, sign, isfinite, triu)
 
 from scipy._lib._util import _apply_over_batch, _deprecate_dtypes
 
@@ -29,7 +29,7 @@ feps = np.finfo('f').eps
 _array_precision = {'i': 1, 'l': 1, 'f': 0, 'd': 1, 'F': 0, 'D': 1}
 
 
-###############################################################################
+#############################################################################
 # Utility functions.
 
 
@@ -91,7 +91,7 @@ def _maybe_real(A, B, tol=None):
     return B
 
 
-###############################################################################
+#############################################################################
 # Matrix functions.
 
 
@@ -312,14 +312,14 @@ def expm(A):
         if info <= -11:
             # We raise it from failed mallocs; negative LAPACK codes > -7
             raise MemoryError("scipy.linalg.expm could not allocate "
-                            "sufficient memory while trying to compute the "
-                            f"exponential (error code {info}).")
+                              "sufficient memory while trying to compute the "
+                              f"exponential (error code {info}).")
         else:
             # LAPACK wrong argument error or exact singularity.
             # Neither should happen.
             raise RuntimeError("scipy.linalg.expm: Internal LAPACK "
-                                "error during the exponential computation "
-                                f"(error code {info})")
+                               "error during the exponential computation "
+                               f"(error code {info})")
     return eA
 
 

@@ -43,9 +43,9 @@ def setdrop_tr(ximproved, d, delta, rho, sim, simi):
         assert np.isfinite(simi).all()
         assert isinv(sim[:, :num_vars], simi, itol)
 
-    #====================#
+    # ====================#
     # Calculation starts #
-    #====================#
+    # ====================#
 
     # -------------------------------------------------------------------------------------------------- #
     #  The following code is Powell's scheme for defining JDROP.
@@ -145,9 +145,9 @@ def setdrop_tr(ximproved, d, delta, rho, sim, simi):
     if (ximproved and jdrop is None):
         jdrop = np.argmax(distsq)
 
-    #==================#
+    # ==================#
     # Calculation ends #
-    #==================#
+    # ==================#
 
     # Postconditions
     if DEBUGGING:
@@ -158,8 +158,6 @@ def setdrop_tr(ximproved, d, delta, rho, sim, simi):
         # starting point does not contain NaN and the trust-region/geometry steps never contain NaN.
 
     return jdrop
-
-
 
 
 def geostep(jdrop, amat, bvec, conmat, cpen, cval, delbar, fval, simi):
@@ -187,9 +185,9 @@ def geostep(jdrop, amat, bvec, conmat, cpen, cval, delbar, fval, simi):
         assert np.size(cval) == num_vars + 1 and not any(cval < 0 | np.isnan(cval) | np.isposinf(cval))
         assert 0 <= jdrop < num_vars
 
-    #====================#
+    # ====================#
     # Calculation starts #
-    #====================#
+    # ====================#
 
     # SIMI[JDROP, :] is a vector perpendicular to the face of the simplex to the opposite of vertex
     # JDROP. Set D to the vector in this direction and with length DELBAR.
@@ -206,16 +204,16 @@ def geostep(jdrop, amat, bvec, conmat, cpen, cval, delbar, fval, simi):
     A = np.zeros((num_vars, num_constraints))
     A[:, :m_lcon] = amat.T if amat is not None else amat
     A[:, m_lcon:] = matprod((conmat[m_lcon:, :num_vars] -
-                          np.tile(conmat[m_lcon:, num_vars], (num_vars, 1)).T), simi).T
+                             np.tile(conmat[m_lcon:, num_vars], (num_vars, 1)).T), simi).T
     # CVPD and CVND are the predicted constraint violation of D and -D by the linear models.
     cvpd = np.max(np.append(0, conmat[:, num_vars] + matprod(d, A)))
     cvnd = np.max(np.append(0, conmat[:, num_vars] - matprod(d, A)))
     if -inprod(d, g) + cpen * cvnd < inprod(d, g) + cpen * cvpd:
         d *= -1
 
-    #==================#
+    # ==================#
     # Calculation ends #
-    #==================#
+    # ==================#
 
     # Postconditions
     if DEBUGGING:

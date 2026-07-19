@@ -1,8 +1,6 @@
 """Functions for detecting communities based on modularity."""
 
-import random
 from collections import defaultdict
-from copy import deepcopy
 
 import networkx as nx
 from networkx.algorithms.community.quality import modularity
@@ -72,7 +70,7 @@ def _greedy_modularity_communities_generator(G, weight=None, resolution=1):
        Physical Review E 70(5 Pt 2):056131, 2004.
     """
     directed = G.is_directed()
-    N = G.number_of_nodes()
+    G.number_of_nodes()
 
     # Count edges (or the sum of edge-weights for weighted graphs)
     m = G.size(weight)
@@ -191,7 +189,7 @@ def _greedy_modularity_communities_generator(G, weight=None, resolution=1):
         # Remove row/col u from dq_dict matrix
         for w in dq_dict[u]:
             # Remove from dict
-            dq_old = dq_dict[w][u]
+            dq_dict[w][u]
             del dq_dict[w][u]
             # Remove from heaps if we haven't already
             if w != v:

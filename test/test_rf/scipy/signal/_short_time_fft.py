@@ -779,12 +779,11 @@ class ShortTimeFFT:
 
         SFT = cls(win=win/s_fac, hop=hop, fs=fs, fft_mode=fft_mode, mfft=mfft,
                   dual_win=win*s_fac, phase_shift=phase_shift,
-                  scale_to=None if scale_to=='unitary' else scale_to)
+                  scale_to=None if scale_to == 'unitary' else scale_to)
 
         if scale_to == 'unitary':
             SFT._scaling = scale_to
         return SFT
-
 
     @property
     def win(self) -> np.ndarray:
@@ -1096,7 +1095,7 @@ class ShortTimeFFT:
             'edge': dict(mode='edge'),
             'even': dict(mode='reflect', reflect_type='even'),
             'odd': dict(mode='reflect', reflect_type='odd'),
-           }  # typing of pad_kws is needed to make mypy happy
+        }  # typing of pad_kws is needed to make mypy happy
 
         n, n1 = x.shape[-1], (p1 - p0) * self.hop
         k0 = p0 * self.hop - self.m_num_mid + k_off  # start sample

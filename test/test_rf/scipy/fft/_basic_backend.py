@@ -24,13 +24,14 @@ complex_funcs = {'fft', 'ifft', 'fftn', 'ifftn', 'hfft', 'irfft', 'irfftn'}
 # PyTorch arrays and other array API standard supporting objects.
 # If xp.fft does not exist, we attempt to convert to np and back to use duccfft.
 
+
 def _execute_1D(func_str, duccfft_func, x, n, axis, norm, overwrite_x, workers, plan):
     xp = array_namespace(x)
 
     if is_numpy(xp):
         x = np.asarray(x)
         return duccfft_func(x, n=n, axis=axis, norm=norm,
-                              overwrite_x=overwrite_x, workers=workers, plan=plan)
+                            overwrite_x=overwrite_x, workers=workers, plan=plan)
 
     norm = _validate_fft_args(workers, plan, norm)
     if hasattr(xp, 'fft'):
@@ -38,7 +39,7 @@ def _execute_1D(func_str, duccfft_func, x, n, axis, norm, overwrite_x, workers, 
         if func_str in complex_funcs:
             try:
                 res = xp_func(x, n=n, axis=axis, norm=norm)
-            except: # backends may require complex input  # noqa: E722
+            except:  # backends may require complex input  # noqa: E722
                 x = xp_float_to_complex(x, xp)
                 res = xp_func(x, n=n, axis=axis, norm=norm)
             return res
@@ -55,7 +56,7 @@ def _execute_nD(func_str, duccfft_func, x, s, axes, norm, overwrite_x, workers, 
     if is_numpy(xp):
         x = np.asarray(x)
         return duccfft_func(x, s=s, axes=axes, norm=norm,
-                              overwrite_x=overwrite_x, workers=workers, plan=plan)
+                            overwrite_x=overwrite_x, workers=workers, plan=plan)
 
     norm = _validate_fft_args(workers, plan, norm)
     if hasattr(xp, 'fft'):
@@ -63,7 +64,7 @@ def _execute_nD(func_str, duccfft_func, x, s, axes, norm, overwrite_x, workers, 
         if func_str in complex_funcs:
             try:
                 res = xp_func(x, s=s, axes=axes, norm=norm)
-            except: # backends may require complex input  # noqa: E722
+            except:  # backends may require complex input  # noqa: E722
                 x = xp_float_to_complex(x, xp)
                 res = xp_func(x, s=s, axes=axes, norm=norm)
             return res
@@ -116,7 +117,6 @@ def fftn(x, s=None, axes=None, norm=None,
                        overwrite_x=overwrite_x, workers=workers, plan=plan)
 
 
-
 def ifftn(x, s=None, axes=None, norm=None,
           overwrite_x=False, workers=None, *, plan=None):
     return _execute_nD('ifftn', _duccfft.ifftn, x, s=s, axes=axes, norm=norm,
@@ -140,7 +140,7 @@ def rfftn(x, s=None, axes=None, norm=None,
 
 
 def rfft2(x, s=None, axes=(-2, -1), norm=None,
-         overwrite_x=False, workers=None, *, plan=None):
+          overwrite_x=False, workers=None, *, plan=None):
     return rfftn(x, s, axes, norm, overwrite_x, workers, plan=plan)
 
 
@@ -191,6 +191,7 @@ def ihfftn(x, s=None, axes=None, norm=None,
         return _duccfft.ihfftn(x, s, axes, norm, overwrite_x, workers, plan=plan)
     return xp.conj(rfftn(x, s, axes, _swap_direction(norm),
                          overwrite_x, workers, plan=plan))
+
 
 def ihfft2(x, s=None, axes=(-2, -1), norm=None,
            overwrite_x=False, workers=None, *, plan=None):

@@ -137,6 +137,7 @@ For more details see
 https://scipy.github.io/devdocs/tutorial/interpolate/interp_transition_guide.html
 """
 
+
 class interp2d:
     """
     interp2d(x, y, z, kind='linear', copy=True, bounds_error=False,
@@ -158,6 +159,7 @@ class interp2d:
 
         For more details see :ref:`interp-transition-guide`.
     """
+
     def __init__(self, x, y, z, kind='linear', copy=True, bounds_error=False,
                  fill_value=None):
         raise NotImplementedError(err_mesg)
@@ -513,8 +515,8 @@ class interp1d(_Interpolator1D):
         y_new = (
             ((x_new - x_lo)/(x_hi - x_lo))[:, None] * y_hi
             + ((x_hi - x_new)/(x_hi - x_lo))[:, None] * y_lo
-            )
-        
+        )
+
         return y_new
 
     def _call_nearest(self, x_new):
@@ -660,7 +662,7 @@ class _PPolyBase:
 
     def _get_dtype(self, dtype):
         if np.issubdtype(dtype, np.complexfloating) \
-               or np.issubdtype(self.c.dtype, np.complexfloating):
+                or np.issubdtype(self.c.dtype, np.complexfloating):
             return np.complex128
         else:
             return np.float64
@@ -711,7 +713,7 @@ class _PPolyBase:
         if self.x[-1] >= self.x[0]:
             if not x[-1] >= x[0]:
                 raise ValueError("`x` is in the different order "
-                                "than `self.x`.")
+                                 "than `self.x`.")
 
             if x[0] >= self.x[-1]:
                 action = 'append'
@@ -719,11 +721,11 @@ class _PPolyBase:
                 action = 'prepend'
             else:
                 raise ValueError("`x` is neither on the left or on the right "
-                                "from `self.x`.")
+                                 "from `self.x`.")
         else:
             if not x[-1] <= x[0]:
                 raise ValueError("`x` is in the different order "
-                                "than `self.x`.")
+                                 "than `self.x`.")
 
             if x[0] <= self.x[-1]:
                 action = 'append'
@@ -731,13 +733,13 @@ class _PPolyBase:
                 action = 'prepend'
             else:
                 raise ValueError("`x` is neither on the left or on the right "
-                                "from `self.x`.")
+                                 "from `self.x`.")
 
         dtype = self._get_dtype(c.dtype)
 
         k2 = max(c.shape[0], self.c.shape[0])
         c2 = np.zeros((k2, self.c.shape[1] + c.shape[1]) + self.c.shape[2:],
-                    dtype=dtype)
+                      dtype=dtype)
 
         if action == 'append':
             c2[k2-self.c.shape[0]:, :self.c.shape[1]] = self.c
@@ -1178,7 +1180,7 @@ class _BPoly(_PPolyBase):
                                      " length y1 or y2.")
 
             b = _BPoly._construct_from_derivatives(xi[i], xi[i+1],
-                                                  y1[:n1], y2[:n2])
+                                                   y1[:n1], y2[:n2])
             if len(b) < k:
                 b = _BPoly._raise_degree(b, k - len(b))
             c.append(b)
@@ -1196,7 +1198,7 @@ class _BPoly(_PPolyBase):
 
         dta, dtb = ya.dtype, yb.dtype
         if (np.issubdtype(dta, np.complexfloating) or
-               np.issubdtype(dtb, np.complexfloating)):
+                np.issubdtype(dtb, np.complexfloating)):
             dt = np.complex128
         else:
             dt = np.float64
@@ -2321,6 +2323,7 @@ class BPoly:
         xp_cls, xp_internal = _get_xp_bpoly_cls(xp)
         return xp.asarray(xp_cls._raise_degree(xp_internal.asarray(c), d))
 
+
 class NdPPoly:
     """
     Piecewise tensor product polynomial.
@@ -2427,7 +2430,7 @@ class NdPPoly:
 
     def _get_dtype(self, dtype):
         if np.issubdtype(dtype, np.complexfloating) \
-               or np.issubdtype(self.c.dtype, np.complexfloating):
+                or np.issubdtype(self.c.dtype, np.complexfloating):
             return np.complex128
         else:
             return np.float64
@@ -2555,7 +2558,7 @@ class NdPPoly:
         c = self.c.transpose(perm)
 
         c2 = np.zeros((c.shape[0] + nu,) + c.shape[1:],
-                     dtype=c.dtype)
+                      dtype=c.dtype)
         c2[:-nu] = c
 
         # divide by the correct rising factorials

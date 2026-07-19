@@ -1,3 +1,4 @@
+from scipy._lib._testutils import PytestTester
 r"""
 ==================================
 Constants (:mod:`scipy.constants`)
@@ -82,7 +83,7 @@ constants.
    The CODATA database uses ellipses to indicate that a value is defined
    (exactly) in terms of others but cannot be represented exactly with the
    allocated number of digits. In these cases, SciPy calculates the derived
-   value and reports it to the full precision of a Python ``float``. Although 
+   value and reports it to the full precision of a Python ``float``. Although
    ``physical_constants`` lists the uncertainty as ``0.0`` to indicate that
    the CODATA value is exact, the value in ``physical_constants`` is still
    subject to the truncation error inherent in double-precision representation.
@@ -331,18 +332,15 @@ References
 
 """  # noqa: E501
 # Modules contributed by BasSw (wegwerp@gmail.com)
-from ._codata import *
-from ._constants import *
 from ._codata import _obsolete_constants, physical_constants
 
 # Deprecated namespaces, to be removed in v2.0.0
-from . import codata, constants
 
 _constant_names_list = [(_k.lower(), _k, _v)
                         for _k, _v in physical_constants.items()
                         if _k not in _obsolete_constants]
 _constant_names = "\n".join(["``{}``{}  {} {}".format(_x[1], " "*(66-len(_x[1])),
-                                                  _x[2][0], _x[2][1])
+                                                      _x[2][0], _x[2][1])
                              for _x in sorted(_constant_names_list)])
 if __doc__:
     __doc__ = __doc__ % dict(constant_names=_constant_names)
@@ -352,6 +350,5 @@ del _constant_names_list
 
 __all__ = [s for s in dir() if not s.startswith('_')]
 
-from scipy._lib._testutils import PytestTester
 test = PytestTester(__name__)
 del PytestTester

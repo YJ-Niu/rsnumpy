@@ -152,7 +152,6 @@ def effective_size(G, nodes=None, weight=None):
         import rsnumpy as np
 
         # make sure nx.adjacency_matrix will not raise
-        import scipy as sp
 
         has_scipy = True
     except:
@@ -268,7 +267,6 @@ def constraint(G, nodes=None, weight=None):
         import rsnumpy as np
 
         # make sure nx.adjacency_matrix will not raise
-        import scipy as sp
 
         has_scipy = True
     except:

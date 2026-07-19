@@ -4,7 +4,7 @@ random selections.
 """
 
 import networkx as nx
-from networkx.utils import py_random_state
+from networkx.utils.decorators import py_random_state
 
 __all__ = [
     "powerlaw_sequence",

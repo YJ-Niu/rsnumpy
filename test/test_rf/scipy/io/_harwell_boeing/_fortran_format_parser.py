@@ -230,6 +230,7 @@ class FortranFormatParser:
     Only ExpFormat (exponential format for floating values) and IntFormat
     (integer format) for now.
     """
+
     def __init__(self):
         self.tokenizer = threading.local()
 

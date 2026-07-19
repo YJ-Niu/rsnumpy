@@ -1,5 +1,5 @@
 # Bounds may appear unused in this file but we need to import it to make it available to the user
-from scipy.optimize import NonlinearConstraint, LinearConstraint, Bounds
+from scipy.optimize import NonlinearConstraint, LinearConstraint
 from .common._nonlinear_constraints import process_nl_constraints
 from .common._linear_constraints import (
     combine_multiple_linear_constraints,
@@ -85,16 +85,20 @@ def minimize(fun, x0, args=(), method=None, bounds=None, constraints=(), callbac
 
     if method is None:
         if nonlinear_constraint_function is not None:
-            if not quiet: print("Nonlinear constraints detected, applying COBYLA")
+            if not quiet:
+                print("Nonlinear constraints detected, applying COBYLA")
             method = "cobyla"
         elif linear_constraint is not None:
-            if not quiet: print("Linear constraints detected without nonlinear constraints, applying LINCOA")
+            if not quiet:
+                print("Linear constraints detected without nonlinear constraints, applying LINCOA")
             method = "lincoa"
         elif bounds is not None:
-            if not quiet: print("Bounds without linear or nonlinear constraints detected, applying BOBYQA")
+            if not quiet:
+                print("Bounds without linear or nonlinear constraints detected, applying BOBYQA")
             method = "bobyqa"
         else:
-            if not quiet: print("No bounds or constraints detected, applying NEWUOA")
+            if not quiet:
+                print("No bounds or constraints detected, applying NEWUOA")
             method = "newuoa"
     else:
         # Raise some errors if methods were called with inappropriate options
@@ -116,6 +120,7 @@ def minimize(fun, x0, args=(), method=None, bounds=None, constraints=(), callbac
     except TypeError:
         x0 = np.array([x0])
         original_scalar_fun = fun
+
         def scalar_fun(x):
             return original_scalar_fun(x[0], *args)
         fun = scalar_fun
@@ -145,6 +150,7 @@ def minimize(fun, x0, args=(), method=None, bounds=None, constraints=(), callbac
         lb = lb[~_fixed_idx]
         ub = ub[~_fixed_idx]
         original_fun = fun
+
         def fixed_fun(x):
             newx = np.zeros(lenx0)
             newx[_fixed_idx] = _fixed_values
@@ -152,12 +158,11 @@ def minimize(fun, x0, args=(), method=None, bounds=None, constraints=(), callbac
             return original_fun(newx, *args)
         fun = fixed_fun
 
-
     # Project x0 onto the feasible set
     if nonlinear_constraint_function is None:
         result = _project(x0, lb, ub, {"linear": linear_constraint, "nonlinear": None})
         x0 = result.x
-    
+
     if linear_constraint is not None:
         A_eq, b_eq, A_ineq, b_ineq = separate_LC_into_eq_and_ineq(linear_constraint)
     else:

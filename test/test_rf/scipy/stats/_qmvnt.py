@@ -471,5 +471,5 @@ def _bvn(a, b, A):
     xl, xu = a[0] / s1, b[0] / s1
     yl, yu = a[1] / s2, b[1] / s2
     p = _bvnu(xl, yl, r) - _bvnu(xu, yl, r) - _bvnu(xl, yu, r) + _bvnu(xu, yu, r)
-    p = max( 0., min( p, 1. ) )
+    p = max(0., min(p, 1.))
     return p

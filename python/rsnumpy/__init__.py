@@ -40,7 +40,7 @@ from ._dtypes import (
 from . import ma
 from . import rec
 
-__version__ = "1.1.7"
+__version__ = "1.1.8"
 
 # 捕获内建函数别名：_extra 挂载会向本模块 globals 注入同名的 numpy 函数
 # （all/any/round），会遮蔽内建函数。以下别名保证本文件内部逻辑始终使用内建实现。
@@ -661,6 +661,12 @@ class ndarray:
         if getattr(self, '_dtype_obj', None) is not None and \
                 _is_ndarray(other) and getattr(other, '_dtype_obj', None) is not None:
             return _struct_eq(self, other)
+        if isinstance(other, str):
+            flat_list = self.flatten().tolist()
+            flat_result = [x == other for x in flat_list]
+            result = ndarray(flat_result)
+            result._dtype = "bool"
+            return result.reshape(self.shape)
         if _is_ndarray(other):
             return _wrap_result(self._array.__eq__(other._array), "bool")
         return _wrap_result(self._array.__eq__(other), "bool")
@@ -3305,7 +3311,14 @@ def asarray(a, dtype=None, order=None):
     if _is_ndarray(a):
         return a
     if dtype is not None:
-        dt_str = dtype if isinstance(dtype, str) else dtype.__name__
+        if isinstance(dtype, str):
+            dt_str = dtype
+        elif hasattr(dtype, '__name__'):
+            dt_str = dtype.__name__
+        elif hasattr(dtype, 'name'):
+            dt_str = dtype.name
+        else:
+            dt_str = str(dtype)
         if dt_str in ("complex", "complex128", "complex64", "cfloat", "cdouble"):
             _dtype = "complex128"
         else:
@@ -4428,7 +4441,23 @@ cbrt = _math_functions_module.cbrt
 abs = _math_functions_module.abs
 sign = _math_functions_module.sign
 reciprocal = _math_functions_module.reciprocal
-clip = _math_functions_module.clip
+_clip_core = _math_functions_module.clip
+
+def clip(a, a_min, a_max, out=None):
+    """限制值范围。"""
+    a_arr = asarray(a)
+    if a_min is None:
+        a_min = a_arr.min()
+    if a_max is None:
+        a_max = a_arr.max()
+    result = _clip_core(a, a_min, a_max)
+    if out is not None:
+        for i in range(len(result)):
+            out[i] = result[i]
+        return out
+    return result
+
+    
 sinc = _math_functions_module.sinc
 heaviside = _math_functions_module.heaviside
 add = _math_functions_module.add

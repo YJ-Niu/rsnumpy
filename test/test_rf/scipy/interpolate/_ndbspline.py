@@ -166,10 +166,10 @@ class NdBSpline:
             nu = np.asarray(nu, dtype=np.int64)
             if nu.ndim != 1 or nu.shape[0] != ndim:
                 raise ValueError(
-                    f"invalid number of derivative orders {nu = } for "
+                    f"invalid number of derivative orders {nu=} for "
                     f"ndim = {len(self.t)}.")
             if any(nu < 0):
-                raise ValueError(f"derivatives must be positive, got {nu = }")
+                raise ValueError(f"derivatives must be positive, got {nu=}")
 
         # prepare xi : shape (..., m1, ..., md) -> (1, m1, ..., md)
         xi = np.asarray(xi, dtype=float)
@@ -199,16 +199,16 @@ class NdBSpline:
 
         num_c_tr = c1.shape[-1]  # # of trailing coefficients
         out = _dierckx.evaluate_ndbspline(xi,
-                                 self._t,
-                                 self._len_t,
-                                 self._k,
-                                 nu,
-                                 extrapolate,
-                                 c1r,
-                                 num_c_tr,
-                                 _strides_c1,
-                                 self._indices_k1d,
-        )
+                                          self._t,
+                                          self._len_t,
+                                          self._k,
+                                          nu,
+                                          extrapolate,
+                                          c1r,
+                                          num_c_tr,
+                                          _strides_c1,
+                                          self._indices_k1d,
+                                          )
         out = out.view(self._c.dtype)
         out = out.reshape(xi_shape[:-1] + self._c.shape[ndim:])
         return self._asarray(out)
@@ -242,7 +242,7 @@ class NdBSpline:
         if len(t) != ndim:
             raise ValueError(
                 f"Data and knots are inconsistent: len(t) = {len(t)} for "
-                f" {ndim = }."
+                f" {ndim=}."
             )
 
         # tabulate the flat indices for iterating over the (k+1)**ndim subarray
@@ -260,7 +260,7 @@ class NdBSpline:
 
         # heavy lifting happens here
         data, indices, indptr = _dierckx._coloc_nd(xvals,
-                _t, len_t, k, _indices_k1d, cstrides)
+                                                   _t, len_t, k, _indices_k1d, cstrides)
 
         return csr_array((data, indices, indptr))
 
@@ -314,11 +314,11 @@ class NdBSpline:
 
         if nu_arr.ndim != 1 or nu_arr.shape[0] != ndim:
             raise ValueError(
-                f"invalid number of derivative orders {nu = } for "
+                f"invalid number of derivative orders {nu=} for "
                 f"ndim = {len(self.t)}.")
 
         if any(nu_arr < 0):
-            raise ValueError(f"derivative orders must be positive, got {nu = }")
+            raise ValueError(f"derivative orders must be positive, got {nu=}")
 
         # extract t and c as rsnumpy arrays
         t_new = [self._t[d, :self._len_t[d]] for d in range(self._t.shape[0])]
@@ -338,7 +338,8 @@ class NdBSpline:
                          self._asarray(c_new),
                          tuple(k_new),
                          extrapolate=self.extrapolate
-        )
+                         )
+
 
 def _preprocess_inputs(k, t_tpl):
     """Helpers: validate and preprocess NdBSpline inputs.
@@ -354,7 +355,7 @@ def _preprocess_inputs(k, t_tpl):
     if not isinstance(t_tpl, tuple):
         raise ValueError(f"Expect `t` to be a tuple of array-likes. "
                          f"Got {t_tpl} instead."
-        )
+                         )
 
     # 2. Make ``k`` a tuple of integers
     ndim = len(t_tpl)
@@ -367,7 +368,7 @@ def _preprocess_inputs(k, t_tpl):
     k = np.asarray([operator.index(ki) for ki in k], dtype=np.int64)
 
     if len(k) != ndim:
-        raise ValueError(f"len(t) = {len(t_tpl)} != {len(k) = }.")
+        raise ValueError(f"len(t) = {len(t_tpl)} != {len(k)=}.")
 
     # 3. Validate inputs
     ndim = len(t_tpl)
@@ -427,17 +428,17 @@ def _iter_solve(a, b, solver=ssl.gcrotmk, **solver_args):
         imag = _iter_solve(a, b.imag, solver, **solver_args)
         return real + 1j*imag
 
-    if b.ndim == 2 and b.shape[1] !=1:
+    if b.ndim == 2 and b.shape[1] != 1:
         res = np.empty_like(b)
         for j in range(b.shape[1]):
             res[:, j], info = solver(a, b[:, j], **solver_args)
             if info != 0:
-                raise ValueError(f"{solver = } returns {info =} for column {j}.")
+                raise ValueError(f"{solver=} returns {info=} for column {j}.")
         return res
     else:
         res, info = solver(a, b, **solver_args)
         if info != 0:
-            raise ValueError(f"{solver = } returns {info = }.")
+            raise ValueError(f"{solver=} returns {info=}.")
         return res
 
 

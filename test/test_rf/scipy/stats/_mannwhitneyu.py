@@ -13,6 +13,7 @@ from scipy.stats._morestats import wilcoxon_result_unpacker, wilcoxon_outputs
 from scipy.stats._wilcoxon import _correction_sign
 from ._axis_nan_policy import _axis_nan_policy_factory
 
+
 class _MWU:
     '''Distribution of MWU statistic under the null hypothesis'''
 

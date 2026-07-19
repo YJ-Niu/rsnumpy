@@ -93,6 +93,7 @@ class DisjointSet:
     >>> disjoint_set.subsets()
     [{1, 2}, {'a', 3, 'b'}]
     """
+
     def __init__(self, elements=None):
         self.n_subsets = 0
         self._sizes = {}

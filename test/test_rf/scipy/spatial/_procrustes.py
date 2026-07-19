@@ -129,4 +129,3 @@ def procrustes(data1, data2):
     disparity = np.sum(np.square(mtx1 - mtx2))
 
     return mtx1, mtx2, disparity
-

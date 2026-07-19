@@ -68,8 +68,8 @@ class _cs_matrix(_data_matrix, _minmax_mixin, IndexMixin):
                     if shape is not None and 0 not in shape:
                         maxval = max(shape)
                     idx_dtype = self._get_index_dtype((indices, indptr),
-                                                maxval=maxval,
-                                                check_contents=True)
+                                                      maxval=maxval,
+                                                      check_contents=True)
 
                     if not copy:
                         copy = copy_if_needed
@@ -226,9 +226,9 @@ class _cs_matrix(_data_matrix, _minmax_mixin, IndexMixin):
         #    assert(self.has_sorted_indices())
         # TODO check for duplicates?
 
-    #######################
+    #####################
     # Boolean comparisons #
-    #######################
+    #####################
 
     def _scalar_binopt(self, other, op):
         """Scalar version of self._binopt, for cases in which no new nonzeros
@@ -239,9 +239,9 @@ class _cs_matrix(_data_matrix, _minmax_mixin, IndexMixin):
         res.eliminate_zeros()
         return res
 
-    #################################
+    ###############################
     # Arithmetic operator overrides #
-    #################################
+    ###############################
 
     def _add_dense(self, other):
         if other.shape != self.shape:
@@ -380,9 +380,9 @@ class _cs_matrix(_data_matrix, _minmax_mixin, IndexMixin):
         ret.data = data.view(np.ndarray).ravel()
         return ret
 
-    ###########################
+    #########################
     # Multiplication handlers #
-    ###########################
+    #########################
 
     def _matmul_vector(self, other):
         M, N = self._shape_as_2d
@@ -485,9 +485,9 @@ class _cs_matrix(_data_matrix, _minmax_mixin, IndexMixin):
 
     diagonal.__doc__ = _spbase.diagonal.__doc__
 
-    #####################
+    ###################
     # Reduce operations #
-    #####################
+    ###################
 
     def sum(self, axis=None, dtype=None, out=None):
         """Sum the array/matrix over the given axis.  If the axis is None, sum
@@ -498,10 +498,10 @@ class _cs_matrix(_data_matrix, _minmax_mixin, IndexMixin):
         if (self.ndim == 2 and not hasattr(self, 'blocksize') and
                 axis in self._swap(((1, -1), (0, -2)))[0]):
             # faster than multiplication for large minor axis in CSC/CSR
-            
+
             res_dtype = get_sum_dtype(self.dtype) if dtype is None else dtype
             self_to_reduce = self.astype(res_dtype, copy=False)
-            
+
             # Fast path: reduce along minor axis
             ret = np.zeros(len(self_to_reduce.indptr) - 1, dtype=res_dtype)
             major_index, value = self_to_reduce._minor_reduce(np.add)
@@ -538,9 +538,9 @@ class _cs_matrix(_data_matrix, _minmax_mixin, IndexMixin):
                                downcast_intp_index(self.indptr[major_index]))
         return major_index, value
 
-    #######################
+    #####################
     # Getting and Setting #
-    #######################
+    #####################
 
     def _get_intXint(self, row, col):
         M, N = self._swap(self.shape)
@@ -928,7 +928,7 @@ class _cs_matrix(_data_matrix, _minmax_mixin, IndexMixin):
 
         # Update index data type
         idx_dtype = self._get_index_dtype((self.indices, self.indptr),
-                                    maxval=(self.indptr[-1].item() + x.size))
+                                          maxval=(self.indptr[-1].item() + x.size))
         self.indptr = np.asarray(self.indptr, dtype=idx_dtype)
         self.indices = np.asarray(self.indices, dtype=idx_dtype)
         i = np.asarray(i, dtype=idx_dtype)
@@ -988,9 +988,9 @@ class _cs_matrix(_data_matrix, _minmax_mixin, IndexMixin):
 
         self.check_format(full_check=False)
 
-    ######################
+    ####################
     # Conversion methods #
-    ######################
+    ####################
 
     def tocoo(self, copy=True):
         if self.ndim == 1:
@@ -1027,9 +1027,9 @@ class _cs_matrix(_data_matrix, _minmax_mixin, IndexMixin):
 
     toarray.__doc__ = _spbase.toarray.__doc__
 
-    ##############################################################
+    ############################################################
     # methods that examine or modify the internal data structure #
-    ##############################################################
+    ############################################################
 
     def eliminate_zeros(self):
         """Remove zero entries from the array/matrix.
@@ -1104,7 +1104,6 @@ class _cs_matrix(_data_matrix, _minmax_mixin, IndexMixin):
     def has_sorted_indices(self, val: bool):
         self._has_sorted_indices = bool(val)
 
-
     def sorted_indices(self):
         """Return a copy of this array/matrix with sorted indices.
 
@@ -1156,7 +1155,7 @@ class _cs_matrix(_data_matrix, _minmax_mixin, IndexMixin):
                                  f" blocks. Got {shape}")
             M, N = self.shape[0] // bm, self.shape[1] // bn
         else:
-            new_M, new_N = self._swap(shape if len(shape)>1 else (1, shape[0]))
+            new_M, new_N = self._swap(shape if len(shape) > 1 else (1, shape[0]))
             M, N = self._swap(self._shape_as_2d)
 
         if new_M < M:
@@ -1181,9 +1180,9 @@ class _cs_matrix(_data_matrix, _minmax_mixin, IndexMixin):
 
     resize.__doc__ = _spbase.resize.__doc__
 
-    ###################
+    #################
     # utility methods #
-    ###################
+    #################
 
     # needed by _data_matrix
     def _with_data(self, data, copy=True):
@@ -1209,8 +1208,8 @@ class _cs_matrix(_data_matrix, _minmax_mixin, IndexMixin):
 
         maxnnz = self.nnz + other.nnz
         idx_dtype = self._get_index_dtype((self.indptr, self.indices,
-                                     other.indptr, other.indices),
-                                    maxval=maxnnz)
+                                           other.indptr, other.indices),
+                                          maxval=maxnnz)
         indptr = np.empty(self.indptr.shape, dtype=idx_dtype)
         indices = np.empty(maxnnz, dtype=idx_dtype)
 
@@ -1274,12 +1273,12 @@ class _cs_matrix(_data_matrix, _minmax_mixin, IndexMixin):
 
         if len(self.shape) == 1 and len(shape) == 1:
             self.sum_duplicates()
-            if self.nnz == 0: # array has no non zero elements
+            if self.nnz == 0:  # array has no non zero elements
                 return self.__class__(shape, dtype=self.dtype, copy=False)
 
             N = shape[0]
             data = np.full(N, self.data[0])
-            indices = np.arange(0,N)
+            indices = np.arange(0, N)
             indptr = np.array([0, N])
             return self._csr_container((data, indices, indptr), shape=shape, copy=False)
 
@@ -1290,7 +1289,7 @@ class _cs_matrix(_data_matrix, _minmax_mixin, IndexMixin):
             ndim = len(shape)
             raise ValueError(f'CSR/CSC broadcast_to cannot have shape >2D. Got {ndim}D')
 
-        if self.nnz == 0: # array has no non zero elements
+        if self.nnz == 0:  # array has no non zero elements
             return self.__class__(shape, dtype=self.dtype, copy=False)
 
         self.sum_duplicates()

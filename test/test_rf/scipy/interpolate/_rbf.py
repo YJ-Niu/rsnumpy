@@ -150,6 +150,7 @@ class Rbf:
     """
     # Available radial basis functions that can be selected as strings;
     # they all start with _h_ (self._init_function relies on that)
+
     def _h_multiquadric(self, r):
         return np.sqrt((1.0/self.epsilon*r)**2 + 1)
 

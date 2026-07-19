@@ -17,6 +17,7 @@ __all__ = [
     'MatReadError', 'MatReadWarning', 'MatWriteError', 'MatWriteWarning',
 ]
 
+
 class MatReadError(Exception):
     """Exception indicating a read issue."""
 
@@ -28,13 +29,14 @@ class MatWriteError(Exception):
 class MatReadWarning(UserWarning):
     """Warning class for read issues."""
 
+
 class MatWriteWarning(UserWarning):
     """Warning class for write issues."""
 
 
 doc_dict = \
     {'file_arg':
-         '''file_name : str
+     '''file_name : str
    Name of the mat file (do not need .mat extension if
    appendmat==True) Can also pass open file-like object.''',
      'append_arg':
@@ -240,7 +242,7 @@ def _get_matfile_version(fileobj):
     mopt_ints = np.ndarray(shape=(4,), dtype=np.uint8, buffer=hdr_bytes[:4])
     if 0 in mopt_ints:
         fileobj.seek(0)
-        return (0,0)
+        return (0, 0)
     # For 5 format or 7.3 format we need to read an integer in the
     # header. Bytes 124 through 128 contain a version integer and an
     # endian test string
@@ -336,16 +338,15 @@ def matdims(arr, oned_as='column'):
 
 class MatVarReader:
     ''' Abstract class defining required interface for var readers'''
+
     def __init__(self, file_reader):
         pass
 
     def read_header(self):
         ''' Returns header '''
-        pass
 
     def array_from_header(self, header):
         ''' Reads array given header '''
-        pass
 
 
 class MatFileReader:

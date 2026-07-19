@@ -11,8 +11,10 @@ import rsnumpy as np
 # Local imports
 from .lapack import get_lapack_funcs
 
+
 class SqrtmError(np.linalg.LinAlgError):
     pass
+
 
 from ._matfuncs_sqrtm_triu import within_block_loop  # noqa: E402
 

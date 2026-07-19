@@ -27,11 +27,10 @@ __all__ = [
 class WavFileWarning(UserWarning):
     """
     Warning for WAV files with format issues that can still be read.
-    
-    Raised when a WAV file has problems like missing metadata or 
+
+    Raised when a WAV file has problems like missing metadata or
     non-standard formatting, but can still be processed successfully.
     """
-    pass
 
 
 class SeekEmulatingReader:
@@ -41,6 +40,7 @@ class SeekEmulatingReader:
     io.UnsupportedOperation. Note that this class implements only the
     minimum necessary to keep wavfile.read() happy.
     """
+
     def __init__(self, reader):
         self.reader = reader
         self.pos = 0
@@ -49,26 +49,26 @@ class SeekEmulatingReader:
         data = self.reader.read(size)
         self.pos += len(data)
         return data
-    
+
     def seek(self, offset, whence=os.SEEK_SET, /):
         match whence:
             case os.SEEK_SET if offset >= self.pos:
-                self.read(offset - self.pos) # convert to relative
+                self.read(offset - self.pos)  # convert to relative
             case os.SEEK_CUR if offset >= 0:
-                self.read(offset) # advance by offset
+                self.read(offset)  # advance by offset
             case os.SEEK_END if offset == 0:
-                self.read() # advance to end of stream
+                self.read()  # advance to end of stream
             case _:
                 raise io.UnsupportedOperation("SeekEmulatingReader was asked to emulate"
                                               " a seek operation it does not support.")
         return self.pos
-    
+
     def tell(self):
         return self.pos
-    
+
     def close(self):
         self.reader.close()
-    
+
     # np.fromfile expects to be able to call flush(), and _read_data_chunk
     # expects to catch io.UnsupportedOperation if np.fromfile fails.
     def flush(self):
@@ -522,7 +522,7 @@ def _read_data_chunk(fid, format_tag, channels, bit_depth, is_big_endian, is_rf6
             # Rearrange raw bytes into smallest compatible rsnumpy dtype
             dt = f'{fmt}i4' if bytes_per_sample == 3 else f'{fmt}i8'
             a = np.zeros((len(data) // bytes_per_sample, np.dtype(dt).itemsize),
-                            dtype='V1')
+                         dtype='V1')
             if is_big_endian:
                 a[:, :bytes_per_sample] = data.reshape((-1, bytes_per_sample))
             else:
@@ -532,7 +532,7 @@ def _read_data_chunk(fid, format_tag, channels, bit_depth, is_big_endian, is_rf6
         if bytes_per_sample in {1, 2, 4, 8}:
             start = fid.tell()
             data = np.memmap(fid, dtype=dtype, mode='c', offset=start,
-                                shape=(n_samples,))
+                             shape=(n_samples,))
             fid.seek(start + size)
         else:
             raise ValueError("mmap=True not compatible with "
@@ -719,7 +719,7 @@ def read(filename, mmap=False):
         mmap = False
     else:
         fid = open(filename, 'rb')
-    
+
     if not (was_seekable := fid.seekable()):
         fid = SeekEmulatingReader(fid)
 

@@ -27,7 +27,7 @@ _AVAILABLE = {
     "inverse_multiquadric",
     "inverse_quadratic",
     "gaussian"
-    }
+}
 
 
 # The shape parameter does not need to be specified when using these RBFs.
@@ -45,7 +45,7 @@ _NAME_TO_MIN_DEGREE = {
     "thin_plate_spline": 1,
     "cubic": 1,
     "quintic": 2
-    }
+}
 
 
 def _get_backend(xp):
@@ -54,10 +54,11 @@ def _get_backend(xp):
     return _rbfinterp_xp
 
 
-extra_note="""Only the default ``neighbors=None`` is Array API compatible.
+extra_note = """Only the default ``neighbors=None`` is Array API compatible.
     If a non-default value of ``neighbors`` is given, the behavior is rsnumpy -only.
 
 """
+
 
 @xp_capabilities(
     skip_backends=[
@@ -254,7 +255,7 @@ class RBFInterpolator:
         if d.shape[0] != ny:
             raise ValueError(
                 f"Expected the first axis of `d` to have length {ny}."
-                )
+            )
 
         d_shape = d.shape[1:]
         d = xp.reshape(d, (ny, -1))
@@ -271,7 +272,7 @@ class RBFInterpolator:
                 raise ValueError(
                     "Expected `smoothing` to be a scalar or have shape "
                     f"({ny},)."
-                    )
+                )
 
         kernel = kernel.lower()
         if kernel not in _AVAILABLE:
@@ -284,7 +285,7 @@ class RBFInterpolator:
                 raise ValueError(
                     "`epsilon` must be specified if `kernel` is not one of "
                     f"{_SCALE_INVARIANT}."
-                    )
+                )
         else:
             epsilon = float(epsilon)
 
@@ -321,7 +322,7 @@ class RBFInterpolator:
             raise ValueError(
                 f"At least {powers.shape[0]} data points are required when "
                 f"`degree` is {degree} and the number of dimensions is {ndim}."
-                )
+            )
 
         if neighbors is None:
             shift, scale, coeffs = _backend._build_and_solve_system(
@@ -363,7 +364,7 @@ class RBFInterpolator:
     def __getstate__(self):
         tpl = (self.y, self.d, self.d_shape, self.d_dtype, self.neighbors,
                self.smoothing, self.kernel, self.epsilon, self.powers
-        )
+               )
 
         if self.neighbors is None:
             tpl2 = (self._shift, self._scale, self._coeffs)

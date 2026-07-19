@@ -157,7 +157,6 @@ def _pinv_general(mat):
     """通用伪逆实现，基于特征值分解处理复数矩阵。"""
     n = len(mat)
     m = len(mat[0]) if mat else 0
-    dtype = type(mat[0][0]) if mat and mat[0] else complex
     
     ata = [[sum(mat[i][k].conjugate() * mat[j][k] for k in range(m)) for j in range(n)] for i in range(n)]
     
@@ -383,7 +382,10 @@ class linalg_module:
         ord_val = ord if ord is not None else 2.0
         if ord == float('inf'):
             ord_val = None
-        return _wrap(_core.linalg.norm(_ensure(x), ord_val, axis))
+        result = _wrap(_core.linalg.norm(_ensure(x), ord_val, axis))
+        if hasattr(result, 'shape') and len(result.shape) == 0:
+            return float(result.tolist())
+        return result
 
     @staticmethod
     def solve(a, b):

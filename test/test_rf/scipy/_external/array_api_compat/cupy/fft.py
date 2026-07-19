@@ -1,3 +1,6 @@
+import cupy as cp
+from .._internal import get_xp
+from ..common import _fft
 from cupy.fft import *  # noqa: F403
 
 # cupy.fft doesn't have __all__. If it is added, replace this with
@@ -9,10 +12,6 @@ del _n["__builtins__"]
 fft_all = list(_n)
 del _n
 
-from ..common import _fft
-from .._internal import get_xp
-
-import cupy as cp
 
 fft = get_xp(cp)(_fft.fft)
 ifft = get_xp(cp)(_fft.ifft)
@@ -31,6 +30,6 @@ ifftshift = get_xp(cp)(_fft.ifftshift)
 
 __all__ = fft_all + _fft.__all__
 
+
 def __dir__() -> list[str]:
     return __all__
-

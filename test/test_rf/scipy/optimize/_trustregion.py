@@ -299,11 +299,11 @@ def _minimize_trust_region(fun, x0, args=(), jac=None, hess=None, hessp=None,
 
     # print some stuff if requested
     status_messages = (
-            _status_message['success'],
-            _status_message['maxiter'],
-            'A bad approximation caused failure to predict improvement.',
-            'A linalg error occurred, such as a non-psd Hessian.',
-            )
+        _status_message['success'],
+        _status_message['maxiter'],
+        'A bad approximation caused failure to predict improvement.',
+        'A linalg error occurred, such as a non-psd Hessian.',
+    )
     if disp:
         if warnflag == 0:
             print(status_messages[warnflag])

@@ -100,7 +100,6 @@ def laplacian_centrality(
     :func:`~networkx.linalg.laplacianmatrix.laplacian_matrix`
     """
     import rsnumpy as np
-    import scipy as sp
 
     if len(G) == 0:
         raise nx.NetworkXPointlessConcept("null graph has no centrality defined")

@@ -34,7 +34,7 @@ value of the function, and whose second argument is the gradient of the function
 
 from scipy.optimize import _moduleTNC as moduleTNC
 from ._optimize import (MemoizeJac, OptimizeResult, _check_unknown_options,
-                       _prepare_scalar_function)
+                        _prepare_scalar_function)
 from ._constraints import old_bound_to_new
 from scipy._lib._array_api import array_namespace
 from scipy._external import array_api_extra as xpx
@@ -52,12 +52,12 @@ MSG_EXIT = 8  # Exit reasons
 MSG_ALL = MSG_ITER + MSG_INFO + MSG_VERS + MSG_EXIT
 
 MSGS = {
-        MSG_NONE: "No messages",
-        MSG_ITER: "One line per iteration",
-        MSG_INFO: "Informational messages",
-        MSG_VERS: "Version info",
-        MSG_EXIT: "Exit reasons",
-        MSG_ALL: "All messages"
+    MSG_NONE: "No messages",
+    MSG_ITER: "One line per iteration",
+    MSG_INFO: "Informational messages",
+    MSG_VERS: "Version info",
+    MSG_EXIT: "Exit reasons",
+    MSG_ALL: "All messages"
 }
 
 INFEASIBLE = -1  # Infeasible (lower bound > upper bound)
@@ -71,15 +71,15 @@ NOPROGRESS = 6  # Unable to progress
 USERABORT = 7  # User requested end of minimization
 
 RCSTRINGS = {
-        INFEASIBLE: "Infeasible (lower bound > upper bound)",
-        LOCALMINIMUM: "Local minimum reached (|pg| ~= 0)",
-        FCONVERGED: "Converged (|f_n-f_(n-1)| ~= 0)",
-        XCONVERGED: "Converged (|x_n-x_(n-1)| ~= 0)",
-        MAXFUN: "Max. number of function evaluations reached",
-        LSFAIL: "Linear search failed",
-        CONSTANT: "All lower bounds are equal to the upper bounds",
-        NOPROGRESS: "Unable to progress",
-        USERABORT: "User requested end of minimization"
+    INFEASIBLE: "Infeasible (lower bound > upper bound)",
+    LOCALMINIMUM: "Local minimum reached (|pg| ~= 0)",
+    FCONVERGED: "Converged (|f_n-f_(n-1)| ~= 0)",
+    XCONVERGED: "Converged (|x_n-x_(n-1)| ~= 0)",
+    MAXFUN: "Max. number of function evaluations reached",
+    LSFAIL: "Linear search failed",
+    CONSTANT: "All lower bounds are equal to the upper bounds",
+    NOPROGRESS: "Unable to progress",
+    USERABORT: "User requested end of minimization"
 }
 
 # Changes to interface made by Travis Oliphant, Apr. 2004 for inclusion in
@@ -258,8 +258,8 @@ def fmin_tnc(func, x0, fprime=None, args=(), approx_grad=0,
     if disp is not None:  # disp takes precedence over messages
         mesg_num = disp
     else:
-        mesg_num = {0:MSG_NONE, 1:MSG_ITER, 2:MSG_INFO, 3:MSG_VERS,
-                    4:MSG_EXIT, 5:MSG_ALL}.get(messages, MSG_ALL)
+        mesg_num = {0: MSG_NONE, 1: MSG_ITER, 2: MSG_INFO, 3: MSG_VERS,
+                    4: MSG_EXIT, 5: MSG_ALL}.get(messages, MSG_ALL)
     # build options
     opts = {'eps': epsilon,
             'scale': scale,
@@ -373,14 +373,14 @@ def _minimize_tnc(fun, x0, args=(), jac=None, bounds=None,
     n = len(x0)
 
     if bounds is None:
-        bounds = [(None,None)] * n
+        bounds = [(None, None)] * n
     if len(bounds) != n:
         raise ValueError('length of x0 != length of bounds')
     new_bounds = old_bound_to_new(bounds)
 
     if mesg_num is not None:
-        messages = {0:MSG_NONE, 1:MSG_ITER, 2:MSG_INFO, 3:MSG_VERS,
-                    4:MSG_EXIT, 5:MSG_ALL}.get(mesg_num, MSG_ALL)
+        messages = {0: MSG_NONE, 1: MSG_ITER, 2: MSG_INFO, 3: MSG_VERS,
+                    4: MSG_EXIT, 5: MSG_ALL}.get(mesg_num, MSG_ALL)
     elif disp:
         messages = MSG_ALL
     else:
@@ -403,7 +403,7 @@ def _minimize_tnc(fun, x0, args=(), jac=None, bounds=None,
         if bounds[i] is None:
             l, u = -inf, inf
         else:
-            l,u = bounds[i]
+            l, u = bounds[i]
             if l is None:
                 low[i] = -inf
             else:

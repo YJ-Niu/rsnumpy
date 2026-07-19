@@ -118,7 +118,7 @@ def cholesky(a, lower=False, overwrite_a=False, check_finite=True):
     """
     # `clean = True` represents setting other triangle to 0.
     c = _cholesky(a, lower=lower, overwrite_a=overwrite_a, clean=True,
-                check_finite=check_finite)
+                  check_finite=check_finite)
     return c
 
 
@@ -210,7 +210,7 @@ def cho_factor(a, lower=False, overwrite_a=False, check_finite=True):
     """
     # `clean=False` to represent that it is not necessary to set other triangle to 0.
     c = _cholesky(a, lower=lower, overwrite_a=overwrite_a, clean=False,
-                    check_finite=check_finite)
+                  check_finite=check_finite)
 
     # broadcast `lower` argument for backwards compat
     batch_shape = a.shape[:-2]
@@ -285,7 +285,7 @@ def _cho_solve(c, b, lower, overwrite_b, check_finite):
     # accommodate empty arrays
     if b1.size == 0:
         dt = cho_solve((np.eye(2, dtype=b1.dtype), True),
-                        np.ones(2, dtype=c.dtype)).dtype
+                       np.ones(2, dtype=c.dtype)).dtype
         return empty_like(b1, dtype=dt)
 
     overwrite_b = overwrite_b or _datacopied(b1, b)

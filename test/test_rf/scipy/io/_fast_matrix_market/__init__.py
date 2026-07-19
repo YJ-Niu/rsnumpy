@@ -548,7 +548,7 @@ def mmwrite(target, a, comment=None, field=None, precision=None, symmetry="AUTO"
             # Ensure that the matrix satisfies this requirement.
             lower_triangle_mask = a.row >= a.col
             a = coo_array((a.data[lower_triangle_mask],
-                              (a.row[lower_triangle_mask],
+                           (a.row[lower_triangle_mask],
                                a.col[lower_triangle_mask])), shape=a.shape)
 
         data = _apply_field(a.data, field)

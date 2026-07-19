@@ -283,8 +283,8 @@ def convert_temperature(
         tempo = _val * 5 / 9
     else:
         raise NotImplementedError(f"{old_scale=} is unsupported: supported scales "
-                                   "are Celsius, Kelvin, Fahrenheit, and "
-                                   "Rankine")
+                                  "are Celsius, Kelvin, Fahrenheit, and "
+                                  "Rankine")
     # and from Kelvin to `new_scale`.
     if new_scale.lower() in ['celsius', 'c']:
         res = tempo - zero_Celsius
@@ -296,8 +296,8 @@ def convert_temperature(
         res = tempo * 9 / 5
     else:
         raise NotImplementedError(f"{new_scale=} is unsupported: supported "
-                                   "scales are 'Celsius', 'Kelvin', "
-                                   "'Fahrenheit', and 'Rankine'")
+                                  "scales are 'Celsius', 'Kelvin', "
+                                  "'Fahrenheit', and 'Rankine'")
 
     return res
 

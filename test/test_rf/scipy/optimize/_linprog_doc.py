@@ -286,7 +286,6 @@ def _linprog_highs_doc(c, A_ub=None, b_ub=None, A_eq=None, b_eq=None,
     .. [16] Goldfarb, Donald, and John Ker Reid. "A practicable steepest-edge
             simplex algorithm." Mathematical Programming 12.1 (1977): 361-371.
     """
-    pass
 
 
 def _linprog_highs_ds_doc(c, A_ub=None, b_ub=None, A_eq=None, b_eq=None,
@@ -527,7 +526,6 @@ def _linprog_highs_ds_doc(c, A_ub=None, b_ub=None, A_eq=None, b_eq=None,
     .. [16] Goldfarb, Donald, and John Ker Reid. "A practicable steepest-edge
             simplex algorithm." Mathematical Programming 12.1 (1977): 361-371.
     """
-    pass
 
 
 def _linprog_highs_ipm_doc(c, A_ub=None, b_ub=None, A_eq=None, b_eq=None,
@@ -755,7 +753,6 @@ def _linprog_highs_ipm_doc(c, A_ub=None, b_ub=None, A_eq=None, b_eq=None,
            simplex method." Mathematical Programming Computation, 10 (1),
            119-142, 2018. :doi:`10.1007/s12532-017-0130-5`.
     """
-    pass
 
 
 def _linprog_ip_doc(c, A_ub=None, b_ub=None, A_eq=None, b_eq=None,
@@ -1086,7 +1083,6 @@ def _linprog_ip_doc(c, A_ub=None, b_ub=None, A_eq=None, b_eq=None,
             methods for large scale linear programming. HEC/Universite de
             Geneve, 1996.
     """
-    pass
 
 
 def _linprog_rs_doc(c, A_ub=None, b_ub=None, A_eq=None, b_eq=None,
@@ -1272,7 +1268,6 @@ def _linprog_rs_doc(c, A_ub=None, b_ub=None, A_eq=None, b_eq=None,
     .. [11] Bartels, Richard H. "A stabilization of the simplex method."
             Journal in  Numerische Mathematik 16.5 (1971): 414-434.
     """
-    pass
 
 
 def _linprog_simplex_doc(c, A_ub=None, b_ub=None, A_eq=None, b_eq=None,
@@ -1431,4 +1426,3 @@ def _linprog_simplex_doc(c, A_ub=None, b_ub=None, A_eq=None, b_eq=None,
     .. [3] Bland, Robert G. New finite pivoting rules for the simplex method.
            Mathematics of Operations Research (2), 1977: pp. 103-107.
     """
-    pass

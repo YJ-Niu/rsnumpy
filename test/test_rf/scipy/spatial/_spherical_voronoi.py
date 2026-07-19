@@ -164,6 +164,7 @@ class SphericalVoronoi:
     >>> fig.set_size_inches(4, 4)
     >>> plt.show()
     """
+
     def __init__(self, points, radius=1, center=None, threshold=1e-06):
 
         if radius is None:

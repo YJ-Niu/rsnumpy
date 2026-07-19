@@ -1,5 +1,6 @@
 """Progress report printers."""
 
+
 class ReportBase:
     COLUMN_NAMES: list[str] = NotImplemented
     COLUMN_WIDTHS: list[int] = NotImplemented

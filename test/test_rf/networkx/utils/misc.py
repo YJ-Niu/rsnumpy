@@ -355,7 +355,7 @@ class PythonRandomViaNumpyBits(random.Random):
         raise NotImplementedError("seed() not implemented in PythonRandomViaNumpyBits")
 
 
-##################################################################
+################################################################
 class PythonRandomInterface:
     """PythonRandomInterface is included for backward compatibility
     New code should use PythonRandomViaNumpyBits instead.

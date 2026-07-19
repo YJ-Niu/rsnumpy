@@ -27,7 +27,6 @@ __all__ = ['use_solver', 'spsolve', 'splu', 'spilu', 'factorized',
 
 class MatrixRankWarning(UserWarning):
     """Warning for exactly singular matrices."""
-    pass
 
 
 def use_solver(**kwargs):
@@ -100,6 +99,7 @@ def use_solver(**kwargs):
     if useUmfpack.u and 'assumeSortedIndices' in kwargs:
         umfpack.configure(assumeSortedIndices=kwargs['assumeSortedIndices'])
 
+
 def _get_umf_family(A):
     """Get umfpack family string given the sparse matrix dtype."""
     _families = {
@@ -133,6 +133,7 @@ def _get_umf_family(A):
     A_new.indices = np.asarray(A.indices, dtype=np.int64)
 
     return family, A_new
+
 
 def spsolve(A, b, permc_spec=None, use_umfpack=True):
     """Solve the sparse linear system Ax=b, where b may be a vector or a matrix.
@@ -266,7 +267,7 @@ def spsolve(A, b, permc_spec=None, use_umfpack=True):
 
         if A.dtype.char not in 'dD':
             raise ValueError("convert matrix data to double, please, using"
-                  " .astype(), or set linsolve.useUmfpack.u = False")
+                             " .astype(), or set linsolve.useUmfpack.u = False")
 
         umf_family, A = _get_umf_family(A)
         umf = umfpack.UmfpackContext(umf_family)
@@ -329,7 +330,7 @@ def spsolve(A, b, permc_spec=None, use_umfpack=True):
             sparse_row = np.concatenate(row_segs, dtype=idx_dtype)
             sparse_col = np.concatenate(col_segs, dtype=idx_dtype)
             x = A.__class__((sparse_data, (sparse_row, sparse_col)),
-                           shape=b.shape, dtype=A.dtype)
+                            shape=b.shape, dtype=A.dtype)
 
             if is_pydata_sparse:
                 x = pydata_sparse_cls.from_scipy_sparse(x)
@@ -411,6 +412,7 @@ def splu(A, permc_spec=None, diag_pivot_thresh=None,
 
     if is_pydata_spmatrix(A):
         A_cls = type(A)
+
         def csc_construct_func(*a, cls=A_cls):
             return cls.from_scipy_sparse(csc_array(*a))
         A = A.to_scipy_sparse().tocsc()
@@ -547,6 +549,7 @@ def spilu(A, drop_tol=None, fill_factor=None, drop_rule=None, permc_spec=None,
 
     if is_pydata_spmatrix(A):
         A_cls = type(A)
+
         def csc_construct_func(*a, cls=A_cls):
             return cls.from_scipy_sparse(csc_array(*a))
         A = A.to_scipy_sparse().tocsc()
@@ -633,7 +636,7 @@ def factorized(A):
 
         if A.dtype.char not in 'dD':
             raise ValueError("convert matrix data to double, please, using"
-                  " .astype(), or set linsolve.useUmfpack.u = False")
+                             " .astype(), or set linsolve.useUmfpack.u = False")
 
         umf_family, A = _get_umf_family(A)
         umf = umfpack.UmfpackContext(umf_family)
@@ -724,7 +727,6 @@ def spsolve_triangular(A, b, lower=True, overwrite_A=False, overwrite_b=False,
         A = csc_array(A)
     elif not overwrite_A:
         A = A.copy()
-
 
     M, N = A.shape
     if M != N:

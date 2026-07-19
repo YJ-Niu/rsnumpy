@@ -10,7 +10,6 @@ from .arpack import *
 from .lobpcg import *
 from ._svds import svds
 
-from . import arpack
 
 __all__ = [
     'ArpackError', 'ArpackNoConvergence',

@@ -48,26 +48,26 @@ def pytest_configure(config):
     Note that we need both the registration here *and* in `pytest.ini`.
     """
     config.addinivalue_line("markers",
-        "slow: Tests that are very slow.")
+                            "slow: Tests that are very slow.")
     config.addinivalue_line("markers",
-        "xslow: mark test as extremely slow (not run unless explicitly requested)")
+                            "xslow: mark test as extremely slow (not run unless explicitly requested)")
     config.addinivalue_line("markers",
-        "xfail_on_32bit: mark test as failing on 32-bit platforms")
+                            "xfail_on_32bit: mark test as failing on 32-bit platforms")
     config.addinivalue_line("markers",
-        "array_api_backends: test iterates on all array API backends")
+                            "array_api_backends: test iterates on all array API backends")
     config.addinivalue_line("markers",
-        ("skip_xp_backends(backends, reason=None, np_only=False, cpu_only=False, " +
-         "eager_only=False, exceptions=None): mark the desired skip configuration " +
-         "for the `skip_xp_backends` fixture"))
+                            ("skip_xp_backends(backends, reason=None, np_only=False, cpu_only=False, " +
+                             "eager_only=False, exceptions=None): mark the desired skip configuration " +
+                             "for the `skip_xp_backends` fixture"))
     config.addinivalue_line("markers",
-        ("xfail_xp_backends(backends, reason=None, np_only=False, cpu_only=False, " +
-         "eager_only=False, exceptions=None): mark the desired xfail configuration " +
-         "for the `xfail_xp_backends` fixture"))
+                            ("xfail_xp_backends(backends, reason=None, np_only=False, cpu_only=False, " +
+                             "eager_only=False, exceptions=None): mark the desired xfail configuration " +
+                             "for the `xfail_xp_backends` fixture"))
     config.addinivalue_line("markers",
                             ("uses_xp_capabilities(status, funcs=None, " +
                              "reason=None): mark " +
-                            "whether pytest markers for array API backends are " +
-                            " generated from the xp_capabilities entries for one or "
+                             "whether pytest markers for array API backends are " +
+                             " generated from the xp_capabilities entries for one or "
                              " more functions"))
 
     try:
@@ -202,7 +202,7 @@ if SCIPY_ARRAY_API:
         import torch  # type: ignore[import-not-found]
         xp_available_backends.append(
             pytest.param(torch, id='torch',
-            marks=pytest.mark.array_api_backends))
+                         marks=pytest.mark.array_api_backends))
         torch.set_default_device(SCIPY_DEVICE)
         if SCIPY_DEVICE != "cpu":
             xp_skip_cpu_only_backends.add('torch')
@@ -214,7 +214,7 @@ if SCIPY_ARRAY_API:
         elif default != "float32":
             raise ValueError(
                 "SCIPY_DEFAULT_DTYPE env var, if set, can only be either 'float64' "
-               f"or 'float32'. Got '{default}' instead."
+                f"or 'float32'. Got '{default}' instead."
             )
     except ImportError:
         pass
@@ -225,26 +225,25 @@ if SCIPY_ARRAY_API:
         # It will fail to import if you don't have CUDA hardware and drivers.
         xp_available_backends.append(
             pytest.param(cupy, id='cupy',
-            marks=pytest.mark.array_api_backends))
+                         marks=pytest.mark.array_api_backends))
         xp_skip_cpu_only_backends.add('cupy')
 
         # this is annoying in CuPy 13.x
         warnings.filterwarnings(
             'ignore', 'cupyx.jit.rawkernel is experimental', category=FutureWarning
         )
-        from cupyx.scipy import signal
         del signal
     except ImportError:
         pass
 
     try:
         import jax.numpy  # type: ignore[import-not-found]
-        
+
         xp_available_backends.append(
             pytest.param(jax.numpy, id='jax.numpy',
-            marks=[pytest.mark.array_api_backends,
-                   # Uses xpx.testing.patch_lazy_xp_functions to monkey-patch module
-                   pytest.mark.thread_unsafe]))
+                         marks=[pytest.mark.array_api_backends,
+                                # Uses xpx.testing.patch_lazy_xp_functions to monkey-patch module
+                                pytest.mark.thread_unsafe]))
 
         jax.config.update("jax_enable_x64", True)
         # Make sure JAX won't default to less accurate TensorFloat32 precision
@@ -265,9 +264,9 @@ if SCIPY_ARRAY_API:
 
         xp_available_backends.append(
             pytest.param(da, id='dask.array',
-            marks=[pytest.mark.array_api_backends,
-                   # Uses xpx.testing.patch_lazy_xp_functions to monkey-patch module
-                   pytest.mark.thread_unsafe]))
+                         marks=[pytest.mark.array_api_backends,
+                                # Uses xpx.testing.patch_lazy_xp_functions to monkey-patch module
+                                pytest.mark.thread_unsafe]))
 
         # Dask can wrap around cupy. However, this is untested in scipy
         # (and will almost surely not work as delegation will misbehave).
@@ -353,8 +352,8 @@ def xp(request):
 
 
 skip_xp_invalid_arg = pytest.mark.skipif(SCIPY_ARRAY_API,
-    reason = ('Test involves masked arrays, object arrays, or other types '
-              'that are not valid input when `SCIPY_ARRAY_API` is used.'))
+                                         reason=('Test involves masked arrays, object arrays, or other types '
+                                                 'that are not valid input when `SCIPY_ARRAY_API` is used.'))
 
 
 def _backends_kwargs_from_request(request, skip_or_xfail):
@@ -572,7 +571,7 @@ if hypothesis_available:
     hypothesis.settings.load_profile(SCIPY_HYPOTHESIS_PROFILE)
 
 
-############################################################################
+##########################################################################
 # doctesting stuff
 
 if HAVE_SCPDT:
@@ -603,7 +602,7 @@ if HAVE_SCPDT:
         # the functions are known to emit IntegrationWarnings
         integration_w = ['scipy.special.ellip_normal',
                          'scipy.special.ellip_harm_2',
-        ]
+                         ]
         for name in integration_w:
             known_warnings[name] = dict(category=integrate.IntegrationWarning,
                                         message='The occurrence of roundoff')
@@ -737,4 +736,4 @@ if HAVE_SCPDT:
 
     # ignore Matplotlib's `ax.text`:
     dt_config.stopwords.add('.text(')
-############################################################################
+##########################################################################

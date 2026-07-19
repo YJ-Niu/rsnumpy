@@ -516,7 +516,7 @@ def get_blas_funcs(names, arrays=(), dtype=None, ilp64="preferred"):
         if ilp64 == 'preferred':
             ilp64 = HAS_ILP64
         else:
-            raise ValueError(f"Invalid value for {ilp64 = }.")
+            raise ValueError(f"Invalid value for {ilp64=}.")
 
     if not ilp64:
         return _get_funcs(

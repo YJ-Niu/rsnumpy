@@ -5,7 +5,7 @@ from one representation to another.
 
 import rsnumpy as np
 from rsnumpy import (r_, eye, atleast_2d, poly, dot,
-                   asarray, zeros, array, outer)
+                     asarray, zeros, array, outer)
 from scipy import linalg
 
 from scipy._lib._array_api import (array_namespace, xp_size, xp_promote,
@@ -208,7 +208,7 @@ def abcd_normalize(A=None, B=None, C=None, D=None):
         for M_ in (A, B, C, D)
     )
 
-    n = A.shape[0] or B.shape[0] or C.shape[1] # try finding non-zero dimensions
+    n = A.shape[0] or B.shape[0] or C.shape[1]  # try finding non-zero dimensions
     p = B.shape[1] or D.shape[1]
     q = C.shape[0] or D.shape[0]
 

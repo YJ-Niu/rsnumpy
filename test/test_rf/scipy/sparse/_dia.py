@@ -43,7 +43,7 @@ class _dia_base(_data_matrix):
                 # It's a tuple of matrix dimensions (M, N)
                 # create empty matrix
                 self._shape = check_shape(arg1)
-                self.data = np.zeros((0,0), getdtype(dtype, default=float))
+                self.data = np.zeros((0, 0), getdtype(dtype, default=float))
                 idx_dtype = self._get_index_dtype(maxval=max(self.shape))
                 self.offsets = np.zeros((0), dtype=idx_dtype)
             else:
@@ -111,7 +111,7 @@ class _dia_base(_data_matrix):
         mask[i,j] is True when data[i,j] corresponds to a stored element."""
         num_rows, num_cols = self.shape
         offset_inds = np.arange(self.data.shape[1])
-        row = offset_inds - self.offsets[:,None]
+        row = offset_inds - self.offsets[:, None]
         mask = (row >= 0)
         mask &= (row < num_rows)
         mask &= (offset_inds < num_cols)
@@ -160,7 +160,7 @@ class _dia_base(_data_matrix):
             row_sums = np.zeros((num_rows, 1), dtype=res_dtype)
             one = np.ones(num_cols, dtype=res_dtype)
             dia_matvec(num_rows, num_cols, len(self.offsets),
-                       self.data.shape[1], self.offsets, 
+                       self.data.shape[1], self.offsets,
                        self.data.astype(res_dtype), one, row_sums)
 
             row_sums = self._ascontainer(row_sums)
@@ -286,13 +286,13 @@ class _dia_base(_data_matrix):
         x = other
 
         y = np.zeros(self.shape[0], dtype=upcast_char(self.dtype.char,
-                                                       x.dtype.char))
+                                                      x.dtype.char))
 
         L = self.data.shape[1]
 
-        M,N = self.shape
+        M, N = self.shape
 
-        dia_matvec(M,N, len(self.offsets), L, self.offsets, self.data,
+        dia_matvec(M, N, len(self.offsets), L, self.offsets, self.data,
                    x.ravel(), y.ravel())
 
         return y
@@ -368,8 +368,8 @@ class _dia_base(_data_matrix):
     def transpose(self, axes=None, copy=False):
         if axes is not None and axes != (1, 0):
             raise ValueError("Sparse arrays/matrices do not support "
-                              "an 'axes' parameter because swapping "
-                              "dimensions is the only logical permutation.")
+                             "an 'axes' parameter because swapping "
+                             "dimensions is the only logical permutation.")
 
         num_rows, num_cols = self.shape
         max_dim = max(self.shape)

@@ -39,7 +39,7 @@ class _lil_base(_spbase, IndexMixin):
             self.dtype = A.dtype
             self.rows = A.rows
             self.data = A.data
-        elif isinstance(arg1,tuple):
+        elif isinstance(arg1, tuple):
             if isshape(arg1):
                 if shape is not None:
                     raise ValueError('invalid use of shape parameter')
@@ -67,24 +67,24 @@ class _lil_base(_spbase, IndexMixin):
             self.rows = A.rows
             self.data = A.data
 
-    def __iadd__(self,other):
-        self[:,:] = self + other
+    def __iadd__(self, other):
+        self[:, :] = self + other
         return self
 
-    def __isub__(self,other):
-        self[:,:] = self - other
+    def __isub__(self, other):
+        self[:, :] = self - other
         return self
 
-    def __imul__(self,other):
+    def __imul__(self, other):
         if isscalarlike(other):
-            self[:,:] = self * other
+            self[:, :] = self * other
             return self
         else:
             return NotImplemented
 
-    def __itruediv__(self,other):
+    def __itruediv__(self, other):
         if isscalarlike(other):
-            self[:,:] = self / other
+            self[:, :] = self / other
             return self
         else:
             return NotImplemented
@@ -216,7 +216,7 @@ class _lil_base(_spbase, IndexMixin):
 
     def _get_columnXarray(self, row, col):
         # outer indexing
-        row, col = _broadcast_arrays(row[:,None], col)
+        row, col = _broadcast_arrays(row[:, None], col)
         return self._get_arrayXarray(row, col)
 
     def _get_arrayXarray(self, row, col):

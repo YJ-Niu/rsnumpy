@@ -26,10 +26,10 @@ See the PRIMA documentation (www.libprima.net) for more information.
 
 from ..common.evaluate import evaluate, moderatex, moderatef, moderatec
 from ..common.consts import (EPS, RHOBEG_DEFAULT, RHOEND_DEFAULT, CTOL_DEFAULT,
-                                   CWEIGHT_DEFAULT, FTARGET_DEFAULT, IPRINT_DEFAULT,
-                                   MAXFUN_DIM_DEFAULT, DEBUGGING, BOUNDMAX,
-                                   ETA1_DEFAULT, ETA2_DEFAULT, GAMMA1_DEFAULT,
-                                   GAMMA2_DEFAULT)
+                             CWEIGHT_DEFAULT, FTARGET_DEFAULT, IPRINT_DEFAULT,
+                             MAXFUN_DIM_DEFAULT, DEBUGGING, BOUNDMAX,
+                             ETA1_DEFAULT, ETA2_DEFAULT, GAMMA1_DEFAULT,
+                             GAMMA2_DEFAULT)
 from ..common.preproc import preproc
 from ..common.present import present
 from ..common.linalg import matprod
@@ -74,19 +74,19 @@ def cobyla(calcfc, m_nlcon, x, Aineq=None, bineq=None, Aeq=None, beq=None,
     result = cobyla(calcfc, m_nlcon, x, Aineq=Aineq, bineq=bineq, rhobeg=1.0e0,
         rhoend=1.0e-6)
 
-    ####################################################################################
+    ##################################################################################
     # IMPORTANT NOTICE: The user must set M_NLCON correctly to the number of nonlinear
     # constraints, namely the size of NLCONSTR introduced below. Set it to 0 if there
     # is no nonlinear constraint.
-    ####################################################################################
+    ##################################################################################
 
     See examples/cobyla/cobyla_example.py for a concrete example.
 
     A detailed introduction to the arguments is as follows.
 
-    ####################################################################################
+    ##################################################################################
     # INPUTS
-    ####################################################################################
+    ##################################################################################
 
     CALCFC
       Input, function.
@@ -212,9 +212,9 @@ def cobyla(calcfc, m_nlcon, x, Aineq=None, bineq=None, Aeq=None, beq=None,
       Input, function to report progress and optionally request termination.
 
 
-    ####################################################################################
+    ##################################################################################
     # OUTPUTS
-    ####################################################################################
+    ##################################################################################
 
     The output is a single data structure, COBYLAResult, with the following fields:
 
@@ -315,7 +315,6 @@ def cobyla(calcfc, m_nlcon, x, Aineq=None, bineq=None, Aeq=None, beq=None,
         if (present(xu)):
             assert len(xu) == num_vars, f'{srname} SIZE(XU) == N'
 
-
         # N.B.: If NLCONSTR0 is present, then F0 must be present, and we assume that
         # F(X0) = F0 even if F0 is NaN; if NLCONSTR0 is absent, then F0 must be either
         # absent or NaN, both of which will be interpreted as F(X0) is not provided.
@@ -325,8 +324,6 @@ def cobyla(calcfc, m_nlcon, x, Aineq=None, bineq=None, Aeq=None, beq=None,
             assert np.isnan(f0) or present(nlconstr0), \
                 f'{srname} If F0 is present and not NaN, then NLCONSTR0 is present'
 
-
-
     # Exit if the size of NLCONSTR0 is inconsistent with M_NLCON.
     if present(nlconstr0):
         assert np.size(nlconstr0) == m_nlcon
@@ -334,14 +331,14 @@ def cobyla(calcfc, m_nlcon, x, Aineq=None, bineq=None, Aeq=None, beq=None,
     # Read the inputs.
 
     if xl is not None:
-      xl = copy(xl)
-      xl[np.isnan(xl)] = -BOUNDMAX
-      xl[xl < -BOUNDMAX] = -BOUNDMAX
+        xl = copy(xl)
+        xl[np.isnan(xl)] = -BOUNDMAX
+        xl[xl < -BOUNDMAX] = -BOUNDMAX
 
     if xu is not None:
-      xu = copy(xu)
-      xu[np.isnan(xu)] = BOUNDMAX
-      xu[xu > BOUNDMAX] = BOUNDMAX
+        xu = copy(xu)
+        xu[np.isnan(xu)] = BOUNDMAX
+        xu[xu > BOUNDMAX] = BOUNDMAX
 
     # Wrap the linear and bound constraints into a single constraint: AMAT@X <= BVEC.
     amat, bvec = get_lincon(Aeq, Aineq, beq, bineq, xl, xu)
@@ -361,7 +358,7 @@ def cobyla(calcfc, m_nlcon, x, Aineq=None, bineq=None, Aeq=None, beq=None,
     if (present(f0) and present(nlconstr0) and all(np.isfinite(x))):
         f = moderatef(f0)
         if amat is not None:
-          constr[:mmm - m_nlcon] = moderatec(matprod(amat, x) - bvec)
+            constr[:mmm - m_nlcon] = moderatec(matprod(amat, x) - bvec)
         constr[mmm - m_nlcon:] = moderatec(nlconstr0)
     else:
         x = moderatex(x)
@@ -370,7 +367,6 @@ def cobyla(calcfc, m_nlcon, x, Aineq=None, bineq=None, Aeq=None, beq=None,
         # N.B.: Do NOT call FMSG, SAVEHIST, or SAVEFILT for the function/constraint evaluation at X0.
         # They will be called during the initialization, which will read the function/constraint at X0.
     cstrv = max(np.append(0, constr))
-
 
     # If RHOBEG is present, use it; otherwise, RHOBEG takes the default value for
     # RHOBEG, taking the value of RHOEND into account. Note that RHOEND is considered
@@ -513,9 +509,9 @@ def get_lincon(Aeq=None, Aineq=None, beq=None, bineq=None, xl=None, xu=None):
         assert Aeq is None or Aeq.shape == (len(beq), num_vars)
         assert (xl is None or xu is None) or len(xl) == len(xu) == num_vars
 
-    #====================#
+    # ====================#
     # Calculation starts #
-    #====================#
+    # ====================#
 
     # Define the indices of the nontrivial bound constraints.
     ixl = np.where(xl > -BOUNDMAX)[0] if xl is not None else None
@@ -548,9 +544,9 @@ def get_lincon(Aeq=None, Aineq=None, beq=None, bineq=None, xl=None, xu=None):
     amat = amat if amat.shape[0] > 0 else None
     bvec = bvec if bvec.shape[0] > 0 else None
 
-    #==================#
+    # ==================#
     # Calculation ends #
-    #==================#
+    # ==================#
 
     # Postconditions
     if DEBUGGING:

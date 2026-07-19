@@ -230,7 +230,7 @@ class GraphMatcher:
 
         # All computations are done using the current state!
 
-        G1_nodes = self.G1_nodes
+        self.G1_nodes
         G2_nodes = self.G2_nodes
         min_key = self.G2_node_order.__getitem__
 
@@ -307,7 +307,7 @@ class GraphMatcher:
             return False
 
         try:
-            x = next(self.isomorphisms_iter())
+            next(self.isomorphisms_iter())
             return True
         except StopIteration:
             return False
@@ -407,7 +407,7 @@ class GraphMatcher:
         True
         """
         try:
-            x = next(self.subgraph_isomorphisms_iter())
+            next(self.subgraph_isomorphisms_iter())
             return True
         except StopIteration:
             return False
@@ -435,7 +435,7 @@ class GraphMatcher:
         True
         """
         try:
-            x = next(self.subgraph_monomorphisms_iter())
+            next(self.subgraph_monomorphisms_iter())
             return True
         except StopIteration:
             return False
@@ -518,9 +518,9 @@ class GraphMatcher:
         # singlet for Graph instances.  For MultiGraphs, the value in the
         # innermost dictionary is a list.
 
-        ###
+        #
         # Test at each step to get a return value as soon as possible.
-        ###
+        #
 
         # Look ahead 0
 
@@ -748,9 +748,9 @@ class DiGraphMatcher(GraphMatcher):
         # dictionary is a singlet for DiGraph instances.  For MultiDiGraphs,
         # the value in the innermost dictionary is a list.
 
-        ###
+        #
         # Test at each step to get a return value as soon as possible.
-        ###
+        #
 
         # Look ahead 0
 

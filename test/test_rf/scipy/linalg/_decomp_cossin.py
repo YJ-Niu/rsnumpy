@@ -161,8 +161,8 @@ def _cossin(x11, x12, x21, x22, separate, swap_sign, compute_u, compute_vh):
     if p + mmp != q + mmq:
         raise ValueError("The subblocks have compatible sizes but "
                          "don't form a square array (instead they form a"
-                          f" {p + mmp}x{q + mmq} array). This might be "
-                          "due to missing p, q arguments.")
+                         f" {p + mmp}x{q + mmq} array). This might be "
+                         "due to missing p, q arguments.")
 
     m = p + mmp
 

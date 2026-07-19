@@ -1,8 +1,8 @@
 import math
 
 from rsnumpy import (zeros_like, array, tan, arange, floor,
-                   r_, atleast_1d, greater, cos, add, sin,
-                   moveaxis, abs, complex64, float32)
+                     r_, atleast_1d, greater, cos, add, sin,
+                     moveaxis, abs, complex64, float32)
 import rsnumpy as np
 
 from scipy._lib._array_api import array_namespace, xp_promote
@@ -64,7 +64,7 @@ def spline_filter(Iin, lmbda=5.0):
     Iin = np.asarray(Iin)
 
     if Iin.dtype not in [np.float32, np.float64, np.complex64, np.complex128]:
-        raise TypeError(f"Invalid data type for Iin: {Iin.dtype = }")
+        raise TypeError(f"Invalid data type for Iin: {Iin.dtype=}")
 
     # XXX: note that complex-valued computations are done in single precision
     # this is historic, and the root reason is unclear,
@@ -666,7 +666,7 @@ def qspline1d_eval(cj, newx, dx=1.0, x0=0):
     cj = np.asarray(cj)
     if cj.size == 0:
         raise ValueError("Spline coefficients 'cj' must not be empty.")
-    
+
     N = len(cj)
     cond1 = newx < 0
     cond2 = newx > (N - 1)

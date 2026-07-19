@@ -116,7 +116,7 @@ def _fgmres(matvec, v0, m, atol, lpsolve=None, rpsolve=None, cs=(), outer_v=(),
         # i.e. orthogonalize against C
         for i, c in enumerate(cs):
             alpha = dot(c, w)
-            B[i,j] = alpha
+            B[i, j] = alpha
             w = axpy(c, w, c.shape[0], -alpha)  # w -= alpha*c
 
         # Orthogonalize against V
@@ -147,11 +147,11 @@ def _fgmres(matvec, v0, m, atol, lpsolve=None, rpsolve=None, cs=(), outer_v=(),
 
         # Add new column to H=Q@R, padding other columns with zeros
         Q2 = np.zeros((j+2, j+2), dtype=Q.dtype, order='F')
-        Q2[:j+1,:j+1] = Q
-        Q2[j+1,j+1] = 1
+        Q2[:j+1, :j+1] = Q
+        Q2[j+1, j+1] = 1
 
         R2 = np.zeros((j+2, j), dtype=R.dtype, order='F')
-        R2[:j+1,:] = R
+        R2[:j+1, :] = R
 
         Q, R = qr_insert(Q2, R2, hcur, j, which='col',
                          overwrite_qru=True, check_finite=False)
@@ -161,13 +161,13 @@ def _fgmres(matvec, v0, m, atol, lpsolve=None, rpsolve=None, cs=(), outer_v=(),
         # Since R = [R'; 0], solution is y = inner_res_0 (R')^{-1} (Q^H)[:j,0]
 
         # Residual is immediately known
-        res = abs(Q[0,-1])
+        res = abs(Q[0, -1])
 
         # Check for termination
         if res < atol or breakdown:
             break
 
-    if not np.isfinite(R[j,j]):
+    if not np.isfinite(R[j, j]):
         # nans encountered, bail out
         raise LinAlgError()
 
@@ -176,9 +176,9 @@ def _fgmres(matvec, v0, m, atol, lpsolve=None, rpsolve=None, cs=(), outer_v=(),
     # The problem is triangular, but the condition number may be
     # bad (or in case of breakdown the last diagonal entry may be
     # zero), so use lstsq instead of trtrs.
-    y, _, _, _, = lstsq(R[:j+1,:j+1], Q[0,:j+1].conj())
+    y, _, _, _, = lstsq(R[:j+1, :j+1], Q[0, :j+1].conj())
 
-    B = B[:,:j+1]
+    B = B[:, :j+1]
 
     return Q, R, B, vs, zs, y, res
 
@@ -276,7 +276,7 @@ def gcrotmk(A, b, x0=None, *, rtol=1e-5, atol=0., maxiter=1000, M=None, callback
     True
 
     """
-    A,M,x,b = make_system(A,M,x0,b)
+    A, M, x, b = make_system(A, M, x0, b)
 
     if not np.isfinite(b).all():
         raise ValueError("RHS must contain only finite numbers")
@@ -328,7 +328,7 @@ def gcrotmk(A, b, x0=None, *, rtol=1e-5, atol=0., maxiter=1000, M=None, callback
             c, u = CU.pop(0)
             if c is None:
                 c = matvec(u)
-            C[:,j] = c
+            C[:, j] = c
             j += 1
             us.append(u)
 
@@ -344,11 +344,11 @@ def gcrotmk(A, b, x0=None, *, rtol=1e-5, atol=0., maxiter=1000, M=None, callback
         for j in range(len(cs)):
             u = us[P[j]]
             for i in range(j):
-                u = axpy(us[P[i]], u, u.shape[0], -R[i,j])
-            if abs(R[j,j]) < 1e-12 * abs(R[0,0]):
+                u = axpy(us[P[i]], u, u.shape[0], -R[i, j])
+            if abs(R[j, j]) < 1e-12 * abs(R[0, 0]):
                 # discard rest of the vectors
                 break
-            u = scal(1.0/R[j,j], u)
+            u = scal(1.0/R[j, j], u)
             new_us.append(u)
 
         # Form the new CU lists
@@ -467,12 +467,12 @@ def gcrotmk(A, b, x0=None, *, rtol=1e-5, atol=0., maxiter=1000, M=None, callback
         elif truncate == 'smallest':
             if len(CU) >= k and CU:
                 # cf. [1,2]
-                D = solve(R[:-1,:].T, B.T).T
+                D = solve(R[:-1, :].T, B.T).T
                 W, sigma, V = svd(D)
 
                 # C := C W[:,:k-1],  U := U W[:,:k-1]
                 new_CU = []
-                for j, w in enumerate(W[:,:k-1].T):
+                for j, w in enumerate(W[:, :k-1].T):
                     c, u = CU[0]
                     c = c * w[0]
                     u = u * w[0]

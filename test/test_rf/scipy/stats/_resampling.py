@@ -981,8 +981,8 @@ def monte_carlo_test(data, rvs, statistic, *, vectorized=None,
 
     # relative tolerance for detecting numerically distinct but
     # theoretically equal values in the null distribution
-    eps =  (0 if not xp.isdtype(observed.dtype, ('real floating'))
-            else xp.finfo(observed.dtype).eps*100)
+    eps = (0 if not xp.isdtype(observed.dtype, ('real floating'))
+           else xp.finfo(observed.dtype).eps*100)
     gamma = xp.abs(eps * observed)
 
     def less(null_distribution, observed):
@@ -2119,8 +2119,8 @@ def permutation_test(data, statistic, *, permutation_type='independent',
 
     # relative tolerance for detecting numerically distinct but
     # theoretically equal values in the null distribution
-    eps =  (0 if not xp.isdtype(observed.dtype, 'real floating')
-            else xp.finfo(observed.dtype).eps*100)
+    eps = (0 if not xp.isdtype(observed.dtype, 'real floating')
+           else xp.finfo(observed.dtype).eps*100)
     gamma = xp.abs(eps * observed)
 
     def less(null_distribution, observed):

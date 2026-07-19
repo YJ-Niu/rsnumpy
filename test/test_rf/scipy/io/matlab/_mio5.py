@@ -86,19 +86,19 @@ import scipy.sparse
 from ._byteordercodes import native_code, swapped_code
 
 from ._miobase import (MatFileReader, docfiller, matdims, read_dtype,
-                      arr_to_chars, arr_dtype_number, MatWriteError,
-                      MatReadError, MatReadWarning, MatWriteWarning)
+                       arr_to_chars, arr_dtype_number, MatWriteError,
+                       MatReadError, MatReadWarning, MatWriteWarning)
 
 # Reader object for matlab 5 format variables
 from ._mio5_utils import VarReader5
 
 # Constants and helper objects
 from ._mio5_params import (MatlabObject, MatlabFunction, MDTYPES, NP_TO_MTYPES,
-                          NP_TO_MXTYPES, miCOMPRESSED, miMATRIX, miINT8,
-                          miUTF8, miUINT32, mxCELL_CLASS, mxSTRUCT_CLASS,
-                          mxOBJECT_CLASS, mxCHAR_CLASS, mxSPARSE_CLASS,
-                          mxDOUBLE_CLASS, mclass_info, mat_struct,
-                          mxOPAQUE_CLASS, MatlabOpaque)
+                           NP_TO_MXTYPES, miCOMPRESSED, miMATRIX, miINT8,
+                           miUTF8, miUINT32, mxCELL_CLASS, mxSTRUCT_CLASS,
+                           mxOBJECT_CLASS, mxCHAR_CLASS, mxSPARSE_CLASS,
+                           mxDOUBLE_CLASS, mclass_info, mat_struct,
+                           mxOPAQUE_CLASS, MatlabOpaque)
 
 from ._streams import ZlibInputStream
 
@@ -477,7 +477,7 @@ def to_writeable(source):
         pass
     elif not is_mapping and hasattr(source, '__dict__'):
         source = {key: value for key, value in source.__dict__.items()
-                      if not key.startswith('_')}
+                  if not key.startswith('_')}
         is_mapping = True
     if is_mapping:
         dtype = []
@@ -868,8 +868,8 @@ class MatFile5Writer:
                               f'Created on: {time.asctime()}')
         hdr['version'] = 0x0100
         hdr['endian_test'] = np.ndarray(shape=(),
-                                      dtype='S2',
-                                      buffer=np.uint16(0x4d49))
+                                        dtype='S2',
+                                        buffer=np.uint16(0x4d49))
         self.file_stream.write(hdr.tobytes())
 
     def put_variables(self, mdict, write_header=None):

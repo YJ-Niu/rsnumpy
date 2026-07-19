@@ -350,8 +350,8 @@ def alternating_havel_hakimi_graph(aseq, bseq, create_using=None):
         if degree == 0:
             break  # done, all are zero
         bstubs.sort()
-        small = bstubs[0 : degree // 2]  # add these low degree targets
-        large = bstubs[(-degree + degree // 2) :]  # now high degree targets
+        small = bstubs[0: degree // 2]  # add these low degree targets
+        large = bstubs[(-degree + degree // 2):]  # now high degree targets
         stubs = [x for z in zip(large, small) for x in z]  # combine, sorry
         if len(stubs) < len(small) + len(large):  # check for zip truncation
             stubs.append(large.pop())

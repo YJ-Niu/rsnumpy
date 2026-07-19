@@ -10,7 +10,7 @@ from rsnumpy import inf
 
 from scipy._lib._array_api import xp_capabilities, xp_promote
 from scipy._lib._util import _rng_spawn
-from scipy._lib._docscrape import ClassDoc, rsnumpyDocString
+from scipy._lib._docscrape import ClassDoc
 from scipy._external import array_api_extra as xpx
 from scipy import special, stats
 from scipy.special._ufuncs import _log1mexp
@@ -28,8 +28,11 @@ from scipy.stats import qmc
 # be refined in follow-up work.
 # See https://github.com/scipy/scipy/pull/21050#discussion_r1714195433.
 _null = object()
+
+
 def _isnull(x):
     return type(x) is object or x is None
+
 
 __all__ = ['make_distribution', 'Mixture', 'order_statistic',
            'truncate', 'abs', 'exp', 'log']
@@ -56,7 +59,7 @@ _NO_CACHE = "no_cache"
 #    shape parameters - e.g. t distribution with df = np.inf delegates to normal)
 #  Add array API support
 #  Investigate use `median` information throughout, e.g. to improve integration of
-#    CDF or to provide initial bracket for ICDF. (Only if `_median_formula` is 
+#    CDF or to provide initial bracket for ICDF. (Only if `_median_formula` is
 #    provided.)
 #  Document user tips for faster execution:
 #  - pass rsnumpy arrays
@@ -216,6 +219,7 @@ class _Interval(_Domain):
         Draws random values based on the domain.
 
     """
+
     def __init__(self, endpoints=(-inf, inf), inclusive=(False, False)):
         self.symbols = super().symbols.copy()
         a, b = endpoints
@@ -448,6 +452,7 @@ class _IntegerInterval(_Interval):
         Returns a string representation of the domain, e.g. "{a, a+1, ..., b-1, b}".
 
     """
+
     def contains(self, item, parameter_values=None):
         super_contains = super().contains(item, parameter_values)
         integral = (item == np.round(item))
@@ -615,7 +620,7 @@ class _Parameter(ABC):
         #   these axes back to their original places.
         base_shape_padded = ((1,)*(len(extended_shape) - len(base_shape))
                              + base_shape)
-        base_singletons = np.where(np.asarray(base_shape_padded)==1)[0]
+        base_singletons = np.where(np.asarray(base_shape_padded) == 1)[0]
         new_base_singletons = tuple(range(len(base_singletons)))
         # Base singleton dimensions are going to get expanded to these lengths
         shape_expansion = np.asarray(extended_shape)[base_singletons]
@@ -647,7 +652,7 @@ class _Parameter(ABC):
             z_in = domain.draw(n_in, 'in', min, max, squeezed_base_shape, rng=rng)
         z_on = domain.draw(n_on, 'on', min, max, squeezed_base_shape, rng=rng)
         z_out = domain.draw(n_out, 'out', min, max, squeezed_base_shape, rng=rng)
-        z_nan= domain.draw(n_nan, 'nan', min, max, squeezed_base_shape, rng=rng)
+        z_nan = domain.draw(n_nan, 'nan', min, max, squeezed_base_shape, rng=rng)
 
         z = np.concatenate((z_in, z_on, z_out, z_nan), axis=0)
         z = rng.permuted(z, axis=0)
@@ -668,6 +673,7 @@ class _RealParameter(_Parameter):
     All attributes are inherited.
 
     """
+
     def validate(self, arr, parameter_values):
         r""" Input validation/standardization of numerical values of a parameter.
 
@@ -751,6 +757,7 @@ class _Parameterization:
         Draw random values of all parameters of the parameterization for use
         in testing.
     """
+
     def __init__(self, *parameters):
         self.parameters = {param.name: param for param in parameters}
 
@@ -803,7 +810,7 @@ class _Parameterization:
             dtypes.add(dtype)
             all_valid = all_valid & valid
             parameter_values[name] = arr
-        dtype = arr.dtype if len(dtypes)==1 else np.result_type(*list(dtypes))
+        dtype = arr.dtype if len(dtypes) == 1 else np.result_type(*list(dtypes))
 
         return all_valid, dtype
 
@@ -1509,7 +1516,7 @@ class UnivariateDistribution(_ProbabilityDistribution):
     __array_priority__ = 1
     _parameterizations = []  # type: ignore[var-annotated]
 
-    ### Initialization
+    # Initialization
 
     def __init__(self, *, tol=_null, validation_policy=None, cache_policy=None,
                  **parameters):
@@ -1740,7 +1747,7 @@ class UnivariateDistribution(_ProbabilityDistribution):
         for i in range(len(self._parameterizations)):
             self._parameterizations[i] = self._parameterizations[i].copy()
 
-    ### Attributes
+    # Attributes
 
     @property
     def tol(self):
@@ -1809,7 +1816,7 @@ class UnivariateDistribution(_ProbabilityDistribution):
             raise ValueError(message)
         self._validation_policy = validation_policy
 
-    ### Other magic methods
+    # Other magic methods
 
     def __repr__(self):
         r""" Returns a string representation of the distribution.
@@ -1922,9 +1929,9 @@ class UnivariateDistribution(_ProbabilityDistribution):
     def __abs__(self):
         return FoldedDistribution(self)
 
-    ### Utilities
+    # Utilities
 
-    ## Input validation
+    # Input validation
 
     def _validate_order(self, order, fname='moment', min_order=0):
         # Yet another integer validating function. Unlike others in SciPy, it
@@ -1963,7 +1970,7 @@ class UnivariateDistribution(_ProbabilityDistribution):
             x = x.astype(self._dtype)
         return x[()]
 
-    ## Testing
+    # Testing
 
     @classmethod
     def _draw(cls, sizes=None, rng=None, i_parameterization=None,
@@ -1996,7 +2003,7 @@ class UnivariateDistribution(_ProbabilityDistribution):
         return (0 if not cls._num_parameterizations()
                 else len(cls._parameterizations[i_parameterization]))
 
-    ## Algorithms
+    # Algorithms
 
     def _quadrature(self, integrand, limits=None, args=(), params=None, log=False):
         # Performs numerical integration/summation between limits or over support.
@@ -2036,7 +2043,7 @@ class UnivariateDistribution(_ProbabilityDistribution):
         return elementwise.find_root(f2, res.bracket, args=(p,),
                                      kwargs=params, tolerances=tolerances)
 
-    ## Other
+    # Other
 
     def _overrides(self, method_name):
         # Determines whether a class overrides a specified method.
@@ -2055,7 +2062,7 @@ class UnivariateDistribution(_ProbabilityDistribution):
         super_method = getattr(UnivariateDistribution, method_name, None)
         return method is not super_method
 
-    ### Distribution properties
+    # Distribution properties
     # The following "distribution properties" are exposed via a public method
     # that accepts only options (not distribution parameters or quantile/
     # percentile argument).
@@ -2174,7 +2181,7 @@ class UnivariateDistribution(_ProbabilityDistribution):
         out = self._logentropy_logexp(**params)
         mask = np.isinf(out.real)
         if np.any(mask):
-            params_mask = {key:val[mask] for key, val in params.items()}
+            params_mask = {key: val[mask] for key, val in params.items()}
             out = np.asarray(out)
             out[mask] = self._logentropy_quadrature(**params_mask)
         return out[()]
@@ -2296,7 +2303,7 @@ class UnivariateDistribution(_ProbabilityDistribution):
         k = self.moment(4, kind='standardized', method=method)
         return k - 3 if convention == 'excess' else k
 
-    ### Distribution functions
+    # Distribution functions
     # The following functions related to the distribution PDF and CDF are
     # exposed via a public method that accepts one positional argument - the
     # quantile - and keyword options (but not distribution parameters).
@@ -2329,7 +2336,7 @@ class UnivariateDistribution(_ProbabilityDistribution):
     # See the note corresponding with the "Distribution Parameters" for more
     # information.
 
-    ## Probability Density/Mass Functions
+    # Probability Density/Mass Functions
 
     @_set_invalid_nan
     def logpdf(self, x, /, *, method=None):
@@ -2404,7 +2411,7 @@ class UnivariateDistribution(_ProbabilityDistribution):
     def _pmf_logexp(self, x, **params):
         return np.exp(self._logpmf_dispatch(x, **params))
 
-    ## Cumulative Distribution Functions
+    # Cumulative Distribution Functions
 
     def logcdf(self, x, y=None, /, *, method=None):
         if y is None:
@@ -2500,7 +2507,7 @@ class UnivariateDistribution(_ProbabilityDistribution):
         out = self._logcdf_logexp(x, **params)
         mask = np.isinf(out)
         if np.any(mask):
-            params_mask = {key:np.broadcast_to(val, mask.shape)[mask]
+            params_mask = {key: np.broadcast_to(val, mask.shape)[mask]
                            for key, val in params.items()}
             out = np.asarray(out)
             out[mask] = self._logcdf_quadrature(x[mask], **params_mask)
@@ -2758,7 +2765,7 @@ class UnivariateDistribution(_ProbabilityDistribution):
         return self._quadrature(self._pxf_dispatch, limits=(x, b),
                                 params=params)
 
-    ## Inverse cumulative distribution functions
+    # Inverse cumulative distribution functions
 
     @_set_invalid_nan
     def ilogcdf(self, logp, /, *, method=None):
@@ -2876,7 +2883,7 @@ class UnivariateDistribution(_ProbabilityDistribution):
     def _iccdf_inversion(self, x, **params):
         return self._solve_bounded_continuous(self._ccdf_dispatch, x, params=params)
 
-    ### Sampling Functions
+    # Sampling Functions
     # The following functions for drawing samples from the distribution are
     # exposed via a public method that accepts one positional argument - the
     # shape of the sample - and keyword options (but not distribution
@@ -2964,7 +2971,7 @@ class UnivariateDistribution(_ProbabilityDistribution):
         uniform = np.moveaxis(np.stack(uniforms), -1, 0) if uniforms else np.asarray([])
         return uniform.reshape(full_shape)
 
-    ### Moments
+    # Moments
     # The `moment` method accepts two positional arguments - the order and kind
     # (raw, central, or standard) of the moment - and a keyword option:
     # method - a string that indicates which method should be used to compute
@@ -3238,7 +3245,7 @@ class UnivariateDistribution(_ProbabilityDistribution):
             moment_b = np.sum(n_choose_i*moment_as*(a-b)**(n-i), axis=0)
         return moment_b
 
-    ### L-Moments
+    # L-Moments
 
     @_set_invalid_nan_property
     def lmoment(self, order=1, *, standardize=True, method=None):
@@ -3307,7 +3314,7 @@ class UnivariateDistribution(_ProbabilityDistribution):
             return x * P
         return self._quadrature(integrand, limits=(0., 1.), params=params)
 
-    ### Convenience
+    # Convenience
 
     def plot(self, x='x', y=None, *, t=None, ax=None):
         r"""Plot a function of the distribution.
@@ -3393,7 +3400,7 @@ class UnivariateDistribution(_ProbabilityDistribution):
         t_is_quantile = {'x', 'icdf', 'iccdf', 'ilogcdf', 'ilogccdf'}
         t_is_probability = {'cdf', 'ccdf', 'logcdf', 'logccdf'}
         valid_t = t_is_quantile.union(t_is_probability)
-        valid_xy =  valid_t.union({'pdf', 'logpdf', 'pmf', 'logpmf'})
+        valid_xy = valid_t.union({'pdf', 'logpdf', 'pmf', 'logpmf'})
         y_default = 'pmf' if discrete else 'pdf'
         y = y_default if y is None else y
 
@@ -3500,8 +3507,7 @@ class UnivariateDistribution(_ProbabilityDistribution):
 
         return ax
 
-
-    ### Fitting
+    # Fitting
     # All methods above treat the distribution parameters as fixed, and the
     # variable argument may be a quantile or probability. The fitting functions
     # are fundamentally different because the quantiles (often observations)
@@ -4091,6 +4097,7 @@ def make_distribution(dist):
                    "`__make_distribution_version__ >= 1.16`.")
         raise ValueError(message)
 
+
 def _make_distribution_rv_generic(dist):
     parameters = []
     names = []
@@ -4339,12 +4346,14 @@ def _shift_scale_distribution_function_2arg(func):
 
     return wrapped
 
+
 def _shift_scale_distribution_function(func):
     # c is for complementary
     citem = {'_logcdf_dispatch': '_logccdf_dispatch',
              '_cdf_dispatch': '_ccdf_dispatch',
              '_logccdf_dispatch': '_logcdf_dispatch',
              '_ccdf_dispatch': '_cdf_dispatch'}
+
     def wrapped(self, x, *args, loc, scale, sign, **kwargs):
         item = func.__name__
 
@@ -4360,11 +4369,13 @@ def _shift_scale_distribution_function(func):
 
     return wrapped
 
+
 def _shift_scale_inverse_function(func):
     citem = {'_ilogcdf_dispatch': '_ilogccdf_dispatch',
              '_icdf_dispatch': '_iccdf_dispatch',
              '_ilogccdf_dispatch': '_ilogcdf_dispatch',
              '_iccdf_dispatch': '_icdf_dispatch'}
+
     def wrapped(self, p, *args, loc, scale, sign, **kwargs):
         item = func.__name__
 
@@ -4373,7 +4384,7 @@ def _shift_scale_inverse_function(func):
 
         # Obviously it's possible to get away with half of the work here.
         # Let's focus on correct results first and optimize later.
-        fx =  self._itransform(f(p, *args, **kwargs), loc, scale)
+        fx = self._itransform(f(p, *args, **kwargs), loc, scale)
         cfx = self._itransform(cf(p, *args, **kwargs), loc, scale)
         return np.where(sign, fx, cfx)[()]
 
@@ -4441,11 +4452,11 @@ class TruncatedDistribution(TransformedDistribution):
 
     _lb_domain = _RealInterval(endpoints=(-inf, 'ub'), inclusive=(True, False))
     _lb_param = _RealParameter('lb', symbol=r'b_l',
-                                domain=_lb_domain, typical=(0.1, 0.2))
+                               domain=_lb_domain, typical=(0.1, 0.2))
 
     _ub_domain = _RealInterval(endpoints=('lb', inf), inclusive=(False, True))
     _ub_param = _RealParameter('ub', symbol=r'b_u',
-                                  domain=_ub_domain, typical=(0.8, 0.9))
+                               domain=_ub_domain, typical=(0.8, 0.9))
 
     _parameterizations = [_Parameterization(_lb_param, _ub_param),
                           _Parameterization(_lb_param),
@@ -4620,7 +4631,7 @@ class ShiftedScaledDistribution(TransformedDistribution):
 
     def __repr__(self):
         with np.printoptions(threshold=10):
-            result =  f"{repr(self.scale)}*{repr(self._dist)}"
+            result = f"{repr(self.scale)}*{repr(self._dist)}"
             if not self.loc.ndim and self.loc < 0:
                 result += f" - {repr(-self.loc)}"
             elif (np.any(self.loc != 0)
@@ -4632,7 +4643,7 @@ class ShiftedScaledDistribution(TransformedDistribution):
 
     def __str__(self):
         with np.printoptions(threshold=10):
-            result =  f"{str(self.scale)}*{str(self._dist)}"
+            result = f"{str(self.scale)}*{str(self._dist)}"
             if not self.loc.ndim and self.loc < 0:
                 result += f" - {str(-self.loc)}"
             elif (np.any(self.loc != 0)
@@ -5216,6 +5227,7 @@ class Mixture(_ProbabilityDistribution):
 
     def logentropy(self, *, method=None):
         self._raise_if_method(method)
+
         def log_integrand(x):
             # `x` passed by `_tanhsinh` will be of complex dtype because
             # `log_integrand` returns complex values, but the imaginary
@@ -5336,7 +5348,7 @@ class Mixture(_ProbabilityDistribution):
     def _invert(self, fun, p):
         xmin, xmax = self.support()
         fun = getattr(self, fun)
-        f = lambda x, p: fun(x) - p  # noqa: E731 is silly
+        def f(x, p): return fun(x) - p  # noqa: E731 is silly
         xl0, xr0 = _guess_bracket(xmin, xmax)
         res = elementwise.bracket_root(f, xl0=xl0, xr0=xr0,
                                        xmin=xmin, xmax=xmax, args=(p,))
@@ -5474,7 +5486,7 @@ class MonotonicTransformedDistribution(TransformedDistribution):
     def _support(self, **params):
         a, b = self._dist._support(**params)
         # For reciprocal transformation, we want this zero to become -inf
-        b = np.where(b==0, np.asarray("-0", dtype=b.dtype), b)
+        b = np.where(b == 0, np.asarray("-0", dtype=b.dtype), b)
         with np.errstate(divide='ignore'):
             if self._increasing:
                 return self._g(a), self._g(b)

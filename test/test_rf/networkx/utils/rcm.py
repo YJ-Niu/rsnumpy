@@ -7,7 +7,7 @@ from operator import itemgetter
 
 import networkx as nx
 
-from ..utils import arbitrary_element
+from .misc import arbitrary_element
 
 __all__ = ["cuthill_mckee_ordering", "reverse_cuthill_mckee_ordering"]
 

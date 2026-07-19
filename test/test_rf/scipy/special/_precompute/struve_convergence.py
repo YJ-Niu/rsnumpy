@@ -51,9 +51,9 @@ def do_plot(is_h=True):
     vs = np.linspace(-1000, 1000, 91)
     zs = np.sort(np.r_[1e-5, 1.0, np.linspace(0, 700, 91)[1:]])
 
-    rp = _struve_power_series(vs[:,None], zs[None,:], is_h)
-    ra = _struve_asymp_large_z(vs[:,None], zs[None,:], is_h)
-    rb = _struve_bessel_series(vs[:,None], zs[None,:], is_h)
+    rp = _struve_power_series(vs[:, None], zs[None, :], is_h)
+    ra = _struve_asymp_large_z(vs[:, None], zs[None, :], is_h)
+    rb = _struve_bessel_series(vs[:, None], zs[None, :], is_h)
 
     mpmath.mp.dps = 50
     if is_h:
@@ -62,7 +62,7 @@ def do_plot(is_h=True):
     else:
         def sh(v, z):
             return float(mpmath.struvel(mpmath.mpf(v), mpmath.mpf(z)))
-    ex = np.vectorize(sh, otypes='d')(vs[:,None], zs[None,:])
+    ex = np.vectorize(sh, otypes='d')(vs[:, None], zs[None, :])
 
     err_a = err_metric(ra[0], ex) + 1e-300
     err_p = err_metric(rp[0], ex) + 1e-300

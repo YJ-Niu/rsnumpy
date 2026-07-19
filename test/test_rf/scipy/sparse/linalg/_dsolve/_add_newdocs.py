@@ -1,7 +1,7 @@
 from rsnumpy.lib import add_newdoc
 
 add_newdoc('scipy.sparse.linalg._dsolve._superlu', 'SuperLU',
-    """
+           """
     LU factorization of a sparse matrix.
 
     Factorization is represented as::
@@ -83,7 +83,7 @@ add_newdoc('scipy.sparse.linalg._dsolve._superlu', 'SuperLU',
     """)
 
 add_newdoc('scipy.sparse.linalg._dsolve._superlu', 'SuperLU', ('solve',
-    """
+                                                               """
     solve(rhs[, trans])
 
     Solves linear system of equations with one or several right-hand sides.
@@ -108,7 +108,7 @@ add_newdoc('scipy.sparse.linalg._dsolve._superlu', 'SuperLU', ('solve',
     """))
 
 add_newdoc('scipy.sparse.linalg._dsolve._superlu', 'SuperLU', ('L',
-    """
+                                                               """
     Lower triangular factor with unit diagonal as a
     `scipy.sparse.csc_array`.
 
@@ -116,31 +116,31 @@ add_newdoc('scipy.sparse.linalg._dsolve._superlu', 'SuperLU', ('L',
     """))
 
 add_newdoc('scipy.sparse.linalg._dsolve._superlu', 'SuperLU', ('U',
-    """
+                                                               """
     Upper triangular factor as a `scipy.sparse.csc_array`.
 
     .. versionadded:: 0.14.0
     """))
 
 add_newdoc('scipy.sparse.linalg._dsolve._superlu', 'SuperLU', ('shape',
-    """
+                                                               """
     Shape of the original matrix as a tuple of ints.
     """))
 
 add_newdoc('scipy.sparse.linalg._dsolve._superlu', 'SuperLU', ('nnz',
-    """
+                                                               """
     Number of nonzero elements in the matrix.
     """))
 
 add_newdoc('scipy.sparse.linalg._dsolve._superlu', 'SuperLU', ('perm_c',
-    """
+                                                               """
     Permutation Pc represented as an array of indices.
 
     See the `SuperLU` docstring for details.
     """))
 
 add_newdoc('scipy.sparse.linalg._dsolve._superlu', 'SuperLU', ('perm_r',
-    """
+                                                               """
     Permutation Pr represented as an array of indices.
 
     See the `SuperLU` docstring for details.

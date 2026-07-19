@@ -39,10 +39,11 @@ def _report_nonhermitian(M, name):
     tol = max(tol, tol * norm(M, 1))
     if nmd > tol:
         warnings.warn(
-              f"Matrix {name} of the type {M.dtype} is not Hermitian: "
-              f"condition: {nmd} < {tol} fails.",
-              UserWarning, stacklevel=4
-         )
+            f"Matrix {name} of the type {M.dtype} is not Hermitian: "
+            f"condition: {nmd} < {tol} fails.",
+            UserWarning, stacklevel=4
+        )
+
 
 def _as2d(ar):
     """
@@ -376,7 +377,7 @@ def lobpcg(
 
     The traditional callable `LinearOperator` is no longer
     necessary but still supported as the input to `lobpcg`.
-    Specifying ``matmat=A_matmat`` explicitly improves performance. 
+    Specifying ``matmat=A_matmat`` explicitly improves performance.
 
     >>> A_lo = LinearOperator((n, n), matvec=A_matmat, matmat=A_matmat, dtype=np.int16)
     >>> eigenvalues, _ = lobpcg(A_lo, X, maxiter=80)
@@ -397,7 +398,7 @@ def lobpcg(
     and ``largest=False`` parameter
 
     >>> eigenvalues, _ = lobpcg(A, X, largest=False, maxiter=90)
-    >>> print(eigenvalues)  
+    >>> print(eigenvalues)
     [1. 2. 3.]
 
     The next example illustrates computing 3 smallest eigenvalues of

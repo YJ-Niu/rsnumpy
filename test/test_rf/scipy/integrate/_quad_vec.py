@@ -31,6 +31,7 @@ class SemiInfiniteFunc:
     """
     Argument transform from (start, +-oo) to (0, 1)
     """
+
     def __init__(self, func, start, infty):
         self._func = func
         self._start = start
@@ -59,6 +60,7 @@ class DoubleInfiniteFunc:
     """
     Argument transform from (-oo, oo) to (-1, 1)
     """
+
     def __init__(self, func):
         self._func = func
 
@@ -425,7 +427,7 @@ def quad_vec(f, a, b, epsabs=1e-200, epsrel=1e-8, norm='2', cache_size=100e6,
         res_arr = np.asarray(res)
         dummy = np.full(res_arr.shape, np.nan, dtype=res_arr.dtype)
         integrals = np.array([interval_cache.get((z[1], z[2]), dummy)
-                                      for z in intervals], dtype=res_arr.dtype)
+                              for z in intervals], dtype=res_arr.dtype)
         errors = np.array([-z[0] for z in intervals])
         intervals = np.array([[z[1], z[2]] for z in intervals])
 

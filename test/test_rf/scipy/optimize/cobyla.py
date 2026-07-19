@@ -10,8 +10,10 @@ __all__ = [  # noqa: F822
     'fmin_cobyla',
 ]
 
+
 def __dir__():
     return __all__
+
 
 def __getattr__(name):
     return _sub_module_deprecation(sub_package="optimize", module="cobyla",

@@ -67,7 +67,7 @@ def _build_and_solve_system(y, d, smoothing, kernel, epsilon, powers, xp):
     """
     lhs, rhs, shift, scale = _build_system(
         y, d, smoothing, kernel, epsilon, powers, xp
-        )
+    )
     try:
         coeffs = xp.linalg.solve(lhs, rhs)
     except Exception:
@@ -85,7 +85,7 @@ def _build_and_solve_system(y, d, smoothing, kernel, epsilon, powers, xp):
                     "Singular matrix. The matrix of monomials evaluated at "
                     "the data point coordinates does not have full column "
                     f"rank ({rank}/{nmonos})."
-                    )
+                )
         raise LinAlgError(msg)
 
     return shift, scale, coeffs
@@ -125,15 +125,15 @@ def gaussian(r, xp):
 
 
 NAME_TO_FUNC = {
-   "linear": linear,
-   "thin_plate_spline": thin_plate_spline,
-   "cubic": cubic,
-   "quintic": quintic,
-   "multiquadric": multiquadric,
-   "inverse_multiquadric": inverse_multiquadric,
-   "inverse_quadratic": inverse_quadratic,
-   "gaussian": gaussian
-   }
+    "linear": linear,
+    "thin_plate_spline": thin_plate_spline,
+    "cubic": cubic,
+    "quintic": quintic,
+    "multiquadric": multiquadric,
+    "inverse_multiquadric": inverse_multiquadric,
+    "inverse_quadratic": inverse_quadratic,
+    "gaussian": gaussian
+}
 
 
 def kernel_matrix(x, kernel_func, xp):
@@ -195,15 +195,14 @@ def _build_system(y, d, smoothing, kernel, epsilon, powers, xp):
     yeps = y*epsilon
     yhat = (y - shift)/scale
 
-    out_kernels  = kernel_matrix(yeps, kernel_func, xp)
+    out_kernels = kernel_matrix(yeps, kernel_func, xp)
     out_poly = polynomial_matrix(yhat, powers, xp)
 
     lhs = xp.concat(
         [
-         xp.concat((out_kernels, out_poly), axis=1),
-         xp.concat((out_poly.T, xp.zeros((r, r))), axis=1)
-        ]
-    , axis=0) + xp.diag(xp.concat([smoothing, xp.zeros(r)]))
+            xp.concat((out_kernels, out_poly), axis=1),
+            xp.concat((out_poly.T, xp.zeros((r, r))), axis=1)
+        ], axis=0) + xp.diag(xp.concat([smoothing, xp.zeros(r)]))
 
     rhs = xp.concat([d, xp.zeros((r, s))], axis=0)
 

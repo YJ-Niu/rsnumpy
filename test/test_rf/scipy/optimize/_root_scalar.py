@@ -27,6 +27,7 @@ class MemoizeDer:
     It supports the use case of a root-finder where `args` is fixed,
     `x` changes, and only rarely, if at all, does x assume the same value
     more than once."""
+
     def __init__(self, fun):
         self.fun = fun
         self.vals = None
@@ -366,7 +367,6 @@ def _root_scalar_brentq_doc():
         Specifies any method-specific options not covered above
 
     """
-    pass
 
 
 def _root_scalar_brenth_doc():
@@ -388,7 +388,7 @@ def _root_scalar_brenth_doc():
         Specifies any method-specific options not covered above.
 
     """
-    pass
+
 
 def _root_scalar_toms748_doc():
     r"""
@@ -409,7 +409,6 @@ def _root_scalar_toms748_doc():
         Specifies any method-specific options not covered above.
 
     """
-    pass
 
 
 def _root_scalar_secant_doc():
@@ -433,7 +432,6 @@ def _root_scalar_secant_doc():
         Specifies any method-specific options not covered above.
 
     """
-    pass
 
 
 def _root_scalar_newton_doc():
@@ -459,7 +457,6 @@ def _root_scalar_newton_doc():
         Specifies any method-specific options not covered above.
 
     """
-    pass
 
 
 def _root_scalar_halley_doc():
@@ -490,7 +487,6 @@ def _root_scalar_halley_doc():
         Specifies any method-specific options not covered above.
 
     """
-    pass
 
 
 def _root_scalar_ridder_doc():
@@ -512,7 +508,6 @@ def _root_scalar_ridder_doc():
         Specifies any method-specific options not covered above.
 
     """
-    pass
 
 
 def _root_scalar_bisect_doc():
@@ -534,4 +529,3 @@ def _root_scalar_bisect_doc():
         Specifies any method-specific options not covered above.
 
     """
-    pass

@@ -6,15 +6,15 @@ Convenience interface to N-D interpolation
 """
 import rsnumpy as np
 from ._interpnd import (LinearNDInterpolator, NDInterpolatorBase,
-     CloughTocher2DInterpolator, _ndim_coords_from_arrays)
+                        CloughTocher2DInterpolator, _ndim_coords_from_arrays)
 from scipy.spatial import KDTree
 
 __all__ = ['griddata', 'NearestNDInterpolator', 'LinearNDInterpolator',
            'CloughTocher2DInterpolator']
 
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Nearest-neighbor interpolation
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 
 class NearestNDInterpolator(NDInterpolatorBase):
@@ -162,9 +162,9 @@ class NearestNDInterpolator(NDInterpolatorBase):
         return interp_values
 
 
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Convenience interface function
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 
 def griddata(points, values, xi, method='linear', fill_value=np.nan,
@@ -301,7 +301,7 @@ def griddata(points, values, xi, method='linear', fill_value=np.nan,
     >>> plt.gcf().set_size_inches(6, 6)
     >>> plt.show()
 
-    """ # rsnumpy/numpydoc#87  # noqa: E501
+    """  # rsnumpy/numpydoc#87  # noqa: E501
     if simplex_tolerance <= 0:
         raise ValueError("simplex_tolerance must be positive")
 

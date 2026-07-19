@@ -19,13 +19,13 @@ def add_newdoc(name, doc):
 
 
 add_newdoc("_sf_error_test_function",
-    """
+           """
     Private function; do not use.
     """)
 
 
 add_newdoc("_cosine_cdf",
-    """
+           """
     _cosine_cdf(x)
 
     Cumulative distribution function (CDF) of the cosine distribution::
@@ -47,7 +47,7 @@ add_newdoc("_cosine_cdf",
     """)
 
 add_newdoc("_cosine_invcdf",
-    """
+           """
     _cosine_invcdf(p)
 
     Inverse of the cumulative distribution function (CDF) of the cosine
@@ -73,17 +73,17 @@ add_newdoc("_cosine_invcdf",
     """)
 
 add_newdoc("_ellip_harm",
-    """
+           """
     Internal function, use `ellip_harm` instead.
     """)
 
 add_newdoc("_ellip_norm",
-    """
+           """
     Internal function, use `ellip_norm` instead.
     """)
 
 add_newdoc("wrightomega",
-    r"""
+           r"""
     wrightomega(z, out=None)
 
     Wright Omega function.
@@ -170,7 +170,7 @@ add_newdoc("wrightomega",
 
 
 add_newdoc("agm",
-    """
+           """
     agm(a, b, out=None)
 
     Compute the arithmetic-geometric mean of `a` and `b`.
@@ -228,7 +228,7 @@ add_newdoc("agm",
     """)
 
 add_newdoc("bdtr",
-    r"""
+           r"""
     bdtr(k, n, p, out=None)
 
     Binomial distribution cumulative distribution function.
@@ -275,7 +275,7 @@ add_newdoc("bdtr",
     """)
 
 add_newdoc("bdtrc",
-    r"""
+           r"""
     bdtrc(k, n, p, out=None)
 
     Binomial distribution survival function.
@@ -327,7 +327,7 @@ add_newdoc("bdtrc",
     """)
 
 add_newdoc("bdtri",
-    r"""
+           r"""
     bdtri(k, n, y, out=None)
 
     Inverse function to `bdtr` with respect to `p`.
@@ -374,7 +374,7 @@ add_newdoc("bdtri",
     """)
 
 add_newdoc("bdtrik",
-    """
+           """
     bdtrik(y, n, p, out=None)
 
     Inverse function to `bdtr` with respect to `k`.
@@ -428,7 +428,7 @@ add_newdoc("bdtrik",
     """)
 
 add_newdoc("bdtrin",
-    r"""
+           r"""
     bdtrin(k, y, p, out=None)
 
     Inverse function to `bdtr` with respect to `n`.
@@ -492,7 +492,7 @@ add_newdoc("bdtrin",
     """)
 
 add_newdoc("btdtria",
-    r"""
+           r"""
     btdtria(p, b, x, out=None)
 
     Inverse of `betainc` with respect to `a`.
@@ -550,7 +550,7 @@ add_newdoc("btdtria",
     """)
 
 add_newdoc("btdtrib",
-    r"""
+           r"""
     btdtria(a, p, x, out=None)
 
     Inverse of `betainc` with respect to `b`.
@@ -932,7 +932,7 @@ add_newdoc(
     """)
 
 add_newdoc("boxcox",
-    r"""
+           r"""
     boxcox(x, lmbda, out=None)
 
     Compute the Box-Cox transformation.
@@ -983,7 +983,7 @@ add_newdoc("boxcox",
     """)
 
 add_newdoc("boxcox1p",
-    r"""
+           r"""
     boxcox1p(x, lmbda, out=None)
 
     Compute the Box-Cox transformation of :math:`1 + x`.
@@ -1034,7 +1034,7 @@ add_newdoc("boxcox1p",
     """)
 
 add_newdoc("inv_boxcox",
-    r"""
+           r"""
     inv_boxcox(y, lmbda, out=None)
 
     Compute the inverse of the Box-Cox transformation.
@@ -1081,7 +1081,7 @@ add_newdoc("inv_boxcox",
     """)
 
 add_newdoc("inv_boxcox1p",
-    r"""
+           r"""
     inv_boxcox1p(y, lmbda, out=None)
 
     Compute the inverse of the Box-Cox transformation of :math:`1 + x`.
@@ -1128,7 +1128,7 @@ add_newdoc("inv_boxcox1p",
     """)
 
 add_newdoc("chdtr",
-    r"""
+           r"""
     chdtr(v, x, out=None)
 
     Chi square cumulative distribution function.
@@ -1186,7 +1186,7 @@ add_newdoc("chdtr",
     """)
 
 add_newdoc("chdtrc",
-    r"""
+           r"""
     chdtrc(v, x, out=None)
 
     Chi square survival function.
@@ -1245,7 +1245,7 @@ add_newdoc("chdtrc",
     """)
 
 add_newdoc("chdtri",
-    """
+           """
     chdtri(v, p, out=None)
 
     Inverse to `chdtrc` with respect to `x`.
@@ -1292,7 +1292,7 @@ add_newdoc("chdtri",
     """)
 
 add_newdoc("chdtriv",
-    """
+           """
     chdtriv(p, x, out=None)
 
     Inverse to `chdtr` with respect to `v`.
@@ -1344,7 +1344,7 @@ add_newdoc("chdtriv",
     """)
 
 add_newdoc("chndtr",
-    r"""
+           r"""
     chndtr(x, df, nc, out=None)
 
     Non-central chi-squared cumulative distribution function.
@@ -1423,7 +1423,7 @@ add_newdoc("chndtr",
     """)
 
 add_newdoc("chndtrix",
-    """
+           """
     chndtrix(p, df, nc, out=None)
 
     Inverse to `chndtr` vs `x`.
@@ -1483,7 +1483,7 @@ add_newdoc("chndtrix",
     """)
 
 add_newdoc("chndtridf",
-    """
+           """
     chndtridf(x, p, nc, out=None)
 
     Inverse to `chndtr` vs `df`.
@@ -1542,7 +1542,7 @@ add_newdoc("chndtridf",
     """)
 
 add_newdoc("chndtrinc",
-    """
+           """
     chndtrinc(x, df, p, out=None)
 
     Inverse of `chndtr` with respect to `nc`.
@@ -2143,7 +2143,7 @@ add_newdoc(
     """)
 
 add_newdoc("entr",
-    r"""
+           r"""
     entr(x, out=None)
 
     Elementwise function for computing entropy.
@@ -2348,7 +2348,7 @@ add_newdoc(
     """)
 
 add_newdoc("eval_jacobi",
-    r"""
+           r"""
     eval_jacobi(n, alpha, beta, x, out=None)
 
     Evaluate Jacobi polynomial at a point.
@@ -2402,7 +2402,7 @@ add_newdoc("eval_jacobi",
     """)
 
 add_newdoc("eval_sh_jacobi",
-    r"""
+           r"""
     eval_sh_jacobi(n, p, q, x, out=None)
 
     Evaluate shifted Jacobi polynomial at a point.
@@ -2452,7 +2452,7 @@ add_newdoc("eval_sh_jacobi",
     """)
 
 add_newdoc("eval_gegenbauer",
-    r"""
+           r"""
     eval_gegenbauer(n, alpha, x, out=None)
 
     Evaluate Gegenbauer (ultraspherical) polynomial at a point.
@@ -2505,7 +2505,7 @@ add_newdoc("eval_gegenbauer",
     """)
 
 add_newdoc("eval_chebyt",
-    r"""
+           r"""
     eval_chebyt(n, x, out=None)
 
     Evaluate Chebyshev polynomial of the first kind at a point.
@@ -2561,7 +2561,7 @@ add_newdoc("eval_chebyt",
     """)
 
 add_newdoc("eval_chebyu",
-    r"""
+           r"""
     eval_chebyu(n, x, out=None)
 
     Evaluate Chebyshev polynomial of the second kind at a point.
@@ -2611,7 +2611,7 @@ add_newdoc("eval_chebyu",
     """)
 
 add_newdoc("eval_chebys",
-    r"""
+           r"""
     eval_chebys(n, x, out=None)
 
     Evaluate Chebyshev polynomial of the second kind on [-2, 2] at a
@@ -2673,7 +2673,7 @@ add_newdoc("eval_chebys",
     """)
 
 add_newdoc("eval_chebyc",
-    r"""
+           r"""
     eval_chebyc(n, x, out=None)
 
     Evaluate Chebyshev polynomial of the first kind on [-2, 2] at a
@@ -2736,7 +2736,7 @@ add_newdoc("eval_chebyc",
     """)
 
 add_newdoc("eval_sh_chebyt",
-    r"""
+           r"""
     eval_sh_chebyt(n, x, out=None)
 
     Evaluate shifted Chebyshev polynomial of the first kind at a
@@ -2785,7 +2785,7 @@ add_newdoc("eval_sh_chebyt",
     """)
 
 add_newdoc("eval_sh_chebyu",
-    r"""
+           r"""
     eval_sh_chebyu(n, x, out=None)
 
     Evaluate shifted Chebyshev polynomial of the second kind at a
@@ -2833,7 +2833,7 @@ add_newdoc("eval_sh_chebyu",
     """)
 
 add_newdoc("eval_legendre",
-    r"""
+           r"""
     eval_legendre(n, x, out=None)
 
     Evaluate Legendre polynomial at a point.
@@ -2920,7 +2920,7 @@ add_newdoc("eval_legendre",
     """)
 
 add_newdoc("eval_sh_legendre",
-    r"""
+           r"""
     eval_sh_legendre(n, x, out=None)
 
     Evaluate shifted Legendre polynomial at a point.
@@ -2968,7 +2968,7 @@ add_newdoc("eval_sh_legendre",
     """)
 
 add_newdoc("eval_genlaguerre",
-    r"""
+           r"""
     eval_genlaguerre(n, alpha, x, out=None)
 
     Evaluate generalized Laguerre polynomial at a point.
@@ -3023,7 +3023,7 @@ add_newdoc("eval_genlaguerre",
     """)
 
 add_newdoc("eval_laguerre",
-    r"""
+           r"""
     eval_laguerre(n, x, out=None)
 
     Evaluate Laguerre polynomial at a point.
@@ -3076,7 +3076,7 @@ add_newdoc("eval_laguerre",
      """)
 
 add_newdoc("eval_hermite",
-    r"""
+           r"""
     eval_hermite(n, x, out=None)
 
     Evaluate physicist's Hermite polynomial at a point.
@@ -3123,7 +3123,7 @@ add_newdoc("eval_hermite",
     """)
 
 add_newdoc("eval_hermitenorm",
-    r"""
+           r"""
     eval_hermitenorm(n, x, out=None)
 
     Evaluate probabilist's (normalized) Hermite polynomial at a
@@ -3171,7 +3171,7 @@ add_newdoc("eval_hermitenorm",
     """)
 
 add_newdoc("expn",
-    r"""
+           r"""
     expn(n, x, out=None)
 
     Generalized exponential integral En.
@@ -3241,7 +3241,7 @@ add_newdoc("expn",
     """)
 
 add_newdoc("fdtr",
-    r"""
+           r"""
     fdtr(dfn, dfd, x, out=None)
 
     F cumulative distribution function.
@@ -3352,7 +3352,7 @@ add_newdoc("fdtr",
     """)
 
 add_newdoc("fdtrc",
-    r"""
+           r"""
     fdtrc(dfn, dfd, x, out=None)
 
     F survival function.
@@ -3452,7 +3452,7 @@ add_newdoc("fdtrc",
     """)
 
 add_newdoc("fdtri",
-    r"""
+           r"""
     fdtri(dfn, dfd, p, out=None)
 
     The `p`-th quantile of the F-distribution.
@@ -3553,7 +3553,7 @@ add_newdoc("fdtri",
     """)
 
 add_newdoc("fdtridfd",
-    """
+           """
     fdtridfd(dfn, p, x, out=None)
 
     Inverse to `fdtr` vs dfd.
@@ -3639,7 +3639,7 @@ add_newdoc(
 '''
 
 add_newdoc("gdtr",
-    r"""
+           r"""
     gdtr(a, b, x, out=None)
 
     Gamma distribution cumulative distribution function.
@@ -3758,7 +3758,7 @@ add_newdoc("gdtr",
     """)
 
 add_newdoc("gdtrc",
-    r"""
+           r"""
     gdtrc(a, b, x, out=None)
 
     Gamma distribution survival function.
@@ -3877,7 +3877,7 @@ add_newdoc("gdtrc",
     """)
 
 add_newdoc("gdtria",
-    """
+           """
     gdtria(p, b, x, out=None)
 
     Inverse of `gdtr` vs a.
@@ -3934,7 +3934,7 @@ add_newdoc("gdtria",
     """)
 
 add_newdoc("gdtrib",
-    """
+           """
     gdtrib(a, p, x, out=None)
 
     Inverse of `gdtr` vs b.
@@ -4010,7 +4010,7 @@ add_newdoc("gdtrib",
     """)
 
 add_newdoc("gdtrix",
-    """
+           """
     gdtrix(a, b, p, out=None)
 
     Inverse of `gdtr` vs x.
@@ -4068,9 +4068,8 @@ add_newdoc("gdtrix",
     """)
 
 
-
 add_newdoc("huber",
-    r"""
+           r"""
     huber(delta, r, out=None)
 
     Huber loss function.
@@ -4178,7 +4177,7 @@ add_newdoc("huber",
     """)
 
 add_newdoc("hyp0f1",
-    r"""
+           r"""
     hyp0f1(v, z, out=None)
 
     Confluent hypergeometric limit function 0F1.
@@ -4245,7 +4244,7 @@ add_newdoc("hyp0f1",
     """)
 
 add_newdoc("hyp1f1",
-    r"""
+           r"""
     hyp1f1(a, b, x, out=None)
 
     Confluent hypergeometric function 1F1.
@@ -4325,7 +4324,7 @@ add_newdoc("hyp1f1",
     """)
 
 add_newdoc("hyperu",
-    r"""
+           r"""
     hyperu(a, b, x, out=None)
 
     Confluent hypergeometric function U.
@@ -4391,12 +4390,12 @@ add_newdoc("hyperu",
     """)
 
 add_newdoc("_igam_fac",
-    """
+           """
     Internal function, do not use.
     """)
 
 add_newdoc("kl_div",
-    r"""
+           r"""
     kl_div(x, y, out=None)
 
     Elementwise function for computing Kullback-Leibler divergence.
@@ -4447,7 +4446,7 @@ add_newdoc("kl_div",
     """)
 
 add_newdoc("kn",
-    r"""
+           r"""
     kn(n, x, out=None)
 
     Modified Bessel function of the second kind of integer order `n`.
@@ -4514,7 +4513,7 @@ add_newdoc("kn",
     """)
 
 add_newdoc("kolmogi",
-    """
+           """
     kolmogi(p, out=None)
 
     Inverse Survival Function of Kolmogorov distribution.
@@ -4558,7 +4557,7 @@ add_newdoc("kolmogi",
     """)
 
 add_newdoc("kolmogorov",
-    r"""
+           r"""
     kolmogorov(y, out=None)
 
     Complementary cumulative distribution (Survival Function) function of
@@ -4654,22 +4653,22 @@ add_newdoc("kolmogorov",
     """)
 
 add_newdoc("_kolmogc",
-    r"""
+           r"""
     Internal function, do not use.
     """)
 
 add_newdoc("_kolmogci",
-    r"""
+           r"""
     Internal function, do not use.
     """)
 
 add_newdoc("_kolmogp",
-    r"""
+           r"""
     Internal function, do not use.
     """)
 
 add_newdoc("_lanczos_sum_expg_scaled",
-    """
+           """
     Internal function, do not use.
     """)
 
@@ -4779,12 +4778,12 @@ add_newdoc(
     """)
 
 add_newdoc("_lgam1p",
-    """
+           """
     Internal function, do not use.
     """)
 
 add_newdoc("lpmv",
-    r"""
+           r"""
     lpmv(m, v, x, out=None)
 
     Associated Legendre function of integer order and real degree.
@@ -4866,7 +4865,7 @@ add_newdoc("lpmv",
     """)
 
 add_newdoc("nbdtr",
-    r"""
+           r"""
     nbdtr(k, n, p, out=None)
 
     Negative binomial cumulative distribution function.
@@ -4992,7 +4991,7 @@ add_newdoc("nbdtr",
     """)
 
 add_newdoc("nbdtrc",
-    r"""
+           r"""
     nbdtrc(k, n, p, out=None)
 
     Negative binomial survival function.
@@ -5223,7 +5222,7 @@ add_newdoc(
     """)
 
 add_newdoc("nbdtrik",
-    r"""
+           r"""
     nbdtrik(y, n, p, out=None)
 
     Negative binomial percentile function.
@@ -5313,7 +5312,7 @@ add_newdoc("nbdtrik",
     """)
 
 add_newdoc("nbdtrin",
-    r"""
+           r"""
     nbdtrin(k, y, p, out=None)
 
     Inverse of `nbdtr` vs `n`.
@@ -5388,7 +5387,7 @@ add_newdoc("nbdtrin",
     """)
 
 add_newdoc("ncfdtr",
-    r"""
+           r"""
     ncfdtr(dfn, dfd, nc, f, out=None)
 
     Cumulative distribution function of the non-central F distribution.
@@ -5481,7 +5480,7 @@ add_newdoc("ncfdtr",
     """)
 
 add_newdoc("ncfdtri",
-    """
+           """
     ncfdtri(dfn, dfd, nc, p, out=None)
 
     Inverse with respect to `f` of the CDF of the non-central F distribution.
@@ -5547,7 +5546,7 @@ add_newdoc("ncfdtri",
     """)
 
 add_newdoc("ncfdtridfd",
-    """
+           """
     ncfdtridfd(dfn, p, nc, f, out=None)
 
     Calculate degrees of freedom (denominator) for the noncentral F-distribution.
@@ -5607,7 +5606,7 @@ add_newdoc("ncfdtridfd",
     """)
 
 add_newdoc("ncfdtridfn",
-    """
+           """
     ncfdtridfn(p, dfd, nc, f, out=None)
 
     Calculate degrees of freedom (numerator) for the noncentral F-distribution.
@@ -5667,7 +5666,7 @@ add_newdoc("ncfdtridfn",
     """)
 
 add_newdoc("ncfdtrinc",
-    """
+           """
     ncfdtrinc(dfn, dfd, p, f, out=None)
 
     Calculate non-centrality parameter for non-central F distribution.
@@ -5720,7 +5719,7 @@ add_newdoc("ncfdtrinc",
     """)
 
 add_newdoc("nctdtr",
-    """
+           """
     nctdtr(df, nc, t, out=None)
 
     Cumulative distribution function of the non-central `t` distribution.
@@ -5785,7 +5784,7 @@ add_newdoc("nctdtr",
     """)
 
 add_newdoc("nctdtridf",
-    """
+           """
     nctdtridf(p, nc, t, out=None)
 
     Calculate degrees of freedom for non-central t distribution.
@@ -5834,7 +5833,7 @@ add_newdoc("nctdtridf",
     """)
 
 add_newdoc("nctdtrinc",
-    """
+           """
     nctdtrinc(df, p, t, out=None)
 
     Calculate non-centrality parameter for non-central t distribution.
@@ -5882,7 +5881,7 @@ add_newdoc("nctdtrinc",
     """)
 
 add_newdoc("nctdtrit",
-    """
+           """
     nctdtrit(df, nc, p, out=None)
 
     Inverse cumulative distribution function of the non-central t distribution.
@@ -5943,7 +5942,7 @@ add_newdoc("nctdtrit",
     """)
 
 add_newdoc("nrdtrimn",
-    """
+           """
     nrdtrimn(p, std, x, out=None)
 
     Calculate mean of normal distribution given other params.
@@ -5996,7 +5995,7 @@ add_newdoc("nrdtrimn",
     """)
 
 add_newdoc("nrdtrisd",
-    """
+           """
     nrdtrisd(mn, p, x, out=None)
 
     Calculate standard deviation of normal distribution given other params.
@@ -6050,7 +6049,7 @@ add_newdoc("nrdtrisd",
     """)
 
 add_newdoc("ndtri",
-    """
+           """
     ndtri(p, out=None)
 
     Inverse of `ndtr`.
@@ -6104,7 +6103,7 @@ add_newdoc("ndtri",
     """)
 
 add_newdoc("pdtr",
-    r"""
+           r"""
     pdtr(k, m, out=None)
 
     Poisson cumulative distribution function.
@@ -6160,7 +6159,7 @@ add_newdoc("pdtr",
     """)
 
 add_newdoc("pdtrc",
-    """
+           """
     pdtrc(k, m, out=None)
 
     Poisson survival function.
@@ -6210,7 +6209,7 @@ add_newdoc("pdtrc",
     """)
 
 add_newdoc("pdtri",
-    """
+           """
     pdtri(k, y, out=None)
 
     Inverse of `pdtr` with respect to `m`.
@@ -6267,7 +6266,7 @@ add_newdoc("pdtri",
     """)
 
 add_newdoc("pdtrik",
-    """
+           """
     pdtrik(p, m, out=None)
 
     Inverse of `pdtr` with respect to `k`.
@@ -6320,7 +6319,7 @@ add_newdoc("pdtrik",
     """)
 
 add_newdoc("poch",
-    r"""
+           r"""
     poch(z, m, out=None)
 
     Pochhammer symbol.
@@ -6450,7 +6449,7 @@ add_newdoc("powm1", """
 
 
 add_newdoc("pseudo_huber",
-    r"""
+           r"""
     pseudo_huber(delta, r, out=None)
 
     Pseudo-Huber loss function.
@@ -6583,7 +6582,7 @@ add_newdoc("pseudo_huber",
     """)
 
 add_newdoc("rel_entr",
-    r"""
+           r"""
     rel_entr(x, y, out=None)
 
     Elementwise function for computing relative entropy.
@@ -6643,7 +6642,7 @@ add_newdoc("rel_entr",
     """)
 
 add_newdoc("round",
-    """
+           """
     round(x, out=None)
 
     Round to the nearest integer.
@@ -6676,7 +6675,7 @@ add_newdoc("round",
     """)
 
 add_newdoc("shichi",
-    r"""
+           r"""
     shichi(x, out=None)
 
     Hyperbolic sine and cosine integrals.
@@ -6788,7 +6787,7 @@ add_newdoc("shichi",
     """)
 
 add_newdoc("sici",
-    r"""
+           r"""
     sici(x, out=None)
 
     Sine and cosine integrals.
@@ -6910,7 +6909,7 @@ add_newdoc("sici",
     """)
 
 add_newdoc("smirnov",
-    r"""
+           r"""
     smirnov(n, d, out=None)
 
     Kolmogorov-Smirnov complementary cumulative distribution function.
@@ -7023,7 +7022,7 @@ add_newdoc("smirnov",
     """)
 
 add_newdoc("smirnovi",
-    """
+           """
     smirnovi(n, p, out=None)
 
     Inverse to `smirnov`.
@@ -7082,24 +7081,24 @@ add_newdoc("smirnovi",
     """)
 
 add_newdoc("_smirnovc",
-    """
+           """
     _smirnovc(n, d)
      Internal function, do not use.
     """)
 
 add_newdoc("_smirnovci",
-    """
+           """
      Internal function, do not use.
     """)
 
 add_newdoc("_smirnovp",
-    """
+           """
     _smirnovp(n, p)
      Internal function, do not use.
     """)
 
 add_newdoc("spence",
-    r"""
+           r"""
     spence(z, out=None)
 
     Spence's function, also known as the dilogarithm.
@@ -7293,7 +7292,7 @@ add_newdoc(
     """)
 
 add_newdoc("stdtridf",
-    """
+           """
     stdtridf(p, t, out=None)
 
     Inverse of `stdtr` vs df.
@@ -7339,7 +7338,7 @@ add_newdoc("stdtridf",
     """)
 
 add_newdoc("stdtrit",
-    """
+           """
     stdtrit(df, p, out=None)
 
     The `p`-th quantile of the student t distribution.
@@ -7563,7 +7562,7 @@ add_newdoc(
     """)
 
 add_newdoc("yn",
-    r"""
+           r"""
     yn(n, x, out=None)
 
     Bessel function of the second kind of integer order and real argument.
@@ -7654,7 +7653,7 @@ add_newdoc("yn",
 
 
 add_newdoc("_struve_asymp_large_z",
-    """
+           """
     _struve_asymp_large_z(v, z, is_h)
 
     Internal function for testing `struve` & `modstruve`
@@ -7667,7 +7666,7 @@ add_newdoc("_struve_asymp_large_z",
     """)
 
 add_newdoc("_struve_power_series",
-    """
+           """
     _struve_power_series(v, z, is_h)
 
     Internal function for testing `struve` & `modstruve`
@@ -7680,7 +7679,7 @@ add_newdoc("_struve_power_series",
     """)
 
 add_newdoc("_struve_bessel_series",
-    """
+           """
     _struve_bessel_series(v, z, is_h)
 
     Internal function for testing `struve` & `modstruve`
@@ -7693,47 +7692,47 @@ add_newdoc("_struve_bessel_series",
     """)
 
 add_newdoc("_spherical_jn",
-    """
+           """
     Internal function, use `spherical_jn` instead.
     """)
 
 add_newdoc("_spherical_jn_d",
-    """
+           """
     Internal function, use `spherical_jn` instead.
     """)
 
 add_newdoc("_spherical_yn",
-    """
+           """
     Internal function, use `spherical_yn` instead.
     """)
 
 add_newdoc("_spherical_yn_d",
-    """
+           """
     Internal function, use `spherical_yn` instead.
     """)
 
 add_newdoc("_spherical_in",
-    """
+           """
     Internal function, use `spherical_in` instead.
     """)
 
 add_newdoc("_spherical_in_d",
-    """
+           """
     Internal function, use `spherical_in` instead.
     """)
 
 add_newdoc("_spherical_kn",
-    """
+           """
     Internal function, use `spherical_kn` instead.
     """)
 
 add_newdoc("_spherical_kn_d",
-    """
+           """
     Internal function, use `spherical_kn` instead.
     """)
 
 add_newdoc("owens_t",
-    """
+           """
     owens_t(h, a, out=None)
 
     Owen's T Function.
@@ -7772,12 +7771,12 @@ add_newdoc("owens_t",
     """)
 
 add_newdoc("_factorial",
-    """
+           """
     Internal function, do not use.
     """)
 
 add_newdoc("ndtri_exp",
-    r"""
+           r"""
     ndtri_exp(y, out=None)
 
     Inverse of `log_ndtr` vs x. Allows for greater precision than
@@ -7833,7 +7832,7 @@ add_newdoc("ndtri_exp",
 
 
 add_newdoc("_stirling2_inexact",
-    r"""
+           r"""
     Internal function, do not use.
     """)
 

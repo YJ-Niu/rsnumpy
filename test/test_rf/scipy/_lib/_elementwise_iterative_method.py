@@ -26,6 +26,7 @@ _EINPUTERR = -5
 _ECONVERGED = 0
 _EINPROGRESS = 1
 
+
 def _initialize(func, xs, args, kwargs=None,
                 complex_ok=False, preserve_shape=None, xp=None):
     """Initialize abscissa, function, and args arrays for elementwise function
@@ -84,6 +85,7 @@ def _initialize(func, xs, args, kwargs=None,
     if kwargs is not None:
         args = (*args, *kwargs.values())
         kwnames = tuple(kwargs.keys())
+
         def func(x, *args, kwnames=kwnames, func=func, **kwargs):
             nargs = len(args) - len(kwnames)
             kwarrays = dict(zip(kwnames, args[nargs:]))

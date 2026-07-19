@@ -511,7 +511,7 @@ def differential_evolution(func, bounds, args=(), strategy='best1bin',
     ...     trial = np.where(crossovers, bprime, trial)
     ...     return trial
 
-    """# noqa: E501
+    """  # noqa: E501
 
     # using a context manager means that any created Pool objects are
     # cleared up.
@@ -781,7 +781,7 @@ class DifferentialEvolutionSolver:
         ignored if ``workers != 1``.
         This option will override the `updating` keyword to
         ``updating='deferred'``.
-    """ # noqa: E501
+    """  # noqa: E501
 
     # Dispatch of mutation strategy method (binomial or exponential).
     _binomial = {'best1bin': '_best1',
@@ -1047,7 +1047,7 @@ class DifferentialEvolutionSolver:
         # We need to do this sampling for each parameter.
         samples = (segsize * rng.uniform(size=self.population_shape)
 
-        # Offset each segment to cover the entire parameter range [0, 1)
+                   # Offset each segment to cover the entire parameter range [0, 1)
                    + np.linspace(0., 1., self.num_population_members,
                                  endpoint=False)[:, np.newaxis])
 
@@ -1290,6 +1290,7 @@ class DifferentialEvolutionSolver:
             _f = self.original_func
             if not callable(pf):
                 pf = partial(minimize, method=polish_method)
+
                 def _f(x):
                     return list(self._mapwrapper(self.func, np.atleast_2d(x)))[0]
 
@@ -1306,7 +1307,7 @@ class DifferentialEvolutionSolver:
             if not isinstance(result, OptimizeResult):
                 raise ValueError(
                     "The result from a user defined polishing function "
-                     "should return an OptimizeResult."
+                    "should return an OptimizeResult."
                 )
 
             self._nfev += result.get("nfev", 0)
@@ -1438,7 +1439,7 @@ class DifferentialEvolutionSolver:
         self.population[[0, l], :] = self.population[[l, 0], :]
         self.feasible[[0, l]] = self.feasible[[l, 0]]
         self.constraint_violation[[0, l], :] = (
-        self.constraint_violation[[l, 0], :])
+            self.constraint_violation[[l, 0], :])
 
     def _constraint_violation_fn(self, x):
         """
@@ -1946,6 +1947,7 @@ class _ConstraintWrapper:
     arrays of shape (N, S) or (N,), where S is the number of vectors of shape
     (N,) to consider constraints for.
     """
+
     def __init__(self, constraint, x0):
         self.constraint = constraint
 

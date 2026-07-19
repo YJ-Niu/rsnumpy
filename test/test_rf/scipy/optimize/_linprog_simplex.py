@@ -421,7 +421,7 @@ def _solve_simplex(T, n, basis, callback, postsolve_args,
                 'success': status == 0 and complete,
                 'phase': phase,
                 'complete': complete,
-                })
+            })
             callback(res)
 
         if not complete:

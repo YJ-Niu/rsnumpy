@@ -41,6 +41,7 @@ from ._isolve.iterative import _get_atol_rtol
 
 __all__ = ['funm_multiply_krylov']
 
+
 def _funm_multiply_krylov_arnoldi(A, b, bnorm, V, H, m):
     """
     The Arnoldi iteration for constructing the basis V and the projection H = V * A V
@@ -91,6 +92,7 @@ def _funm_multiply_krylov_arnoldi(A, b, bnorm, V, H, m):
         V[:, k + 1] = V[:, k + 1] / H[k + 1, k]
 
     return False, m
+
 
 def _funm_multiply_krylov_lanczos(A, b, bnorm, V, H, m):
     """
@@ -146,8 +148,8 @@ def _funm_multiply_krylov_lanczos(A, b, bnorm, V, H, m):
     return False, m
 
 
-def funm_multiply_krylov(f, A, b, *, assume_a = "general", t = 1.0, atol = 0.0,
-                         rtol = 1e-6, restart_every_m = None, max_restarts = 20):
+def funm_multiply_krylov(f, A, b, *, assume_a="general", t=1.0, atol=0.0,
+                         rtol=1e-6, restart_every_m=None, max_restarts=20):
     """
     A restarted Krylov method for evaluating ``y = f(tA) b`` from [1]_ [2]_.
 
@@ -277,8 +279,8 @@ def funm_multiply_krylov(f, A, b, *, assume_a = "general", t = 1.0, atol = 0.0,
                          "argument 'restart_every_m' must be positive.")
 
     if max_restarts <= 0:
-            raise ValueError("scipy.sparse.linalg.funm_multiply_krylov: "
-                             "argument 'max_restarts' must be positive.")
+        raise ValueError("scipy.sparse.linalg.funm_multiply_krylov: "
+                         "argument 'max_restarts' must be positive.")
 
     m = restart_every_m
     max_restarts = min(max_restarts, int(n / m) + 1)
@@ -295,8 +297,8 @@ def funm_multiply_krylov(f, A, b, *, assume_a = "general", t = 1.0, atol = 0.0,
     # Using the column major order here since we work with
     # each individual column separately.
     internal_type = np.common_type(A, b)
-    V = np.zeros((n, m + 1), dtype = internal_type, order = 'F')
-    H = np.zeros((mmax + 1, mmax), dtype = internal_type, order = 'F')
+    V = np.zeros((n, m + 1), dtype=internal_type, order='F')
+    H = np.zeros((mmax + 1, mmax), dtype=internal_type, order='F')
 
     restart = 1
 

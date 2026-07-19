@@ -481,7 +481,6 @@ def triangle_sequence(creation_sequence):
             irun += 1
             tri = dr * (dr - 1) // 2  # new triangles at this i
         seq.append(tri)
-        prevsym = sym
     return seq
 
 

@@ -27,6 +27,7 @@ class BinomTestResult:
         The p-value of the hypothesis test.
 
     """
+
     def __init__(self, k, n, alternative, statistic, pvalue, xp):
         self.k = k
         self.n = n

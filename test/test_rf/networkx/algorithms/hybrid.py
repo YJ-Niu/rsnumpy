@@ -83,7 +83,7 @@ def kl_connected_subgraph(G, k, l, low_memory=False, same_as_graph=False):
                 G2 = G.subgraph(verts).copy()
             else:
                 G2 = copy.deepcopy(G)
-            ###
+            #
             path = [u, v]
             cnt = 0
             accept = 0
@@ -168,7 +168,7 @@ def is_kl_connected(G, k, l, low_memory=False):
             G2 = G.subgraph(verts)
         else:
             G2 = copy.deepcopy(G)
-        ###
+        #
         path = [u, v]
         cnt = 0
         accept = 0

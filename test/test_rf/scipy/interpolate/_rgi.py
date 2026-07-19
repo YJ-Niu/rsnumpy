@@ -275,9 +275,9 @@ class RegularGridInterpolator:
     # see https://github.com/JohannesBuchner/regulargrid
 
     _SPLINE_DEGREE_MAP = {"slinear": 1, "cubic": 3, "quintic": 5, 'pchip': 3,
-                          "slinear_legacy": 1, "cubic_legacy": 3, "quintic_legacy": 5,}
+                          "slinear_legacy": 1, "cubic_legacy": 3, "quintic_legacy": 5, }
     _SPLINE_METHODS_recursive = {"slinear_legacy", "cubic_legacy",
-                                "quintic_legacy", "pchip"}
+                                 "quintic_legacy", "pchip"}
     _SPLINE_METHODS_ndbspl = {"slinear", "cubic", "quintic"}
     _SPLINE_METHODS = list(_SPLINE_DEGREE_MAP.keys())
     _ALL_METHODS = ["linear", "nearest"] + _SPLINE_METHODS
@@ -296,7 +296,7 @@ class RegularGridInterpolator:
             xp = array_namespace(*points, values)
         except Exception as e:
             # either "duck-type" values or a user error?
-            xp = array_namespace(*points) # still forbid mixed namespaces in `points`
+            xp = array_namespace(*points)  # still forbid mixed namespaces in `points`
             try:
                 xp_v = array_namespace(values)
             except Exception:
@@ -329,17 +329,17 @@ class RegularGridInterpolator:
         else:
             if solver is not None or solver_args:
                 raise ValueError(
-                    f"{method =} does not accept the 'solver' argument. Got "
-                    f" {solver = } and with arguments {solver_args}."
+                    f"{method=} does not accept the 'solver' argument. Got "
+                    f" {solver=} and with arguments {solver_args}."
                 )
 
     def _construct_spline(self, method, solver=None, **solver_args):
         if solver is None:
             solver = ssl.gcrotmk
         spl = make_ndbspl(
-                self._grid, self._values, self._SPLINE_DEGREE_MAP[method],
-                solver=solver, **solver_args
-              )
+            self._grid, self._values, self._SPLINE_DEGREE_MAP[method],
+            solver=solver, **solver_args
+        )
         return spl
 
     def _check_dimensionality(self, grid, values):
@@ -440,7 +440,7 @@ class RegularGridInterpolator:
         if nu is not None and method not in self._SPLINE_METHODS_ndbspl:
             raise ValueError(
                 f"Can only compute derivatives for methods "
-                f"{self._SPLINE_METHODS_ndbspl}, got {method =}."
+                f"{self._SPLINE_METHODS_ndbspl}, got {method=}."
             )
 
         xi, xi_shape, ndim, nans, out_of_bounds = self._prepare_xi(xi)
@@ -766,7 +766,7 @@ def interpn(points, values, xi, method="linear", bounds_error=True,
 
     >>> x = np.array([0.0]) # x axis has length 1
     >>> y = np.linspace(0, 10, 11)
-    >>> points = (x, y) 
+    >>> points = (x, y)
     >>> values = value_func_2d(*np.meshgrid(*points, indexing='ij'))
     >>> xi = np.array([[1.0, 0.5]])
     >>> interpn(points, values, xi, method='linear', bounds_error=False,
@@ -777,7 +777,7 @@ def interpn(points, values, xi, method="linear", bounds_error=True,
 
     >>> xi = np.array([[0.0, 0.5]])
     >>> interpn(points, values, xi, method='linear', bounds_error=False,
-    ...         fill_value = 42) 
+    ...         fill_value = 42)
     array([-1.5])   # interpolation as normal along y
 
     """
@@ -850,4 +850,4 @@ def interpn(points, values, xi, method="linear", bounds_error=True,
 
         return result.reshape(xi_shape[:-1])
     else:
-        raise ValueError(f"unknown {method = }")
+        raise ValueError(f"unknown {method=}")

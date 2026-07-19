@@ -756,4 +756,3 @@ def idst(x, type=2, n=None, axis=-1, norm=None, overwrite_x=False,
 
     """
     return (Dispatchable(x, np.ndarray),)
-

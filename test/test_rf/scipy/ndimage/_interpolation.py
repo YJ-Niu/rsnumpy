@@ -133,6 +133,7 @@ def spline_filter1d(input, order=3, axis=-1, output=np.float64,
         _nd_image.spline_filter1d(input, order, axis, output, mode)
     return output
 
+
 @docfiller
 def spline_filter(input, order=3, output=np.float64, mode='mirror'):
     """
@@ -214,7 +215,7 @@ def _prepad_for_spline_filter(input, mode, cval):
         npad = 12
         if mode == 'grid-constant':
             padded = np.pad(input, npad, mode='constant',
-                               constant_values=cval)
+                            constant_values=cval)
         elif mode == 'nearest':
             padded = np.pad(input, npad, mode='edge')
     else:
@@ -838,7 +839,7 @@ def zoom(input, zoom, output=None, order=3, mode='constant', cval=0.0,
         raise RuntimeError('input and output rank must be > 0')
     zoom = _ni_support._normalize_sequence(zoom, input.ndim)
     output_shape = tuple(
-            [int(round(ii * jj)) for ii, jj in zip(input.shape, zoom)])
+        [int(round(ii * jj)) for ii, jj in zip(input.shape, zoom)])
     complex_output = np.iscomplexobj(input)
     output = _ni_support._get_output(output, input, shape=output_shape,
                                      complex_output=complex_output)

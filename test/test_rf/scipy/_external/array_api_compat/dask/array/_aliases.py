@@ -4,6 +4,18 @@
 # pyright: reportUnknownVariableType=false
 
 from __future__ import annotations
+from dask.array import right_shift as bitwise_right_shift
+from dask.array import power as pow
+from dask.array import left_shift as bitwise_left_shift
+from dask.array import invert as bitwise_invert
+from dask.array import concatenate as concat
+from dask.array import arctanh as atanh
+from dask.array import arctan2 as atan2
+from dask.array import arctan as atan
+from dask.array import arcsinh as asinh
+from dask.array import arcsin as asin
+from dask.array import arccosh as acosh
+from dask.array import arccos as acos
 
 from builtins import bool as py_bool
 from collections.abc import Callable
@@ -178,20 +190,8 @@ def asarray(
 
 
 # Element wise aliases
-from dask.array import arccos as acos
-from dask.array import arccosh as acosh
-from dask.array import arcsin as asin
-from dask.array import arcsinh as asinh
-from dask.array import arctan as atan
-from dask.array import arctan2 as atan2
-from dask.array import arctanh as atanh
 
 # Other
-from dask.array import concatenate as concat
-from dask.array import invert as bitwise_invert
-from dask.array import left_shift as bitwise_left_shift
-from dask.array import power as pow
-from dask.array import right_shift as bitwise_right_shift
 
 
 # dask.array.clip does not work unless all three arguments are provided.
@@ -364,6 +364,7 @@ __all__ = [
     "bitwise_left_shift", "bitwise_right_shift", "bitwise_invert",
 ]  # fmt: skip
 __all__ += _aliases.__all__
+
 
 def __dir__() -> list[str]:
     return __all__

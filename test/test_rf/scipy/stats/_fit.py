@@ -1276,6 +1276,8 @@ def _filliben(dist, data, axis):
 
     # [7] Section 8 # 4
     return _corr(X, M)
+
+
 _filliben.alternative = 'less'  # type: ignore[attr-defined]
 
 

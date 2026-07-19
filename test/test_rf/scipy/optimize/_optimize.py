@@ -1,4 +1,4 @@
-#__docformat__ = "restructuredtext en"
+# __docformat__ = "restructuredtext en"
 # ******NOTICE***************
 # optimize.py module by Travis E. Oliphant
 #
@@ -151,12 +151,11 @@ class OptimizeResult(_RichResult):
     attributes are available using the `OptimizeResult.keys` method.
 
     """
-    pass
 
 
 class OptimizeWarning(UserWarning):
     """General warning for :mod:`scipy.optimize`."""
-    pass
+
 
 def _check_positive_definite(Hk):
     def is_pos_def(A):
@@ -1440,9 +1439,9 @@ def _minimize_bfgs(fun, x0, args=(), jac=None, callback=None,
         pk = -np.dot(Hk, gfk)
         try:
             alpha_k, fc, gc, old_fval, old_old_fval, gfkp1 = \
-                     _line_search_wolfe12(f, myfprime, xk, pk, gfk,
-                                          old_fval, old_old_fval, amin=1e-100,
-                                          amax=1e100, c1=c1, c2=c2)
+                _line_search_wolfe12(f, myfprime, xk, pk, gfk,
+                                     old_fval, old_old_fval, amin=1e-100,
+                                     amax=1e100, c1=c1, c2=c2)
         except _LineSearchError:
             # Line search failed to find a better solution.
             warnflag = 2
@@ -1495,7 +1494,7 @@ def _minimize_bfgs(fun, x0, args=(), jac=None, callback=None,
         A1 = I - sk[:, np.newaxis] * yk[np.newaxis, :] * rhok
         A2 = I - yk[:, np.newaxis] * sk[np.newaxis, :] * rhok
         Hk = np.dot(A1, np.dot(Hk, A2)) + (rhok * sk[:, np.newaxis] *
-                                                 sk[np.newaxis, :])
+                                           sk[np.newaxis, :])
 
     fval = old_fval
 
@@ -1829,9 +1828,9 @@ def _minimize_cg(fun, x0, args=(), jac=None, callback=None,
 
         try:
             alpha_k, fc, gc, old_fval, old_old_fval, gfkp1 = \
-                     _line_search_wolfe12(f, myfprime, xk, pk, gfk, old_fval,
-                                          old_old_fval, c1=c1, c2=c2, amin=1e-100,
-                                          amax=1e100, extra_condition=descent_condition)
+                _line_search_wolfe12(f, myfprime, xk, pk, gfk, old_fval,
+                                     old_old_fval, c1=c1, c2=c2, amin=1e-100,
+                                     amax=1e100, extra_condition=descent_condition)
         except _LineSearchError:
             # Line search failed to find a better solution.
             warnflag = 2
@@ -2167,8 +2166,8 @@ def _minimize_newtoncg(fun, x0, args=(), jac=None, hess=None, hessp=None,
 
         try:
             alphak, fc, gc, old_fval, old_old_fval, gfkp1 = \
-                     _line_search_wolfe12(f, fprime, xk, pk, gfk,
-                                          old_fval, old_old_fval, c1=c1, c2=c2)
+                _line_search_wolfe12(f, fprime, xk, pk, gfk,
+                                     old_fval, old_old_fval, c1=c1, c2=c2)
         except _LineSearchError:
             # Line search failed to find a better solution.
             msg = "Warning: " + _status_message['pr_loss']
@@ -2437,7 +2436,7 @@ def _minimize_scalar_bounded(func, bounds, args=(),
 
 
 class Brent:
-    #need to rethink design of __init__
+    # need to rethink design of __init__
     def __init__(self, func, args=(), tol=1.48e-8, maxiter=500,
                  full_output=0, disp=0):
         self.func = func
@@ -2457,12 +2456,12 @@ class Brent:
         self.brack = brack
 
     def get_bracket_info(self):
-        #set up
+        # set up
         func = self.func
         args = self.args
         brack = self.brack
-        ### BEGIN core bracket_info code ###
-        ### carefully DOCUMENT any CHANGES in core ##
+        # BEGIN core bracket_info code
+        # carefully DOCUMENT any CHANGES in core
         if brack is None:
             xa, xb, xc, fa, fb, fc, funcalls = bracket(func, args=args)
         elif len(brack) == 2:
@@ -2490,7 +2489,7 @@ class Brent:
         else:
             raise ValueError("Bracketing interval must be "
                              "length 2 or 3 sequence.")
-        ### END core bracket_info code ###
+        # END core bracket_info code
 
         return xa, xb, xc, fa, fb, fc, funcalls
 
@@ -2500,9 +2499,9 @@ class Brent:
         xa, xb, xc, fa, fb, fc, funcalls = self.get_bracket_info()
         _mintol = self._mintol
         _cg = self._cg
-        #################################
-        #BEGIN CORE ALGORITHM
-        #################################
+        ###############################
+        # BEGIN CORE ALGORITHM
+        ###############################
         x = w = v = xb
         fw = fv = fx = fb
         if (xa < xc):
@@ -2601,9 +2600,9 @@ class Brent:
                 print(f"{funcalls:^12g} {x:^12.6g} {fx:^12.6g}")
 
             iter += 1
-        #################################
-        #END CORE ALGORITHM
-        #################################
+        ###############################
+        # END CORE ALGORITHM
+        ###############################
 
         self.xmin = x
         self.fval = fx

@@ -195,9 +195,9 @@ def maximum_branching(
     preserve_attrs=False,
     partition=None,
 ):
-    #######################################
-    ### Data Structure Helper Functions ###
-    #######################################
+    #####################################
+    # Data Structure Helper Functions #
+    #####################################
 
     def edmonds_add_edge(G, edge_index, u, v, key, **d):
         """
@@ -256,9 +256,9 @@ def maximum_branching(
 
         G.remove_node(n)
 
-    #######################
-    ### Algorithm Setup ###
-    #######################
+    #####################
+    # Algorithm Setup #
+    #####################
 
     # Pick an attribute name that the original graph is unlikly to have
     candidate_attr = "edmonds' secret candidate attribute"
@@ -314,9 +314,9 @@ def maximum_branching(
     # different)
     minedge_circuit = []
 
-    ###########################
-    ### Algorithm Structure ###
-    ###########################
+    #########################
+    # Algorithm Structure #
+    #########################
 
     # Each step listed in the algorithm is an inner function. Thus, the overall
     # loop structure is:
@@ -328,9 +328,9 @@ def maximum_branching(
     #     elif every node of G is in D and E is a branching:
     #         break
 
-    ##################################
-    ### Algorithm Helper Functions ###
-    ##################################
+    ################################
+    # Algorithm Helper Functions #
+    ################################
 
     def edmonds_find_desired_edge(v):
         """
@@ -500,9 +500,9 @@ def maximum_branching(
 
             break
         else:
-            #####################
-            ### BEGIN STEP I1 ###
-            #####################
+            ###################
+            # BEGIN STEP I1 #
+            ###################
 
             # This is a very simple step, so I don't think it needs a method of it's own
             if v in selected_nodes:
@@ -527,26 +527,26 @@ def maximum_branching(
             G[u][v][desired_edge[2]][candidate_attr] = True
             uf.union(u, v)
 
-            ###################
-            ### END STEP I1 ###
-            ###################
+            #################
+            # END STEP I1 #
+            #################
 
-            #####################
-            ### BEGIN STEP I2 ###
-            #####################
+            ###################
+            # BEGIN STEP I2 #
+            ###################
 
             if circuit:
                 edmonds_step_I2(v, desired_edge, level)
                 nodes = iter(list(G.nodes()))
                 level += 1
 
-            ###################
-            ### END STEP I2 ###
-            ###################
+            #################
+            # END STEP I2 #
+            #################
 
-    #####################
-    ### BEGIN STEP I3 ###
-    #####################
+    ###################
+    # BEGIN STEP I3 #
+    ###################
 
     # Create a new graph of the same class as the input graph
     H = G_original.__class__()
@@ -607,9 +607,9 @@ def maximum_branching(
 
         H.add_edge(u, v, **dd)
 
-    ###################
-    ### END STEP I3 ###
-    ###################
+    #################
+    # END STEP I3 #
+    #################
 
     return H
 

@@ -240,7 +240,6 @@ def _fit_edge(x, window_start, window_stop, interp_start, interp_stop,
     return y
 
 
-
 def _fit_edges_polyfit(x, window_length, polyorder, deriv, delta, axis, y):
     """
     Use polynomial interpolation of x at the low and high ends of the axis
@@ -250,10 +249,10 @@ def _fit_edges_polyfit(x, window_length, polyorder, deriv, delta, axis, y):
     """
     halflen = window_length // 2
     y = _fit_edge(x, 0, window_length, 0, halflen, axis,
-              polyorder, deriv, delta, y)
+                  polyorder, deriv, delta, y)
     n = x.shape[axis]
     y = _fit_edge(x, n - window_length, n, n - halflen, n, axis,
-              polyorder, deriv, delta, y)
+                  polyorder, deriv, delta, y)
 
     return y
 

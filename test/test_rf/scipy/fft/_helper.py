@@ -67,7 +67,6 @@ def next_fast_len(target, real=False):
     >>> b = fft.fft(a, 131072)
 
     """
-    pass
 
 
 # Directly wrap the c-function good_size but take the docstring etc., from the
@@ -134,7 +133,6 @@ def prev_fast_len(target, real=False):
     >>> c = fft.fft(a[:92160]) # discard last 899 samples
 
     """
-    pass
 
 
 # Directly wrap the c-function prev_good_size but take the docstring etc.,

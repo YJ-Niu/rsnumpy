@@ -630,7 +630,7 @@ class FastGeneratorInversion:
                 raise ValueError(
                     f"Distribution '{distname}' is not supported."
                     f"It must be one of {list(PINV_CONFIG.keys())}"
-                    )
+                )
         else:
             raise ValueError("`dist` must be a frozen distribution object")
 
@@ -705,7 +705,7 @@ class FastGeneratorInversion:
             random_state=self.random_state,
             domain=self._domain_pinv,
             center=self._center,
-            )
+        )
 
     @property
     def random_state(self):

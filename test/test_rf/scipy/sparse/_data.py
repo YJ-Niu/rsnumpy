@@ -133,9 +133,9 @@ class _data_matrix(_spbase):
             data = data.astype(dtype, copy=False)
         return self._with_data(data ** n)
 
-    ###########################
+    #########################
     # Multiplication handlers #
-    ###########################
+    #########################
 
     def _mul_scalar(self, other):
         return self._with_data(self.data * other)

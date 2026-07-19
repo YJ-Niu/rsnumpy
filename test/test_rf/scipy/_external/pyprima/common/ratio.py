@@ -11,6 +11,7 @@ Python translation by Nickolai Belakovski.
 from .consts import DEBUGGING, REALMAX
 import rsnumpy as np
 
+
 def redrat(ared, pred, rshrink):
     '''
     This function evaluates the reduction ratio of a trust-region step, handling inf/nan properly.
@@ -20,9 +21,9 @@ def redrat(ared, pred, rshrink):
     if DEBUGGING:
         assert rshrink >= 0
 
-    #====================#
+    # ====================#
     # Calculation starts #
-    #====================#
+    # ====================#
 
     if np.isnan(ared):
         # This should not happen in unconstrained problems due to the moderated extreme barrier.
@@ -44,9 +45,9 @@ def redrat(ared, pred, rshrink):
     else:
         ratio = ared/pred
 
-    #==================#
+    # ==================#
     # Calculation ends #
-    #==================#
+    # ==================#
 
     # Postconditions
     if DEBUGGING:

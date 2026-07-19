@@ -13,7 +13,6 @@ class LinAlgWarning(RuntimeWarning):
     The warning emitted when a linear algebra related operation is close
     to fail conditions of the algorithm or loss of accuracy is expected.
     """
-    pass
 
 
 def norm(a, ord=None, axis=None, keepdims=False, check_finite=True):
@@ -272,4 +271,3 @@ def bandwidth(a):
         )
 
     return _bandwidth(a)
-

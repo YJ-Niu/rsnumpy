@@ -267,7 +267,7 @@ def direct(
     format_val = (maxfun, maxiter, f_min_rtol, vol_tol, len_tol)
     if ret_code > 2:
         message = SUCCESS_MESSAGES[ret_code - 3].format(
-                    format_val[ret_code - 1])
+            format_val[ret_code - 1])
     elif 0 < ret_code <= 2:
         message = ERROR_MESSAGES[ret_code - 1].format(format_val[ret_code - 1])
     elif 0 > ret_code > -100:

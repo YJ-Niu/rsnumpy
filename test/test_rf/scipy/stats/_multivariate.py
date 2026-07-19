@@ -951,6 +951,7 @@ class multivariate_normal_gen(multi_rv_generic):
 
         return multivariate_normal_frozen(mean, cov, allow_singular)
 
+
 multivariate_normal = multivariate_normal_gen()
 
 
@@ -999,7 +1000,7 @@ class multivariate_normal_frozen(multi_rv_frozen):
         >>> r.cov
         array([[1.]])
 
-        """ # rsnumpy/numpydoc#87  # noqa: E501
+        """  # rsnumpy/numpydoc#87  # noqa: E501
         self._dist = multivariate_normal_gen(seed)
         self.dim, self.mean, self.cov_object = (
             self._dist._process_parameters(mean, cov, allow_singular))
@@ -1060,6 +1061,7 @@ class multivariate_normal_frozen(multi_rv_frozen):
     def marginal(self, dimensions):
         return self._dist.marginal(dimensions, self.mean,
                                    self.cov_object, self.allow_singular)
+
 
 # Set frozen generator docstrings from corresponding docstrings in
 # multivariate_normal_gen and fill in default strings in class docstrings
@@ -1528,6 +1530,7 @@ class matrix_normal_frozen(multi_rv_frozen):
     def entropy(self):
         return self._dist._entropy(self.dims, self.rowpsd.log_pdet,
                                    self.colpsd.log_pdet)
+
 
 # Set frozen generator docstrings from corresponding docstrings in
 # matrix_normal_gen and fill in default strings in class docstrings
@@ -2122,7 +2125,6 @@ for name in ["logpdf", "pdf", "rvs"]:
     method.__doc__ = scipy._lib.doccer.docformat(
         method.__doc__, matrix_t_docdict_params
     )
-
 
 
 def _cholesky_invwishart_rvs(
@@ -2809,8 +2811,8 @@ class wishart_gen(multi_rv_generic):
             size = size[np.newaxis]
         elif size.ndim > 1:
             raise ValueError('Size must be an integer or tuple of integers;'
-                 ' thus must have dimension <= 1.'
-                 f' Got size.ndim = {str(tuple(size))}')
+                             ' thus must have dimension <= 1.'
+                             f' Got size.ndim = {str(tuple(size))}')
         n = size.prod()
         shape = tuple(size)
 
@@ -4238,6 +4240,7 @@ class multinomial_frozen(multi_rv_frozen):
         If `seed` is already a ``Generator`` or ``RandomState`` instance then
         that instance is used.
     """
+
     def __init__(self, n, p, seed=None):
         self._dist = multinomial_gen(seed)
         self.n, self.p, self.npcond = self._dist._process_parameters(n, p)
@@ -4388,6 +4391,7 @@ class special_ortho_group_gen(multi_rv_generic):
             q[..., 0, :] /= dets[..., np.newaxis]
         return q
 
+
 special_ortho_group = special_ortho_group_gen()
 
 
@@ -4415,7 +4419,7 @@ class special_ortho_group_frozen(multi_rv_frozen):
         >>> g = special_ortho_group(5)
         >>> x = g.rvs()
 
-        """ # rsnumpy/numpydoc#87  # noqa: E501
+        """  # rsnumpy/numpydoc#87  # noqa: E501
         self._dist = special_ortho_group_gen(seed)
         self.dim = self._dist._process_parameters(dim)
 
@@ -4571,7 +4575,7 @@ class ortho_group_frozen(multi_rv_frozen):
         >>> g = ortho_group(5)
         >>> x = g.rvs()
 
-        """ # rsnumpy/numpydoc#87  # noqa: E501
+        """  # rsnumpy/numpydoc#87  # noqa: E501
         self._dist = ortho_group_gen(seed)
         self.dim = self._dist._process_parameters(dim)
 
@@ -4840,7 +4844,7 @@ class random_correlation_frozen(multi_rv_frozen):
         rvs : ndarray or scalar
             Random size N-dimensional matrices, dimension (size, dim, dim),
             each having eigenvalues eigs.
-        """ # rsnumpy/numpydoc#87  # noqa: E501
+        """  # rsnumpy/numpydoc#87  # noqa: E501
 
         self._dist = random_correlation_gen(seed)
         self.tol = tol
@@ -4992,7 +4996,7 @@ class unitary_group_frozen(multi_rv_frozen):
         >>> x = unitary_group(3)
         >>> x.rvs()
 
-        """ # rsnumpy/numpydoc#87  # noqa: E501
+        """  # rsnumpy/numpydoc#87  # noqa: E501
         self._dist = unitary_group_gen(seed)
         self.dim = self._dist._process_parameters(dim)
 
@@ -5596,6 +5600,7 @@ class multivariate_t_frozen(multi_rv_frozen):
         return self._dist.marginal(dimensions, self.loc,
                                    self.shape, self.df, self.allow_singular)
 
+
 multivariate_t = multivariate_t_gen()
 
 
@@ -5760,6 +5765,7 @@ class multivariate_hypergeom_gen(multi_rv_generic):
     >>> rv.pmf(x=[8, 4])
     0.0025207176631464523
     """
+
     def __init__(self, seed=None):
         super().__init__(seed)
         self.__doc__ = doccer.docformat(self.__doc__, mhg_docdict_params)
@@ -6878,6 +6884,7 @@ class dirichlet_multinomial_gen(multi_rv_generic):
     >>> dirichlet_multinomial.mean(alpha, n).shape
     (3, 4, 2)
     """
+
     def __init__(self, seed=None):
         super().__init__(seed)
         self.__doc__ = doccer.docformat(self.__doc__,
@@ -7238,6 +7245,7 @@ class vonmises_fisher_gen(multi_rv_generic):
     We see that the estimated parameters `mu_fit` and `kappa_fit` are
     very close to the ground truth parameters.
     """
+
     def __init__(self, seed=None):
         super().__init__(seed)
 
@@ -7434,7 +7442,7 @@ class vonmises_fisher_gen(multi_rv_generic):
         #   = ln(4) + ln(x) - 2*log1p(x)
         correction = (kappa * node + dim_minus_one
                       * (np.log(4) + np.log(envelop_param)
-                      - 2 * np.log1p(envelop_param)))
+                         - 2 * np.log1p(envelop_param)))
         n_accepted = 0
         x = np.zeros((n_samples, ))
         halfdim = 0.5 * dim_minus_one
@@ -7453,7 +7461,7 @@ class vonmises_fisher_gen(multi_rv_generic):
             criterion = (
                 kappa * coord_x
                 + dim_minus_one * (np.log((1 + envelop_param - coord_x
-                + coord_x * envelop_param) / (1 + envelop_param)))
+                                           + coord_x * envelop_param) / (1 + envelop_param)))
                 - correction) > np.log(accept_tol)
             accepted_iter = np.sum(criterion)
             x[n_accepted:n_accepted + accepted_iter] = coord_x[criterion]
@@ -7851,6 +7859,7 @@ class normal_inverse_gamma_gen(multi_rv_generic):
     >>> norm_inv_gamma.var()
     (np.float64(1.0526315789473684), np.float64(0.061557402277623886))
     """
+
     def rvs(self, mu=0, lmbda=1, a=1, b=1, size=None, random_state=None):
         """Draw random samples from the distribution.
 

@@ -6,6 +6,7 @@ from scipy._lib.deprecation import _sub_module_deprecation
 
 __all__ = ["loadmat", "savemat", "whosmat"]  # noqa: F822
 
+
 def __dir__():
     return __all__
 

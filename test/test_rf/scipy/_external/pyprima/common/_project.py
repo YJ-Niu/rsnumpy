@@ -14,6 +14,7 @@ from scipy.optimize import OptimizeResult
 scalar_types = (int, float, np.generic)
 eps = np.finfo(np.float64).eps
 
+
 def _project(x0, lb, ub, constraints):
     """Projection of the initial guess onto the feasible set.
 

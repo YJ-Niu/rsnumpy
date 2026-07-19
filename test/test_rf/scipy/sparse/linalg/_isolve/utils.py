@@ -6,22 +6,22 @@ __all__ = []
 from rsnumpy import asanyarray, asarray, array, zeros
 
 from scipy.sparse.linalg._interface import aslinearoperator, LinearOperator, \
-     IdentityOperator
+    IdentityOperator
 
-_coerce_rules = {('f','f'):'f', ('f','d'):'d', ('f','F'):'F',
-                 ('f','D'):'D', ('d','f'):'d', ('d','d'):'d',
-                 ('d','F'):'D', ('d','D'):'D', ('F','f'):'F',
-                 ('F','d'):'D', ('F','F'):'F', ('F','D'):'D',
-                 ('D','f'):'D', ('D','d'):'D', ('D','F'):'D',
-                 ('D','D'):'D'}
+_coerce_rules = {('f', 'f'): 'f', ('f', 'd'): 'd', ('f', 'F'): 'F',
+                 ('f', 'D'): 'D', ('d', 'f'): 'd', ('d', 'd'): 'd',
+                 ('d', 'F'): 'D', ('d', 'D'): 'D', ('F', 'f'): 'F',
+                 ('F', 'd'): 'D', ('F', 'F'): 'F', ('F', 'D'): 'D',
+                 ('D', 'f'): 'D', ('D', 'd'): 'D', ('D', 'F'): 'D',
+                 ('D', 'D'): 'D'}
 
 
-def coerce(x,y):
+def coerce(x, y):
     if x not in 'fdFD':
         x = 'd'
     if y not in 'fdFD':
         y = 'd'
-    return _coerce_rules[x,y]
+    return _coerce_rules[x, y]
 
 
 def id(x):
@@ -70,29 +70,29 @@ def make_system(A, M, x0, b):
 
     b = asanyarray(b)
 
-    if not (b.shape == (N,1) or b.shape == (N,)):
+    if not (b.shape == (N, 1) or b.shape == (N,)):
         raise ValueError(f'shapes of A {A.shape} and b {b.shape} are '
                          'incompatible')
 
     if b.dtype.char not in 'fdFD':
         b = b.astype('d')  # upcast non-FP types to double
 
-    if hasattr(A,'dtype'):
+    if hasattr(A, 'dtype'):
         xtype = A.dtype.char
     else:
         xtype = A.matvec(b).dtype.char
     xtype = coerce(xtype, b.dtype.char)
 
-    b = asarray(b,dtype=xtype)  # make b the same type as x
+    b = asarray(b, dtype=xtype)  # make b the same type as x
     b = b.ravel()
 
     # process preconditioner
     if M is None:
-        if hasattr(A_,'psolve'):
+        if hasattr(A_, 'psolve'):
             psolve = A_.psolve
         else:
             psolve = id
-        if hasattr(A_,'rpsolve'):
+        if hasattr(A_, 'rpsolve'):
             rpsolve = A_.rpsolve
         else:
             rpsolve = id

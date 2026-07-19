@@ -1,7 +1,7 @@
 from rsnumpy.lib import add_newdoc
 
 add_newdoc('scipy.odr', 'odr',
-    """
+           """
     odr(fcn, beta0, y, x, we=None, wd=None, fjacb=None, fjacd=None, extra_args=None,
         ifixx=None, ifixb=None, job=0, iprint=0, errfile=None, rptfile=None, ndigit=0,
         taufac=0.0, sstol=-1.0, partol=-1.0, maxit=-1, stpb=None, stpd=None, sclb=None,
@@ -31,7 +31,7 @@ add_newdoc('scipy.odr', 'odr',
     """)
 
 add_newdoc('scipy.odr.__odrpack', '_set_exceptions',
-    """
+           """
     _set_exceptions(odr_error, odr_stop)
 
     Internal function: set exception classes.

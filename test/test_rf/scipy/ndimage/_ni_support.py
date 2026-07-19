@@ -125,6 +125,7 @@ def _check_axes(axes, ndim):
         raise ValueError("axes must be unique")
     return axes
 
+
 def _skip_if_dtype(arg):
     """'array or dtype' polymorphism.
 

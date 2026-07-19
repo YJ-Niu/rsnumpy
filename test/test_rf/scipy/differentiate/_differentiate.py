@@ -8,6 +8,7 @@ import scipy._external.array_api_extra as xpx
 
 _EERRORINCREASE = -1  # used in derivative
 
+
 def _derivative_iv(f, x, args, kwargs, tolerances, maxiter, order, initial_step,
                    step_factor, step_direction, preserve_shape, callback):
     # Input validation for `derivative`
@@ -55,7 +56,6 @@ def _derivative_iv(f, x, args, kwargs, tolerances, maxiter, order, initial_step,
 
     return (f, x, args, kwargs, atol, rtol, maxiter_int, order_int, initial_step,
             step_factor, step_direction, preserve_shape, callback)
-
 
 
 _array_api_strict_skip_reason = 'Array API does not support fancy indexing assignment.'

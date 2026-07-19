@@ -67,7 +67,7 @@ def delegate_xp(delegator, module_name):
                     # result is {np.int64(1): (array(0), array(1))} etc
                     return {
                         k.item(): tuple(xp.asarray(vv) for vv in v)
-                        for k,v in result.items()
+                        for k, v in result.items()
                     }
                 elif result is None:
                     # inplace operations
@@ -77,6 +77,7 @@ def delegate_xp(delegator, module_name):
                     return _maybe_convert_arg(result, xp)
         return wrapper
     return inner
+
 
 default_capabilities = xp_capabilities(
     cpu_only=True, exceptions=["cupy"], allow_dask_compute=True, jax_jit=False
@@ -106,7 +107,7 @@ capabilities_dict = {
     "labeled_comprehension": xp_capabilities(np_only=True),
 }
 
-# ### decorate ###
+# ## decorate
 for func_name in _ndimage_api.__all__:
     bare_func = getattr(_ndimage_api, func_name)
     delegator = getattr(_delegators, func_name + "_signature")

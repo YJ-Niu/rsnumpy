@@ -44,7 +44,7 @@ class _HeapElement:
         if self.priority == other_priority:
             try:
                 return self.element < other.element
-            except TypeError as err:
+            except TypeError:
                 raise TypeError(
                     "Consider using a tuple, with a priority value that can be compared."
                 )
@@ -59,7 +59,7 @@ class _HeapElement:
         if self.priority == other_priority:
             try:
                 return self.element > other.element
-            except TypeError as err:
+            except TypeError:
                 raise TypeError(
                     "Consider using a tuple, with a priority value that can be compared."
                 )
@@ -244,7 +244,6 @@ class MappedQueue:
         """
         heap, position = self.heap, self.position
         end_pos = len(heap)
-        startpos = pos
         newitem = heap[pos]
         # Shift up the smaller child until hitting a leaf
         child_pos = (pos << 1) + 1  # start with leftmost child position

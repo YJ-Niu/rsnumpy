@@ -38,9 +38,9 @@ def preproc(solver, num_vars, iprint, maxfun, maxhist, ftarget, rhobeg, rhoend,
         if present(honour_x0):
             assert solver.lower() == 'bobyqa' and present(has_rhobeg) and present(xl) and present(xu) and present(x0)
 
-    #====================#
+    # ====================#
     # Calculation starts #
-    #====================#
+    # ====================#
 
     # Read num_constraints, if necessary
     num_constraints = num_constraints if (present(num_constraints) and solver.lower() == 'cobyla') else 0
@@ -205,14 +205,14 @@ def preproc(solver, num_vars, iprint, maxfun, maxhist, ftarget, rhobeg, rhoend,
     # least RHOBEG. If HONOUR_X0 == TRUE, revise RHOBEG if needed; otherwise, revise HONOUR_X0 if needed.
     if present(honour_x0):
         if honour_x0:
-            rhobeg_old = rhobeg;
-            lbx = np.isfinite(xl) & (x0 - xl <= EPS * np.maximum(1, np.abs(xl))) # X0 essentially equals XL
-            ubx = np.isfinite(xu) & (x0 - xu >= -EPS * np.maximum(1, np.abs(xu))) # X0 essentially equals XU
+            rhobeg_old = rhobeg
+            lbx = np.isfinite(xl) & (x0 - xl <= EPS * np.maximum(1, np.abs(xl)))  # X0 essentially equals XL
+            ubx = np.isfinite(xu) & (x0 - xu >= -EPS * np.maximum(1, np.abs(xu)))  # X0 essentially equals XU
             x0[lbx] = xl[lbx]
             x0[ubx] = xu[ubx]
             rhobeg = max(EPS, np.min([rhobeg, x0[~lbx] - xl[~lbx], xu[~ubx] - x0[~ubx]]))
             if rhobeg_old - rhobeg > EPS * max(1, rhobeg_old):
-                rhoend = max(EPS, min(0.1 * rhobeg, rhoend)) # We do not revise RHOEND unless RHOBEG is truly revised.
+                rhoend = max(EPS, min(0.1 * rhobeg, rhoend))  # We do not revise RHOEND unless RHOBEG is truly revised.
                 if has_rhobeg:
                     warn(f'{solver}: RHOBEG is revised to {rhobeg} and RHOEND to at most 0.1*RHOBEG so that the distance between X0 and the inactive bounds is at least RHOBEG')
             else:
@@ -248,9 +248,9 @@ def preproc(solver, num_vars, iprint, maxfun, maxhist, ftarget, rhobeg, rhoend,
             if (is_constrained):
                 warn(f'{solver}: Invalid CWEIGHT; it should be a nonnegative number; it is set to {cweight}')
 
-    #====================#
+    # ====================#
     #  Calculation ends  #
-    #====================#
+    # ====================#
 
     # Postconditions
     if DEBUGGING:

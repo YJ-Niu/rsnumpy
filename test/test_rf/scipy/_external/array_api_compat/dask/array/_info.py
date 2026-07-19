@@ -219,34 +219,42 @@ class __array_namespace_info__:
     def dtypes(
         self, /, *, device: Device | None = None, kind: None = None
     ) -> DTypesAll: ...
+
     @overload
     def dtypes(
         self, /, *, device: Device | None = None, kind: Literal["bool"]
     ) -> DTypesBool: ...
+
     @overload
     def dtypes(
         self, /, *, device: Device | None = None, kind: Literal["signed integer"]
     ) -> DTypesSigned: ...
+
     @overload
     def dtypes(
         self, /, *, device: Device | None = None, kind: Literal["unsigned integer"]
     ) -> DTypesUnsigned: ...
+
     @overload
     def dtypes(
         self, /, *, device: Device | None = None, kind: Literal["integral"]
     ) -> DTypesIntegral: ...
+
     @overload
     def dtypes(
         self, /, *, device: Device | None = None, kind: Literal["real floating"]
     ) -> DTypesReal: ...
+
     @overload
     def dtypes(
         self, /, *, device: Device | None = None, kind: Literal["complex floating"]
     ) -> DTypesComplex: ...
+
     @overload
     def dtypes(
         self, /, *, device: Device | None = None, kind: Literal["numeric"]
     ) -> DTypesNumeric: ...
+
     def dtypes(
         self, /, *, device: Device | None = None, kind: DTypeKind | None = None
     ) -> DTypesAny:

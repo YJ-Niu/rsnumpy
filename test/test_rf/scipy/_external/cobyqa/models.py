@@ -1390,7 +1390,7 @@ class Models:
         shift = x_new - self.interpolation.x_base
         new_col = np.empty((self.npt + self.n + 1, 1))
         new_col[: self.npt, 0] = (
-                0.5 * (self.interpolation.xpt.T @ shift) ** 2.0)
+            0.5 * (self.interpolation.xpt.T @ shift) ** 2.0)
         new_col[self.npt, 0] = 1.0
         new_col[self.npt + 1:, 0] = shift
         inv_new_col = Quadratic.solve_systems(self.interpolation, new_col)[0]

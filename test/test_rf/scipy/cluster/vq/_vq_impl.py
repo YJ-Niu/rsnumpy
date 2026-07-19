@@ -18,7 +18,6 @@ class ClusterError(Exception):
     """
     An ``Exception`` raised during clustering.
     """
-    pass
 
 
 @xp_capabilities()
@@ -557,7 +556,7 @@ def _kpp(data, k, rng, xp):
         if i == 0:
             data_idx = rng_integers(rng, data.shape[0])
         else:
-            D2 = cdist(init[:i,:], data, metric='sqeuclidean').min(axis=0)
+            D2 = cdist(init[:i, :], data, metric='sqeuclidean').min(axis=0)
             probs = D2/D2.sum()
             cumprobs = probs.cumsum()
             r = rng.uniform()

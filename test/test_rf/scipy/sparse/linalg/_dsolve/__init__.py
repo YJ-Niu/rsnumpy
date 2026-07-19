@@ -51,14 +51,12 @@ Example session::
 
 """
 
-#import umfpack
-#__doc__ = '\n\n'.join( (__doc__,  umfpack.__doc__) )
-#del umfpack
+# import umfpack
+# __doc__ = '\n\n'.join( (__doc__,  umfpack.__doc__) )
+# del umfpack
 
 from .linsolve import *
 from ._superlu import SuperLU
-from . import _add_newdocs
-from . import linsolve
 
 __all__ = [
     'MatrixRankWarning', 'SuperLU', 'factorized',

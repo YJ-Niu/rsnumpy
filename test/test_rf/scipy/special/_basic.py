@@ -8,7 +8,7 @@ import warnings
 from collections import defaultdict
 from heapq import heapify, heappop
 from rsnumpy import (pi, asarray, floor, isscalar, sqrt, where,
-                   sin, place, issubdtype, extract, inexact, nan, zeros, sinc)
+                     sin, place, issubdtype, extract, inexact, nan, zeros, sinc)
 
 from . import _ufuncs
 from ._ufuncs import (mathieu_a, mathieu_b, iv, jv, gamma, rgamma,
@@ -1983,7 +1983,7 @@ def lqn(n, z):
     if (z.ndim == 0):
         _lqn(z, out=(qn, qd))
     else:
-          # new axes must be last for the ufunc
+        # new axes must be last for the ufunc
         _lqn(z,
              out=(np.moveaxis(qn, 0, -1),
                   np.moveaxis(qd, 0, -1)))

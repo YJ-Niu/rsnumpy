@@ -648,7 +648,7 @@ def bracket_root(f, xl0, xr0=None, *, xmin=None, xmax=None, factor=None,
                    ('jax.numpy', 'JAX arrays do not support item assignment.'),
                    ('torch', 'data-apis/array-api-compat#271')])
 def bracket_minimum(f, xm0, *, xl0=None, xr0=None, xmin=None, xmax=None,
-                     factor=None, args=(), kwargs=None, maxiter=1000):
+                    factor=None, args=(), kwargs=None, maxiter=1000):
     """Bracket the minimum of a unimodal, real-valued function of a real variable.
 
     For each element of the output of `f`, `bracket_minimum` seeks the scalar

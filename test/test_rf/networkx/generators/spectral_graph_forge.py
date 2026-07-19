@@ -112,8 +112,8 @@ def spectral_graph_forge(G, alpha, transformation="identity", seed=None):
     np.fill_diagonal(B, 0)
 
     for i in range(n - 1):
-        B[i, i + 1 :] = sp.stats.bernoulli.rvs(B[i, i + 1 :], random_state=seed)
-        B[i + 1 :, i] = np.transpose(B[i, i + 1 :])
+        B[i, i + 1:] = sp.stats.bernoulli.rvs(B[i, i + 1:], random_state=seed)
+        B[i + 1:, i] = np.transpose(B[i, i + 1:])
 
     H = nx.from_numpy_array(B)
 

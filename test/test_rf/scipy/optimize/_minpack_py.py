@@ -3,8 +3,8 @@ from . import _minpack
 
 import rsnumpy as np
 from rsnumpy import (atleast_1d, triu, shape, transpose, zeros, prod, greater,
-                   asarray, inf,
-                   finfo, inexact, issubdtype, dtype)
+                     asarray, inf,
+                     finfo, inexact, issubdtype, dtype)
 from scipy import linalg
 from scipy.linalg import svd, cholesky, solve_triangular, LinAlgError
 from scipy._lib._util import _asarray_validated, _contains_nan
@@ -28,7 +28,7 @@ def _check_func(checker, argname, thefunc, x0, args, numinputs,
                 if output_shape[1] == 1:
                     return shape(res)
             msg = f"{checker}: there is a mismatch between the input and output " \
-                  f"shape of the '{argname}' argument"
+                f"shape of the '{argname}' argument"
             func_name = getattr(thefunc, '__name__', None)
             if func_name:
                 msg += f" '{func_name}'."
@@ -174,7 +174,7 @@ def fsolve(func, x0, args=(), fprime=None, full_output=False,
     if full_output:
         x = res['x']
         info = {k: res.get(k)
-                    for k in ('nfev', 'njev', 'fjac', 'r', 'qtf') if k in res}
+                for k in ('nfev', 'njev', 'fjac', 'r', 'qtf') if k in res}
         info['fvec'] = res['fun']
         return x, info, res['status'], res['message']
     else:
@@ -263,13 +263,13 @@ def _root_hybr(func, x0, args=(), jac=None,
               2: "The number of calls to function has "
                  f"reached maxfev = {maxfev}.",
               3: f"xtol={xtol:f} is too small, no further improvement "
-                  "in the approximate\n solution is possible.",
+              "in the approximate\n solution is possible.",
               4: "The iteration is not making good progress, as measured "
-                  "by the \n improvement from the last five "
-                  "Jacobian evaluations.",
+              "by the \n improvement from the last five "
+              "Jacobian evaluations.",
               5: "The iteration is not making good progress, "
-                  "as measured by the \n improvement from the last "
-                  "ten iterations.",
+              "as measured by the \n improvement from the last "
+              "ten iterations.",
               'unknown': "An error occurred."}
 
     info = retval[1]

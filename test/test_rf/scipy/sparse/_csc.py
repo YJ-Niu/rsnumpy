@@ -20,8 +20,8 @@ class _csc_base(_cs_matrix):
     def transpose(self, axes=None, copy=False):
         if axes is not None and axes != (1, 0):
             raise ValueError("Sparse arrays/matrices do not support "
-                              "an 'axes' parameter because swapping "
-                              "dimensions is the only logical permutation.")
+                             "an 'axes' parameter because swapping "
+                             "dimensions is the only logical permutation.")
 
         M, N = self.shape
 
@@ -42,9 +42,9 @@ class _csc_base(_cs_matrix):
     tocsc.__doc__ = _spbase.tocsc.__doc__
 
     def tocsr(self, copy=False):
-        M,N = self.shape
+        M, N = self.shape
         idx_dtype = self._get_index_dtype((self.indptr, self.indices),
-                                    maxval=max(self.nnz, N))
+                                          maxval=max(self.nnz, N))
         indptr = np.empty(M + 1, dtype=idx_dtype)
         indices = np.empty(self.nnz, dtype=idx_dtype)
         data = np.empty(self.nnz, dtype=upcast(self.dtype))
@@ -400,4 +400,3 @@ class csc_matrix(spmatrix, _csc_base):
            [2, 3, 6]])
 
     """
-

@@ -13,7 +13,7 @@ Functions
 import rsnumpy as np
 from scipy._lib._util import wrapped_inspect_signature
 from ._optimize import (OptimizeResult, _check_unknown_options,
-    _prepare_scalar_function)
+                        _prepare_scalar_function)
 from ._constraints import NonlinearConstraint
 
 
@@ -254,6 +254,7 @@ def _minimize_cobyla(fun, x0, args=(), constraints=(),
         else:
             def wrapped_callback_intermediate(x, f, nf, tr, cstrv, nlconstrlist):
                 callback(np.copy(x))
+
         def wrapped_callback(x, f, nf, tr, cstrv, nlconstrlist):
             try:
                 wrapped_callback_intermediate(x, f, nf, tr, cstrv, nlconstrlist)
@@ -262,7 +263,6 @@ def _minimize_cobyla(fun, x0, args=(), constraints=(),
                 return True
     else:
         wrapped_callback = None
-
 
     ctol = catol if catol is not None else np.sqrt(np.finfo(float).eps)
     options = {
@@ -278,11 +278,10 @@ def _minimize_cobyla(fun, x0, args=(), constraints=(),
                       constraints=constraints, callback=wrapped_callback,
                       options=options)
 
-
     if result.cstrv > ctol:
         success = False
         message = ('Did not converge to a solution satisfying the constraints. See '
-                  '`maxcv` for the magnitude of the violation.')
+                   '`maxcv` for the magnitude of the violation.')
     else:
         success = result.info == SMALL_TR_RADIUS or result.info == FTARGET_ACHIEVED
         message = get_info_string('COBYLA', result.info)

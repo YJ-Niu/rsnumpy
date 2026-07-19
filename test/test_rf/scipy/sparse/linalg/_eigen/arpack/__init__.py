@@ -17,4 +17,3 @@ References
    Arnoldi Methods. SIAM, Philadelphia, PA, 1998.
 
 """
-from .arpack import *

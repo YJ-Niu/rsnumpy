@@ -113,6 +113,7 @@ class Complex:
         Uses `multiprocessing.Pool <multiprocessing>`) to compute the field
          functions in parallel.
     """
+
     def __init__(self, dim, domain=None, sfield=None, sfield_args=(),
                  symmetry=None, constraints=None, workers=1):
         self.dim = dim
@@ -1187,7 +1188,7 @@ class Complex:
             # TODO: Note that scipy might be faster to add as an optional
             #       dependency
             sign_det_A_j0 = np.sign(np.linalg.det(np.delete(A_j0, d,
-                                                                     0)))
+                                                            0)))
             # TODO: Note if sign_det_A_j0 == then the point is coplanar to the
             #       current simplex facet, so perhaps return True and attach?
             if det_A_jj == sign_det_A_j0:

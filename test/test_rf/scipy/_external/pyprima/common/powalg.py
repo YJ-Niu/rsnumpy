@@ -98,7 +98,6 @@ def qrexc_Rdiag(A, Q, Rdiag, i):  # Used in COBYLA
     # tol = max(1.0E-8, min(1.0E-1, 1.0E8 * EPS * m + 1))
     # assert isorth(Q, tol)  # Costly!
 
-
     if i < 0 or i >= n:
         return Q, Rdiag
 

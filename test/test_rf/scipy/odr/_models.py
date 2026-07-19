@@ -180,9 +180,9 @@ def polynomial(order):
     return Model(_poly_fcn, fjacd=_poly_fjacd, fjacb=_poly_fjacb,
                  estimate=_poly_est, extra_args=(powers,),
                  meta={'name': 'Sorta-general Polynomial',
-                 'equ': 'y = B_0 + Sum[i=1..%s, B_i * (x**i)]' % (len_beta-1),
-                 'TeXequ': r'$y=\beta_0 + \sum_{i=1}^{%s} \beta_i x^i$' %
-                        (len_beta-1)})
+                       'equ': 'y = B_0 + Sum[i=1..%s, B_i * (x**i)]' % (len_beta-1),
+                       'TeXequ': r'$y=\beta_0 + \sum_{i=1}^{%s} \beta_i x^i$' %
+                       (len_beta-1)})
 
 
 class _ExponentialModel(Model):
@@ -254,7 +254,7 @@ def _quad_fjb(B, x):
 
 
 def _quad_est(data):
-    return (1.,1.,1.)
+    return (1., 1., 1.)
 
 
 class _UnilinearModel(Model):

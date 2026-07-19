@@ -612,7 +612,7 @@ def stochastic_block_model(
     # Split nodelist in a partition (list of sets).
     size_cumsum = [sum(sizes[0:x]) for x in range(len(sizes) + 1)]
     g.graph["partition"] = [
-        set(nodelist[size_cumsum[x] : size_cumsum[x + 1]])
+        set(nodelist[size_cumsum[x]: size_cumsum[x + 1]])
         for x in range(len(size_cumsum) - 1)
     ]
     # Setup nodes and graph name

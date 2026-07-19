@@ -22,5 +22,6 @@ __all__ = sorted(
     | {"__array_api_version__", "__array_namespace_info__", "linalg", "fft"}
 )
 
+
 def __dir__() -> list[str]:
     return __all__

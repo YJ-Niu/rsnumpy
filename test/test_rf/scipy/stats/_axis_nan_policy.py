@@ -38,6 +38,7 @@ too_small_nd_omit = (
     "elements of returned arrays will be NaN. "
     "See documentation for sample size requirements.")
 
+
 class SmallSampleWarning(RuntimeWarning):
     pass
 

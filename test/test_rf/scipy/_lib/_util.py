@@ -39,6 +39,7 @@ copy_if_needed: bool | None = None
 # Consider dropping this wrapper when support for Python 3.13 is dropped.
 if sys.version_info >= (3, 14):
     import annotationlib
+
     def wrapped_inspect_signature(callable):
         """Get a signature object for the passed callable."""
         return inspect.signature(callable,
@@ -522,6 +523,7 @@ class _FunctionWrapper:
     """
     Object to wrap user's function, allowing picklability
     """
+
     def __init__(self, f, args):
         self.f = f
         self.args = [] if args is None else args
@@ -534,6 +536,7 @@ class _ScalarFunctionWrapper:
     """
     Object to wrap scalar user function, allowing picklability
     """
+
     def __init__(self, f, args=None):
         self.f = f
         self.args = [] if args is None else args
@@ -557,6 +560,7 @@ class _ScalarFunctionWrapper:
                 ) from e
         return fx
 
+
 class MapWrapper:
     """
     Parallelisation wrapper for working with map-like callables, such as
@@ -573,6 +577,7 @@ class MapWrapper:
         calling sequence as the built-in map function, then this callable is
         used for parallelization.
     """
+
     def __init__(self, pool=1):
         self.pool = None
         self._mapfunc = map
@@ -586,7 +591,7 @@ class MapWrapper:
 
             method = get_start_method(allow_none=True)
 
-            if method is None and os.name=='posix' and sys.version_info < (3, 14):
+            if method is None and os.name == 'posix' and sys.version_info < (3, 14):
                 # Python 3.13 and older used "fork" on posix, which can lead to
                 # deadlocks. This backports that fix to older Python versions.
                 method = 'forkserver'
@@ -942,6 +947,7 @@ def _call_callback_maybe_halt(callback, res):
 
 class _RichResult(dict):
     """ Container for multiple outputs with pretty-printing """
+
     def __getattr__(self, name):
         try:
             return self[name]
@@ -1035,7 +1041,6 @@ def _dict_formatter(d, n=0, mplus=1, sorter=None):
     return s
 
 
-
 def _deprecate_dtypes(func_name, *arrays):
     """
     A temporary helper for deprecating non-LAPACK dtypes.
@@ -1048,10 +1053,10 @@ def _deprecate_dtypes(func_name, *arrays):
             continue
         if a.dtype.char not in np.typecodes['AllInteger'] + 'fdFD':
             msg = (f"Calling {func_name} with arguments of dtype={a.dtype} "
-                   f"({a.dtype.char = }) is deprecated in SciPy 1.18.0 and "
-                    "will be removed in SciPy 1.20.0. Please cast array inputs to "
-                    "one of np.float{32,64} or np.complex{64,128} manually."
-            )
+                   f"({a.dtype.char=}) is deprecated in SciPy 1.18.0 and "
+                   "will be removed in SciPy 1.20.0. Please cast array inputs to "
+                   "one of np.float{32,64} or np.complex{64,128} manually."
+                   )
             import warnings
             warnings.warn(msg, category=DeprecationWarning, stacklevel=3)
             return

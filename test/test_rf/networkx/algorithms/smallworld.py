@@ -194,7 +194,7 @@ def lattice_reference(G, niter=5, D=None, connectivity=True, seed=None):
         u = np.append((0,), np.where(un < um, un, um))
 
         for v in range(int(np.ceil(nnodes / 2))):
-            D[nnodes - v - 1, :] = np.append(u[v + 1 :], u[: v + 1])
+            D[nnodes - v - 1, :] = np.append(u[v + 1:], u[: v + 1])
             D[v, :] = D[nnodes - v - 1, :][::-1]
 
     niter = niter * nedges

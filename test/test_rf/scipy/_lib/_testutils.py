@@ -51,7 +51,6 @@ IS_EDITABLE = 'editable' in scipy.__path__[0]
 
 class FPUModeChangeWarning(RuntimeWarning):
     """Warning about FPU mode change"""
-    pass
 
 
 class PytestTester:
@@ -84,6 +83,7 @@ class PytestTester:
         1. Default is 1.
 
     """
+
     def __init__(self, module_name):
         self.module_name = module_name
 
@@ -277,6 +277,7 @@ def _get_mem_available():
             return info['memfree'] + info['cached']
 
     return None
+
 
 def _test_cython_extension(tmp_path, srcdir):
     """

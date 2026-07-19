@@ -105,7 +105,7 @@ def _lstsq(a, b, xp=None, rcond=None):
         return x, residuals, rank, s
 
 
-# ### Old-style routines ###
+# ## Old-style routines
 
 
 # https://github.com/numpy/numpy/blob/v2.2.0/numpy/lib/_polynomial_impl.py#L1232
@@ -221,7 +221,7 @@ def polyfit(x, y, deg, *, xp, rcond=None):
     return c
 
 
-# ### New-style routines ###
+# ## New-style routines
 
 
 # https://github.com/numpy/numpy/blob/v2.2.0/numpy/polynomial/polynomial.py#L663

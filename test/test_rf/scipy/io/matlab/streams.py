@@ -6,6 +6,7 @@ from scipy._lib.deprecation import _sub_module_deprecation
 
 __all__: list[str] = []
 
+
 def __dir__():
     return __all__
 

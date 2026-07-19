@@ -273,7 +273,7 @@ def _wilcoxon_nd(x, y=None, zero_method='wilcox', correction=True,
             alternative=alternative, axis=-1).pvalue
 
     # for backward compatibility...
-    statistic = xp.minimum(r_plus, r_minus) if alternative=='two-sided' else r_plus
+    statistic = xp.minimum(r_plus, r_minus) if alternative == 'two-sided' else r_plus
     z = -xp.abs(z) if (alternative == 'two-sided' and method == 'asymptotic') else z
 
     statistic = statistic[()] if statistic.ndim == 0 else statistic

@@ -158,7 +158,7 @@ def to_networkx_graph(data, create_using=None, multigraph_input=False):
 
     # scipy sparse array - any format
     try:
-        import scipy as sp
+        pass
 
         if hasattr(data, "format"):
             try:

@@ -2,7 +2,6 @@
 
 import random
 from copy import deepcopy
-from itertools import count
 
 import networkx as nx
 
@@ -145,9 +144,9 @@ def kernighan_lin_bisection(G, partition=None, max_iter=10, weight="weight", see
     if callable(weight):
         sum_weight = weight
     elif G.is_multigraph():
-        sum_weight = lambda u, v, d: sum(dd.get(weight, 1) for dd in d.values())
+        def sum_weight(u, v, d): return sum(dd.get(weight, 1) for dd in d.values())
     else:
-        sum_weight = lambda u, v, d: d.get(weight, 1)
+        def sum_weight(u, v, d): return d.get(weight, 1)
 
     edge_info = {
         u: {v: wt for v, d in nbrs.items() if (wt := sum_weight(u, v, d)) is not None}
@@ -292,7 +291,7 @@ def greedy_node_swap_bipartition(G, *, init_split=None, max_iter=10):
     """
     if init_split is None:
         m1 = len(G) // 2
-        m2 = len(G) - m1
+        len(G) - m1
         some_nodes = set(random.sample(list(G), m1))
         other_nodes = {n for n in G if n not in some_nodes}
         best_split_so_far = (some_nodes, other_nodes)

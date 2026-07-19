@@ -12,7 +12,7 @@ import rsnumpy as np
 from ..common.checkbreak import checkbreak_con
 from ..common.consts import REALMAX, EPS, DEBUGGING, MIN_MAXFILT
 from ..common.infos import INFO_DEFAULT, MAXTR_REACHED, DAMAGING_ROUNDING, \
-                    SMALL_TR_RADIUS, CALLBACK_TERMINATE
+    SMALL_TR_RADIUS, CALLBACK_TERMINATE
 from ..common.evaluate import evaluate
 from ..common.history import savehist
 from ..common.linalg import isinv, matprod, inprod, norm, primasum, primapow2
@@ -40,7 +40,7 @@ def cobylb(calcfc, iprint, maxfilt, maxfun, amat, bvec, ctol, cweight, eta1, eta
 
     # Local variables
     solver = 'COBYLA'
-    A = np.zeros((np.size(x), np.size(constr))) # A contains the approximate gradient for the constraints
+    A = np.zeros((np.size(x), np.size(constr)))  # A contains the approximate gradient for the constraints
     distsq = np.zeros(np.size(x) + 1)
     # CPENMIN is the minimum of the penalty parameter CPEN for the L-infinity
     # constraint violation in the merit function. Note that CPENMIN = 0 in Powell's
@@ -79,9 +79,9 @@ def cobylb(calcfc, iprint, maxfilt, maxfun, amat, bvec, ctol, cweight, eta1, eta
         assert amat is None or np.shape(amat) == (m_lcon, num_vars)
         assert min(MIN_MAXFILT, maxfun) <= maxfilt <= maxfun
 
-    #====================#
+    # ====================#
     # Calculation starts #
-    #====================#
+    # ====================#
 
     # Initialize SIM, FVAL, CONMAT, and CVAL, together with the history.
     # After the initialization, SIM[:, NUM_VARS] holds the vertex of the initial
@@ -91,8 +91,8 @@ def cobylb(calcfc, iprint, maxfilt, maxfun, amat, bvec, ctol, cweight, eta1, eta
     # values, and constraint violations on the vertices in the order corresponding to
     # SIM.
     evaluated, conmat, cval, sim, simi, fval, nf, subinfo = initxfc(calcfc, iprint,
-      maxfun, constr, amat, bvec, ctol, f, ftarget, rhobeg, x,
-      xhist, fhist, chist, conhist, maxhist)
+                                                                    maxfun, constr, amat, bvec, ctol, f, ftarget, rhobeg, x,
+                                                                    xhist, fhist, chist, conhist, maxhist)
 
     # Initialize the filter, including xfilt, ffilt, confilt, cfilt, and nfilt.
     # N.B.: The filter is used only when selecting which iterate to return. It does not
@@ -135,7 +135,6 @@ def cobylb(calcfc, iprint, maxfilt, maxfun, amat, bvec, ctol, cweight, eta1, eta
             # nhist = minval([nf, maxfhist, maxchist])
             # assert not any(isbetter(fhist(1:nhist), chist(1:nhist), f, cstrv, ctol))
         return x, f, constr, cstrv, nf, xhist, fhist, chist, conhist, info
-
 
     # Set some more initial values.
     # We must initialize shortd, ratio, and jdrop_tr because these get defined on
@@ -215,7 +214,7 @@ def cobylb(calcfc, iprint, maxfilt, maxfun, amat, bvec, ctol, cweight, eta1, eta
         g = matprod((fval[:num_vars] - fval[num_vars]), simi)
         A[:, :m_lcon] = amat.T if amat is not None else amat
         A[:, m_lcon:] = matprod((conmat[m_lcon:, :num_vars] -
-                          np.tile(conmat[m_lcon:, num_vars], (num_vars, 1)).T), simi).T
+                                 np.tile(conmat[m_lcon:, num_vars], (num_vars, 1)).T), simi).T
 
         # Calculate the trust-region trial step d. Note that d does NOT depend on cpen.
         d = trstlp(A, -conmat[:, num_vars], delta, g)
@@ -268,7 +267,7 @@ def cobylb(calcfc, iprint, maxfilt, maxfun, amat, bvec, ctol, cweight, eta1, eta
             x = sim[:, num_vars] + d
             distsq[num_vars] = primasum(primapow2(x - sim[:, num_vars]))
             distsq[:num_vars] = primasum(primapow2(x.reshape(num_vars, 1) -
-                (sim[:, num_vars].reshape(num_vars, 1) + sim[:, :num_vars])), axis=0)
+                                                   (sim[:, num_vars].reshape(num_vars, 1) + sim[:, :num_vars])), axis=0)
             j = np.argmin(distsq)
             if distsq[j] <= primapow2(1e-4 * rhoend):
                 f = fval[j]
@@ -402,7 +401,6 @@ def cobylb(calcfc, iprint, maxfilt, maxfun, amat, bvec, ctol, cweight, eta1, eta
         # REDUCE_RHO to true if they are small (e.g., ALL(ABS(MODERR_REC) <= 0.1 * MAXVAL(ABS(A))*RHO) or
         # ALL(ABS(MODERR_REC) <= RHO**2)) when SHORTD is TRUE. It made little impact on the performance.
 
-
         # Since COBYLA never sets IMPROVE_GEO and REDUCE_RHO to TRUE simultaneously, the following
         # two blocks are exchangeable: IF (IMPROVE_GEO) ... END IF and IF (REDUCE_RHO) ... END IF.
 
@@ -466,7 +464,7 @@ def cobylb(calcfc, iprint, maxfilt, maxfun, amat, bvec, ctol, cweight, eta1, eta
             x = sim[:, num_vars] + d
             distsq[num_vars] = primasum(primapow2(x - sim[:, num_vars]))
             distsq[:num_vars] = primasum(primapow2(x.reshape(num_vars, 1) -
-                (sim[:, num_vars].reshape(num_vars, 1) + sim[:, :num_vars])), axis=0)
+                                                   (sim[:, num_vars].reshape(num_vars, 1) + sim[:, :num_vars])), axis=0)
             j = np.argmin(distsq)
             if distsq[j] <= primapow2(1e-4 * rhoend):
                 f = fval[j]
@@ -558,7 +556,6 @@ def cobylb(calcfc, iprint, maxfilt, maxfun, amat, bvec, ctol, cweight, eta1, eta
     return x, f, constr, cstrv, nf, xhist, fhist, chist, conhist, info
 
 
-
 def getcpen(amat, bvec, conmat, cpen, cval, delta, fval, rho, sim, simi):
     '''
     This function gets the penalty parameter CPEN so that PREREM = PREREF + CPEN * PREREC > 0.
@@ -603,9 +600,9 @@ def getcpen(amat, bvec, conmat, cpen, cval, delta, fval, rho, sim, simi):
         assert isinv(sim[:, :num_vars], simi, itol)
         assert delta >= rho and rho > 0
 
-    #====================#
+    # ====================#
     # Calculation starts #
-    #====================#
+    # ====================#
 
     # Initialize INFO which is needed in the postconditions
     info = INFO_DEFAULT
@@ -637,7 +634,7 @@ def getcpen(amat, bvec, conmat, cpen, cval, delta, fval, rho, sim, simi):
         g = matprod(fval[:num_vars] - fval[num_vars], simi)
         A[:, :m_lcon] = amat.T if amat is not None else amat
         A[:, m_lcon:] = matprod((conmat[m_lcon:, :num_vars] -
-                          np.tile(conmat[m_lcon:, num_vars], (num_vars, 1)).T), simi).T
+                                 np.tile(conmat[m_lcon:, num_vars], (num_vars, 1)).T), simi).T
 
         # Calculate the trust-region trial step D. Note that D does NOT depend on CPEN.
         d = trstlp(A, -conmat[:, num_vars], delta, g)
@@ -662,9 +659,9 @@ def getcpen(amat, bvec, conmat, cpen, cval, delta, fval, rho, sim, simi):
         if findpole(cpen, cval, fval) == num_vars:
             break
 
-    #==================#
+    # ==================#
     # Calculation ends #
-    #==================#
+    # ==================#
 
     # Postconditions
     if DEBUGGING:
@@ -686,9 +683,9 @@ def fcratio(conmat, fval):
         assert np.size(fval) >= 1
         assert np.size(conmat, 1) == np.size(fval)
 
-    #====================#
+    # ====================#
     # Calculation starts #
-    #====================#
+    # ====================#
 
     cmin = np.min(-conmat, axis=1)
     cmax = np.max(-conmat, axis=1)
@@ -703,9 +700,9 @@ def fcratio(conmat, fval):
     else:
         r = 0
 
-    #==================#
+    # ==================#
     # Calculation ends #
-    #==================#
+    # ==================#
 
     # Postconditions
     if DEBUGGING:

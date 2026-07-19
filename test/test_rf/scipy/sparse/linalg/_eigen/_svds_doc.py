@@ -123,7 +123,6 @@ def _svds_arpack_doc(A, k=6, ncv=None, tol=0, which='LM', v0=None,
     ...  np.allclose(vT3 @ vT3.T, np.eye(5)))
     True
     """
-    pass
 
 
 def _svds_lobpcg_doc(A, k=6, ncv=None, tol=0, which='LM', v0=None,
@@ -248,7 +247,6 @@ def _svds_lobpcg_doc(A, k=6, ncv=None, tol=0, which='LM', v0=None,
     True
 
     """
-    pass
 
 
 def _svds_propack_doc(A, k=6, ncv=None, tol=0, which='LM', v0=None,
@@ -379,4 +377,3 @@ def _svds_propack_doc(A, k=6, ncv=None, tol=0, which='LM', v0=None,
     True
 
     """
-    pass

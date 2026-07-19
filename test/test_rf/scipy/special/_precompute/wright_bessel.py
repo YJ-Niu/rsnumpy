@@ -148,11 +148,11 @@ def series_small_a_small_b():
     s += "\nTest B[2] == C[1] + b*C[2] + b^2/2*C[3] + b^3/6*C[4] + .."
     test = sum([b**k/factorial(k) * C[k+1] for k in range(order-1)])
     test = (test - B[2].subs(c_subs)).simplify()
-    s += f"\ntest successful = {test==S(0)}"
+    s += f"\ntest successful = {test == S(0)}"
     s += "\nTest B[3] == C[2] + b*C[3] + b^2/2*C[4] + .."
     test = sum([b**k/factorial(k) * C[k+2] for k in range(order-2)])
     test = (test - B[3].subs(c_subs)).simplify()
-    s += f"\ntest successful = {test==S(0)}"
+    s += f"\ntest successful = {test == S(0)}"
     return s
 
 

@@ -77,8 +77,8 @@ def nnls(A, b, *, maxiter=None):
 
     if m != b.shape[0]:
         raise ValueError(
-                "Incompatible dimensions. The first dimension of " +
-                f"A is {m}, while the shape of b is {(b.shape[0], )}")
+            "Incompatible dimensions. The first dimension of " +
+            f"A is {m}, while the shape of b is {(b.shape[0], )}")
 
     if n == 0:
         return (np.empty(0), np.linalg.norm(b))

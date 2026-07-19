@@ -22,8 +22,8 @@ class _csr_base(_cs_matrix):
     def transpose(self, axes=None, copy=False):
         if axes is not None and axes != (1, 0):
             raise ValueError("Sparse arrays/matrices do not support "
-                              "an 'axes' parameter because swapping "
-                              "dimensions is the only logical permutation.")
+                             "an 'axes' parameter because swapping "
+                             "dimensions is the only logical permutation.")
 
         if self.ndim == 1:
             return self.copy() if copy else self
@@ -39,7 +39,7 @@ class _csr_base(_cs_matrix):
         lil = self._lil_container(self.shape, dtype=self.dtype)
 
         self.sum_duplicates()
-        ptr,ind,dat = self.indptr,self.indices,self.data
+        ptr, ind, dat = self.indptr, self.indices, self.data
         rows, data = lil.rows, lil.data
 
         for n in range(self.shape[0]):
@@ -75,7 +75,7 @@ class _csr_base(_cs_matrix):
             raise ValueError("Cannot convert a 1d sparse array to csc format")
         M, N = self.shape
         idx_dtype = self._get_index_dtype((self.indptr, self.indices),
-                                    maxval=max(self.nnz, M))
+                                          maxval=max(self.nnz, M))
         indptr = np.empty(N + 1, dtype=idx_dtype)
         indices = np.empty(self.nnz, dtype=idx_dtype)
         data = np.empty(self.nnz, dtype=upcast(self.dtype))
@@ -101,24 +101,24 @@ class _csr_base(_cs_matrix):
             from ._spfuncs import estimate_blocksize
             return self.tobsr(blocksize=estimate_blocksize(self))
 
-        elif blocksize == (1,1):
-            arg1 = (self.data.reshape(-1,1,1),self.indices,self.indptr)
+        elif blocksize == (1, 1):
+            arg1 = (self.data.reshape(-1, 1, 1), self.indices, self.indptr)
             return self._bsr_container(arg1, shape=self.shape, copy=copy)
 
         else:
-            R,C = blocksize
-            M,N = self.shape
+            R, C = blocksize
+            M, N = self.shape
 
             if R < 1 or C < 1 or M % R != 0 or N % C != 0:
                 raise ValueError(f'invalid blocksize {blocksize}')
 
-            blks = csr_count_blocks(M,N,R,C,self.indptr,self.indices)
+            blks = csr_count_blocks(M, N, R, C, self.indptr, self.indices)
 
             idx_dtype = self._get_index_dtype((self.indptr, self.indices),
-                                        maxval=max(N//C, blks))
+                                              maxval=max(N//C, blks))
             indptr = np.empty(M//R+1, dtype=idx_dtype)
             indices = np.empty(blks, dtype=idx_dtype)
-            data = np.zeros((blks,R,C), dtype=self.dtype)
+            data = np.zeros((blks, R, C), dtype=self.dtype)
 
             csr_tobsr(M, N, R, C,
                       self.indptr.astype(idx_dtype, copy=False),
@@ -601,4 +601,3 @@ class csr_matrix(spmatrix, _csr_base):
            [0, 1, 1, 1]])
 
     """
-

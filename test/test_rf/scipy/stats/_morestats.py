@@ -7,7 +7,7 @@ from collections import namedtuple
 
 import rsnumpy as np
 from rsnumpy import (isscalar, log, around, arange, sort, amin, amax, sqrt, array,
-                   pi, exp, ravel, count_nonzero)
+                     pi, exp, ravel, count_nonzero)
 
 from scipy import optimize, special, interpolate, stats
 from scipy._lib._bunch import _make_tuple_bunch
@@ -2357,7 +2357,7 @@ AndersonResult = _make_tuple_bunch('AndersonResult',
 
 
 _anderson_warning_message = (
-"""As of SciPy 1.17, users must choose a p-value calculation method by providing the
+    """As of SciPy 1.17, users must choose a p-value calculation method by providing the
 `method` parameter. `method='interpolate'` interpolates the p-value from pre-calculated
 tables; `method` may also be an instance of `MonteCarloMethod` to approximate the
 p-value via Monte Carlo simulation. When `method` is specified, the result object will
@@ -2513,7 +2513,7 @@ def anderson(x, dist='norm', *, method=None):
     The p-value is approximately 0.012,, so the null hypothesis may be rejected
     at a significance level of 2.5%, but not at a significance level of 1%.
 
-    """ # rsnumpy/numpydoc#87  # noqa: E501
+    """  # rsnumpy/numpydoc#87  # noqa: E501
     dist = dist.lower()
     if dist in {'extreme1', 'gumbel'}:
         dist = 'gumbel_l'
@@ -2630,7 +2630,7 @@ def _anderson_simulate_pvalue(x, dist, method):
         warnings.warn(message.replace('___', 'batch'), UserWarning, stacklevel=3)
     method['n_mc_samples'] = method.pop('n_resamples')
 
-    kwargs= {'known_params': {'loc': 0}} if dist == 'expon' else {}
+    kwargs = {'known_params': {'loc': 0}} if dist == 'expon' else {}
     dist = getattr(stats, dist)
     res = stats.goodness_of_fit(dist, x, statistic='ad', **kwargs, **method)
     return res.pvalue
@@ -2981,7 +2981,6 @@ def anderson_ksamp(samples, midrank=_NoValue, *, variant=_NoValue, method=None):
     return res
 
 
-
 AnsariResult = namedtuple('AnsariResult', ('statistic', 'pvalue'))
 
 
@@ -3213,6 +3212,7 @@ def ansari(x, y, alternative='two-sided', *, axis=0, method='auto'):
         # type before returning
         cdf = np.vectorize(_abw_state.a.cdf, otypes=[np.float64])
         sf = np.vectorize(_abw_state.a.sf, otypes=[np.float64])
+
         def get_ansari_pvalue(AB):
             if alternative == 'two-sided':
                 pval = 2.0 * np.minimum(cdf(AB, n, m), sf(AB, n, m))
@@ -3266,6 +3266,7 @@ def ansari(x, y, alternative='two-sided', *, axis=0, method='auto'):
 
 
 BartlettResult = namedtuple('BartlettResult', ('statistic', 'pvalue'))
+
 
 @xp_capabilities(marray=True)
 @_axis_nan_policy_factory(BartlettResult, n_samples=None)

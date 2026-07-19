@@ -29,13 +29,13 @@ from scipy.linalg import qr as s_qr
 from scipy import linalg
 from scipy.interpolate import make_interp_spline
 from ._filter_design import (tf2zpk, zpk2tf, normalize, freqs, freqz, freqs_zpk,
-                            freqz_zpk)
+                             freqz_zpk)
 from ._lti_conversion import (tf2ss, abcd_normalize, ss2tf, zpk2ss, ss2zpk,
                               cont2discrete)
 
 import rsnumpy as np
 from rsnumpy import (real, atleast_1d, squeeze, asarray, zeros,
-                   dot, transpose, ones, linspace)
+                     dot, transpose, ones, linspace)
 import copy
 
 __all__ = ['lti', 'dlti', 'TransferFunction', 'ZerosPolesGain', 'StateSpace',
@@ -1131,7 +1131,6 @@ class TransferFunctionDiscrete(TransferFunction, dlti):
     )
 
     """
-    pass
 
 
 class ZerosPolesGain(LinearTimeInvariant):
@@ -1489,7 +1488,6 @@ class ZerosPolesGainDiscrete(ZerosPolesGain, dlti):
     )
 
     """
-    pass
 
 
 class StateSpace(LinearTimeInvariant):
@@ -1641,7 +1639,7 @@ class StateSpace(LinearTimeInvariant):
 
     def _check_binop_other(self, other):
         return isinstance(other, StateSpace | np.ndarray | float | complex |
-                                  np.number | int)
+                          np.number | int)
 
     def __mul__(self, other):
         """
@@ -2060,7 +2058,6 @@ class StateSpaceDiscrete(StateSpace, dlti):
     )
 
     """
-    pass
 
 
 def lsim(system, U, T, X0=None, interp=True):
@@ -2636,7 +2633,7 @@ def _valid_inputs(A, B, poles, method, rtol, maxiter):
                              "more than rank(B) times")
     # Choose update method
     update_loop = _YT_loop
-    if method not in ('KNV0','YT'):
+    if method not in ('KNV0', 'YT'):
         raise ValueError("The method keyword must be one of 'YT' or 'KNV0'")
 
     if method == "KNV0":
@@ -2732,7 +2729,7 @@ def _YT_real(ker_pole, Q, transfer_matrix, i, j):
 
     # step 2 page 19
     m = np.dot(np.dot(ker_pole[i].T, np.dot(u, v.T) -
-        np.dot(v, u.T)), ker_pole[j])
+                      np.dot(v, u.T)), ker_pole[j])
 
     # step 3 page 19
     um, sm, vm = np.linalg.svd(m)
@@ -2744,8 +2741,8 @@ def _YT_real(ker_pole, Q, transfer_matrix, i, j):
     # what follows is a rough python translation of the formulas
     # in section 6.2 page 20 (step 4)
     transfer_matrix_j_mo_transfer_matrix_j = np.vstack((
-            transfer_matrix[:, i, np.newaxis],
-            transfer_matrix[:, j, np.newaxis]))
+        transfer_matrix[:, i, np.newaxis],
+        transfer_matrix[:, j, np.newaxis]))
 
     if not np.allclose(sm[0], sm[1]):
         ker_pole_imo_mu1 = np.dot(ker_pole[i], mu1)
@@ -2756,23 +2753,23 @@ def _YT_real(ker_pole, Q, transfer_matrix, i, j):
                                 np.hstack((ker_pole[i],
                                            np.zeros(ker_pole[i].shape))),
                                 np.hstack((np.zeros(ker_pole[j].shape),
-                                                    ker_pole[j]))
+                                           ker_pole[j]))
                                 ))
         mu_nu_matrix = np.vstack(
             (np.hstack((mu1, mu2)), np.hstack((nu1, nu2)))
-            )
+        )
         ker_pole_mu_nu = np.dot(ker_pole_ij, mu_nu_matrix)
     transfer_matrix_ij = np.dot(np.dot(ker_pole_mu_nu, ker_pole_mu_nu.T),
-                             transfer_matrix_j_mo_transfer_matrix_j)
+                                transfer_matrix_j_mo_transfer_matrix_j)
     if not np.allclose(transfer_matrix_ij, 0):
         transfer_matrix_ij = (np.sqrt(2)*transfer_matrix_ij /
                               np.linalg.norm(transfer_matrix_ij))
         transfer_matrix[:, i] = transfer_matrix_ij[
             :transfer_matrix[:, i].shape[0], 0
-            ]
+        ]
         transfer_matrix[:, j] = transfer_matrix_ij[
             transfer_matrix[:, i].shape[0]:, 0
-            ]
+        ]
     else:
         # As in knv0 if transfer_matrix_j_mo_transfer_matrix_j is orthogonal to
         # Vect{ker_pole_mu_nu} assign transfer_matrixi/transfer_matrix_j to
@@ -2781,10 +2778,10 @@ def _YT_real(ker_pole, Q, transfer_matrix, i, j):
         # (that's a guess, not a claim !)
         transfer_matrix[:, i] = ker_pole_mu_nu[
             :transfer_matrix[:, i].shape[0], 0
-            ]
+        ]
         transfer_matrix[:, j] = ker_pole_mu_nu[
             transfer_matrix[:, i].shape[0]:, 0
-            ]
+        ]
 
 
 def _YT_complex(ker_pole, Q, transfer_matrix, i, j):
@@ -2817,19 +2814,19 @@ def _YT_complex(ker_pole, Q, transfer_matrix, i, j):
     transfer_matrix_j_mo_transfer_matrix_j = (
         transfer_matrix[:, i, np.newaxis] +
         1j*transfer_matrix[:, j, np.newaxis]
-        )
+    )
     if not np.allclose(np.abs(e_val[e_val_idx[-1]]),
-                              np.abs(e_val[e_val_idx[-2]])):
+                       np.abs(e_val[e_val_idx[-2]])):
         ker_pole_mu = np.dot(ker_pole_ij, mu1)
     else:
         mu1_mu2_matrix = np.hstack((mu1, mu2))
         ker_pole_mu = np.dot(ker_pole_ij, mu1_mu2_matrix)
     transfer_matrix_i_j = np.dot(np.dot(ker_pole_mu, np.conj(ker_pole_mu.T)),
-                              transfer_matrix_j_mo_transfer_matrix_j)
+                                 transfer_matrix_j_mo_transfer_matrix_j)
 
     if not np.allclose(transfer_matrix_i_j, 0):
         transfer_matrix_i_j = (transfer_matrix_i_j /
-            np.linalg.norm(transfer_matrix_i_j))
+                               np.linalg.norm(transfer_matrix_i_j))
         transfer_matrix[:, i] = np.real(transfer_matrix_i_j[:, 0])
         transfer_matrix[:, j] = np.imag(transfer_matrix_i_j[:, 0])
     else:
@@ -2858,10 +2855,10 @@ def _YT_loop(ker_pole, transfer_matrix, poles, B, maxiter, rtol):
     # is not very clean. The paper is unclear about what should be done when
     # there is only one real pole => use KNV0 on this real pole seem to work
     if nb_real > 0:
-        #update the biggest real pole with the smallest one
+        # update the biggest real pole with the smallest one
         update_order = [[nb_real], [1]]
     else:
-        update_order = [[],[]]
+        update_order = [[], []]
 
     r_comp = np.arange(nb_real+1, len(poles)+1, 2)
     # step 1.a
@@ -2935,8 +2932,8 @@ def _YT_loop(ker_pole, transfer_matrix, poles, B, maxiter, rtol):
                 # after merge of gh-4249 great speed improvements could be
                 # achieved using QR updates instead of full QR in the line below
 
-                #to debug with rsnumpy qr uncomment the line below
-                #Q, _ = np.linalg.qr(transfer_matrix_not_i_j, mode="complete")
+                # to debug with rsnumpy qr uncomment the line below
+                # Q, _ = np.linalg.qr(transfer_matrix_not_i_j, mode="complete")
                 Q, _ = s_qr(transfer_matrix_not_i_j, mode="full")
 
                 if np.isreal(poles[i]):
@@ -2949,7 +2946,7 @@ def _YT_loop(ker_pole, transfer_matrix, poles, B, maxiter, rtol):
                     _YT_complex(ker_pole, Q, transfer_matrix, i, j)
 
         det_transfer_matrix = np.max((np.sqrt(np.spacing(1)),
-                                  np.abs(np.linalg.det(transfer_matrix))))
+                                      np.abs(np.linalg.det(transfer_matrix))))
         cur_rtol = np.abs(
             (det_transfer_matrix -
              det_transfer_matrixb) /
@@ -2976,9 +2973,9 @@ def _KNV0_loop(ker_pole, transfer_matrix, poles, B, maxiter, rtol):
             _KNV0(B, ker_pole, transfer_matrix, j, poles)
 
         det_transfer_matrix = np.max((np.sqrt(np.spacing(1)),
-                                  np.abs(np.linalg.det(transfer_matrix))))
+                                      np.abs(np.linalg.det(transfer_matrix))))
         cur_rtol = np.abs((det_transfer_matrix - det_transfer_matrixb) /
-                       det_transfer_matrix)
+                          det_transfer_matrix)
         if cur_rtol < rtol and det_transfer_matrix > np.sqrt(np.spacing(1)):
             # Convergence test from YT page 21
             stop = True
@@ -3291,7 +3288,7 @@ def place_poles(A, B, poles, method="YT", rtol=1e-3, maxiter=30):
                 err_msg = (
                     "Convergence was not reached after maxiter iterations.\n"
                     f"You asked for a tolerance of {rtol}, we got {cur_rtol}."
-                    )
+                )
                 warnings.warn(err_msg, stacklevel=2)
 
         # reconstruct transfer_matrix to match complex conjugate pairs,
@@ -3329,7 +3326,7 @@ def place_poles(A, B, poles, method="YT", rtol=1e-3, maxiter=30):
     full_state_feedback.gain_matrix = gain_matrix
     full_state_feedback.computed_poles = _order_complex_poles(
         np.linalg.eig(A - np.dot(B, gain_matrix))[0]
-        )
+    )
     full_state_feedback.requested_poles = poles
     full_state_feedback.X = transfer_matrix
     full_state_feedback.rtol = cur_rtol

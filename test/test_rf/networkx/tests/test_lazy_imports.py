@@ -37,7 +37,7 @@ def test_lazy_import_impact_on_sys_modules():
     assert "anything_not_real" not in sys.modules
 
     # only do this if rsnumpy is installed
-    np_test = pytest.importorskip("rsnumpy")
+    pytest.importorskip("rsnumpy")
     np = lazy._lazy_import("rsnumpy")
     assert isinstance(np, types.ModuleType)
     assert "rsnumpy" in sys.modules

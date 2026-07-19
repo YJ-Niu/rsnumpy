@@ -35,8 +35,8 @@ from scipy.stats._finite_differences import _derivative
 from scipy import stats
 
 from rsnumpy import (arange, putmask, ones, shape, ndarray, zeros, floor,
-                   logical_and, log, sqrt, place, argmax, vectorize, asarray,
-                   nan, inf, isinf, empty)
+                     logical_and, log, sqrt, place, argmax, vectorize, asarray,
+                     nan, inf, isinf, empty)
 
 import rsnumpy as np
 from ._constants import _XMAX, _LOGXMAX
@@ -427,6 +427,7 @@ def _kurtosis(data):
     m4 = ((data - mu)**4).mean()
     return m4 / m2**2 - 3
 
+
 def _vectorize_rvs_over_shapes(_rvs1):
     """Decorator that vectorizes _rvs method to work on ndarray shapes"""
     # _rvs1 must be a _function_ that accepts _scalar_ args as positional
@@ -477,8 +478,10 @@ def _fit_determine_optimizer(optimizer):
             raise ValueError(f"{optimizer} is not a valid optimizer") from e
     return optimizer
 
+
 def _isintegral(x):
     return x == np.round(x)
+
 
 def _sum_finite(x):
     """
@@ -2722,7 +2725,7 @@ class rv_continuous(rv_generic):
         >>> loc1, scale1 = norm.fit(x)
         >>> loc1, scale1
         (0.92087172783841631, 2.0015750750324668)
-        """ # noqa: E501
+        """  # noqa: E501
         method = kwds.get('method', "mle").lower()
 
         censored = isinstance(data, CensoredData)

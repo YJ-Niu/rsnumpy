@@ -154,7 +154,6 @@ Morphology
 
 # mypy: ignore-errors
 
-from ._support_alternative_backends import *
 
 # adjust __all__ and do not leak implementation details
 from . import _support_alternative_backends
@@ -163,11 +162,6 @@ del _support_alternative_backends, _ndimage_api, _delegators  # noqa: F821  # py
 
 
 # Deprecated namespaces, to be removed in v2.0.0
-from . import filters
-from . import fourier
-from . import interpolation
-from . import measurements
-from . import morphology
 
 from scipy._lib._testutils import PytestTester
 test = PytestTester(__name__)

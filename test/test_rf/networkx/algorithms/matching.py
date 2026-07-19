@@ -1,6 +1,6 @@
 """Functions for computing and verifying matchings in a graph."""
 
-from itertools import combinations, repeat
+from itertools import repeat
 
 import networkx as nx
 from networkx.utils import not_implemented_for
@@ -663,7 +663,6 @@ def max_weight_matching(G, maxcardinality=False, weight="weight"):
             kslack = slack(*k)
             if mybestedge is None or kslack < mybestslack:
                 mybestedge = k
-                mybestslack = kslack
         bestedge[b] = mybestedge
 
     # Expand the given top-level blossom.

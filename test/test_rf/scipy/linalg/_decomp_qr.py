@@ -30,7 +30,7 @@ def safecall(f, name, *args, **kwargs):
 
 
 def qr(a, overwrite_a=False, lwork=_NoValue, mode="full", pivoting=False,
-    check_finite=True):
+       check_finite=True):
     """
     Compute QR decomposition of a matrix.
 
@@ -141,7 +141,7 @@ def qr(a, overwrite_a=False, lwork=_NoValue, mode="full", pivoting=False,
     # structure mappings, keep in sync with the C side
     modes = {
         "full": 1,
-        "qr": 1, # equivalent to `full`
+        "qr": 1,  # equivalent to `full`
         "r": 11,
         "raw": 21,
         "economic": 31
@@ -153,7 +153,7 @@ def qr(a, overwrite_a=False, lwork=_NoValue, mode="full", pivoting=False,
     if mode not in modes.keys():
         raise ValueError(f"Mode argument should be one of {list(modes.keys())}")
 
-    modeFlag = modes[mode] # convert the string to an int for the C enum
+    modeFlag = modes[mode]  # convert the string to an int for the C enum
 
     if check_finite:
         a1 = np.asarray_chkfinite(a)
@@ -464,7 +464,7 @@ def rq(a, overwrite_a=False, lwork=None, mode='full', check_finite=True):
     """
     if mode not in ['full', 'r', 'economic']:
         raise ValueError(
-                 "Mode argument should be one of ['full', 'r', 'economic']")
+            "Mode argument should be one of ['full', 'r', 'economic']")
 
     if check_finite:
         a1 = np.asarray_chkfinite(a)

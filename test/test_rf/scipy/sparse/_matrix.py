@@ -63,7 +63,7 @@ class spmatrix:
 
         return matrix_power(self, power)
 
-    ## Backward compatibility
+    # Backward compatibility
 
     def set_shape(self, shape):
         """Set the shape of the matrix in-place"""

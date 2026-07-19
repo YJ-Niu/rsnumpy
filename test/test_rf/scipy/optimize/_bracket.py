@@ -6,6 +6,7 @@ from scipy._lib._array_api import array_namespace, xp_ravel, xp_promote
 _ELIMITS = -1  # used in _bracket_root
 _ESTOPONESIDE = 2  # used in _bracket_root
 
+
 def _bracket_root_iv(func, xl0, xr0, xmin, xmax, factor, args, kwargs, maxiter):
 
     if not callable(func):
@@ -34,19 +35,19 @@ def _bracket_root_iv(func, xl0, xr0, xmin, xmax, factor, args, kwargs, maxiter):
         raise ValueError('`xl0` must be numeric and real.')
 
     if (not xp.isdtype(xr0.dtype, "numeric")
-        or xp.isdtype(xr0.dtype, "complex floating")):
+            or xp.isdtype(xr0.dtype, "complex floating")):
         raise ValueError('`xr0` must be numeric and real.')
 
     if (not xp.isdtype(xmin.dtype, "numeric")
-        or xp.isdtype(xmin.dtype, "complex floating")):
+            or xp.isdtype(xmin.dtype, "complex floating")):
         raise ValueError('`xmin` must be numeric and real.')
 
     if (not xp.isdtype(xmax.dtype, "numeric")
-        or xp.isdtype(xmax.dtype, "complex floating")):
+            or xp.isdtype(xmax.dtype, "complex floating")):
         raise ValueError('`xmax` must be numeric and real.')
 
     if (not xp.isdtype(factor.dtype, "numeric")
-        or xp.isdtype(factor.dtype, "complex floating")):
+            or xp.isdtype(factor.dtype, "complex floating")):
         raise ValueError('`factor` must be numeric and real.')
     if not xp.all(factor > 1):
         raise ValueError('All elements of `factor` must be greater than 1.')
@@ -54,7 +55,7 @@ def _bracket_root_iv(func, xl0, xr0, xmin, xmax, factor, args, kwargs, maxiter):
     # Calculate the default value of xr0 if a value has not been supplied.
     # Be careful to ensure xr0 is not larger than xmax.
     if xr0_not_supplied:
-        xr0 = xl0 + xp.minimum((xmax - xl0)/ 8, xp.ones_like(xmax))
+        xr0 = xl0 + xp.minimum((xmax - xl0) / 8, xp.ones_like(xmax))
         xr0 = xp.astype(xr0, xl0.dtype, copy=False)
 
     maxiter = xp.asarray(maxiter)
@@ -451,23 +452,23 @@ def _bracket_minimum_iv(func, xm0, xl0, xr0, xmin, xmax, factor, args, kwargs, m
         raise ValueError('`xm0` must be numeric and real.')
 
     if (not xp.isdtype(xl0.dtype, "numeric")
-        or xp.isdtype(xl0.dtype, "complex floating")):
+            or xp.isdtype(xl0.dtype, "complex floating")):
         raise ValueError('`xl0` must be numeric and real.')
 
     if (not xp.isdtype(xr0.dtype, "numeric")
-        or xp.isdtype(xr0.dtype, "complex floating")):
+            or xp.isdtype(xr0.dtype, "complex floating")):
         raise ValueError('`xr0` must be numeric and real.')
 
     if (not xp.isdtype(xmin.dtype, "numeric")
-        or xp.isdtype(xmin.dtype, "complex floating")):
+            or xp.isdtype(xmin.dtype, "complex floating")):
         raise ValueError('`xmin` must be numeric and real.')
 
     if (not xp.isdtype(xmax.dtype, "numeric")
-        or xp.isdtype(xmax.dtype, "complex floating")):
+            or xp.isdtype(xmax.dtype, "complex floating")):
         raise ValueError('`xmax` must be numeric and real.')
 
     if (not xp.isdtype(factor.dtype, "numeric")
-        or xp.isdtype(factor.dtype, "complex floating")):
+            or xp.isdtype(factor.dtype, "complex floating")):
         raise ValueError('`factor` must be numeric and real.')
     if not xp.all(factor > 1):
         raise ValueError('All elements of `factor` must be greater than 1.')

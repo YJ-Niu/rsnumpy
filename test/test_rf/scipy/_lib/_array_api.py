@@ -73,16 +73,17 @@ def _check_finite(array: Array, xp: ModuleType) -> None:
         msg = "array must not contain infs or NaNs"
         raise ValueError(msg)
 
+
 def _asarray(
-        array: ArrayLike,
-        dtype: Any = None,
-        order: Literal['K', 'A', 'C', 'F'] | None = None,
-        copy: bool | None = None,
-        *,
-        xp: ModuleType | None = None,
-        check_finite: bool = False,
-        subok: bool = False,
-    ) -> Array:
+    array: ArrayLike,
+    dtype: Any = None,
+    order: Literal['K', 'A', 'C', 'F'] | None = None,
+    copy: bool | None = None,
+    *,
+    xp: ModuleType | None = None,
+    check_finite: bool = False,
+    subok: bool = False,
+) -> Array:
     """SciPy-specific replacement for `np.asarray` with `order`, `check_finite`, and
     `subok`.
 
@@ -191,6 +192,7 @@ def _xp_copy_to_numpy(x: Array) -> np.ndarray:
 
 
 _default_xp_ctxvar: ContextVar[ModuleType] = ContextVar("_default_xp")
+
 
 @contextmanager
 def default_xp(xp: ModuleType) -> Generator[None, None, None]:
@@ -574,7 +576,7 @@ def xp_promote(*args, broadcast=False, force_floating=False, xp):
             for arg in args]
 
     if not broadcast:
-        return args[0] if len(args)==1 else tuple(args)
+        return args[0] if len(args) == 1 else tuple(args)
 
     args_not_none = [arg for arg in args if arg is not None]
 
@@ -606,7 +608,7 @@ def xp_promote(*args, broadcast=False, force_floating=False, xp):
 
         out.append(arg)
 
-    return out[0] if len(out)==1 else tuple(out)
+    return out[0] if len(out) == 1 else tuple(out)
 
 
 def xp_float_to_complex(arr: Array, xp: ModuleType | None = None) -> Array:
@@ -657,7 +659,7 @@ def concat_1d(xp: ModuleType | None, *arrays: Iterable[ArrayLike]) -> Array:
     return xp.concat(arys)  # type:ignore[union-attr]
 
 
-### MArray Helpers ###
+# MArray Helpers
 
 
 def is_marray(xp):
@@ -704,7 +706,7 @@ def _masked_apply(f, *, args, kwargs=None, xp):
             else xp.asarray(res, mask=mask))
 
 
-### End MArray Helpers ###
+# End MArray Helpers
 
 
 @dataclasses.dataclass(repr=False)
@@ -738,7 +740,7 @@ def _make_sphinx_capabilities(
     # xpx.lazy_xp_backends kwargs
     allow_dask_compute=False, jax_jit=True,
     # list of tuples [(module name, reason), ...]
-    warnings = (),
+    warnings=(),
     # Whether the function supports MArrays that wrap one of the supported backends
     marray=None,
     # unused in documentation
@@ -757,10 +759,10 @@ def _make_sphinx_capabilities(
         "cupy": _XPSphinxCapability(cpu=None, gpu=True),
         "torch": _XPSphinxCapability(cpu=True, gpu=True),
         "jax.numpy": _XPSphinxCapability(cpu=True, gpu=True,
-            warnings=[] if jax_jit else ["no JIT"]),
+                                         warnings=[] if jax_jit else ["no JIT"]),
         # Note: Dask+CuPy is currently untested and unsupported
         "dask.array": _XPSphinxCapability(cpu=True, gpu=None,
-            warnings=["computes graph"] if allow_dask_compute else []),
+                                          warnings=["computes graph"] if allow_dask_compute else []),
     }
 
     # documentation doesn't display the reason
@@ -808,9 +810,9 @@ def _make_capabilities_note(fun_name, capabilities, extra_note=None):
         return textwrap.dedent(note)
 
     marray_note = (f"`{fun_name}` also accepts "
-        "`MArrays <https://mdhaber.github.io/marray/tutorial.html>`__ "
-        "backed by the backends indicated above; masked values will be treated as "
-        "though they were not present." if capabilities.get("marray", False) else "")
+                   "`MArrays <https://mdhaber.github.io/marray/tutorial.html>`__ "
+                   "backed by the backends indicated above; masked values will be treated as "
+                   "though they were not present." if capabilities.get("marray", False) else "")
 
     # Note: deliberately not documenting array-api-strict
     note = f"""
@@ -825,11 +827,11 @@ def _make_capabilities_note(fun_name, capabilities, extra_note=None):
     ====================  ====================  ====================
     Library               CPU                   GPU
     ====================  ====================  ====================
-    rsnumpy                 {capabilities['numpy']                   }
-    CuPy                  {capabilities['cupy']                    }
-    PyTorch               {capabilities['torch']                   }
-    JAX                   {capabilities['jax.numpy']               }
-    Dask                  {capabilities['dask.array']              }
+    rsnumpy                 {capabilities['numpy']}
+    CuPy                  {capabilities['cupy']}
+    PyTorch               {capabilities['torch']}
+    JAX                   {capabilities['jax.numpy']}
+    Dask                  {capabilities['dask.array']}
     ====================  ====================  ====================
 
     {marray_note or ""}

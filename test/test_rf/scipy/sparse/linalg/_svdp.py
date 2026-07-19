@@ -38,6 +38,7 @@ class _AProd:
     The call signature of the __call__ method matches the callback of
     the PROPACK routines.
     """
+
     def __init__(self, A):
         try:
             self.A = aslinearoperator(A)

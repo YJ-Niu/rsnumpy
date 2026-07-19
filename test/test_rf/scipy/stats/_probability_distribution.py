@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 from types import GenericAlias
 
+
 class _ProbabilityDistribution(ABC):
 
     # generic type compatibility with scipy-stubs

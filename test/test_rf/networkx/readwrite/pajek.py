@@ -36,9 +36,9 @@ def generate_pajek(G):
     for format information.
     """
     if G.name == "":
-        name = "NetworkX"
+        pass
     else:
-        name = G.name
+        G.name
     # Apparently many Pajek format readers can't process this line
     # So we'll leave it out for now.
     # yield '*network %s'%name

@@ -759,8 +759,8 @@ class IntegratorConcurrencyError(RuntimeError):
 
     def __init__(self, name):
         msg = (f"Integrator `{name}` can be used to solve only a single problem "
-                "at a time. If you want to integrate multiple problems, "
-                "consider using a different integrator (see `ode.set_integrator`)")
+               "at a time. If you want to integrate multiple problems, "
+               "consider using a different integrator (see `ode.set_integrator`)")
         RuntimeError.__init__(self, msg)
 
 
@@ -978,7 +978,6 @@ class vode(IntegratorBase):
         # different problems (different n etc.), state needs to be cleared.
         self.state_doubles.fill(0.0)
         self.state_ints.fill(0)
-
 
     def run(self, f, jac, y0, t0, t1, f_params, jac_params):
         # Note: For banded Jacobians, the user provides the compressed format

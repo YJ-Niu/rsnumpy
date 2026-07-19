@@ -22,6 +22,7 @@ import itertools
 import math
 from numbers import Number
 
+import matplotlib.pyplot as plt
 import networkx as nx
 
 __all__ = [
@@ -191,16 +192,14 @@ class CurvedArrowTextBase:
         else:
             if not isinstance(
                 conn,
-                mpl.patches.ConnectionStyle.Angle
-                | mpl.patches.ConnectionStyle.Arc
-                | mpl.patches.ConnectionStyle.Bar,
+                mpl.patches.ConnectionStyle.Angle | mpl.patches.ConnectionStyle.Arc | mpl.patches.ConnectionStyle.Bar,
             ):
                 msg = f"invalid connection style: {type(conn)}"
                 raise TypeError(msg)
             # A. Collect lines
             codes = path_disp.codes
             lines = [
-                points[i - 1 : i + 1]
+                points[i - 1:i + 1]
                 for i in range(1, len(points))
                 if codes[i] == mpl.path.Path.LINETO
             ]
@@ -236,7 +235,11 @@ class CurvedArrowTextBase:
             else:
                 change_x = (cx2 - cx1) / 2
                 change_y = (cy2 - cy1) / 2
-            angle = np.arctan2(change_y, change_x) / (2 * np.pi) * 360
+            angle_val = np.arctan2(change_y, change_x) / (2 * np.pi) * 360
+            if hasattr(angle_val, 'tolist'):
+                angle = float(angle_val.tolist())
+            else:
+                angle = float(angle_val)
             # Text is "right way up"
             if angle > 90:
                 angle -= 180
@@ -367,8 +370,8 @@ def display(
     G : graph
         A networkx graph
 
-    canvas : Matplotlib Axes object, optional
-        Draw the graph in specified Matplotlib axes
+    canvas : matplotlib Axes object, optional
+        Draw the graph in specified matplotlib axes
 
     node_pos : string or function, default "pos"
         A string naming the node attribute storing the position of nodes as a tuple.
@@ -594,7 +597,7 @@ def display(
             labelleft=False,
         )
 
-    ### Helper methods and classes
+    # Helper methods and classes
 
     def node_property_sequence(seq, attr):
         """Return a list of attribute values for `seq`, using a default if needed"""
@@ -614,9 +617,9 @@ def display(
         # it must be a user-default value. Allow attr=None to tell draw to skip
         # attributes which are on the graph
         if (
-            attr is not None
-            and nx.get_node_attributes(node_subgraph, attr) == {}
-            and any(attr == v for k, v in kwargs.items() if "node" in k)
+            attr is not None and nx.get_node_attributes(
+                node_subgraph, attr) == {} and any(
+                    attr == v for k, v in kwargs.items() if "node" in k)
         ):
             return [attr for _ in seq]
 
@@ -649,12 +652,8 @@ def display(
 
     def collection_compatible(e):
         return (
-            get_edge_attr(e, "arrowstyle") == "-"
-            and get_edge_attr(e, "curvature") == "arc3"
-            and get_edge_attr(e, "source_margin") == 0
-            and get_edge_attr(e, "target_margin") == 0
-            # Self-loops will use fancy arrow patches
-            and e[0] != e[1]
+            get_edge_attr(e, "arrowstyle") == "-" and get_edge_attr(e, "curvature") == "arc3" and get_edge_attr(
+                e, "source_margin") == 0 and get_edge_attr(e, "target_margin") == 0 and e[0] != e[1]
         )
 
     def edge_property_sequence(seq, attr):
@@ -671,9 +670,8 @@ def display(
                     raise nx.NetworkXError(f"Attribute '{attr}' missing for edge {e}")
 
         if (
-            attr is not None
-            and nx.get_edge_attributes(edge_subgraph, attr) == {}
-            and any(attr == v for k, v in kwargs.items() if "edge" in k)
+            attr is not None and nx.get_edge_attributes(edge_subgraph, attr) == {} and any(
+                attr == v for k, v in kwargs.items() if "edge" in k)
         ):
             return [attr for _ in seq]
 
@@ -690,9 +688,7 @@ def display(
             raise nx.NetworkXError(f"Attribute '{attr}' missing from edge {e}")
 
         if (
-            attr is not None
-            and nx.get_edge_attributes(edge_subgraph, attr) == {}
-            and attr in kwargs.values()
+            attr is not None and nx.get_edge_attributes(edge_subgraph, attr) == {} and attr in kwargs.values()
         ):
             return attr
 
@@ -710,9 +706,7 @@ def display(
             raise nx.NetworkXError(f"Attribute '{attr}' missing from node {n}")
 
         if (
-            attr is not None
-            and nx.get_node_attributes(subgraph, attr) == {}
-            and attr in kwargs.values()
+            attr is not None and nx.get_node_attributes(subgraph, attr) == {} and attr in kwargs.values()
         ):
             return attr
 
@@ -809,7 +803,7 @@ def display(
     class CurvedArrowText(CurvedArrowTextBase, mpl.text.Text):
         pass
 
-    ### Draw the nodes first
+    # Draw the nodes first
     node_visible = kwargs.get("node_visible", "visible")
     if isinstance(node_visible, bool):
         if node_visible:
@@ -880,8 +874,7 @@ def display(
                                 "border_color",
                                 False,
                             )
-                        )
-                        != "face"
+                        ) != "face"
                         else color[i]
                     )
                     for i, n in enumerate(nodes_with_shape)
@@ -898,7 +891,7 @@ def display(
                 zorder=2,
             )
 
-    ### Draw node labels
+    # Draw node labels
     node_label = kwargs.get("node_label", "label")
     # Plot labels if node_label is not None and not False
     if node_label is not None and node_label is not False:
@@ -937,7 +930,7 @@ def display(
                 bbox=lbl.get("bbox", defaults["node_label"]["bbox"]),
             )
 
-    ### Draw edges
+    # Draw edges
 
     edge_visible = kwargs.get("edge_visible", "visible")
     if isinstance(edge_visible, bool):
@@ -995,7 +988,7 @@ def display(
             fancy_arrows[e] = build_fancy_arrow(e)
             canvas.add_patch(fancy_arrows[e])
 
-    ### Draw edge labels
+    # Draw edge labels
     edge_label = kwargs.get("edge_label", "label")
     default_dict = {}
     if isinstance(edge_label, dict):
@@ -1089,10 +1082,10 @@ def display(
 
 
 def draw(G, pos=None, ax=None, **kwds):
-    """Draw the graph G with Matplotlib.
+    """Draw the graph G with matplotlib.
 
     Draw the graph as a simple representation with no node
-    labels or edge labels and using the full Matplotlib figure area
+    labels or edge labels and using the full matplotlib figure area
     and no axis labels by default.  See draw_networkx() for more
     full-featured drawing that allows title, axis labels etc.
 
@@ -1107,8 +1100,8 @@ def draw(G, pos=None, ax=None, **kwds):
         See :py:mod:`networkx.drawing.layout` for functions that
         compute node positions.
 
-    ax : Matplotlib Axes object, optional
-        Draw the graph in specified Matplotlib axes.
+    ax : matplotlib Axes object, optional
+        Draw the graph in specified matplotlib axes.
 
     kwds : optional keywords
         See networkx.draw_networkx() for a description of optional keywords.
@@ -1168,9 +1161,9 @@ def draw(G, pos=None, ax=None, **kwds):
 
 
 def draw_networkx(G, pos=None, arrows=None, with_labels=True, **kwds):
-    r"""Draw the graph G using Matplotlib.
+    r"""Draw the graph G using matplotlib.
 
-    Draw the graph with Matplotlib with options for node positions,
+    Draw the graph with matplotlib with options for node positions,
     labeling, titles, and many other drawing features.
     See draw() for simple drawing without labels or axes.
 
@@ -1209,8 +1202,8 @@ def draw_networkx(G, pos=None, arrows=None, with_labels=True, **kwds):
     with_labels :  bool (default=True)
         Set to True to draw labels on the nodes.
 
-    ax : Matplotlib Axes object, optional
-        Draw the graph in the specified Matplotlib axes.
+    ax : matplotlib Axes object, optional
+        Draw the graph in the specified matplotlib axes.
 
     nodelist : list (default=list(G))
         Draw only specified nodes
@@ -1236,7 +1229,7 @@ def draw_networkx(G, pos=None, arrows=None, with_labels=True, **kwds):
     alpha : float or None (default=None)
         The node and edge transparency
 
-    cmap : Matplotlib colormap, optional
+    cmap : matplotlib colormap, optional
         Colormap for mapping intensities of nodes
 
     vmin,vmax : float, optional
@@ -1254,7 +1247,7 @@ def draw_networkx(G, pos=None, arrows=None, with_labels=True, **kwds):
         floats from 0-1. If numeric values are specified they will be
         mapped to colors using the edge_cmap and edge_vmin,edge_vmax parameters.
 
-    edge_cmap : Matplotlib colormap, optional
+    edge_cmap : matplotlib colormap, optional
         Colormap for mapping intensities of edges
 
     edge_vmin,edge_vmax : floats, optional
@@ -1387,8 +1380,8 @@ def draw_networkx_nodes(
         A dictionary with nodes as keys and positions as values.
         Positions should be sequences of length 2.
 
-    ax : Matplotlib Axes object, optional
-        Draw the graph in the specified Matplotlib axes.
+    ax : matplotlib Axes object, optional
+        Draw the graph in the specified matplotlib axes.
 
     nodelist : list (default list(G))
         Draw only specified nodes
@@ -1413,7 +1406,7 @@ def draw_networkx_nodes(
         if it is an array, the elements of alpha will be applied to the colors
         in order (cycling through alpha multiple times if necessary).
 
-    cmap : Matplotlib colormap (default=None)
+    cmap : matplotlib colormap (default=None)
         Colormap for mapping intensities of nodes
 
     vmin,vmax : floats or None (default=None)
@@ -1435,7 +1428,7 @@ def draw_networkx_nodes(
         Sets the padding for axis autoscaling. Increase margin to prevent
         clipping for nodes that are near the edges of an image. Values should
         be in the range ``[0, 1]``. See :meth:`matplotlib.axes.Axes.margins`
-        for details. The default is `None`, which uses the Matplotlib default.
+        for details. The default is `None`, which uses the matplotlib default.
 
     hide_ticks : bool, optional
         Hide ticks of axes. When `True` (the default), ticks and ticklabels
@@ -1469,7 +1462,6 @@ def draw_networkx_nodes(
     import matplotlib.collections  # call as mpl.collections
     import matplotlib.pyplot as plt
     import rsnumpy as np
-
     if ax is None:
         ax = plt.gca()
 
@@ -1611,7 +1603,6 @@ class FancyArrowFactory:
     ):
         import matplotlib as mpl
         import matplotlib.patches  # call as mpl.patches
-        import matplotlib.pyplot as plt
         import rsnumpy as np
 
         if isinstance(connectionstyle, str):
@@ -1648,18 +1639,14 @@ class FancyArrowFactory:
         shrink_source = 0  # space from source to tail
         shrink_target = 0  # space from  head to target
         if (
-            self.np.iterable(self.min_source_margin)
-            and not isinstance(self.min_source_margin, str)
-            and not isinstance(self.min_source_margin, tuple)
+            self.np.iterable(self.min_source_margin) and not isinstance(self.min_source_margin, str) and not isinstance(self.min_source_margin, tuple)
         ):
             min_source_margin = self.min_source_margin[i]
         else:
             min_source_margin = self.min_source_margin
 
         if (
-            self.np.iterable(self.min_target_margin)
-            and not isinstance(self.min_target_margin, str)
-            and not isinstance(self.min_target_margin, tuple)
+            self.np.iterable(self.min_target_margin) and not isinstance(self.min_target_margin, str) and not isinstance(self.min_target_margin, tuple)
         ):
             min_target_margin = self.min_target_margin[i]
         else:
@@ -1699,9 +1686,7 @@ class FancyArrowFactory:
             linewidth = self.linewidth
 
         if (
-            self.np.iterable(self.style)
-            and not isinstance(self.style, str)
-            and not isinstance(self.style, tuple)
+            self.np.iterable(self.style) and not isinstance(self.style, str) and not isinstance(self.style, tuple)
         ):
             if len(self.style) > i:
                 linestyle = self.style[i]
@@ -1718,9 +1703,7 @@ class FancyArrowFactory:
             connectionstyle = self.connectionstyle_factory.curved(self.edge_indices[i])
 
         if (
-            self.np.iterable(self.arrowstyle)
-            and not isinstance(self.arrowstyle, str)
-            and not isinstance(self.arrowstyle, tuple)
+            self.np.iterable(self.arrowstyle) and not isinstance(self.arrowstyle, str) and not isinstance(self.arrowstyle, tuple)
         ):
             arrowstyle = self.arrowstyle[i]
         else:
@@ -1813,14 +1796,14 @@ def draw_networkx_edges(
         if it is an array, the elements of alpha will be applied to the colors
         in order (cycling through alpha multiple times if necessary).
 
-    edge_cmap : Matplotlib colormap, optional
+    edge_cmap : matplotlib colormap, optional
         Colormap for mapping intensities of edges
 
     edge_vmin,edge_vmax : floats, optional
         Minimum and maximum for edge colormap scaling
 
-    ax : Matplotlib Axes object, optional
-        Draw the graph in the specified Matplotlib axes.
+    ax : matplotlib Axes object, optional
+        Draw the graph in the specified matplotlib axes.
 
     arrows : bool or None, optional (default=None)
         If `None`, directed graphs draw arrowheads with
@@ -2019,9 +2002,7 @@ def draw_networkx_edges(
     # Check if edge_color is an array of floats and map to edge_cmap.
     # This is the only case handled differently from matplotlib
     if (
-        np.iterable(edge_color)
-        and (len(edge_color) == len(edge_pos))
-        and np.all([isinstance(c, Number) for c in edge_color])
+        np.iterable(edge_color) and (len(edge_color) == len(edge_pos)) and np.all([isinstance(c, Number) for c in edge_color])
     ):
         if edge_cmap is not None:
             assert isinstance(edge_cmap, mpl.colors.Colormap)
@@ -2168,7 +2149,7 @@ def draw_networkx_labels(
     alpha : float or None or dictionary of nodes to floats (default=None)
         The text transparency.
 
-    bbox : Matplotlib bbox, (default is Matplotlib's ax.text default)
+    bbox : matplotlib bbox, (default is matplotlib's ax.text default)
         Specify text box properties (e.g. shape, color etc.) for node labels.
 
     horizontalalignment : string or array of strings (default='center')
@@ -2179,8 +2160,8 @@ def draw_networkx_labels(
         Vertical alignment {'center', 'top', 'bottom', 'baseline', 'center_baseline'}.
         If an array is specified it must be the same length as `nodelist`.
 
-    ax : Matplotlib Axes object, optional
-        Draw the graph in the specified Matplotlib axes.
+    ax : matplotlib Axes object, optional
+        Draw the graph in the specified matplotlib axes.
 
     clip_on : bool (default=True)
         Turn on clipping of node labels at axis boundaries
@@ -2328,7 +2309,7 @@ def draw_networkx_edge_labels(
     alpha : float or None (default=None)
         The text transparency
 
-    bbox : Matplotlib bbox, optional
+    bbox : matplotlib bbox, optional
         Specify text box properties (e.g. shape, color etc.) for edge labels.
         Default is {boxstyle='round', ec=(1.0, 1.0, 1.0), fc=(1.0, 1.0, 1.0)}.
 
@@ -2338,8 +2319,8 @@ def draw_networkx_edge_labels(
     verticalalignment : string (default='center')
         Vertical alignment {'center', 'top', 'bottom', 'baseline', 'center_baseline'}
 
-    ax : Matplotlib Axes object, optional
-        Draw the graph in the specified Matplotlib axes.
+    ax : matplotlib Axes object, optional
+        Draw the graph in the specified matplotlib axes.
 
     rotate : bool (default=True)
         Rotate edge labels to lie parallel to edges

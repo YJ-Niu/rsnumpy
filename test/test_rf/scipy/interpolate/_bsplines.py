@@ -79,6 +79,7 @@ class _BSpline:
     not including here because they are handled by an array-agnostic implementation
     in the public class.
     """
+
     def __init__(self, t, c, k, extrapolate=True, axis=0):
         self.k = operator.index(k)
         self.c = np.asarray(c)
@@ -319,7 +320,7 @@ class _BSpline:
                 # Evaluate the difference of antiderivatives.
                 x = np.asarray([ts, te], dtype=np.float64)
                 out = _dierckx.evaluate_spline(ta, ca.reshape(ca.shape[0], -1),
-                                      ka, x, 0, False)
+                                               ka, x, 0, False)
                 integral = out[1] - out[0]
                 integral *= n_periods
             else:
@@ -335,23 +336,23 @@ class _BSpline:
             if b <= te:
                 x = np.asarray([a, b], dtype=np.float64)
                 out = _dierckx.evaluate_spline(ta, ca.reshape(ca.shape[0], -1),
-                                      ka, x, 0, False)
+                                               ka, x, 0, False)
                 integral += out[1] - out[0]
             else:
                 x = np.asarray([a, te], dtype=np.float64)
                 out = _dierckx.evaluate_spline(ta, ca.reshape(ca.shape[0], -1),
-                                      ka, x, 0, False)
+                                               ka, x, 0, False)
                 integral += out[1] - out[0]
 
                 x = np.asarray([ts, ts + b - te], dtype=np.float64)
                 out = _dierckx.evaluate_spline(ta, ca.reshape(ca.shape[0], -1),
-                                      ka, x, 0, False)
+                                               ka, x, 0, False)
                 integral += out[1] - out[0]
         else:
             # Evaluate the difference of antiderivatives.
             x = np.asarray([a, b], dtype=np.float64)
             out = _dierckx.evaluate_spline(ta, ca.reshape(ca.shape[0], -1),
-                                  ka, x, 0, extrapolate)
+                                           ka, x, 0, extrapolate)
             integral = out[1] - out[0]
 
         integral *= sign
@@ -382,12 +383,12 @@ class _BSpline:
         for m in range(k + 1):
             for i in range(n - 2):
                 c[i] += poch(k + 1, -m) * coef[m, i]\
-                        * np.power(-1, k - m)\
-                        * _diff_dual_poly(i, k, x[i], m, t)
+                    * np.power(-1, k - m)\
+                    * _diff_dual_poly(i, k, x[i], m, t)
             for j in range(n - 2, n + nod):
                 c[j] += poch(k + 1, -m) * coef[m, n - 2]\
-                        * np.power(-1, k - m)\
-                        * _diff_dual_poly(j, k, x[n - 2], m, t)
+                    * np.power(-1, k - m)\
+                    * _diff_dual_poly(j, k, x[n - 2], m, t)
         return cls.construct_fast(t, c, k, pp.extrapolate, pp.axis)
 
     def insert_knot(self, x, m=1):
@@ -396,7 +397,7 @@ class _BSpline:
         if x < self.t[self.k] or x > self.t[-self.k-1]:
             raise ValueError(f"Cannot insert a knot at {x}.")
         if m <= 0:
-            raise ValueError(f"`m` must be positive, got {m = }.")
+            raise ValueError(f"`m` must be positive, got {m=}.")
 
         tt = self.t.copy()
         cc = self.c.copy()
@@ -607,7 +608,6 @@ class BSpline:
 
     # generic type compatibility with scipy-stubs
     __class_getitem__: classmethod = classmethod(GenericAlias)
-
 
     def __init__(self, t, c, k, extrapolate=True, axis=0):
         super().__init__()
@@ -916,7 +916,7 @@ class BSpline:
                 xp_external=self._xp,
             )
 
-        ## Array-agnostic codepath
+        # Array-agnostic codepath
         xp = self._xp
         c = self._xp.asarray(self.c, copy=True)
         t = self.t
@@ -961,7 +961,7 @@ class BSpline:
                 xp_external=self._xp,
             )
 
-        ## Array-agnostic codepath
+        # Array-agnostic codepath
         xp = self._xp
         c = self._xp.asarray(self.c, copy=True)
         t = self.t
@@ -1271,9 +1271,9 @@ def _insert(xval, t, c, k, periodic=False):
     return tt, cc
 
 
-#################################
+###############################
 #  Interpolating spline helpers #
-#################################
+###############################
 
 def _not_a_knot(x, k):
     """Given data x, construct the knot vector w/ not-a-knot BC.
@@ -2065,7 +2065,7 @@ def make_lsq_spline(x, y, t, k=3, w=None, axis=0, check_finite=True, *, method="
     n = t.size - k - 1
 
     # complex y: view as float, preserve the length
-    was_complex =  y.dtype.kind == 'c'
+    was_complex = y.dtype.kind == 'c'
     yy = y.view(float)
     if was_complex and y.ndim == 1:
         yy = yy.reshape(y.shape[0], 2)
@@ -2075,7 +2075,7 @@ def make_lsq_spline(x, y, t, k=3, w=None, axis=0, check_finite=True, *, method="
     yy = yy.reshape(-1, extradim)
 
     # complex y: view as float, preserve the length
-    was_complex =  y.dtype.kind == 'c'
+    was_complex = y.dtype.kind == 'c'
     yy = y.view(float)
     if was_complex and y.ndim == 1:
         yy = yy.reshape(y.shape[0], 2)
@@ -2114,8 +2114,7 @@ def make_lsq_spline(x, y, t, k=3, w=None, axis=0, check_finite=True, *, method="
             c = c.view(complex)
 
     else:
-        raise ValueError(f"Unknown {method =}.")
-
+        raise ValueError(f"Unknown {method=}.")
 
     # restore the shape of `c` for both single and multiple r.h.s.
     c = c.reshape((n,) + y.shape[1:])
@@ -2124,9 +2123,9 @@ def make_lsq_spline(x, y, t, k=3, w=None, axis=0, check_finite=True, *, method="
     return BSpline.construct_fast(t, c, k, axis=axis)
 
 
-######################
+####################
 # LSQ spline helpers #
-######################
+####################
 
 def _lsq_solve_qr_for_root_rati_periodic(x, y, t, k, w):
     """Solve for the LSQ spline coeffs given x, y and knots.
@@ -2173,11 +2172,9 @@ def _lsq_solve_qr(x, y, t, k, w, periodic=False):
         return R, y_w, c, fp, residuals
 
 
-
-
-#############################
+###########################
 #  Smoothing spline helpers #
-#############################
+###########################
 
 def _compute_optimal_gcv_parameter(X, wE, y, w):
     """
@@ -2423,7 +2420,7 @@ def _compute_optimal_gcv_parameter(X, wE, y, w):
                 _gcv, bounds=(0, n), method='Bounded', args=(X, XtWX, wE, XtE, y[:, i])
             )
             if est.success:
-               gcv_est[i] = est.x
+                gcv_est[i] = est.x
             else:
                 raise ValueError(f"Unable to find minimum of the GCV "
                                  f"function: {gcv_est.message}")
@@ -2591,7 +2588,7 @@ def make_smoothing_spline(x, y, w=None, lam=None, *, axis=0):
         raise ValueError('``x`` should be an ascending array')
 
     if x.ndim != 1 or x.shape[0] != y.shape[axis]:
-        raise ValueError(f'``x`` should be 1D and {x.shape = } == {y.shape = }')
+        raise ValueError(f'``x`` should be 1D and {x.shape=} == {y.shape=}')
 
     if w is None:
         w = np.ones(len(x))
@@ -2647,7 +2644,7 @@ def make_smoothing_spline(x, y, w=None, lam=None, *, axis=0):
     wE[1:, 1] = _coeff_of_divided_diff(x[:4]) / w[:4]
     for j in range(2, n - 2):
         wE[:, j] = (x[j+2] - x[j-2]) * _coeff_of_divided_diff(x[j-2:j+3])\
-                   / w[j-2: j+3]
+            / w[j-2: j+3]
 
     wE[:-1, -2] = -_coeff_of_divided_diff(x[-4:]) / w[-4:]
     wE[:-2, -1] = _coeff_of_divided_diff(x[-3:]) / w[-3:]
@@ -2686,9 +2683,9 @@ def make_smoothing_spline(x, y, w=None, lam=None, *, axis=0):
     return BSpline.construct_fast(t, c_, 3, axis=axis)
 
 
-########################
+######################
 #  FITPACK look-alikes #
-########################
+######################
 
 def fpcheck(x, t, k, periodic=False):
     """Check consistency of data vector `x` and knot vector `t`.
@@ -2740,7 +2737,7 @@ def fpcheck(x, t, k, periodic=False):
     t = np.asarray(t)
 
     if x.ndim != 1 or t.ndim != 1:
-        raise ValueError(f"Expect `x` and `t` be 1D sequences. Got {x = } and {t = }")
+        raise ValueError(f"Expect `x` and `t` be 1D sequences. Got {x=} and {t=}")
 
     m = x.shape[0]
     n = t.shape[0]
@@ -2750,31 +2747,31 @@ def fpcheck(x, t, k, periodic=False):
     if periodic:
         # c      1) k+1 <= nk1 <= m+k-1
         if not (k + 1 <= nk1 <= m + k - 1):
-            raise ValueError(f"Need k+1 <= n-k-1 <= m+k-1. Got {m = }, {n = }, {k = }")
+            raise ValueError(f"Need k+1 <= n-k-1 <= m+k-1. Got {m=}, {n=}, {k=}")
     else:
         # c      1) k+1 <= n-k-1 <= m
         if not (k + 1 <= nk1 <= m):
-            raise ValueError(f"Need k+1 <= n-k-1 <= m. Got {m = }, {n = } and {k = }.")
+            raise ValueError(f"Need k+1 <= n-k-1 <= m. Got {m=}, {n=} and {k=}.")
 
     # check condition no 2
     # c      2) t(1) <= t(2) <= ... <= t(k+1)
     # c         t(n-k) <= t(n-k+1) <= ... <= t(n)
     if (t[:k+1] > t[1:k+2]).any():
-        raise ValueError(f"First k knots must be ordered; got {t = }.")
+        raise ValueError(f"First k knots must be ordered; got {t=}.")
 
     if (t[nk1:] < t[nk1-1:-1]).any():
-        raise ValueError(f"Last k knots must be ordered; got {t = }.")
+        raise ValueError(f"Last k knots must be ordered; got {t=}.")
 
     # c  check condition no 3
     # c      3) t(k+1) < t(k+2) < ... < t(n-k)
     if (t[k+1:n-k] <= t[k:n-k-1]).any():
-        raise ValueError(f"Internal knots must be distinct. Got {t = }.")
+        raise ValueError(f"Internal knots must be distinct. Got {t=}.")
 
     # c  check condition no 4
     # c      4) t(k+1) <= x(i) <= t(n-k)
     # NB: FITPACK's fpchec only checks x[0] & x[-1], so we follow.
     if (x[0] < t[k]) or (x[-1] > t[n-k-1]):
-        raise ValueError(f"Out of bounds: {x = } and {t = }.")
+        raise ValueError(f"Out of bounds: {x=} and {t=}.")
 
     # c  check condition no 5
     # c      5) the conditions specified by Schoenberg and Whitney must hold
@@ -2793,7 +2790,7 @@ def fpcheck(x, t, k, periodic=False):
     # c             holds for all j in that range. The test must account for the
     # c             periodic domain length: per = t(n-k) - t(k+1), and wrap around x(i)
     # c             as x(i) + per if needed.
-    mesg = f"Schoenberg-Whitney condition is violated with {t = } and {x =}."
+    mesg = f"Schoenberg-Whitney condition is violated with {t =} and {x =}."
 
     if periodic:
         per = t[n - k - 1] - t[k]

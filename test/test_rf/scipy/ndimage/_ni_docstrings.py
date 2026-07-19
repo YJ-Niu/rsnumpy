@@ -7,21 +7,21 @@ __all__ = ['docfiller']
 
 
 _input_doc = (
-"""input : array_like
+    """input : array_like
     The input array.""")
 _axis_doc = (
-"""axis : int, optional
+    """axis : int, optional
     The axis of `input` along which to calculate. Default is -1.""")
 _output_doc = (
-"""output : array or dtype, optional
+    """output : array or dtype, optional
     The array in which to place the output, or the dtype of the
     returned array. By default an array of the same dtype as input
     will be created.""")
 _nan_doc = (
-"""The behavior of this function with NaN elements is undefined. To control
+    """The behavior of this function with NaN elements is undefined. To control
 behavior in the presence of NaNs, consider using `vectorized_filter`.""")
 _size_foot_doc = (
-"""size : scalar or tuple, optional
+    """size : scalar or tuple, optional
     See footprint, below. Ignored if footprint is given.
 footprint : array, optional
     Either `size` or `footprint` must be defined. `size` gives
@@ -35,7 +35,7 @@ footprint : array, optional
     shape (10,10,10), and `size` is 2, then the actual size used is
     (2,2,2). When `footprint` is given, `size` is ignored.""")
 _mode_reflect_doc = (
-"""mode : {'reflect', 'constant', 'nearest', 'mirror', 'wrap'}, optional
+    """mode : {'reflect', 'constant', 'nearest', 'mirror', 'wrap'}, optional
     The `mode` parameter determines how the input array is extended
     beyond its boundaries. Default is 'reflect'. Behavior for each valid
     value is as follows:
@@ -73,7 +73,7 @@ _mode_reflect_doc = (
         This is a synonym for 'wrap'.""")
 
 _mode_interp_constant_doc = (
-"""mode : {'reflect', 'grid-mirror', 'constant', 'grid-constant', 'nearest', \
+    """mode : {'reflect', 'grid-mirror', 'constant', 'grid-constant', 'nearest', \
 'mirror', 'grid-wrap', 'wrap'}, optional
     The `mode` parameter determines how the input array is extended
     beyond its boundaries. Default is 'constant'. Behavior for each valid
@@ -128,7 +128,7 @@ assert _mode_interp_mirror_doc != _mode_interp_constant_doc, \
     'Default not replaced'
 
 _mode_multiple_doc = (
-"""mode : str or sequence, optional
+    """mode : str or sequence, optional
     The `mode` parameter determines how the input array is extended
     when the filter overlaps a border. By passing a sequence of modes
     with length equal to the number of dimensions of the input array,
@@ -167,17 +167,17 @@ _mode_multiple_doc = (
     'grid-wrap'
         This is a synonym for 'wrap'.""")
 _cval_doc = (
-"""cval : scalar, optional
+    """cval : scalar, optional
     Value to fill past edges of input if `mode` is 'constant'. Default
     is 0.0.""")
 _origin_doc = (
-"""origin : int, optional
+    """origin : int, optional
     Controls the placement of the filter on the input array's pixels.
     A value of 0 (the default) centers the filter over the pixel, with
     positive values shifting the filter to the left, and negative ones
     to the right.""")
 _origin_multiple_doc = (
-"""origin : int or sequence, optional
+    """origin : int or sequence, optional
     Controls the placement of the filter on the input array's pixels.
     A value of 0 (the default) centers the filter over the pixel, with
     positive values shifting the filter to the left, and negative ones
@@ -185,13 +185,13 @@ _origin_multiple_doc = (
     the number of dimensions of the input array, different shifts can
     be specified along each axis.""")
 _extra_arguments_doc = (
-"""extra_arguments : sequence, optional
+    """extra_arguments : sequence, optional
     Sequence of extra positional arguments to pass to passed function.""")
 _extra_keywords_doc = (
-"""extra_keywords : dict, optional
+    """extra_keywords : dict, optional
     dict of extra keyword arguments to pass to passed function.""")
 _prefilter_doc = (
-"""prefilter : bool, optional
+    """prefilter : bool, optional
     Determines if the input array is prefiltered with `spline_filter`
     before interpolation. The default is True, which will create a
     temporary `float64` array of filtered values if ``order > 1``. If
@@ -215,6 +215,6 @@ docdict = {
     'extra_keywords': _extra_keywords_doc,
     'prefilter': _prefilter_doc,
     'nan': _nan_doc,
-    }
+}
 
 docfiller: Final = doccer.filldoc(docdict)

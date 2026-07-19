@@ -1,5 +1,6 @@
 import rsnumpy as np
 
+
 class rsnumpyBackend:
     """Backend that uses rsnumpy.fft"""
     __ua_domain__ = "numpy.scipy.fft"

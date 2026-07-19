@@ -155,6 +155,7 @@ from . import _dierckx      # type: ignore[attr-defined]
 from scipy.sparse import csr_array
 from scipy._lib._util import _validate_int
 
+
 def _ndbspline_call_like_bivariate(ndbs, x, y, dx=0, dy=0, grid=True):
     """
     Evaluate a 2D `NdBSpline` like a classical bivariate API.
@@ -268,6 +269,7 @@ class PackedMatrix:
     matrix A is ``A[i, offset[i]: offset[i] + nz]``.
 
     """
+
     def __init__(self, a, offset, nc):
         self.a = a
         self.offset = offset
@@ -300,7 +302,7 @@ class PackedMatrix:
         return csr_array(
             (data, indices, indptr),
             shape=(m, len_t - k - 1)
-    )
+        )
 
 
 def _stack_augmented_fitpack(A, D, nc, k, p):
@@ -342,6 +344,7 @@ def _stack_augmented_fitpack(A, D, nc, k, p):
     AA[nc:, :] = D.a / p
     offset = np.concatenate((A.offset, D.offset))
     return AA, offset, nc
+
 
 def _solve_2d_fitpack(Ax, Ay, Q, p,
                       kx, tx, x_x,
@@ -470,7 +473,7 @@ def _solve_2d_fitpack(Ax, Ay, Q, p,
 
     # If we stacked penalty rows on the x side, the RHS must be padded with zeros
     # to match the augmented row count for the QR reduction call.
-    if p != -1: # https://github.com/scipy/scipy/blob/v1.16.2/scipy/interpolate/fitpack/fpgrre.f#L97
+    if p != -1:  # https://github.com/scipy/scipy/blob/v1.16.2/scipy/interpolate/fitpack/fpgrre.f#L97
         # Dx.shape[0] is the number of penalty rows; add that many zero rows
         # so Ax_aug and Q have compatible leading dimensions for in-place QR.
         # https://github.com/scipy/scipy/blob/v1.16.2/scipy/interpolate/fitpack/fpgrre.f#L110-L118
@@ -502,7 +505,7 @@ def _solve_2d_fitpack(Ax, Ay, Q, p,
     Q = np.ascontiguousarray(T.T)
 
     # If we stacked penalty rows on the y side, pad RHS with zeros to match Ay_aug.
-    if p != -1: # https://github.com/scipy/scipy/blob/v1.16.2/scipy/interpolate/fitpack/fpgrre.f#L97
+    if p != -1:  # https://github.com/scipy/scipy/blob/v1.16.2/scipy/interpolate/fitpack/fpgrre.f#L97
         # https://github.com/scipy/scipy/blob/v1.16.2/scipy/interpolate/fitpack/fpgrre.f#L110-L118
         Q = np.vstack([Q, np.zeros((Dy.shape[0], Q.shape[1]), dtype=float)])
 
@@ -546,6 +549,7 @@ def _solve_2d_fitpack(Ax, Ay, Q, p,
     # Return coefficients in the conventional (nx_coef, ny_coef) orientation,
     # fp, and the residual matrix R.
     return C.T, fp, R
+
 
 class F:
     """
@@ -613,10 +617,12 @@ class F:
         return fp
 
 # https://github.com/scipy/scipy/blob/v1.16.2/scipy/interpolate/fitpack/fpregr.f#L301-L367
+
+
 def _p_search_hit_s(
-    Ax, Dx, Ay, Dy, Q, kx,
-    tx, x_x, ky, ty, x_y, z, s, fp0, *,
-    p_init=1.0, tol_rel=1e-3, maxit=40):
+        Ax, Dx, Ay, Dy, Q, kx,
+        tx, x_x, ky, ty, x_y, z, s, fp0, *,
+        p_init=1.0, tol_rel=1e-3, maxit=40):
     """
     Search for a smoothing parameter `p` such that `fp(p) ~ s`.
 
@@ -780,7 +786,7 @@ def _initialise_knots(m, xb, xe, k, nest=None):
         nest = max(m + k + 1, 2*k + 3)
     else:
         if nest < 2*(k + 1):
-            raise ValueError(f"`nest` too small: {nest = } < 2*(k+1) = {2*(k+1)}.")
+            raise ValueError(f"`nest` too small: {nest=} < 2*(k+1) = {2*(k+1)}.")
 
     nmin = 2*(k + 1)    # the number of knots for an LSQ polynomial approximation
     nmax = m + k + 1  # the number of knots for the spline interpolation
@@ -792,6 +798,7 @@ def _initialise_knots(m, xb, xe, k, nest=None):
 
 
 TOL = 0.001
+
 
 def _add_knots(x, k, s, t, nmin, nmax,
                nest, fp, fpold,
@@ -874,7 +881,7 @@ def _add_knots(x, k, s, t, nmin, nmax,
     n = t.size
     fpms = fp - s
 
-    # ### c  increase the number of knots. ###
+    # ## c  increase the number of knots.
 
     # c  determine the number of knots nplus we are going to add.
     # https://github.com/scipy/scipy/blob/v1.16.2/scipy/interpolate/fitpack/fpregr.f#L248-L261
@@ -913,9 +920,9 @@ def _add_knots(x, k, s, t, nmin, nmax,
 
 
 def _regrid_fitpack(
-    x, y, Z, *, kx=3, ky=3, s=0.0,
-    maxit=50, nestx=None, nesty=None,
-    bbox=None):
+        x, y, Z, *, kx=3, ky=3, s=0.0,
+        maxit=50, nestx=None, nesty=None,
+        bbox=None):
     """
     Core adaptive bivariate spline fitter using the 1/p-penalty convention.
 
@@ -977,10 +984,10 @@ def _regrid_fitpack(
         tx = _not_a_knot(x_fit, kx)
         ty = _not_a_knot(y_fit, ky)
         (Ax, Ay, Q) = _build_design_matrices(
-             x_fit, y_fit, Z, tx, ty, kx, ky)
+            x_fit, y_fit, Z, tx, ty, kx, ky)
         C0, fp, _ = _solve_2d_fitpack(Ax, Ay, Q, p,
-                                     kx, tx, x_fit, ky, ty,
-                                     y_fit, Z_fit)
+                                      kx, tx, x_fit, ky, ty,
+                                      y_fit, Z_fit)
         return return_NdBSpline(fp, (tx, ty, C0), (kx, ky))
 
     tx, nestx, nminx, nmaxx = _initialise_knots(x_fit.size, xb, xe, kx, nest=nestx)
@@ -997,7 +1004,7 @@ def _regrid_fitpack(
     for _ in range(mpm):
 
         (Ax, Ay, Q) = _build_design_matrices(
-             x_fit, y_fit, Z, tx, ty, kx, ky)
+            x_fit, y_fit, Z, tx, ty, kx, ky)
         # _solve_2d_fitpack now returns R = Z_fit - zhat alongside C0 and fp,
         # so we can reuse it directly for knot placement instead of
         # recomputing zhat a second time via tocsr + dense matmul.

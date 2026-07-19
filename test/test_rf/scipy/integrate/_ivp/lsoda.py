@@ -117,6 +117,7 @@ class LSODA(OdeSolver):
            on Scientific and Statistical Computing, Vol. 4, No. 1, pp. 136-148,
            1983.
     """
+
     def __init__(self, fun, t0, y0, t_bound, first_step=None, min_step=0.0,
                  max_step=np.inf, rtol=1e-3, atol=1e-6, jac=None, lband=None,
                  uband=None, vectorized=False, **extraneous):

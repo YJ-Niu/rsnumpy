@@ -240,7 +240,7 @@ The `root` function supports the following methods:
    optimize.root-excitingmixing
    optimize.root-krylov
    optimize.root-dfsane
-   
+
 Elementwise Minimization and Root Finding
 =========================================
 
@@ -419,39 +419,8 @@ Simple iteration solvers:
 
 """  # noqa: E501
 
-from ._optimize import *
-from ._minimize import *
-from ._root import *
-from ._root_scalar import *
-from ._minpack_py import *
-from ._zeros_py import *
-from ._lbfgsb_py import fmin_l_bfgs_b, LbfgsInvHessProduct
-from ._tnc import fmin_tnc
-from ._cobyla_py import fmin_cobyla
-from ._nonlin import *
-from ._slsqp_py import fmin_slsqp
-from ._nnls import nnls
-from ._basinhopping import basinhopping
-from ._linprog import linprog, linprog_verbose_callback
-from ._lsap import linear_sum_assignment
-from ._differentialevolution import differential_evolution
-from ._lsq import least_squares, lsq_linear
-from ._isotonic import isotonic_regression
-from ._constraints import (NonlinearConstraint,
-                           LinearConstraint,
-                           Bounds)
-from ._hessian_update_strategy import HessianUpdateStrategy, BFGS, SR1
-from ._shgo import shgo
-from ._dual_annealing import dual_annealing
-from ._qap import quadratic_assignment
-from ._direct_py import direct
-from ._milp import milp
 
 # Deprecated namespaces, to be removed in v2.0.0
-from . import (
-    cobyla, lbfgsb, linesearch, minpack, minpack2, moduleTNC, nonlin, optimize,
-    slsqp, tnc, zeros
-)
 
 __all__ = [s for s in dir() if not s.startswith('_')]
 

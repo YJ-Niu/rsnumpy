@@ -292,6 +292,7 @@ class ConstantDenseOutput(DenseOutput):
     This class used for degenerate integration cases: equal integration limits
     or a system with 0 equations.
     """
+
     def __init__(self, t_old, t, value):
         super().__init__(t_old, t)
         self.value = value

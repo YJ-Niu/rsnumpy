@@ -311,6 +311,7 @@ def _root_leastsq(fun, x0, args=(), jac=None,
         N positive entries that serve as a scale factors for the variables.
     """
     nfev = 0
+
     def _wrapped_fun(*fargs):
         """
         Wrapped `func` to track the number of times
@@ -382,6 +383,7 @@ def _root_nonlin_solve(fun, x0, args=(), jac=None,
     sol.update(info)
     return sol
 
+
 def _root_broyden1_doc():
     """
     Options
@@ -449,7 +451,6 @@ def _root_broyden1_doc():
     array([1., 2., 3., 4.])
 
     """
-    pass
 
 
 def _root_broyden2_doc():
@@ -505,7 +506,6 @@ def _root_broyden2_doc():
             Maximum rank for the Broyden matrix.
             Default is infinity (i.e., no rank reduction).
     """
-    pass
 
 
 def _root_anderson_doc():
@@ -547,7 +547,7 @@ def _root_anderson_doc():
             Regularization parameter for numerical stability.
             Compared to unity, good values of the order of 0.01.
     """
-    pass
+
 
 def _root_linearmixing_doc():
     """
@@ -583,7 +583,7 @@ def _root_linearmixing_doc():
         alpha : float, optional
             initial guess for the jacobian is (-1/alpha).
     """
-    pass
+
 
 def _root_diagbroyden_doc():
     """
@@ -619,7 +619,7 @@ def _root_diagbroyden_doc():
         alpha : float, optional
             initial guess for the jacobian is (-1/alpha).
     """
-    pass
+
 
 def _root_excitingmixing_doc():
     """
@@ -658,7 +658,7 @@ def _root_excitingmixing_doc():
             The entries of the diagonal Jacobian are kept in the range
             ``[alpha, alphamax]``.
     """
-    pass
+
 
 def _root_krylov_doc():
     """
@@ -730,4 +730,3 @@ def _root_krylov_doc():
 
             See `scipy.sparse.linalg.lgmres` for details.
     """
-    pass

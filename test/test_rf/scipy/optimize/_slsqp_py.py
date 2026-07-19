@@ -372,16 +372,16 @@ def _minimize_slsqp(func, x0, args=(), jac=None, bounds=None,
                          'args': con.get('args', ())}, )
 
     exit_modes = {-1: "Gradient evaluation required (g & a)",
-                   0: "Optimization terminated successfully",
-                   1: "Function evaluation required (f & c)",
-                   2: "More equality constraints than independent variables",
-                   3: "More than 3*n iterations in LSQ subproblem",
-                   4: "Inequality constraints incompatible",
-                   5: "Singular matrix E in LSQ subproblem",
-                   6: "Singular matrix C in LSQ subproblem",
-                   7: "Rank-deficient equality constraint subproblem HFTI",
-                   8: "Positive directional derivative for linesearch",
-                   9: "Iteration limit reached"}
+                  0: "Optimization terminated successfully",
+                  1: "Function evaluation required (f & c)",
+                  2: "More equality constraints than independent variables",
+                  3: "More than 3*n iterations in LSQ subproblem",
+                  4: "Inequality constraints incompatible",
+                  5: "Singular matrix E in LSQ subproblem",
+                  6: "Singular matrix C in LSQ subproblem",
+                  7: "Rank-deficient equality constraint subproblem HFTI",
+                  8: "Positive directional derivative for linesearch",
+                  9: "Iteration limit reached"}
 
     # Set the parameters that SLSQP will need
     # meq, mieq: number of equality and inequality constraints
@@ -402,7 +402,7 @@ def _minimize_slsqp(func, x0, args=(), jac=None, bounds=None,
         xu.fill(np.nan)
     else:
         bnds = np.array([(_arr_to_scalar(lo), _arr_to_scalar(up))
-                      for (lo, up) in bounds], float)
+                         for (lo, up) in bounds], float)
         if bnds.shape[0] != n:
             raise IndexError('SLSQP Error: the length of bounds is not '
                              'compatible with that of x0.')
@@ -571,6 +571,8 @@ def _minimize_slsqp(func, x0, args=(), jac=None, bounds=None,
     )
 
 # The following functions modify their first input argument in-place.
+
+
 def _eval_constraint(d: NDArray, x: NDArray, cons: dict, m: int, meq: int):
     if m == 0:
         return

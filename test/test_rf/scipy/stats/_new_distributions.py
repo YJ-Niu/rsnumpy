@@ -494,9 +494,9 @@ class Binomial(DiscreteDistribution):
         #   author to specify threshold other than median in case median is expensive
         median = self._icdf_formula(0.5, n=n, p=p)
         return xpx.apply_where(x < median, (x, n, p),
-            lambda *args: np.log(scu._binom_cdf(*args)),
-            lambda *args: np.log1p(-scu._binom_sf(*args))
-        )
+                               lambda *args: np.log(scu._binom_cdf(*args)),
+                               lambda *args: np.log1p(-scu._binom_sf(*args))
+                               )
 
     def _ccdf_formula(self, x, *, n, p, **kwargs):
         return scu._binom_sf(x, n, p)
@@ -504,9 +504,9 @@ class Binomial(DiscreteDistribution):
     def _logccdf_formula(self, x, *, n, p, **kwargs):
         median = self._icdf_formula(0.5, n=n, p=p)
         return xpx.apply_where(x < median, (x, n, p),
-            lambda *args: np.log1p(-scu._binom_cdf(*args)),
-            lambda *args: np.log(scu._binom_sf(*args))
-        )
+                               lambda *args: np.log1p(-scu._binom_cdf(*args)),
+                               lambda *args: np.log(scu._binom_sf(*args))
+                               )
 
     def _icdf_formula(self, x, *, n, p, **kwargs):
         return scu._binom_ppf(x, n, p)

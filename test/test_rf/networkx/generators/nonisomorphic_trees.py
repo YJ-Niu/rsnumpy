@@ -193,7 +193,7 @@ def _next_tree(candidate):
             new_left, new_rest = _split_tree(new_candidate)
             new_left_height = max(new_left)
             suffix = range(1, new_left_height + 2)
-            new_candidate[-len(suffix) :] = suffix
+            new_candidate[-len(suffix):] = suffix
         return new_candidate
 
 

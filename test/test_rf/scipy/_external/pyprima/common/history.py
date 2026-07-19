@@ -9,6 +9,7 @@ Dedicated to late Professor M. J. D. Powell FRS (1936--2015).
 Python translation by Nickolai Belakovski.
 '''
 
+
 def savehist(maxhist, x, xhist, f, fhist, cstrv, chist, constr, conhist):
     '''
     Save the data values to the history lists.

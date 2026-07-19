@@ -449,10 +449,10 @@ def shgo(
     # use in context manager to make sure that any parallelization
     # resources are freed.
     with SHGO(func, bounds, args=args, constraints=constraints, n=n,
-               iters=iters, callback=callback,
-               minimizer_kwargs=minimizer_kwargs,
-               options=options, sampling_method=sampling_method,
-               workers=workers) as shc:
+              iters=iters, callback=callback,
+              minimizer_kwargs=minimizer_kwargs,
+              options=options, sampling_method=sampling_method,
+              workers=workers) as shc:
         # Run the algorithm, process results and test success
         shc.iterate_all()
 
@@ -1535,8 +1535,7 @@ class SHGO:
                                     'will be reduced in this mode.')
                     self.qhull_incremental = False
                     self.Tri = spatial.Delaunay(self.C,
-                                                incremental=
-                                                self.qhull_incremental)
+                                                incremental=self.qhull_incremental)
                 else:
                     raise
 

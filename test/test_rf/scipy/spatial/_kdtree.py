@@ -146,10 +146,11 @@ class Rectangle:
     If any element of `maxes` is smaller than the corresponding element in `mins`, the
     values are swapped automatically.
     """
+
     def __init__(self, maxes, mins):
         """Construct a hyperrectangle."""
-        self.maxes = np.maximum(maxes,mins).astype(float)
-        self.mins = np.minimum(maxes,mins).astype(float)
+        self.maxes = np.maximum(maxes, mins).astype(float)
+        self.mins = np.minimum(maxes, mins).astype(float)
         self.m, = self.maxes.shape
 
     def __repr__(self):
@@ -1009,13 +1010,13 @@ def distance_matrix(x, y, p=2.0, threshold=1000000):
                          f"{kk}-dimensional vectors")
 
     if m*n*k <= threshold:
-        return minkowski_distance(x[:,np.newaxis,:],y[np.newaxis,:,:],p)
+        return minkowski_distance(x[:, np.newaxis, :], y[np.newaxis, :, :], p)
     else:
-        result = np.empty((m,n),dtype=float)  # FIXME: figure out the best dtype
+        result = np.empty((m, n), dtype=float)  # FIXME: figure out the best dtype
         if m < n:
             for i in range(m):
-                result[i,:] = minkowski_distance(x[i],y,p)
+                result[i, :] = minkowski_distance(x[i], y, p)
         else:
             for j in range(n):
-                result[:,j] = minkowski_distance(x,y[j],p)
+                result[:, j] = minkowski_distance(x, y[j], p)
         return result

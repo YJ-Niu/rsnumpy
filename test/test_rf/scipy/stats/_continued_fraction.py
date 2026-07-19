@@ -13,6 +13,7 @@ from scipy import special
 # Interpret/return |f_n - f_{n-1}| as an error estimate?
 # Return gracefully for size=0 arrays
 
+
 def _logaddexp(x, y, xp=None):
     # logaddexp that supports complex numbers
     xp = array_namespace(x, y) if xp is None else xp
@@ -348,7 +349,6 @@ def _continued_fraction(a, b, *, args=(), tolerances=None, maxiter=100, log=Fals
                      else Cn + Dn)
         work.fn = (work.fn * work.CnDn if not log
                    else work.fn + work.CnDn)
-
 
         work.Cnm1, work.Dnm1 = Cn, Dn
 

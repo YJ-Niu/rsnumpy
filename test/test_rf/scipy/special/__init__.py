@@ -1,3 +1,4 @@
+from scipy._lib._testutils import PytestTester
 """
 ========================================
 Special functions (:mod:`scipy.special`)
@@ -814,7 +815,6 @@ from ._spherical_bessel import (
 )
 
 # Deprecated namespaces, to be removed in v2.0.0
-from . import add_newdocs, basic, orthogonal, specfun, sf_error, spfun_stats
 
 # We replace some function definitions from _ufuncs with those from
 # _support_alternative_backends above, but those are all listed in _ufuncs.__all__,
@@ -837,6 +837,5 @@ __all__ += [
     'spherical_kn',
 ]
 
-from scipy._lib._testutils import PytestTester
 test = PytestTester(__name__)
 del PytestTester

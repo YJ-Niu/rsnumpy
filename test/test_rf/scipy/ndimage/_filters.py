@@ -92,6 +92,7 @@ def _vectorized_filter_iv(input, function, size, footprint, output, mode, cval, 
         # If provided, `footprint` must be array-like
         footprint = xp.asarray(footprint, dtype=xp.bool)
         size = footprint.shape
+
         def footprinted_function(input, *args, axis=-1, **kwargs):
             return function(input[..., footprint], *args, axis=-1, **kwargs)
 
@@ -433,7 +434,7 @@ def vectorized_filter(input, function, *, size=None, footprint=None, output=None
 
     (input, function, size, mode, cval, origin, working_axes, axes, n_axes, n_batch, xp
      ) = _vectorized_filter_iv(input, function, size, footprint, output, mode, cval,
-        origin, axes, batch_memory)
+                               origin, axes, batch_memory)
 
     # `np.pad`/`cp.pad` raises with these sorts of cases, but the best result is
     # probably to return the original array. It could be argued that we should call

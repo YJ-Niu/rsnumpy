@@ -9,6 +9,7 @@ class DegenerateDataWarning(RuntimeWarning):
     msg : str, optional
         Warning message.
     """
+
     def __init__(self, msg=None):
         if msg is None:
             msg = ("Degenerate data encountered; results may not be reliable.")
@@ -23,6 +24,7 @@ class ConstantInputWarning(DegenerateDataWarning):
     msg : str, optional
         Warning message.
     """
+
     def __init__(self, msg=None):
         if msg is None:
             msg = ("All values in data are exactly equal; "
@@ -38,6 +40,7 @@ class NearConstantInputWarning(DegenerateDataWarning):
     msg : str, optional
         Warning message.
     """
+
     def __init__(self, msg=None):
         if msg is None:
             msg = ("All values in data are nearly equal; "
@@ -56,6 +59,7 @@ class FitError(RuntimeError):
     msg : str, optional
         Error message.
     """
+
     def __init__(self, msg=None):
         if msg is None:
             msg = ("An error occurred when fitting a distribution to data.")

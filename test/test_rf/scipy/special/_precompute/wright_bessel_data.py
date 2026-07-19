@@ -109,7 +109,7 @@ def main():
         [1.5, 0.1, 500],
         [1.5, 20, 100000],
         [1.5, 100, 100000],
-        ]).tolist()
+    ]).tolist()
 
     does_fail = np.full_like(a_range, False, dtype=bool)
     for i in range(x_range.size):

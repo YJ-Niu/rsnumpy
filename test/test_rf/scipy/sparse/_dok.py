@@ -382,7 +382,7 @@ class _dok_base(_spbase, IndexMixin, dict):
             if len(x_set) == 1:
                 x_set = np.full(len(idx_set), x_set[0], dtype=self.dtype)
             else:
-              raise ValueError("Need len(index)==len(data) or len(data)==1")
+                raise ValueError("Need len(index)==len(data) or len(data)==1")
         for i, v in zip(idx_set, x_set):
             if v:
                 self._dict[i] = v

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import optparse
 
-import rsplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 
 import skrf as rf
 

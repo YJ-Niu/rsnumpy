@@ -9,6 +9,7 @@ __all__ = [  # noqa: F822
     'MatlabFunction', 'mat_struct', 'varmats_from_mat',
 ]
 
+
 def __dir__():
     return __all__
 

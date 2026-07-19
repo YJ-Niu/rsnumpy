@@ -67,7 +67,6 @@ class ClusterWarning(UserWarning):
     """
     A ``UserWarning`` raised during clustering.
     """
-    pass
 
 
 def _warning(s):
@@ -936,7 +935,7 @@ def linkage(y, method='single', metric='euclidean', optimal_ordering=False):
     elif y.ndim == 2:
         if (not lazy and y.shape[0] == y.shape[1]
             and xp.all(xpx.isclose(xp.linalg.diagonal(y), 0))
-            and xp.all(y >= 0) and xp.all(xpx.isclose(y, y.T))):
+                and xp.all(y >= 0) and xp.all(xpx.isclose(y, y.T))):
             warnings.warn('The symmetric non-negative hollow observation '
                           'matrix looks suspiciously like an uncondensed '
                           'distance matrix',
@@ -955,7 +954,7 @@ def linkage(y, method='single', metric='euclidean', optimal_ordering=False):
     def cy_linkage(y, validate):
         if validate and not np.all(np.isfinite(y)):
             raise ValueError("The condensed distance matrix must contain only "
-                            "finite values.")
+                             "finite values.")
 
         if method == 'single':
             return _hierarchy.mst_single_linkage(y, n)
@@ -1379,18 +1378,18 @@ def to_tree(Z, rd=False):
         fj = _int_floor(row[1], xp)
         if fi > i + n:
             raise ValueError('Corrupt matrix Z. Index to derivative cluster '
-                              f'is used before it is formed. See row {fi}, '
-                              'column 0')
+                             f'is used before it is formed. See row {fi}, '
+                             'column 0')
         if fj > i + n:
             raise ValueError('Corrupt matrix Z. Index to derivative cluster '
-                              f'is used before it is formed. See row {fj}, '
-                              'column 1')
+                             f'is used before it is formed. See row {fj}, '
+                             'column 1')
 
         nd = ClusterNode(i + n, d[fi], d[fj], row[2])
         #                ^ id   ^ left ^ right ^ dist
         if row[3] != nd.count:
             raise ValueError(f'Corrupt matrix Z. The count Z[{i},3] is '
-                              'incorrect.')
+                             'incorrect.')
         d[n + i] = nd
 
     if rd:
@@ -1450,7 +1449,7 @@ def optimal_leaf_ordering(Z, y, metric='euclidean'):
     elif y.ndim == 2:
         if (not lazy and y.shape[0] == y.shape[1]
             and xp.all(xpx.isclose(xp.linalg.diagonal(y), 0))
-            and xp.all(y >= 0) and xp.all(xpx.isclose(y, y.T))):
+                and xp.all(y >= 0) and xp.all(xpx.isclose(y, y.T))):
             warnings.warn('The symmetric non-negative hollow observation '
                           'matrix looks suspiciously like an uncondensed '
                           'distance matrix',

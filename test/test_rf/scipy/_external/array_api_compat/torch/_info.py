@@ -11,6 +11,7 @@ import torch
 
 from functools import cache
 
+
 class __array_namespace_info__:
     """
     Get the array API inspection namespace for PyTorch.
@@ -169,7 +170,6 @@ class __array_namespace_info__:
             "integral": default_integral,
             "indexing": default_integral,
         }
-
 
     def _dtypes(self, kind):
         bool = torch.bool

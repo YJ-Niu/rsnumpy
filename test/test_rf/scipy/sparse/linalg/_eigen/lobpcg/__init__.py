@@ -7,7 +7,6 @@ LOBPCG is a preconditioned eigensolver for large symmetric positive definite
 Call the function lobpcg - see help for lobpcg.lobpcg.
 
 """
-from .lobpcg import *
 
 __all__ = [s for s in dir() if not s.startswith('_')]
 

@@ -120,10 +120,10 @@ class HBInfo:
         total_nlines = pointer_nlines + indices_nlines + values_nlines
 
         return cls(title, key,
-            total_nlines, pointer_nlines, indices_nlines, values_nlines,
-            mxtype, nrows, ncols, nnon_zeros,
-            pointer_fmt.fortran_format, indices_fmt.fortran_format,
-            values_fmt.fortran_format)
+                   total_nlines, pointer_nlines, indices_nlines, values_nlines,
+                   mxtype, nrows, ncols, nnon_zeros,
+                   pointer_fmt.fortran_format, indices_fmt.fortran_format,
+                   values_fmt.fortran_format)
 
     @classmethod
     def from_file(cls, fid):
@@ -197,7 +197,7 @@ class HBInfo:
             raise ValueError(
                 f"Unexpected value {nelementals} for nltvl (last entry of line 3)"
             )
-        
+
         # Fourth line
         line = fid.readline().strip("\n")
 
@@ -212,10 +212,10 @@ class HBInfo:
                    rhs_nlines, nelementals)
 
     def __init__(self, title, key,
-            total_nlines, pointer_nlines, indices_nlines, values_nlines,
-            mxtype, nrows, ncols, nnon_zeros,
-            pointer_format_str, indices_format_str, values_format_str,
-            right_hand_sides_nlines=0, nelementals=0):
+                 total_nlines, pointer_nlines, indices_nlines, values_nlines,
+                 mxtype, nrows, ncols, nnon_zeros,
+                 pointer_format_str, indices_format_str, values_format_str,
+                 right_hand_sides_nlines=0, nelementals=0):
         """Do not use this directly, but the class ctrs (from_* functions)."""
         if title is None:
             title = "No Title"
@@ -310,19 +310,19 @@ def _expect_int(value, msg=None):
 def _read_hb_data(content, header):
     # XXX: look at a way to reduce memory here (big string creation)
     ptr_string = "".join([content.read(header.pointer_nbytes_full),
-                           content.readline()])
+                          content.readline()])
     ptr = np.fromstring(ptr_string,
-            dtype=int, sep=' ')
+                        dtype=int, sep=' ')
 
     ind_string = "".join([content.read(header.indices_nbytes_full),
-                       content.readline()])
+                          content.readline()])
     ind = np.fromstring(ind_string,
-            dtype=int, sep=' ')
+                        dtype=int, sep=' ')
 
     val_string = "".join([content.read(header.values_nbytes_full),
                           content.readline()])
     val = np.fromstring(val_string,
-            dtype=header.values_dtype, sep=' ')
+                        dtype=header.values_dtype, sep=' ')
 
     return csc_array((val, ind-1, ptr-1), shape=(header.nrows, header.ncols))
 
@@ -366,11 +366,11 @@ class HBMatrixType:
         "integer": "I",
     }
     _q2f_structure = {
-            "symmetric": "S",
-            "unsymmetric": "U",
-            "hermitian": "H",
-            "skewsymmetric": "Z",
-            "rectangular": "R"
+        "symmetric": "S",
+        "unsymmetric": "U",
+        "hermitian": "H",
+        "skewsymmetric": "Z",
+        "rectangular": "R"
     }
     _q2f_storage = {
         "assembled": "A",
@@ -409,8 +409,8 @@ class HBMatrixType:
     @property
     def fortran_format(self):
         return self._q2f_type[self.value_type] + \
-               self._q2f_structure[self.structure] + \
-               self._q2f_storage[self.storage]
+            self._q2f_structure[self.structure] + \
+            self._q2f_storage[self.storage]
 
     def __repr__(self):
         return f"HBMatrixType({self.value_type}, {self.structure}, {self.storage})"
@@ -432,7 +432,7 @@ class HBFile:
         if hb_info is None:
             self._hb_info = HBInfo.from_file(file)
         else:
-            #raise OSError("file %s is not writable, and hb_info "
+            # raise OSError("file %s is not writable, and hb_info "
             #              "was given." % file)
             self._hb_info = hb_info
 

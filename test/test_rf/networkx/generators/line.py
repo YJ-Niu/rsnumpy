@@ -207,7 +207,7 @@ def _lg_undirected(G, selfloops=False, create_using=None):
             edges.update(
                 [
                     tuple(sorted((a, b), key=edge_key_function))
-                    for b in nodes[i + shift :]
+                    for b in nodes[i + shift:]
                 ]
             )
 

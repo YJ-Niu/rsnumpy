@@ -5,7 +5,7 @@ from scipy.special import beta
 
 # The following code was used to generate the Pade coefficients for the
 # Tukey Lambda variance function.  Version 0.17 of mpmath was used.
-#---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # import mpmath as mp
 #
 # mp.mp.dps = 60
@@ -25,7 +25,7 @@ from scipy.special import beta
 # p, q = mp.pade(t, 4, 4)
 # print("p =", [mp.fp.mpf(c) for c in p])
 # print("q =", [mp.fp.mpf(c) for c in q])
-#---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 
 # Pade coefficients for the Tukey Lambda variance function.
 _tukeylambda_var_pc = [3.289868133696453, 0.7306125098871127,
@@ -102,7 +102,7 @@ def tukeylambda_variance(lam):
 
 # The following code was used to generate the Pade coefficients for the
 # Tukey Lambda kurtosis function.  Version 0.17 of mpmath was used.
-#---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 # import mpmath as mp
 #
 # mp.mp.dps = 60
@@ -130,7 +130,7 @@ def tukeylambda_variance(lam):
 # p, q = mp.pade(t, 4, 4)
 # print("p =", [mp.fp.mpf(c) for c in p])
 # print("q =", [mp.fp.mpf(c) for c in q])
-#---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 
 # Pade coefficients for the Tukey Lambda kurtosis function.
 _tukeylambda_kurt_pc = [1.2, -5.853465139719495, -22.653447381131077,

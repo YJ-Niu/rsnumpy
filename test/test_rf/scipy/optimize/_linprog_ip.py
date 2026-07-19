@@ -255,8 +255,8 @@ def _get_delta(A, b, c, x, y, z, tau, kappa, gamma, eta, sparse=False,
                 rhatxs = ((1 - alpha) * gamma * mu -
                           x * z - alpha**2 * d_x * d_z)
                 rhattk = ((1 - alpha) * gamma * mu -
-                    tau * kappa -
-                    alpha**2 * d_tau * d_kappa)
+                          tau * kappa -
+                          alpha**2 * d_tau * d_kappa)
             else:  # if the correction is for "predictor-corrector"
                 # Reference [4] Eq. 8.13
                 rhatxs -= d_x * d_z

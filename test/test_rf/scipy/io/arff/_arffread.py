@@ -54,21 +54,19 @@ r_wcomattrval = re.compile(r"(\S+)\s+(..+$)")
 class ArffError(OSError):
     """
     Base exception for errors when reading ARFF files.
-    
+
     Raised when an ARFF file cannot be read due to file access issues,
     corruption, or unsupported features.
     """
-    pass
 
 
 class ParseArffError(ArffError):
     """
     Exception for syntax and parsing errors in ARFF files.
-    
+
     Raised when an ARFF file has invalid syntax, malformed attributes,
     or data that doesn't match the expected format.
     """
-    pass
 
 
 # ----------
@@ -487,10 +485,10 @@ def split_data_line(line, dialect=None):
     # Remove the line end if any
     if line[-1] == '\n':
         line = line[:-1]
-    
+
     # Remove potential trailing whitespace
     line = line.strip()
-    
+
     sniff_line = line
 
     # Add a delimiter if none is present, so that the csv.Sniffer
@@ -701,6 +699,7 @@ class MetaData:
         # Getting attribute type
         types = meta.types()
     """
+
     def __init__(self, rel, attr):
         self.name = rel
         self._attributes = {a.name: a for a in attr}
@@ -890,4 +889,3 @@ def _loadarff(ofile):
     # No error should happen here: it is a bug otherwise
     data = np.array(a, [(a.name, a.dtype) for a in attr])
     return data, meta
-

@@ -9,7 +9,7 @@ Additional statistics functions with support for masked arrays.
 __all__ = ['compare_medians_ms',
            'hdquantiles', 'hdmedian', 'hdquantiles_sd',
            'idealfourths',
-           'median_cihs','mjci','mquantiles_cimj',
+           'median_cihs', 'mjci', 'mquantiles_cimj',
            'rsh',
            'trimmed_mean_ci',]
 
@@ -77,13 +77,13 @@ def hdquantiles(data, prob=(.25, .5, .75), axis=None, var=False,):
     75th percentile: 7.430626414674935
 
     """
-    def _hd_1D(data,prob,var):
+    def _hd_1D(data, prob, var):
         "Computes the HD quantiles for a 1D array. Returns nan for invalid data."
         xsorted = np.squeeze(np.sort(data.compressed().view(ndarray)))
         # Don't use length here, in case we have a rsnumpy scalar
         n = xsorted.size
 
-        hd = np.empty((2,len(prob)), float64)
+        hd = np.empty((2, len(prob)), float64)
         if n < 2:
             hd.flat = np.nan
             if var:
@@ -92,13 +92,13 @@ def hdquantiles(data, prob=(.25, .5, .75), axis=None, var=False,):
 
         v = np.arange(n+1) / float(n)
         betacdf = beta.cdf
-        for (i,p) in enumerate(prob):
+        for (i, p) in enumerate(prob):
             _w = betacdf(v, (n+1)*p, (n+1)*(1-p))
             w = _w[1:] - _w[:-1]
             hd_mean = np.dot(w, xsorted)
-            hd[0,i] = hd_mean
+            hd[0, i] = hd_mean
             #
-            hd[1,i] = np.dot(w, (xsorted-hd_mean)**2)
+            hd[1, i] = np.dot(w, (xsorted-hd_mean)**2)
             #
         hd[0, prob == 0] = xsorted[0]
         hd[0, prob == 1] = xsorted[-1]
@@ -143,7 +143,7 @@ def hdmedian(data, axis=-1, var=False):
         (2,).
 
     """
-    result = hdquantiles(data,[0.5], axis=axis, var=var)
+    result = hdquantiles(data, [0.5], axis=axis, var=var)
     return result.squeeze()
 
 
@@ -183,7 +183,7 @@ def hdquantiles_sd(data, prob=(.25, .5, .75), axis=None):
         vv = np.arange(n) / float(n-1)
         betacdf = beta.cdf
 
-        for (i,p) in enumerate(prob):
+        for (i, p) in enumerate(prob):
             _w = betacdf(vv, n*p, n*(1-p))
             w = _w[1:] - _w[:-1]
             # cumulative sum of weights and data points if
@@ -210,7 +210,7 @@ def hdquantiles_sd(data, prob=(.25, .5, .75), axis=None):
     return ma.fix_invalid(result, copy=False).ravel()
 
 
-def trimmed_mean_ci(data, limits=(0.2,0.2), inclusive=(True,True),
+def trimmed_mean_ci(data, limits=(0.2, 0.2), inclusive=(True, True),
                     alpha=0.05, axis=None):
     """
     Selected confidence interval of the trimmed mean along the given axis.
@@ -255,9 +255,9 @@ def trimmed_mean_ci(data, limits=(0.2,0.2), inclusive=(True,True),
     data = ma.array(data, copy=False)
     trimmed = mstats.trimr(data, limits=limits, inclusive=inclusive, axis=axis)
     tmean = trimmed.mean(axis)
-    tstde = mstats.trimmed_stde(data,limits=limits,inclusive=inclusive,axis=axis)
+    tstde = mstats.trimmed_stde(data, limits=limits, inclusive=inclusive, axis=axis)
     df = trimmed.count(axis) - 1
-    tppf = t.ppf(1-alpha/2.,df)
+    tppf = t.ppf(1-alpha/2., df)
     return np.array((tmean - tppf*tstde, tmean+tppf*tstde))
 
 
@@ -284,12 +284,12 @@ def mjci(data, prob=(0.25, 0.5, 0.75), axis=None):
         betacdf = beta.cdf
 
         mj = np.empty(len(prob), float64)
-        x = np.arange(1,n+1, dtype=float64) / n
+        x = np.arange(1, n+1, dtype=float64) / n
         y = x - 1./n
-        for (i,m) in enumerate(prob):
-            W = betacdf(x,m-1,n-m) - betacdf(y,m-1,n-m)
-            C1 = np.dot(W,data)
-            C2 = np.dot(W,data**2)
+        for (i, m) in enumerate(prob):
+            W = betacdf(x, m-1, n-m) - betacdf(y, m-1, n-m)
+            C1 = np.dot(W, data)
+            C2 = np.dot(W, data**2)
             mj[i] = np.sqrt(C2 - C1**2)
         return mj
 
@@ -368,11 +368,11 @@ def median_cihs(data, alpha=0.05, axis=None):
         n = len(data)
         alpha = min(alpha, 1-alpha)
         k = int(binom._ppf(alpha/2., n, 0.5))
-        gk = binom.cdf(n-k,n,0.5) - binom.cdf(k-1,n,0.5)
+        gk = binom.cdf(n-k, n, 0.5) - binom.cdf(k-1, n, 0.5)
         if gk < 1-alpha:
             k -= 1
-            gk = binom.cdf(n-k,n,0.5) - binom.cdf(k-1,n,0.5)
-        gkk = binom.cdf(n-k-1,n,0.5) - binom.cdf(k,n,0.5)
+            gk = binom.cdf(n-k, n, 0.5) - binom.cdf(k-1, n, 0.5)
+        gkk = binom.cdf(n-k-1, n, 0.5) - binom.cdf(k, n, 0.5)
         I = (gk - 1 + alpha)/(gk - gkk)
         lambd = (n-k) * I / float(k + (n-2*k)*I)
         lims = (lambd*data[k] + (1-lambd)*data[k-1],
@@ -440,7 +440,7 @@ def compare_medians_ms(group_1, group_2, axis=None):
     >>> stats.mstats.compare_medians_ms(x, y, axis=1)
     array([0.36908985, 0.36092538, 0.2765313 ])
     """
-    (med_1, med_2) = (ma.median(group_1,axis=axis), ma.median(group_2,axis=axis))
+    (med_1, med_2) = (ma.median(group_1, axis=axis), ma.median(group_2, axis=axis))
     (std_1, std_2) = (mstats.stde_median(group_1, axis=axis),
                       mstats.stde_median(group_2, axis=axis))
     W = np.abs(med_1 - med_2) / ma.sqrt(std_1**2 + std_2**2)
@@ -473,8 +473,8 @@ def idealfourths(data, axis=None):
         x = data.compressed()
         n = len(x)
         if n < 3:
-            return [np.nan,np.nan]
-        (j,h) = divmod(n/4. + 5/12.,1)
+            return [np.nan, np.nan]
+        (j, h) = divmod(n/4. + 5/12., 1)
         j = int(j)
         qlo = (1-h)*x[j-1] + h*x[j]
         k = n - j
@@ -515,6 +515,6 @@ def rsh(data, points=None):
     n = data.count()
     r = idealfourths(data, axis=None)
     h = 1.2 * (r[-1]-r[0]) / n**(1./5)
-    nhi = (data[:,None] <= points[None,:] + h).sum(0)
-    nlo = (data[:,None] < points[None,:] - h).sum(0)
+    nhi = (data[:, None] <= points[None, :] + h).sum(0)
+    nlo = (data[:, None] < points[None, :] - h).sum(0)
     return (nhi-nlo) / (2.*n*h)

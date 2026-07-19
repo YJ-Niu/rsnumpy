@@ -18,4 +18,3 @@ def __getattr__(name):
     return _sub_module_deprecation(sub_package="linalg", module="decomp_schur",
                                    private_modules=["_decomp_schur"], all=__all__,
                                    attribute=name)
-

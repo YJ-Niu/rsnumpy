@@ -873,7 +873,7 @@ def recursive_simple_cycles(G):
             for node in component:
                 blocked[node] = False
                 B[node][:] = []
-            dummy = circuit(startnode, startnode, component)
+            circuit(startnode, startnode, component)
     return result
 
 

@@ -51,6 +51,7 @@ MINIMIZE_METHODS_NEW_CB = ['nelder-mead', 'powell', 'cg', 'bfgs', 'newton-cg',
 
 MINIMIZE_SCALAR_METHODS = ['brent', 'bounded', 'golden']
 
+
 def minimize(fun, x0, args=(), method=None, jac=None, hess=None,
              hessp=None, bounds=None, constraints=(), tol=None,
              callback=None, options=None):
@@ -1064,6 +1065,7 @@ class _Patch_Callback_Equal_Variables:
 
 class _Remove_From_Func:
     """Wraps a function such that fixed variables need not be passed in"""
+
     def __init__(self, fun_in, i_fixed, x_fixed, min_dim=None, remove=0):
         self.fun_in = fun_in
         self.i_fixed = i_fixed
@@ -1117,6 +1119,7 @@ def _validate_bounds(bounds, x0, meth):
         raise ValueError(msg) from e
 
     return bounds
+
 
 def standardize_bounds(bounds, x0, meth):
     """Converts bounds to the form required by the solver."""

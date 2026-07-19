@@ -211,6 +211,7 @@ fn has_fancy(indices: &[IndexDesc]) -> bool {
         .any(|idx| matches!(idx, IndexDesc::Fancy(_) | IndexDesc::FancyMulti(_, _)))
 }
 
+#[allow(dead_code)]
 fn build_dim_lists(indices: &[IndexDesc]) -> Vec<Vec<usize>> {
     indices
         .iter()
@@ -514,6 +515,7 @@ pub fn getitem_scalar(a: &NdArray, indices: Vec<isize>) -> PyResult<f64> {
 }
 
 /// 将 `values`（长度 1 表示广播）按 dim_lists 的笛卡尔序散射写入 `data`。
+#[allow(dead_code)]
 fn scatter(data: &mut [f64], dim_lists: &[Vec<usize>], strides: &[usize], values: &[f64]) {
     let broadcast = values.len() == 1;
     let mut indices = vec![0usize; dim_lists.len()];
@@ -563,16 +565,11 @@ pub fn setitem_multi(
         filled_indices.push(IndexDesc::Slice(0, dim_size, 1));
     }
 
-    let dim_lists = build_dim_lists(&filled_indices);
-    let strides = compute_strides(&shape);
-
-    // 赋值右值：标量 → 广播到所有目标位置；数组/列表 → 按 C 序逐元素赋值。
-    // 复数右值携带虚部；实数右值虚部为 None。
     let val_nd = crate::coerce_value_to_nd(value)?;
     let re: Vec<f64> = val_nd.data.iter().copied().collect();
     let im: Option<Vec<f64>> = val_nd.imag.as_ref().map(|im| im.iter().copied().collect());
 
-    let target_count: usize = dim_lists.iter().map(|d| d.len()).product();
+    let target_count = calculate_target_count(&filled_indices);
     let broadcast = re.len() == 1;
     if !broadcast && re.len() != target_count {
         return Err(PyValueError::new_err(format!(
@@ -582,9 +579,10 @@ pub fn setitem_multi(
         )));
     }
 
+    let strides = compute_strides(&shape);
+
     let mut a_borrow = a.borrow_mut();
 
-    // 右值为复数而自身为实数时，先分配零虚部完成升级。
     if im.is_some() && a_borrow.imag.is_none() {
         let zeros = Array::zeros(a_borrow.data.raw_dim());
         a_borrow.imag = Some(zeros);
@@ -592,18 +590,225 @@ pub fn setitem_multi(
 
     {
         let data = a_borrow.data.as_slice_memory_order_mut().unwrap();
-        scatter(data, &dim_lists, &strides, &re);
+        scatter_advanced(data, &filled_indices, &strides, &re, broadcast);
     }
     if let Some(imag_arr) = a_borrow.imag.as_mut() {
         let idata = imag_arr.as_slice_memory_order_mut().unwrap();
         match &im {
-            Some(iv) => scatter(idata, &dim_lists, &strides, iv),
-            // 右值为实数而自身为复数：目标位置虚部清零。
-            None => scatter(idata, &dim_lists, &strides, &[0.0]),
+            Some(iv) => scatter_advanced(idata, &filled_indices, &strides, iv, broadcast),
+            None => scatter_advanced(idata, &filled_indices, &strides, &[0.0], true),
         }
     }
 
     Ok(())
+}
+
+fn scatter_advanced(
+    data: &mut [f64],
+    indices: &[IndexDesc],
+    strides: &[usize],
+    values: &[f64],
+    broadcast: bool,
+) {
+    enum AxisPlan {
+        Slice(Vec<usize>),
+        Adv { shape: Vec<usize>, flat: Vec<usize> },
+    }
+    let axes: Vec<AxisPlan> = indices
+        .iter()
+        .map(|idx| match idx {
+            IndexDesc::Slice(a, b, c) => AxisPlan::Slice(slice_indices_vec(*a, *b, *c)),
+            IndexDesc::Int(i) => AxisPlan::Adv {
+                shape: vec![],
+                flat: vec![*i],
+            },
+            IndexDesc::Fancy(v) => AxisPlan::Adv {
+                shape: vec![v.len()],
+                flat: v.clone(),
+            },
+            IndexDesc::FancyMulti(v, sh) => AxisPlan::Adv {
+                shape: sh.clone(),
+                flat: v.clone(),
+            },
+        })
+        .collect();
+
+    let adv_axes: Vec<usize> = axes
+        .iter()
+        .enumerate()
+        .filter(|(_, a)| matches!(a, AxisPlan::Adv { .. }))
+        .map(|(i, _)| i)
+        .collect();
+
+    let mut adv_shape: Vec<usize> = vec![];
+    for &ai in &adv_axes {
+        if let AxisPlan::Adv { shape: sh, .. } = &axes[ai] {
+            adv_shape = broadcast_shapes(&adv_shape, sh).unwrap();
+        }
+    }
+    let adv_size: usize = adv_shape.iter().product();
+
+    let slice_axes: Vec<usize> = axes
+        .iter()
+        .enumerate()
+        .filter(|(_, a)| matches!(a, AxisPlan::Slice(_)))
+        .map(|(i, _)| i)
+        .collect();
+
+    let slice_dim_lists: Vec<Vec<usize>> = axes
+        .iter()
+        .filter(|a| matches!(a, AxisPlan::Slice(_)))
+        .map(|a| {
+            if let AxisPlan::Slice(v) = a {
+                v.clone()
+            } else {
+                vec![]
+            }
+        })
+        .collect();
+
+    let _adv_flat: Vec<Vec<usize>> = adv_axes
+        .iter()
+        .map(|&ai| {
+            if let AxisPlan::Adv { flat, .. } = &axes[ai] {
+                flat.clone()
+            } else {
+                vec![]
+            }
+        })
+        .collect();
+
+    let adv_strides: Vec<usize> = {
+        let mut s = vec![1; adv_shape.len()];
+        if adv_shape.len() > 1 {
+            for i in (0..adv_shape.len() - 1).rev() {
+                s[i] = s[i + 1] * adv_shape[i + 1];
+            }
+        }
+        s
+    };
+
+    let adv_ndim = adv_shape.len();
+
+    let total: usize = slice_dim_lists.iter().map(|d| d.len()).product::<usize>() * adv_size;
+
+    for lin in 0..total {
+        let mut rem = lin;
+        let mut out_coord = vec![0usize; adv_ndim];
+        for k in (0..adv_ndim).rev() {
+            out_coord[k] = rem / adv_strides[k];
+            rem %= adv_strides[k];
+        }
+
+        let mut src_idx = vec![0usize; indices.len()];
+        for (j, &ai) in adv_axes.iter().enumerate() {
+            if let AxisPlan::Adv { shape: sh, flat } = &axes[ai] {
+                let off = adv_ndim - sh.len();
+                let mut fidx = 0usize;
+                for (dd, &sd) in sh.iter().enumerate() {
+                    let c = if sd == 1 { 0 } else { out_coord[off + dd] };
+                    fidx += c
+                        * (if j < adv_strides.len() {
+                            adv_strides[j]
+                        } else {
+                            1
+                        });
+                }
+                if fidx < flat.len() {
+                    src_idx[ai] = flat[fidx];
+                }
+            }
+        }
+
+        let mut slice_rem = rem;
+        let slice_strides: Vec<usize> = {
+            let mut s = vec![1; slice_dim_lists.len()];
+            if slice_dim_lists.len() > 1 {
+                for i in (0..slice_dim_lists.len() - 1).rev() {
+                    s[i] = s[i + 1] * slice_dim_lists[i + 1].len();
+                }
+            }
+            s
+        };
+        for (k, &si) in slice_axes.iter().enumerate() {
+            let coord = slice_rem / slice_strides[k];
+            slice_rem %= slice_strides[k];
+            if let AxisPlan::Slice(v) = &axes[si]
+                && coord < v.len()
+            {
+                src_idx[si] = v[coord];
+            }
+        }
+
+        let mut flat_idx = 0;
+        for (d, &si) in src_idx.iter().enumerate() {
+            flat_idx += si * strides[d];
+        }
+
+        if flat_idx < data.len() {
+            data[flat_idx] = if broadcast { values[0] } else { values[lin] };
+        }
+    }
+}
+
+fn calculate_target_count(indices: &[IndexDesc]) -> usize {
+    enum AxisPlan {
+        Slice(Vec<usize>),
+        #[allow(dead_code)]
+        Adv {
+            shape: Vec<usize>,
+            flat: Vec<usize>,
+        },
+    }
+    let axes: Vec<AxisPlan> = indices
+        .iter()
+        .map(|idx| match idx {
+            IndexDesc::Slice(a, b, c) => AxisPlan::Slice(slice_indices_vec(*a, *b, *c)),
+            IndexDesc::Int(i) => AxisPlan::Adv {
+                shape: vec![],
+                flat: vec![*i],
+            },
+            IndexDesc::Fancy(v) => AxisPlan::Adv {
+                shape: vec![v.len()],
+                flat: v.clone(),
+            },
+            IndexDesc::FancyMulti(v, sh) => AxisPlan::Adv {
+                shape: sh.clone(),
+                flat: v.clone(),
+            },
+        })
+        .collect();
+
+    let adv_axes: Vec<usize> = axes
+        .iter()
+        .enumerate()
+        .filter(|(_, a)| matches!(a, AxisPlan::Adv { .. }))
+        .map(|(i, _)| i)
+        .collect();
+
+    let mut adv_shape: Vec<usize> = vec![];
+    for &ai in &adv_axes {
+        if let AxisPlan::Adv { shape: sh, .. } = &axes[ai] {
+            adv_shape = broadcast_shapes(&adv_shape, sh)
+                .ok_or_else(|| PyValueError::new_err("shape mismatch in advanced index"))
+                .unwrap();
+        }
+    }
+    let adv_size: usize = adv_shape.iter().product();
+
+    let slice_size: usize = axes
+        .iter()
+        .filter(|a| matches!(a, AxisPlan::Slice(_)))
+        .map(|a| {
+            if let AxisPlan::Slice(v) = a {
+                v.len()
+            } else {
+                1
+            }
+        })
+        .product();
+
+    adv_size * slice_size
 }
 
 #[pyfunction]

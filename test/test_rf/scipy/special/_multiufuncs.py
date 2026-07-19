@@ -431,7 +431,7 @@ def _(n, m, z_shape, branch_cut_shape, nout, **kwargs):
         raise ValueError("m must be a non-negative integer.")
 
     return ((n + 1, 2 * abs(m) + 1) +
-        np.broadcast_shapes(z_shape, branch_cut_shape) + (diff_n + 1,),)
+            np.broadcast_shapes(z_shape, branch_cut_shape) + (diff_n + 1,),)
 
 
 @assoc_legendre_p_all._override_finalize_out
@@ -659,7 +659,7 @@ def _(out):
 
     if (out.shape[-1] == 3):
         return (out[..., 0, 0], out[..., [1, 0], [0, 1]],
-            out[..., [[2, 1], [1, 0]], [[0, 1], [1, 2]]])
+                out[..., [[2, 1], [1, 0]], [[0, 1], [1, 2]]])
 
 
 sph_harm_y_all = MultiUFunc(
@@ -728,7 +728,7 @@ def _(n, m, theta_shape, phi_shape, nout, **kwargs):
         raise ValueError("n must be a non-negative integer.")
 
     return ((n + 1, 2 * abs(m) + 1) + np.broadcast_shapes(theta_shape, phi_shape) +
-        (diff_n + 1, diff_n + 1),)
+            (diff_n + 1, diff_n + 1),)
 
 
 @sph_harm_y_all._override_finalize_out
@@ -741,4 +741,4 @@ def _(out):
 
     if (out.shape[-1] == 3):
         return (out[..., 0, 0], out[..., [1, 0], [0, 1]],
-            out[..., [[2, 1], [1, 0]], [[0, 1], [1, 2]]])
+                out[..., [[2, 1], [1, 0]], [[0, 1], [1, 2]]])

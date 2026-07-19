@@ -30,6 +30,7 @@ import scipy._external.array_api_extra as xpx
 # mypy: disable-error-code=operator
 # mypy: disable-error-code=union-attr
 
+
 def from_quat(
     quat: Array,
     normalize: bool = True,
@@ -243,7 +244,7 @@ def from_davenport(
         raise ValueError("Axes must be vectors of length 3.")
 
     axes = xpx.atleast_nd(axes, ndim=2, xp=xp)
-    angles = xpx.atleast_nd(angles, ndim=1, xp=xp) 
+    angles = xpx.atleast_nd(angles, ndim=1, xp=xp)
     num_axes = axes.shape[-2]
     if num_axes < 1 or num_axes > 3:
         raise ValueError(f"Expected up to 3 axes, got {num_axes}")

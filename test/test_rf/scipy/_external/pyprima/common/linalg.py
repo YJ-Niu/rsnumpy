@@ -76,7 +76,7 @@ def outprod(x, y):
         return np.outer(x, y)
     result = np.zeros((len(x), len(y)))
     for i in range(len(x)):
-            result[:, i] = x * y[i]
+        result[:, i] = x * y[i]
     return result
 
 
@@ -134,6 +134,7 @@ def norm(x):
 
 def istril(A, tol=0):
     return primasum(abs(A) - np.tril(abs(A))) <= tol
+
 
 def istriu(A, tol=0):
     return primasum(abs(A) - np.triu(abs(A))) <= tol
@@ -261,7 +262,7 @@ def planerot(x):
         # In this case, MATLAB sets G to NaN(2, 2). We refrain from doing so to keep G orthogonal.
         c = 1 / np.sqrt(2) * np.sign(x[0])
         s = 1 / np.sqrt(2) * np.sign(x[1])
-    elif (abs(x[0]) <= 0 and abs(x[1]) <= 0): # X(1) == 0 == X(2).
+    elif (abs(x[0]) <= 0 and abs(x[1]) <= 0):  # X(1) == 0 == X(2).
         c = 1
         s = 0
     elif (abs(x[1]) <= EPS * abs(x[0])):
@@ -292,25 +293,25 @@ def planerot(x):
         elif (abs(x[0]) > abs(x[1])):
             t = x[1] / x[0]
             u = max(1, abs(t), np.sqrt(1 + t*t))  # MAXVAL: precaution against rounding error.
-            u *= np.sign(x[0]) ##MATLAB: u = sign(x(1))*sqrt(1 + t**2)
+            u *= np.sign(x[0])  # MATLAB: u = sign(x(1))*sqrt(1 + t**2)
             c = 1 / u
             s = t / u
         else:
             t = x[0] / x[1]
             u = max([1, abs(t), np.sqrt(1 + t*t)])  # MAXVAL: precaution against rounding error.
-            u *= np.sign(x[1]) ##MATLAB: u = sign(x(2))*sqrt(1 + t**2)
+            u *= np.sign(x[1])  # MATLAB: u = sign(x(2))*sqrt(1 + t**2)
             c = t / u
             s = 1 / u
 
-    G = np.array([[c, s], [-s, c]]) #  MATLAB: G = [c, s; -s, c]
+    G = np.array([[c, s], [-s, c]])  # MATLAB: G = [c, s; -s, c]
 
-    #====================#
+    # ====================#
     #  Calculation ends  #
-    #====================#
+    # ====================#
 
     # Postconditions
     if DEBUGGING:
-        assert G.shape == (2,2)
+        assert G.shape == (2, 2)
         assert np.all(np.isfinite(G))
         assert abs(G[0, 0] - G[1, 1]) + abs(G[0, 1] + G[1, 0]) <= 0
         tol = np.maximum(1.0E-10, np.minimum(1.0E-1, 1.0E6 * EPS))
@@ -360,17 +361,17 @@ def isinv(A, B, tol=None):
         if present(tol):
             assert tol >= 0
 
-    #====================#
+    # ====================#
     # Calculation starts #
-    #====================#
+    # ====================#
 
     tol = tol if present(tol) else np.minimum(1e-3, 1e2 * EPS * np.maximum(np.size(A, 0), np.size(A, 1)))
     tol = np.max([tol, tol * np.max(abs(A)), tol * np.max(abs(B))])
     is_inv = ((abs(matprod(A, B)) - np.eye(n)) <= tol).all() or ((abs(matprod(B, A) - np.eye(n))) <= tol).all()
 
-    #===================#
+    # ===================#
     #  Calculation ends #
-    #===================#
+    # ===================#
     return is_inv
 
 
@@ -384,9 +385,9 @@ def isorth(A, tol=None):
         if present(tol):
             assert tol >= 0
 
-    #====================#
+    # ====================#
     # Calculation starts #
-    #====================#
+    # ====================#
 
     num_vars = np.size(A, 1)
 
@@ -400,9 +401,9 @@ def isorth(A, tol=None):
         else:
             is_orth = (abs(matprod(A.T, A) - np.eye(num_vars)) <= 0).all()
 
-    #====================#
+    # ====================#
     #  Calculation ends  #
-    #====================#
+    # ====================#
     return is_orth
 
 

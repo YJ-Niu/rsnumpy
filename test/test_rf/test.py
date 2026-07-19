@@ -2,8 +2,8 @@ import skrf as rf
 from skrf import Frequency, Network
 from skrf.data import ring_slot  # noqa: F811
 import rsnumpy as np
-import rsplotlib.pyplot as plt
-from rsplotlib import style
+import matplotlib.pyplot as plt
+from matplotlib import style
 from skrf.networkSet import NetworkSet
 from skrf.media import CPW, Coaxial
 from skrf.data import wr2p2_line1 as line1
@@ -14,10 +14,12 @@ from skrf.plotting import save_all_figs
 from skrf import plotting
 from skrf.circuit import Circuit
 
+
 def pprint(n, ss):
     print(f"Network {n}")
     print("++++++++++++++++++++++++++++++")
     print(ss, "\n")
+
 
 # 保存当前图
 def ssaver(name):
@@ -422,7 +424,7 @@ ring_slot_meas.plot_s_db(m=0, n=0, marker='<', markevery=10, label='Measured')
 mpl_style = "seaborn-ticks"
 try:
     mpl_style = mpl_style if mpl_style in style.available else "seaborn-v0_8-ticks"
-except:
+except Exception:
     mpl_style = "seaborn-v0_8-ticks"
 with style.context(mpl_style):
     ring_slot.plot_s_smith()
@@ -443,7 +445,6 @@ with plt.style.context('grayscale'):
     plt.legend()  # have to re-generate legend
 
     # ssaver('./test/test_rf/test29.png')
-    
 
 pprint(50, rf.io.read_all(rf.data.pwd, contains='ro'))
 

@@ -78,11 +78,11 @@ Convolutions (:mod:`scipy.fftpack.convolve`)
 """
 
 
-__all__ = ['fft','ifft','fftn','ifftn','rfft','irfft',
-           'fft2','ifft2',
+__all__ = ['fft', 'ifft', 'fftn', 'ifftn', 'rfft', 'irfft',
+           'fft2', 'ifft2',
            'diff',
-           'tilbert','itilbert','hilbert','ihilbert',
-           'sc_diff','cs_diff','cc_diff','ss_diff',
+           'tilbert', 'itilbert', 'hilbert', 'ihilbert',
+           'sc_diff', 'cs_diff', 'cc_diff', 'ss_diff',
            'shift',
            'fftfreq', 'rfftfreq',
            'fftshift', 'ifftshift',
@@ -96,7 +96,6 @@ from ._helper import *
 from ._realtransforms import *
 
 # Deprecated namespaces, to be removed in v2.0.0
-from . import basic, helper, pseudo_diffs, realtransforms
 
 from scipy._lib._testutils import PytestTester
 test = PytestTester(__name__)

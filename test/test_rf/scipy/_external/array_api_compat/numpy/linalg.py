@@ -130,8 +130,8 @@ def eig(x: Array, /) -> tuple[Array, Array]:
 
     signature = 'D->DD' if isComplexType(t) else 'd->DD'
     with np.errstate(call=_raise_linalgerror_eigenvalues_nonconvergence,
-                  invalid='call', over='ignore', divide='ignore',
-                  under='ignore'):
+                     invalid='call', over='ignore', divide='ignore',
+                     under='ignore'):
         w, vt = _umath_linalg.eig(x, signature=signature)
 
     result_t = _complexType(result_t)
@@ -169,8 +169,8 @@ def eigvals(x: Array, /) -> Array:
 
     signature = 'D->D' if isComplexType(t) else 'd->D'
     with np.errstate(call=_raise_linalgerror_eigenvalues_nonconvergence,
-                  invalid='call', over='ignore', divide='ignore',
-                  under='ignore'):
+                     invalid='call', over='ignore', divide='ignore',
+                     under='ignore'):
         w = _umath_linalg.eigvals(x, signature=signature)
 
     result_t = _complexType(result_t)
@@ -197,12 +197,13 @@ _all = [
     "matrix_power",
     "multi_dot",
     "norm",
-    "solve", 
+    "solve",
     "tensorinv",
     "tensorsolve",
     "vector_norm",
 ]
 __all__ = sorted(set(__all__) | set(_linalg.__all__) | set(_all))
+
 
 def __dir__() -> list[str]:
     return __all__

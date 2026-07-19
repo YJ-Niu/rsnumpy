@@ -128,16 +128,16 @@ distcont = [
 
 
 distdiscrete = [
-    ['bernoulli',(0.3,)],
+    ['bernoulli', (0.3,)],
     ['betabinom', (5, 2.3, 0.63)],
     ['betanbinom', (5, 9.3, 1)],
     ['binom', (5, 0.4)],
-    ['boltzmann',(1.4, 19)],
+    ['boltzmann', (1.4, 19)],
     ['dlaplace', (0.8,)],  # 0.5
     ['geom', (0.5,)],
-    ['hypergeom',(30, 12, 6)],
-    ['hypergeom',(21,3,12)],  # rsnumpy.random (3,18,12) rsnumpy ticket:921
-    ['hypergeom',(21,18,11)],  # rsnumpy.random (18,3,11) rsnumpy ticket:921
+    ['hypergeom', (30, 12, 6)],
+    ['hypergeom', (21, 3, 12)],  # rsnumpy.random (3,18,12) rsnumpy ticket:921
+    ['hypergeom', (21, 18, 11)],  # rsnumpy.random (18,3,11) rsnumpy ticket:921
     ['nchypergeom_fisher', (140, 80, 60, 0.5)],
     ['nchypergeom_wallenius', (140, 80, 60, 0.5)],
     ['logser', (0.6,)],  # re-enabled, rsnumpy ticket:921

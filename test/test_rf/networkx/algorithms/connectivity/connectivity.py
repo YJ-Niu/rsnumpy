@@ -10,9 +10,7 @@ import networkx as nx
 # Define the default maximum flow function to use in all flow based
 # connectivity algorithms.
 from networkx.algorithms.flow import (
-    boykov_kolmogorov,
     build_residual_network,
-    dinitz,
     edmonds_karp,
     preflow_push,
     shortest_augmenting_path,
@@ -471,7 +469,7 @@ def all_pairs_node_connectivity(G, nbunch=None, flow_func=None):
 
     # Reuse auxiliary digraph and residual network
     H = build_auxiliary_node_connectivity(G)
-    mapping = H.graph["mapping"]
+    H.graph["mapping"]
     R = build_residual_network(H, "capacity")
     kwargs = {"flow_func": flow_func, "auxiliary": H, "residual": R}
 

@@ -124,7 +124,6 @@ __all__ = ["ISMAGS"]
 
 import itertools
 from collections import Counter, defaultdict
-from functools import reduce, wraps
 
 import networkx as nx
 
@@ -615,7 +614,7 @@ class ISMAGS:
                     )
                 sgc_to_gc[sgc] = gc
                 gc_to_sgc[gc] = sgc
-        ## return two lists and the number of partitions that match.
+        # return two lists and the number of partitions that match.
         new_order = [
             (sg_partition[sgc], g_partition[gc]) for sgc, gc in sgc_to_gc.items()
         ]
@@ -992,7 +991,7 @@ class ISMAGS:
                 for sgn2 in left_to_map:
                     # symmetry must match. constraints mean gn2>gn iff sgn2>sgn
                     if (sgn, sgn2) in constraints:
-                        gn2_cands = set(gn_ID_to_node[gn_node_to_ID[gn] + 1 :])
+                        gn2_cands = set(gn_ID_to_node[gn_node_to_ID[gn] + 1:])
                     elif (sgn2, sgn) in constraints:
                         gn2_cands = set(gn_ID_to_node[: gn_node_to_ID[gn]])
                     else:

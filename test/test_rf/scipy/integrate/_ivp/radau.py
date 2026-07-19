@@ -120,7 +120,7 @@ def solve_collocation_system(fun, t, y, h, Z0, scale, tol,
             rate = dW_norm / dW_norm_old
 
         if (rate is not None and (rate >= 1 or
-                rate ** (NEWTON_MAXITER - k) / (1 - rate) * dW_norm > tol)):
+                                  rate ** (NEWTON_MAXITER - k) / (1 - rate) * dW_norm > tol)):
             break
 
         W += dW
@@ -292,6 +292,7 @@ class Radau(OdeSolver):
            sparse Jacobian matrices", Journal of the Institute of Mathematics
            and its Applications, 13, pp. 117-120, 1974.
     """
+
     def __init__(self, fun, t0, y0, t_bound, max_step=np.inf,
                  rtol=1e-3, atol=1e-6, jac=None, jac_sparsity=None,
                  vectorized=False, first_step=None, **extraneous):

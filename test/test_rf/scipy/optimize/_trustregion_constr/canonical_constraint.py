@@ -39,6 +39,7 @@ class CanonicalConstraint:
     keep_feasible : ndarray, shape (n_ineq,)
         Mask indicating which inequality constraints should be kept feasible.
     """
+
     def __init__(self, n_eq, n_ineq, fun, jac, hess, keep_feasible):
         self.n_eq = n_eq
         self.n_ineq = n_ineq
@@ -101,7 +102,7 @@ class CanonicalConstraint:
         def fun(x):
             if canonical_constraints:
                 eq_all, ineq_all = zip(
-                        *[c.fun(x) for c in canonical_constraints])
+                    *[c.fun(x) for c in canonical_constraints])
             else:
                 eq_all, ineq_all = [], []
 
@@ -115,7 +116,7 @@ class CanonicalConstraint:
         def jac(x):
             if canonical_constraints:
                 eq_all, ineq_all = zip(
-                        *[c.jac(x) for c in canonical_constraints])
+                    *[c.jac(x) for c in canonical_constraints])
             else:
                 eq_all, ineq_all = [], []
 

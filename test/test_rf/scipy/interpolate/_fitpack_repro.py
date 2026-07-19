@@ -59,6 +59,7 @@ def _get_residuals(x, y, t, k, w, periodic=False):
         raise ValueError(_iermesg[1])
     return residuals, fp
 
+
 def _validate_bc_type(bc_type):
     if bc_type is None:
         return "not-a-knot"
@@ -113,38 +114,37 @@ def _validate_inputs(x, y, w, k, s, xb, xe, parametric, periodic=False):
         if not w.flags.c_contiguous:
             w = w.copy()
         if w.ndim != 1:
-            raise ValueError(f"{w.ndim = } not implemented yet.")
+            raise ValueError(f"{w.ndim=} not implemented yet.")
         if (w < 0).any():
             raise ValueError("Weights must be non-negative")
         if w.sum() == 0:
             raise ValueError("All weights are zero.")
 
-
     if y.ndim == 0 or y.ndim > 2:
-        raise ValueError(f"{y.ndim = } not supported (must be 1 or 2.)")
+        raise ValueError(f"{y.ndim=} not supported (must be 1 or 2.)")
 
     parametric = bool(parametric)
     if parametric:
         if y.ndim != 2:
-            raise ValueError(f"{y.ndim = } != 2 not supported with {parametric =}.")
+            raise ValueError(f"{y.ndim=} != 2 not supported with {parametric=}.")
     else:
         if y.ndim != 1:
-            raise ValueError(f"{y.ndim = } != 1 not supported with {parametric =}.")
+            raise ValueError(f"{y.ndim=} != 1 not supported with {parametric=}.")
         # all _impl functions expect y.ndim = 2
         y = y[:, None]
 
     if w.shape[0] != x.shape[0]:
-        raise ValueError(f"Weights is incompatible: {w.shape =} != {x.shape}.")
+        raise ValueError(f"Weights is incompatible: {w.shape=} != {x.shape}.")
 
     if x.shape[0] != y.shape[0]:
-        raise ValueError(f"Data is incompatible: {x.shape = } and {y.shape = }.")
+        raise ValueError(f"Data is incompatible: {x.shape=} and {y.shape=}.")
     if x.ndim != 1 or (x[1:] < x[:-1]).any():
         raise ValueError("Expect `x` to be an ordered 1D sequence.")
 
     k = operator.index(k)
 
     if s < 0:
-        raise ValueError(f"`s` must be non-negative. Got {s = }")
+        raise ValueError(f"`s` must be non-negative. Got {s=}")
 
     if xb is None:
         xb = min(x)
@@ -286,7 +286,7 @@ def _generate_knots_impl(x, y, w, xb, xe, k, s, nest, periodic, xp=np):
             nest = max(m + k + 1, 2*k + 3)
     else:
         if nest < 2*(k + 1):
-            raise ValueError(f"`nest` too small: {nest = } < 2*(k+1) = {2*(k+1)}.")
+            raise ValueError(f"`nest` too small: {nest=} < 2*(k+1) = {2*(k+1)}.")
 
     if not periodic:
         nmin = 2*(k + 1)    # the number of knots for an LSQ polynomial approximation
@@ -355,7 +355,7 @@ def _generate_knots_impl(x, y, w, xb, xe, k, s, nest, periodic, xp=np):
         # construct the LSQ spline with this set of knots
         fpold = fp
         residuals, fp = _get_residuals(x, y, t, k, w=w,
-                                        periodic=periodic)
+                                       periodic=periodic)
         fpms = fp - s
 
         # c  test whether the approximation sinf(x) is an acceptable solution.
@@ -363,7 +363,7 @@ def _generate_knots_impl(x, y, w, xb, xe, k, s, nest, periodic, xp=np):
         if (abs(fpms) < acc) or (fpms < 0):
             return
 
-        # ### c  increase the number of knots. ###
+        # ## c  increase the number of knots.
 
         # c  determine the number of knots nplus we are going to add.
         if n == nmin:
@@ -501,7 +501,7 @@ def disc(t, k):
         # assert (matr[j-k-1, :] == row).all()
 
     # follow FITPACK
-    matr *= (delta/ nrint)**k
+    matr *= (delta / nrint)**k
 
     # make it packed
     offset = np.array([i for i in range(nrint-1)], dtype=np.int64)
@@ -534,6 +534,7 @@ class F:
         :doi:`10.1016/0146-664X(82)90043-0`.
 
     """
+
     def __init__(self, x, y, t, k, s, w=None, *, R=None, Y=None):
         self.x = x
         self.y = y
@@ -541,14 +542,14 @@ class F:
         self.k = k
         w = np.ones_like(x, dtype=float) if w is None else w
         if w.ndim != 1:
-            raise ValueError(f"{w.ndim = } != 1.")
+            raise ValueError(f"{w.ndim=} != 1.")
         self.w = w
         self.s = s
 
         if y.ndim != 2:
-            raise ValueError(f"F: expected y.ndim == 2, got {y.ndim = } instead.")
+            raise ValueError(f"F: expected y.ndim == 2, got {y.ndim=} instead.")
 
-        # ### precompute what we can ###
+        # ## precompute what we can
 
         # https://github.com/scipy/scipy/blob/maintenance/1.11.x/scipy/interpolate/fitpack/fpcurf.f#L250
         # c  evaluate the discontinuity jump of the kth derivative of the
@@ -567,7 +568,7 @@ class F:
         nc = t.shape[0] - k - 1
         nz = k + 1
         if R.shape[1] != nz:
-            raise ValueError(f"Internal error: {R.shape[1] =} != {k+1 =}.")
+            raise ValueError(f"Internal error: {R.shape[1]=} != {k+1=}.")
 
         # r.h.s. of the augmented system
         z = np.zeros((b.shape[0], Y.shape[1]), dtype=float)
@@ -577,7 +578,7 @@ class F:
         AA = np.zeros((nc + b.shape[0], self.k+2), dtype=float)
         AA[:nc, :nz] = R[:nc, :]
         # AA[nc:, :] = b.a / p  # done in __call__(self, p)
-        self.AA  = AA
+        self.AA = AA
         self.offset = np.r_[np.arange(nc, dtype=np.int64), b_offset]
 
         self.nc = nc
@@ -606,6 +607,7 @@ class F:
         self.spl = spl   # store it
 
         return fp - self.s
+
 
 class Fperiodic:
     """
@@ -677,6 +679,7 @@ class Fperiodic:
     -----------
     - FITPACK's fpperi.f and fpcurf.f Fortran routines for periodic spline fitting.
     """
+
     def __init__(self, x, y, t, k, s, w=None, *,
                  R=None, Y=None, A1=None, A2=None, Z=None):
         # Initialize the class with input data points x, y,
@@ -691,15 +694,15 @@ class Fperiodic:
         w = np.ones_like(x, dtype=float) if w is None else w
 
         if w.ndim != 1:
-            raise ValueError(f"{w.ndim = } != 1.")
+            raise ValueError(f"{w.ndim=} != 1.")
         self.w = w
 
         self.s = s
 
         if y.ndim != 2:
-            raise ValueError(f"F: expected y.ndim == 2, got {y.ndim = } instead.")
+            raise ValueError(f"F: expected y.ndim == 2, got {y.ndim=} instead.")
 
-        # ### precompute matrices and factors needed for spline fitting ###
+        # ## precompute matrices and factors needed for spline fitting
 
         # Compute the discontinuity jump vector 'b' for the k-th derivative
         # of B-splines at internal knots. This is needed for enforcing
@@ -711,7 +714,7 @@ class Fperiodic:
         # compute them via least squares on the data (x,y) with weights w.
         # These matrices come from fitting B-spline basis to data.
         if ((A1 is None or A2 is None or Z is None) or
-            (R is None and Y is None)):
+                (R is None and Y is None)):
             # _lsq_solve_qr_for_root_rati_periodic computes QR factorization of
             # data matrix and returns related matrices.
             # Refer: https://github.com/scipy/scipy/blob/maintenance/1.16.x/scipy/interpolate/fitpack/fpperi.f#L171-L215
@@ -806,13 +809,13 @@ fp = s. probably causes : s too small.
 """
 
 _iermesg = {
-1: _iermesg1 + """the weighted sum of squared residuals is becoming NaN
+    1: _iermesg1 + """the weighted sum of squared residuals is becoming NaN
 """,
-2: _iermesg1 + """there is an approximation returned but the corresponding
+    2: _iermesg1 + """there is an approximation returned but the corresponding
 weighted sum of squared residuals does not satisfy the
 condition abs(fp-s)/s < tol.
 """,
-3: """error. the maximal number of iterations maxit (set to 20
+    3: """error. the maximal number of iterations maxit (set to 20
 by the program) allowed for finding a smoothing spline
 with fp=s has been reached. probably causes : s too small
 there is an approximation returned but the corresponding
@@ -852,7 +855,7 @@ def root_rati(f, p0, bracket, acc, maxit=MAXIT):
     # https://github.com/scipy/scipy/blob/maintenance/1.11.x/scipy/interpolate/fitpack/fppara.f#L365
     ich1, ich3 = 0, 0
 
-    (p1, f1), (p3, f3)  = bracket
+    (p1, f1), (p3, f3) = bracket
     p = p0
 
     for it in range(maxit):
@@ -914,6 +917,7 @@ def root_rati(f, p0, bracket, acc, maxit=MAXIT):
 
     return Bunch(converged=converged, root=p, iterations=it, ier=ier)
 
+
 def _make_splrep_impl(x, y, w, xb, xe, k, s, t, nest, periodic, xp=np):
     """Shared infra for make_splrep and make_splprep.
     """
@@ -930,7 +934,7 @@ def _make_splrep_impl(x, y, w, xb, xe, k, s, t, nest, periodic, xp=np):
             nest = max(m + k + 1, 2*k + 3)
     else:
         if nest < 2*(k + 1):
-            raise ValueError(f"`nest` too small: {nest = } < 2*(k+1) = {2*(k+1)}.")
+            raise ValueError(f"`nest` too small: {nest=} < 2*(k+1) = {2*(k+1)}.")
         if t is not None:
             raise ValueError("Either supply `t` or `nest`.")
 
@@ -946,7 +950,7 @@ def _make_splrep_impl(x, y, w, xb, xe, k, s, t, nest, periodic, xp=np):
         t, c = xp.asarray(t), xp.asarray(c)
         return BSpline(t, c, k)
 
-    ### solve ###
+    # solve
 
     # c  initial value for p.
     # https://github.com/scipy/scipy/blob/maintenance/1.11.x/scipy/interpolate/fitpack/fpcurf.f#L253
@@ -956,11 +960,11 @@ def _make_splrep_impl(x, y, w, xb, xe, k, s, t, nest, periodic, xp=np):
         R, A1, A2, Z, Y, _, p, _ = _lsq_solve_qr_for_root_rati_periodic(x, y, t, k, w)
     else:
         R, Y, _, _, _ = _lsq_solve_qr(x, y, t, k, w, periodic=periodic)
-    nc = t.shape[0] -k -1
+    nc = t.shape[0] - k - 1
     if not periodic:
         p = nc / R[:, 0].sum()
 
-    # ### bespoke solver ####
+    # ### bespoke solver ##
     # initial conditions
     # f(p=inf) : LSQ spline with knots t   (XXX: reuse R, c)
     # N.B. - Check _lsq_solve_qr which is called
@@ -1309,7 +1313,7 @@ def make_splprep(x, *, w=None, u=None, ub=None, ue=None,
     # construct the default parametrization of the curve
     if u is None:
         dp = (x[1:, :] - x[:-1, :])**2
-        u = xp.cumulative_sum( xp.sqrt(xp.sum(dp, axis=1)) )
+        u = xp.cumulative_sum(xp.sqrt(xp.sum(dp, axis=1)))
         u = concat_1d(xp, 0., u / u[-1])
 
     if s == 0:

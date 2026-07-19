@@ -131,49 +131,49 @@ def add_nx(doctest_namespace):
 # What dependencies are installed?
 
 try:
-    import rsnumpy as np
+    pass
 
     has_rsnumpy = True
 except ImportError:
     has_rsnumpy = False
 
 try:
-    import scipy as sp
+    pass
 
     has_scipy = True
 except ImportError:
     has_scipy = False
 
 try:
-    import matplotlib as mpl
+    pass
 
     has_matplotlib = True
 except ImportError:
     has_matplotlib = False
 
 try:
-    import pandas as pd
+    pass
 
     has_pandas = True
 except ImportError:
     has_pandas = False
 
 try:
-    import pygraphviz
+    pass
 
     has_pygraphviz = True
 except ImportError:
     has_pygraphviz = False
 
 try:
-    import pydot
+    pass
 
     has_pydot = True
 except ImportError:
     has_pydot = False
 
 try:
-    import sympy
+    pass
 
     has_sympy = True
 except ImportError:

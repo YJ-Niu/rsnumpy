@@ -12,6 +12,7 @@ __all__ = ["_deprecated"]
 # be used over 'None' as the user could parse 'None' as a positional argument
 _NoValue = object()
 
+
 def _sub_module_deprecation(*, sub_package, module, private_modules, all,
                             attribute, correct_module=None, dep_version="1.16.0"):
     """Helper function for deprecating modules that are public but were
@@ -76,7 +77,7 @@ def _sub_module_deprecation(*, sub_package, module, private_modules, all,
             if module == private_modules[-1]:
                 raise e
             continue
-    
+
 
 def _deprecated(msg, stacklevel=2):
     """Deprecate a function by emitting a warning on use."""
@@ -102,6 +103,7 @@ class _DeprecationHelperStr:
     """
     Helper class used by deprecate_cython_api
     """
+
     def __init__(self, content, message):
         self._content = content
         self._message = message
@@ -254,7 +256,7 @@ def _deprecate_positional_args(func=None, *, version=None,
         kwonly_extra_args = set(kwonly_args) - deprecated_args
         admonition = f"""
 .. deprecated:: {version}
-    Use of argument(s) ``{kwonly_extra_args}`` by position is deprecated; beginning in 
+    Use of argument(s) ``{kwonly_extra_args}`` by position is deprecated; beginning in
     SciPy {version}, these will be keyword-only. """
         if deprecated_args:
             admonition += (f"Argument(s) ``{deprecated_args}`` are deprecated, whether "

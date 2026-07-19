@@ -2,7 +2,7 @@ from warnings import warn
 
 import rsnumpy as np
 from rsnumpy import (atleast_2d, arange, zeros_like, imag, diag,
-                   iscomplexobj, tril, triu, argsort, empty_like)
+                     iscomplexobj, tril, triu, argsort, empty_like)
 from rsnumpy.exceptions import ComplexWarning
 
 from scipy._lib._util import _apply_over_batch

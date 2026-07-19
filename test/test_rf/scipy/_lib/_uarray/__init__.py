@@ -112,5 +112,4 @@ left up to ``__ua_function__``, but putting things back into arrays after conver
 will not be possible.
 """
 
-from ._backend import *
 __version__ = '0.8.8.dev0+aa94c5a4.scipy'

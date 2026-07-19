@@ -426,6 +426,7 @@ class AAA(_BarycentricRational):
     poles with residue less than ``10^-13`` in absolute value shown in red. The right
     image then shows the poles after the `clean_up` method has been called.
     """
+
     def __init__(self, x, y, *, rtol=None, max_terms=100, clean_up=True,
                  clean_up_tol=1e-13):
         super().__init__(x, y, rtol=rtol, max_terms=max_terms)
@@ -591,7 +592,7 @@ class AAA(_BarycentricRational):
             return ni
 
         warnings.warn(f"{ni} Froissart doublets detected.", RuntimeWarning,
-                        stacklevel=2)
+                      stacklevel=2)
 
         # For each spurious pole find and remove closest support point
         closest_spt_point = np.argmin(
@@ -619,7 +620,7 @@ class AAA(_BarycentricRational):
 
         # Solve least-squares problem to obtain weights
         _, _, V = scipy.linalg.svd(A, check_finite=False)
-        self.weights = np.conj(V[m - 1,:])
+        self.weights = np.conj(V[m - 1, :])
 
         # reset roots, poles, residues as cached values will be wrong with new weights
         self._poles = None
@@ -728,6 +729,7 @@ class FloaterHormannInterpolator(_BarycentricRational):
     >>> ax.legend()
     >>> plt.show()
     """
+
     def __init__(self, points, values, *, d=3, axis=0):
         super().__init__(points, values, d=d, axis=axis)
 
@@ -746,7 +748,7 @@ class FloaterHormannInterpolator(_BarycentricRational):
         n = w.size
         for k in range(n):
             for i in range(max(k-d, 0), min(k+1, n-d)):
-                w[k] += 1/np.prod(np.abs(np.delete(z[k] - z[i : i + d + 1], k - i)))
+                w[k] += 1/np.prod(np.abs(np.delete(z[k] - z[i: i + d + 1], k - i)))
         w *= (-1.)**(np.arange(n) - d)
 
         return z, f, w

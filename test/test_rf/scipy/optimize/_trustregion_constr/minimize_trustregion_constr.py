@@ -25,6 +25,7 @@ TERMINATION_MESSAGES = {
 
 class HessianLinearOperator:
     """Build LinearOperator from hessp"""
+
     def __init__(self, hessp, n):
         self.hessp = hessp
         self.n = n
@@ -42,6 +43,7 @@ class LagrangianHessian:
     The Lagrangian is computed as the objective function plus all the
     constraints multiplied with some numbers (Lagrange multipliers).
     """
+
     def __init__(self, n, objective_hess, constraints_hess):
         self.n = n
         self.objective_hess = objective_hess

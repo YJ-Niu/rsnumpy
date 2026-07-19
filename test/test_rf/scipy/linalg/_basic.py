@@ -47,7 +47,7 @@ def _format_emit_errors_warnings(err_lst):
         raise ValueError(f"Internal LAPACK errors: {','.join(lapack_err)}.")
 
     if ill_cond:
-       warnings.warn(
+        warnings.warn(
             f"An ill-conditioned matrix detected: {','.join(ill_cond)}.",
             LinAlgWarning,
             stacklevel=3
@@ -192,9 +192,9 @@ def solve(a, b, lower=False, overwrite_a=False,
         'banded': 41,
         'upper triangular': 21,
         'lower triangular': 22,
-        'pos' : 101, 'positive definite': 101,
-        'sym' : 201, 'symmetric': 201,
-        'her' : 211, 'hermitian': 211,
+        'pos': 101, 'positive definite': 101,
+        'sym': 201, 'symmetric': 201,
+        'her': 211, 'hermitian': 211,
     }.get(assume_a, 'unknown')
     if structure == 'unknown':
         raise ValueError(f'{assume_a} is not a recognized matrix structure')
@@ -1111,9 +1111,9 @@ def inv(a, overwrite_a=False, check_finite=True, *, assume_a=None, lower=False):
         'diagonal': 11,
         'upper triangular': 21,
         'lower triangular': 22,
-        'pos' : 101,
-        'sym' : 201,
-        'her' : 211,
+        'pos': 101,
+        'sym': 201,
+        'her': 211,
     }[assume_a]
 
     # a1 is well behaved, invert it.
@@ -1431,7 +1431,7 @@ def lstsq(a, b, cond=None, overwrite_a=False, overwrite_b=False,
     overwrite_a = overwrite_a and (a1.ndim == 2) and a1.flags["F_CONTIGUOUS"]
     overwrite_b = (
         overwrite_b and (b1.ndim == 2) and b1.flags["F_CONTIGUOUS"] and m >= n
-    ) # Only overwrite when overdetermined system, otherwise ldb will be > m
+    )  # Only overwrite when overdetermined system, otherwise ldb will be > m
 
     if cond is None:
         cond = np.finfo(a1.dtype).eps
@@ -1459,7 +1459,7 @@ def lstsq(a, b, cond=None, overwrite_a=False, overwrite_b=False,
         if residuals.size > 0 and lapack_driver != "gelsy":
             residuals = residuals[..., 0]
 
-    if m <= n: # residuals are empty for under- and exactly determined problems
+    if m <= n:  # residuals are empty for under- and exactly determined problems
         residuals = np.zeros(batch_shape + (0,), dtype=residuals.dtype)
 
     return x1, residuals, rank, S

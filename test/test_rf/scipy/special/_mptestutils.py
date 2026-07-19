@@ -147,7 +147,7 @@ class ComplexArg:
         m = int(np.floor(np.sqrt(n)))
         x = self.real.values(m)
         y = self.imag.values(m + 1)
-        return (x[:,None] + 1j*y[None,:]).ravel()
+        return (x[:, None] + 1j*y[None, :]).ravel()
 
 
 class IntArg:

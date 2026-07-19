@@ -100,20 +100,8 @@ Solving boundary value problems for ODE systems
 """  # noqa: E501
 
 
-from ._quadrature import *
-from ._odepack_py import *
-from ._quadpack_py import *
-from ._ode import *
-from ._bvp import solve_bvp
-from ._ivp import (solve_ivp, OdeSolution, DenseOutput,
-                   OdeSolver, RK23, RK45, DOP853, Radau, BDF, LSODA)
-from ._quad_vec import quad_vec
-from ._tanhsinh import nsum, tanhsinh
-from ._cubature import cubature
-from ._lebedev import lebedev_rule
 
 # Deprecated namespaces, to be removed in v2.0.0
-from . import dop, lsoda, vode, odepack, quadpack
 
 __all__ = [s for s in dir() if not s.startswith('_')]
 

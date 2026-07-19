@@ -178,7 +178,7 @@ class MatrixPowerOperator(LinearOperator):
         self._A = A
         self._p = p
         self._structure = structure
-        super().__init__(dtype = A.dtype, shape=A.shape)
+        super().__init__(dtype=A.dtype, shape=A.shape)
 
     def _matvec(self, x):
         for i in range(self._p):
@@ -212,8 +212,8 @@ class ProductOperator(LinearOperator):
         for A in args:
             if len(A.shape) != 2 or A.shape[0] != A.shape[1]:
                 raise ValueError(
-                        'For now, the ProductOperator implementation is '
-                        'limited to the product of multiple square matrices.')
+                    'For now, the ProductOperator implementation is '
+                    'limited to the product of multiple square matrices.')
         shape = None
         if args:
             n = args[0].shape[0]
@@ -221,8 +221,8 @@ class ProductOperator(LinearOperator):
                 for d in A.shape:
                     if d != n:
                         raise ValueError(
-                                'The square matrices of the ProductOperator '
-                                'must all have the same shape.')
+                            'The square matrices of the ProductOperator '
+                            'must all have the same shape.')
             shape = (n, n)
         dtype = np.result_type(*[x.dtype for x in args])
         super().__init__(dtype=dtype, shape=shape)
@@ -251,7 +251,7 @@ class ProductOperator(LinearOperator):
 
 
 def _onenormest_matrix_power(A, p,
-        t=2, itmax=5, compute_v=False, compute_w=False, structure=None):
+                             t=2, itmax=5, compute_v=False, compute_w=False, structure=None):
     """
     Efficiently estimate the 1-norm of A^p.
 
@@ -288,11 +288,11 @@ def _onenormest_matrix_power(A, p,
 
     """
     return scipy.sparse.linalg.onenormest(
-            MatrixPowerOperator(A, p, structure=structure))
+        MatrixPowerOperator(A, p, structure=structure))
 
 
 def _onenormest_product(operator_seq,
-        t=2, itmax=5, compute_v=False, compute_w=False, structure=None):
+                        t=2, itmax=5, compute_v=False, compute_w=False, structure=None):
     """
     Efficiently estimate the 1-norm of the matrix product of the args.
 
@@ -330,7 +330,7 @@ def _onenormest_product(operator_seq,
 
     """
     return scipy.sparse.linalg.onenormest(
-            ProductOperator(*operator_seq, structure=structure))
+        ProductOperator(*operator_seq, structure=structure))
 
 
 class _ExpmPadeHelper:
@@ -381,35 +381,35 @@ class _ExpmPadeHelper:
     def A2(self):
         if self._A2 is None:
             self._A2 = _smart_matrix_product(
-                    self.A, self.A, structure=self.structure)
+                self.A, self.A, structure=self.structure)
         return self._A2
 
     @property
     def A4(self):
         if self._A4 is None:
             self._A4 = _smart_matrix_product(
-                    self.A2, self.A2, structure=self.structure)
+                self.A2, self.A2, structure=self.structure)
         return self._A4
 
     @property
     def A6(self):
         if self._A6 is None:
             self._A6 = _smart_matrix_product(
-                    self.A4, self.A2, structure=self.structure)
+                self.A4, self.A2, structure=self.structure)
         return self._A6
 
     @property
     def A8(self):
         if self._A8 is None:
             self._A8 = _smart_matrix_product(
-                    self.A6, self.A2, structure=self.structure)
+                self.A6, self.A2, structure=self.structure)
         return self._A8
 
     @property
     def A10(self):
         if self._A10 is None:
             self._A10 = _smart_matrix_product(
-                    self.A4, self.A6, structure=self.structure)
+                self.A4, self.A6, structure=self.structure)
         return self._A10
 
     @property
@@ -445,7 +445,7 @@ class _ExpmPadeHelper:
         else:
             if self._d4_approx is None:
                 self._d4_approx = _onenormest_matrix_power(self.A2, 2,
-                        structure=self.structure)**(1/4.)
+                                                           structure=self.structure)**(1/4.)
             return self._d4_approx
 
     @property
@@ -457,7 +457,7 @@ class _ExpmPadeHelper:
         else:
             if self._d6_approx is None:
                 self._d6_approx = _onenormest_matrix_power(self.A2, 3,
-                        structure=self.structure)**(1/6.)
+                                                           structure=self.structure)**(1/6.)
             return self._d6_approx
 
     @property
@@ -469,7 +469,7 @@ class _ExpmPadeHelper:
         else:
             if self._d8_approx is None:
                 self._d8_approx = _onenormest_matrix_power(self.A4, 2,
-                        structure=self.structure)**(1/8.)
+                                                           structure=self.structure)**(1/8.)
             return self._d8_approx
 
     @property
@@ -481,63 +481,63 @@ class _ExpmPadeHelper:
         else:
             if self._d10_approx is None:
                 self._d10_approx = _onenormest_product((self.A4, self.A6),
-                        structure=self.structure)**(1/10.)
+                                                       structure=self.structure)**(1/10.)
             return self._d10_approx
 
     def pade3(self):
         b = (120., 60., 12., 1.)
         U = _smart_matrix_product(self.A,
-                b[3]*self.A2 + b[1]*self.ident,
-                structure=self.structure)
+                                  b[3]*self.A2 + b[1]*self.ident,
+                                  structure=self.structure)
         V = b[2]*self.A2 + b[0]*self.ident
         return U, V
 
     def pade5(self):
         b = (30240., 15120., 3360., 420., 30., 1.)
         U = _smart_matrix_product(self.A,
-                b[5]*self.A4 + b[3]*self.A2 + b[1]*self.ident,
-                structure=self.structure)
+                                  b[5]*self.A4 + b[3]*self.A2 + b[1]*self.ident,
+                                  structure=self.structure)
         V = b[4]*self.A4 + b[2]*self.A2 + b[0]*self.ident
         return U, V
 
     def pade7(self):
         b = (17297280., 8648640., 1995840., 277200., 25200., 1512., 56., 1.)
         U = _smart_matrix_product(self.A,
-                b[7]*self.A6 + b[5]*self.A4 + b[3]*self.A2 + b[1]*self.ident,
-                structure=self.structure)
+                                  b[7]*self.A6 + b[5]*self.A4 + b[3]*self.A2 + b[1]*self.ident,
+                                  structure=self.structure)
         V = b[6]*self.A6 + b[4]*self.A4 + b[2]*self.A2 + b[0]*self.ident
         return U, V
 
     def pade9(self):
         b = (17643225600., 8821612800., 2075673600., 302702400., 30270240.,
-                2162160., 110880., 3960., 90., 1.)
+             2162160., 110880., 3960., 90., 1.)
         U = _smart_matrix_product(self.A,
-                (b[9]*self.A8 + b[7]*self.A6 + b[5]*self.A4 +
-                    b[3]*self.A2 + b[1]*self.ident),
-                structure=self.structure)
+                                  (b[9]*self.A8 + b[7]*self.A6 + b[5]*self.A4 +
+                                   b[3]*self.A2 + b[1]*self.ident),
+                                  structure=self.structure)
         V = (b[8]*self.A8 + b[6]*self.A6 + b[4]*self.A4 +
-                b[2]*self.A2 + b[0]*self.ident)
+             b[2]*self.A2 + b[0]*self.ident)
         return U, V
 
     def pade13_scaled(self, s):
         b = (64764752532480000., 32382376266240000., 7771770303897600.,
-                1187353796428800., 129060195264000., 10559470521600.,
-                670442572800., 33522128640., 1323241920., 40840800., 960960.,
-                16380., 182., 1.)
+             1187353796428800., 129060195264000., 10559470521600.,
+             670442572800., 33522128640., 1323241920., 40840800., 960960.,
+             16380., 182., 1.)
         B = self.A * 2**-s
         B2 = self.A2 * 2**(-2*s)
         B4 = self.A4 * 2**(-4*s)
         B6 = self.A6 * 2**(-6*s)
         U2 = _smart_matrix_product(B6,
-                b[13]*B6 + b[11]*B4 + b[9]*B2,
-                structure=self.structure)
+                                   b[13]*B6 + b[11]*B4 + b[9]*B2,
+                                   structure=self.structure)
         U = _smart_matrix_product(B,
-                (U2 + b[7]*B6 + b[5]*B4 +
-                    b[3]*B2 + b[1]*self.ident),
-                structure=self.structure)
+                                  (U2 + b[7]*B6 + b[5]*B4 +
+                                   b[3]*B2 + b[1]*self.ident),
+                                  structure=self.structure)
         V2 = _smart_matrix_product(B6,
-                b[12]*B6 + b[10]*B4 + b[8]*B2,
-                structure=self.structure)
+                                   b[12]*B6 + b[10]*B4 + b[8]*B2,
+                                   structure=self.structure)
         V = V2 + b[6]*B6 + b[4]*B4 + b[2]*B2 + b[0]*self.ident
         return U, V
 
@@ -633,7 +633,7 @@ def _expm(A, use_exact_onenorm):
 
     # Track functions of A to help compute the matrix exponential.
     h = _ExpmPadeHelper(
-            A, structure=structure, use_exact_onenorm=use_exact_onenorm)
+        A, structure=structure, use_exact_onenorm=use_exact_onenorm)
 
     # Try Pade order 3.
     eta_1 = max(h.d4_loose, h.d6_loose)
@@ -862,12 +862,13 @@ def _ell(A, m):
     value = int(np.ceil(log2_alpha_div_u / (2 * m)))
     return max(value, 0)
 
+
 def matrix_power(A, power):
     """
     Raise a square matrix to the integer power, `power`.
 
     For non-negative integers, ``A**power`` is computed using repeated
-    matrix multiplications. Negative integers are not supported. 
+    matrix multiplications. Negative integers are not supported.
 
     Parameters
     ----------
@@ -881,13 +882,13 @@ def matrix_power(A, power):
     A**power : (M, M) sparse array or matrix
         The output matrix will be the same shape as A, and will preserve
         the class of A, but the format of the output may be changed.
-    
+
     Notes
     -----
     This uses a recursive implementation of the matrix power. For computing
     the matrix power using a reasonably large `power`, this may be less efficient
     than computing the product directly, using A @ A @ ... @ A.
-    This is contingent upon the number of nonzero entries in the matrix. 
+    This is contingent upon the number of nonzero entries in the matrix.
 
     .. versionadded:: 1.12.0
 

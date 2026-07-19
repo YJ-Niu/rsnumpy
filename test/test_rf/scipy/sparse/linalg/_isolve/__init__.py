@@ -1,6 +1,6 @@
 "Iterative Solvers for Sparse Linear Systems"
 
-#from info import __doc__
+# from info import __doc__
 from .iterative import *
 from .minres import minres
 from .lgmres import lgmres

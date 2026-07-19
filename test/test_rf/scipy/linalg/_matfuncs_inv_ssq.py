@@ -35,7 +35,7 @@ class FractionalMatrixPowerError(np.linalg.LinAlgError):
     pass
 
 
-#TODO renovate or move this class when scipy operators are more mature
+# TODO renovate or move this class when scipy operators are more mature
 class _MatrixM1PowerOperator(LinearOperator):
     """
     A representation of the linear operator (A - I)^p.
@@ -69,9 +69,9 @@ class _MatrixM1PowerOperator(LinearOperator):
         return _MatrixM1PowerOperator(self._A.T, self._p)
 
 
-#TODO renovate or move this function when SciPy operators are more mature
+# TODO renovate or move this function when SciPy operators are more mature
 def _onenormest_m1_power(A, p,
-        t=2, itmax=5, compute_v=False, compute_w=False):
+                         t=2, itmax=5, compute_v=False, compute_w=False):
     """
     Efficiently estimate the 1-norm of (A - I)^p.
 
@@ -108,7 +108,7 @@ def _onenormest_m1_power(A, p,
 
     """
     return onenormest(_MatrixM1PowerOperator(A, p),
-            t=t, itmax=itmax, compute_v=compute_v, compute_w=compute_w)
+                      t=t, itmax=itmax, compute_v=compute_v, compute_w=compute_w)
 
 
 def _unwindk(z):
@@ -546,14 +546,14 @@ def _remainder_matrix_power_triu(T, t):
 
     """
     m_to_theta = {
-            1: 1.51e-5,
-            2: 2.24e-3,
-            3: 1.88e-2,
-            4: 6.04e-2,
-            5: 1.24e-1,
-            6: 2.00e-1,
-            7: 2.79e-1,
-            }
+        1: 1.51e-5,
+        2: 2.24e-3,
+        3: 1.88e-2,
+        4: 6.04e-2,
+        5: 1.24e-1,
+        6: 2.00e-1,
+        7: 2.79e-1,
+    }
     n, n = T.shape
     T0 = T
     T0_diag = np.diag(T0)
@@ -649,8 +649,8 @@ def _remainder_matrix_power(A, t):
     T_diag = np.diag(T)
     if np.count_nonzero(T_diag) != n:
         raise FractionalMatrixPowerError(
-                'cannot use inverse scaling and squaring to find '
-                'the fractional matrix power of a singular matrix')
+            'cannot use inverse scaling and squaring to find '
+            'the fractional matrix power of a singular matrix')
 
     # If the triangular matrix is real and has a negative
     # entry on the diagonal, then force the matrix to be complex.
@@ -768,10 +768,10 @@ def _logm_triu(T):
 
     # Define bounds given in Table (2.1).
     theta = (None,
-            1.59e-5, 2.31e-3, 1.94e-2, 6.21e-2,
-            1.28e-1, 2.06e-1, 2.88e-1, 3.67e-1,
-            4.39e-1, 5.03e-1, 5.60e-1, 6.09e-1,
-            6.52e-1, 6.89e-1, 7.21e-1, 7.49e-1)
+             1.59e-5, 2.31e-3, 1.94e-2, 6.21e-2,
+             1.28e-1, 2.06e-1, 2.88e-1, 3.67e-1,
+             4.39e-1, 5.03e-1, 5.60e-1, 6.09e-1,
+             6.52e-1, 6.89e-1, 7.21e-1, 7.49e-1)
 
     R, s, m = _inverse_squaring_helper(T0, theta)
 

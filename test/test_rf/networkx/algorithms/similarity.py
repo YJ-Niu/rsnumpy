@@ -1105,10 +1105,10 @@ def optimize_edit_paths(
         ins_costs = [1] * len(pending_v)
     # assert not n or min(ins_costs) >= 0
     inf = C[0:m, 0:n].sum() + sum(del_costs) + sum(ins_costs) + 1
-    C[0:m, n : n + m] = np.array(
+    C[0:m, n: n + m] = np.array(
         [del_costs[i] if i == j else inf for i in range(m) for j in range(m)]
     ).reshape(m, m)
-    C[m : m + n, 0:n] = np.array(
+    C[m: m + n, 0:n] = np.array(
         [ins_costs[i] if i == j else inf for i in range(n) for j in range(n)]
     ).reshape(n, n)
     Cv = make_CostMatrix(C, m, n)
@@ -1151,10 +1151,10 @@ def optimize_edit_paths(
         ins_costs = [1] * len(pending_h)
     # assert not n or min(ins_costs) >= 0
     inf = C[0:m, 0:n].sum() + sum(del_costs) + sum(ins_costs) + 1
-    C[0:m, n : n + m] = np.array(
+    C[0:m, n: n + m] = np.array(
         [del_costs[i] if i == j else inf for i in range(m) for j in range(m)]
     ).reshape(m, m)
-    C[m : m + n, 0:n] = np.array(
+    C[m: m + n, 0:n] = np.array(
         [ins_costs[i] if i == j else inf for i in range(n) for j in range(n)]
     ).reshape(n, n)
     Ce = make_CostMatrix(C, m, n)

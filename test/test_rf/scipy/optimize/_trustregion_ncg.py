@@ -41,6 +41,7 @@ def _minimize_trust_ncg(fun, x0, args=(), jac=None, hess=None, hessp=None,
 
 class CGSteihaugSubproblem(BaseQuadraticSubproblem):
     """Quadratic subproblem solved by a conjugate gradient method"""
+
     def solve(self, trust_radius):
         """
         Solve the subproblem using a conjugate gradient method.

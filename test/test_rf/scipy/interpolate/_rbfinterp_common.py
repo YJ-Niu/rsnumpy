@@ -2,6 +2,7 @@
 from itertools import combinations_with_replacement
 from math import comb
 
+
 def _monomial_powers_impl(ndim, degree):
     """Return the powers for each monomial in a polynomial.
 

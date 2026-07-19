@@ -62,7 +62,6 @@ class OdrWarning(UserWarning):
         instead.
 
     """
-    pass
 
 
 class OdrError(Exception):
@@ -77,7 +76,6 @@ class OdrError(Exception):
 
     This is raised by `~scipy.odr.odr` if an error occurs during fitting.
     """
-    pass
 
 
 class OdrStop(Exception):
@@ -93,7 +91,6 @@ class OdrStop(Exception):
     You can raise this exception in your objective function to tell
     `~scipy.odr.odr` to stop fitting.
     """
-    pass
 
 
 # Backwards compatibility
@@ -405,7 +402,7 @@ class RealData(Data):
 
         if not isinstance(self.x, np.ndarray):
             raise ValueError("Expected an 'ndarray' of data for 'x', "
-                              f"but instead got data of type '{type(self.x).__name__}'")
+                             f"but instead got data of type '{type(self.x).__name__}'")
 
         self.y = _conv(y)
         self.sx = _conv(sx)
@@ -433,7 +430,7 @@ class RealData(Data):
             weights = np.zeros(cov.shape, float)
 
             for i in range(cov.shape[-1]):  # n
-                weights[:,:,i] = inv(cov[:,:,i])
+                weights[:, :, i] = inv(cov[:, :, i])
 
             return weights
 
@@ -446,9 +443,9 @@ class RealData(Data):
                 raise AttributeError(f"'{attr}' not in metadata")
         else:
             lookup_tbl = {('wd', 'sx'): (self._sd2wt, self.sx),
-                      ('wd', 'covx'): (self._cov2wt, self.covx),
-                      ('we', 'sy'): (self._sd2wt, self.sy),
-                      ('we', 'covy'): (self._cov2wt, self.covy)}
+                          ('wd', 'covx'): (self._cov2wt, self.covx),
+                          ('we', 'sy'): (self._sd2wt, self.sy),
+                          ('we', 'covy'): (self._cov2wt, self.covy)}
 
             func, arg = lookup_tbl[(attr, self._ga_flags[attr])]
 
@@ -651,7 +648,7 @@ class Output:
         print('Beta Std Error:', self.sd_beta)
         print('Beta Covariance:', self.cov_beta)
         if hasattr(self, 'info'):
-            print('Residual Variance:',self.res_var)
+            print('Residual Variance:', self.res_var)
             print('Inverse Condition #:', self.inv_condnum)
             print('Reason(s) for Halting:')
             for r in self.stopreason:
@@ -777,10 +774,10 @@ class ODR:
     """
 
     def __init__(self, data, model, beta0=None, delta0=None, ifixb=None,
-        ifixx=None, job=None, iprint=None, errfile=None, rptfile=None,
-        ndigit=None, taufac=None, sstol=None, partol=None, maxit=None,
-        stpb=None, stpd=None, sclb=None, scld=None, work=None, iwork=None,
-        overwrite=False):
+                 ifixx=None, job=None, iprint=None, errfile=None, rptfile=None,
+                 ndigit=None, taufac=None, sstol=None, partol=None, maxit=None,
+                 stpb=None, stpd=None, sclb=None, scld=None, work=None, iwork=None,
+                 overwrite=False):
 
         self.data = data
         self.model = model
@@ -790,7 +787,7 @@ class ODR:
                 self.beta0 = _conv(self.model.estimate(self.data))
             else:
                 raise ValueError(
-                  "must specify beta0 or provide an estimator with the model"
+                    "must specify beta0 or provide an estimator with the model"
                 )
         else:
             self.beta0 = _conv(beta0)
@@ -974,7 +971,7 @@ class ODR:
             self.work = np.zeros((lwork,), float)
 
     def set_job(self, fit_type=None, deriv=None, var_calc=None,
-        del_init=None, restart=None):
+                del_init=None, restart=None):
         """
         Sets the "job" parameter is a hopefully comprehensible way.
 
@@ -1053,7 +1050,7 @@ class ODR:
                     job_l[2]*100 + job_l[3]*10 + job_l[4])
 
     def set_iprint(self, init=None, so_init=None,
-        iter=None, so_iter=None, iter_step=None, final=None, so_final=None):
+                   iter=None, so_iter=None, iter_step=None, final=None, so_final=None):
         """ Set the iprint parameter for the printing of computation reports.
 
         If any of the arguments are specified here, then they are set in the

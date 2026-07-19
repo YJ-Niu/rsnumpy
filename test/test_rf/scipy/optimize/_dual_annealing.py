@@ -202,7 +202,7 @@ class EnergyState:
             if val is not None:
                 if val:
                     return ('Callback function requested to stop early by '
-                           'returning True')
+                            'returning True')
 
     def update_current(self, e, x):
         self.current_energy = e
@@ -265,7 +265,7 @@ class StrategyChain:
     def accept_reject(self, j, e, x_visit):
         r = self._rand_gen.uniform()
         pqv_temp = 1.0 - ((1.0 - self.acceptance_param) *
-            (e - self.energy_state.current_energy) / self.temperature_step)
+                          (e - self.energy_state.current_energy) / self.temperature_step)
         if pqv_temp <= 0.:
             pqv = 0.
         else:

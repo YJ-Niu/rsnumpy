@@ -18,7 +18,6 @@ __all__ = ['isspmatrix', 'issparse', 'sparray',
 
 class SparseWarning(Warning):
     """General warning for :mod:`scipy.sparse`."""
-    pass
 
 
 class SparseFormatWarning(SparseWarning):
@@ -29,7 +28,6 @@ class SparseEfficiencyWarning(SparseWarning):
     """The warning emitted when the operation is
     inefficient for sparse matrices.
     """
-    pass
 
 
 # The formats that we might potentially understand.
@@ -58,9 +56,9 @@ _formats = {'csc': [0, "Compressed Sparse Column"],
 
 # These univariate ufuncs preserve zeros.
 _ufuncs_with_fixed_point_at_zero = frozenset([
-        np.sin, np.tan, np.arcsin, np.arctan, np.sinh, np.tanh, np.arcsinh,
-        np.arctanh, np.rint, np.sign, np.expm1, np.log1p, np.deg2rad,
-        np.rad2deg, np.floor, np.ceil, np.trunc, np.sqrt])
+    np.sin, np.tan, np.arcsin, np.arctan, np.sinh, np.tanh, np.arcsinh,
+    np.arctanh, np.rint, np.sign, np.expm1, np.log1p, np.deg2rad,
+    np.rad2deg, np.floor, np.ceil, np.trunc, np.sqrt])
 
 
 MAXPRINT = 50
@@ -398,11 +396,11 @@ class _spbase(SparseABC):
     def T(self):
         """Transpose."""
         return self.transpose()
-    
+
     @property
     def mT(self):
         """Matrix transpose.
-        
+
         See Also
         --------
         scipy.sparse.matrix_transpose : equivalent function
@@ -501,12 +499,12 @@ class _spbase(SparseABC):
             except TypeError:
                 return convert_method()
 
-    ###################################################################
+    #################################################################
     #  NOTE: All arithmetic operations use csr_matrix by default.
     # Therefore a new sparse array format just needs to define a
     # .tocsr() method to provide arithmetic support. Any of these
     # methods can be overridden for efficiency.
-    ####################################################################
+    ##################################################################
 
     def multiply(self, other):
         """Element-wise multiplication by another array/matrix.
@@ -841,7 +839,7 @@ class _spbase(SparseABC):
         else:
             return NotImplemented
 
-    def __radd__(self,other):  # other + self
+    def __radd__(self, other):  # other + self
         return self.__add__(other)
 
     def __sub__(self, other):  # self - other
@@ -860,7 +858,7 @@ class _spbase(SparseABC):
         else:
             return NotImplemented
 
-    def __rsub__(self,other):  # other - self
+    def __rsub__(self, other):  # other - self
         if isscalarlike(other):
             if other == 0:
                 return -self.copy()
@@ -999,9 +997,9 @@ class _spbase(SparseABC):
                 return NotImplemented
             return ret.transpose()
 
-    #######################
+    #####################
     # matmul (@) operator #
-    #######################
+    #####################
 
     def __matmul__(self, other):
         if isscalarlike(other):
@@ -1015,9 +1013,9 @@ class _spbase(SparseABC):
                              "use '*' instead")
         return self._rmatmul_dispatch(other)
 
-    ####################
+    ##################
     # Other Arithmetic #
-    ####################
+    ##################
 
     def _divide(self, other, *, rdivide=False):
         if not (issparse(other) or isdense(other) or isscalarlike(other)):
@@ -1575,7 +1573,6 @@ class _spbase(SparseABC):
         if dtype is not None and out is None:
             return res.astype(dtype, copy=False)
         return res
-
 
     def diagonal(self, k=0):
         """Returns the kth diagonal of the array/matrix.

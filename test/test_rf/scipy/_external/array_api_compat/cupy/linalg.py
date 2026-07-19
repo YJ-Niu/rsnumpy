@@ -1,4 +1,7 @@
-from cupy.linalg import * # noqa: F403
+import cupy as cp
+from .._internal import get_xp
+from ..common import _linalg
+from cupy.linalg import *  # noqa: F403
 
 # https://github.com/cupy/cupy/issues/9749
 from cupy.linalg import lstsq  # noqa: F401
@@ -9,7 +12,7 @@ from cupy.linalg import lstsq  # noqa: F401
 _n: dict[str, object] = {}
 exec('from cupy.linalg import *', _n)
 del _n['__builtins__']
-linalg_all = list(_n)  + ['lstsq']
+linalg_all = list(_n) + ['lstsq']
 del _n
 
 try:
@@ -20,13 +23,8 @@ except ImportError:
     pass
 
 
-from ..common import _linalg
-from .._internal import get_xp
-
-import cupy as cp
-
 # These functions are in both the main and linalg namespaces
-from ._aliases import matmul, matrix_transpose, tensordot, vecdot # noqa: F401
+from ._aliases import matmul, matrix_transpose, tensordot, vecdot  # noqa: F401
 
 cross = get_xp(cp)(_linalg.cross)
 outer = get_xp(cp)(_linalg.outer)
@@ -57,6 +55,7 @@ __all__ = linalg_all + _linalg.__all__
 
 # cupy 13 does not have __all__, cupy 14 has it: remove duplicates
 __all__ = sorted(list(set(__all__)))
+
 
 def __dir__() -> list[str]:
     return __all__

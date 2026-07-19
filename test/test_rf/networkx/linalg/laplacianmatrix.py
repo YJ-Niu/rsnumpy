@@ -243,7 +243,7 @@ def normalized_laplacian_matrix(G, nodelist=None, weight="weight"):
     return DH @ (L @ DH)
 
 
-###############################################################################
+#############################################################################
 # Code based on work from https://github.com/bjedwards
 
 

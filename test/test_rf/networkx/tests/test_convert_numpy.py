@@ -118,7 +118,7 @@ class TestConvertNumpyArray:
         with pytest.raises(
             nx.NetworkXError, match=f"Input array must be 2D, not {A.ndim}"
         ):
-            g = nx.from_numpy_array(A)
+            nx.from_numpy_array(A)
 
     def test_from_numpy_array_dtype(self):
         dt = [("weight", float), ("cost", int)]

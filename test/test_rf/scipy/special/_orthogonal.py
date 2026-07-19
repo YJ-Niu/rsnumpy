@@ -77,7 +77,7 @@ References
 # SciPy imports.
 import rsnumpy as np
 from rsnumpy import (exp, inf, pi, sqrt, floor, sin, cos, around,
-                   hstack, arccos, arange)
+                     hstack, arccos, arange)
 from scipy.special import airy
 
 # Local imports.
@@ -122,6 +122,7 @@ class orthopoly1d(np.poly1d):
             evf = eval_func
             if evf:
                 knn = kn
+
                 def eval_func(x):
                     return evf(x) / knn
             mu = mu / abs(kn)
@@ -175,8 +176,8 @@ def _gen_roots_and_weights(n, mu0, an_func, bn_func, f, df, symmetrize, mu):
     from scipy import linalg
     k = np.arange(n, dtype='d')
     c = np.zeros((2, n))
-    c[0,1:] = bn_func(k[1:])
-    c[1,:] = an_func(k)
+    c[0, 1:] = bn_func(k[1:])
+    c[1, :] = an_func(k)
     x = linalg.eigvals_banded(c, overwrite_a_band=True)
 
     # improve roots by one application of Newton's method
@@ -301,6 +302,7 @@ def roots_jacobi(n, alpha, beta, mu=False):
 
     def f(n, x):
         return _ufuncs.eval_jacobi(n, a, b, x)
+
     def df(n, x):
         return 0.5 * (n + a + b + 1) * _ufuncs.eval_jacobi(n - 1, a + 1, b + 1, x)
     return _gen_roots_and_weights(m, mu0, an_func, bn_func, f, df, False, mu)
@@ -608,10 +610,13 @@ def roots_genlaguerre(n, alpha, mu=False):
 
     def an_func(k):
         return 2 * k + alpha + 1
+
     def bn_func(k):
         return -np.sqrt(k * (k + alpha))
+
     def f(n, x):
         return _ufuncs.eval_genlaguerre(n, alpha, x)
+
     def df(n, x):
         return (n * _ufuncs.eval_genlaguerre(n, alpha, x)
                 - (n + alpha) * _ufuncs.eval_genlaguerre(n - 1, alpha, x)) / x
@@ -707,6 +712,7 @@ def genlaguerre(n, alpha, monic=False):
     else:
         n1 = n
     x, w = roots_genlaguerre(n1, alpha)
+
     def wfunc(x):
         return exp(-x) * x ** alpha
     if n == 0:
@@ -928,9 +934,11 @@ def roots_hermite(n, mu=False):
     if n <= 150:
         def an_func(k):
             return 0.0 * k
+
         def bn_func(k):
             return np.sqrt(k / 2.0)
         f = _ufuncs.eval_hermite
+
         def df(n, x):
             return 2.0 * n * _ufuncs.eval_hermite(n - 1, x)
         return _gen_roots_and_weights(m, mu0, an_func, bn_func, f, df, True, mu)
@@ -970,8 +978,10 @@ def _compute_tauk(n, k, maxit=5):
     """
     a = n % 2 - 0.5
     c = (4.0*floor(n/2.0) - 4.0*k + 3.0)*pi / (4.0*floor(n/2.0) + 2.0*a + 2.0)
+
     def f(x):
         return x - sin(x) - c
+
     def df(x):
         return 1.0 - cos(x)
     xi = 0.5*pi
@@ -1052,7 +1062,7 @@ def _initial_nodes_b(n, k):
             + (9.0/140.0 - 12.0/175.0 * ak**3) * nu**(-1.0)
             + (16.0/1575.0 * ak + 92.0/7875.0 * ak**4) * 2.0**(2.0/3.0) * nu**(-5.0/3.0)
             - (15152.0/3031875.0 * ak**5 + 1088.0/121275.0 * ak**2)
-              * 2.0**(1.0/3.0) * nu**(-7.0/3.0))
+            * 2.0**(1.0/3.0) * nu**(-7.0/3.0))
     return xksq
 
 
@@ -1156,42 +1166,42 @@ def _pbcf(n, theta):
     # Polynomials
     # https://dlmf.nist.gov/12.10#E9
     # https://dlmf.nist.gov/12.10#E10
-    ctp = ct ** arange(16).reshape((-1,1))
+    ctp = ct ** arange(16).reshape((-1, 1))
     u0 = 1.0
-    u1 = (1.0*ctp[3,:] - 6.0*ct) / 24.0
-    u2 = (-9.0*ctp[4,:] + 249.0*ctp[2,:] + 145.0) / 1152.0
-    u3 = (-4042.0*ctp[9,:] + 18189.0*ctp[7,:] - 28287.0*ctp[5,:]
-          - 151995.0*ctp[3,:] - 259290.0*ct) / 414720.0
-    u4 = (72756.0*ctp[10,:] - 321339.0*ctp[8,:] - 154982.0*ctp[6,:]
-          + 50938215.0*ctp[4,:] + 122602962.0*ctp[2,:] + 12773113.0) / 39813120.0
-    u5 = (82393456.0*ctp[15,:] - 617950920.0*ctp[13,:] + 1994971575.0*ctp[11,:]
-          - 3630137104.0*ctp[9,:] + 4433574213.0*ctp[7,:] - 37370295816.0*ctp[5,:]
-          - 119582875013.0*ctp[3,:] - 34009066266.0*ct) / 6688604160.0
+    u1 = (1.0*ctp[3, :] - 6.0*ct) / 24.0
+    u2 = (-9.0*ctp[4, :] + 249.0*ctp[2, :] + 145.0) / 1152.0
+    u3 = (-4042.0*ctp[9, :] + 18189.0*ctp[7, :] - 28287.0*ctp[5, :]
+          - 151995.0*ctp[3, :] - 259290.0*ct) / 414720.0
+    u4 = (72756.0*ctp[10, :] - 321339.0*ctp[8, :] - 154982.0*ctp[6, :]
+          + 50938215.0*ctp[4, :] + 122602962.0*ctp[2, :] + 12773113.0) / 39813120.0
+    u5 = (82393456.0*ctp[15, :] - 617950920.0*ctp[13, :] + 1994971575.0*ctp[11, :]
+          - 3630137104.0*ctp[9, :] + 4433574213.0*ctp[7, :] - 37370295816.0*ctp[5, :]
+          - 119582875013.0*ctp[3, :] - 34009066266.0*ct) / 6688604160.0
     v0 = 1.0
-    v1 = (1.0*ctp[3,:] + 6.0*ct) / 24.0
-    v2 = (15.0*ctp[4,:] - 327.0*ctp[2,:] - 143.0) / 1152.0
-    v3 = (-4042.0*ctp[9,:] + 18189.0*ctp[7,:] - 36387.0*ctp[5,:] 
-          + 238425.0*ctp[3,:] + 259290.0*ct) / 414720.0
-    v4 = (-121260.0*ctp[10,:] + 551733.0*ctp[8,:] - 151958.0*ctp[6,:]
-          - 57484425.0*ctp[4,:] - 132752238.0*ctp[2,:] - 12118727) / 39813120.0
-    v5 = (82393456.0*ctp[15,:] - 617950920.0*ctp[13,:] + 2025529095.0*ctp[11,:]
-          - 3750839308.0*ctp[9,:] + 3832454253.0*ctp[7,:] + 35213253348.0*ctp[5,:]
-          + 130919230435.0*ctp[3,:] + 34009066266*ct) / 6688604160.0
+    v1 = (1.0*ctp[3, :] + 6.0*ct) / 24.0
+    v2 = (15.0*ctp[4, :] - 327.0*ctp[2, :] - 143.0) / 1152.0
+    v3 = (-4042.0*ctp[9, :] + 18189.0*ctp[7, :] - 36387.0*ctp[5, :]
+          + 238425.0*ctp[3, :] + 259290.0*ct) / 414720.0
+    v4 = (-121260.0*ctp[10, :] + 551733.0*ctp[8, :] - 151958.0*ctp[6, :]
+          - 57484425.0*ctp[4, :] - 132752238.0*ctp[2, :] - 12118727) / 39813120.0
+    v5 = (82393456.0*ctp[15, :] - 617950920.0*ctp[13, :] + 2025529095.0*ctp[11, :]
+          - 3750839308.0*ctp[9, :] + 3832454253.0*ctp[7, :] + 35213253348.0*ctp[5, :]
+          + 130919230435.0*ctp[3, :] + 34009066266*ct) / 6688604160.0
     # Airy Evaluation (Bi and Bip unused)
     Ai, Aip, Bi, Bip = airy(mu**(4.0/6.0) * zeta)
     # Prefactor for U
     P = 2.0*sqrt(pi) * mu**(1.0/6.0) * phi
     # Terms for U
     # https://dlmf.nist.gov/12.10#E42
-    phip = phi ** arange(6, 31, 6).reshape((-1,1))
+    phip = phi ** arange(6, 31, 6).reshape((-1, 1))
     A0 = b0*u0
-    A1 = (b2*u0 + phip[0,:]*b1*u1 + phip[1,:]*b0*u2) / zeta**3
-    A2 = (b4*u0 + phip[0,:]*b3*u1 + phip[1,:]*b2*u2 + phip[2,:]*b1*u3
-          + phip[3,:]*b0*u4) / zeta**6
-    B0 = -(a1*u0 + phip[0,:]*a0*u1) / zeta**2
-    B1 = -(a3*u0 + phip[0,:]*a2*u1 + phip[1,:]*a1*u2 + phip[2,:]*a0*u3) / zeta**5
-    B2 = -(a5*u0 + phip[0,:]*a4*u1 + phip[1,:]*a3*u2 + phip[2,:]*a2*u3
-           + phip[3,:]*a1*u4 + phip[4,:]*a0*u5) / zeta**8
+    A1 = (b2*u0 + phip[0, :]*b1*u1 + phip[1, :]*b0*u2) / zeta**3
+    A2 = (b4*u0 + phip[0, :]*b3*u1 + phip[1, :]*b2*u2 + phip[2, :]*b1*u3
+          + phip[3, :]*b0*u4) / zeta**6
+    B0 = -(a1*u0 + phip[0, :]*a0*u1) / zeta**2
+    B1 = -(a3*u0 + phip[0, :]*a2*u1 + phip[1, :]*a1*u2 + phip[2, :]*a0*u3) / zeta**5
+    B2 = -(a5*u0 + phip[0, :]*a4*u1 + phip[1, :]*a3*u2 + phip[2, :]*a2*u3
+           + phip[3, :]*a1*u4 + phip[4, :]*a0*u5) / zeta**8
     # U
     # https://dlmf.nist.gov/12.10#E35
     U = P * (Ai * (A0 + A1/mu**2.0 + A2/mu**4.0) +
@@ -1200,14 +1210,14 @@ def _pbcf(n, theta):
     Pd = sqrt(2.0*pi) * mu**(2.0/6.0) / phi
     # Terms for derivative of U
     # https://dlmf.nist.gov/12.10#E46
-    C0 = -(b1*v0 + phip[0,:]*b0*v1) / zeta
-    C1 = -(b3*v0 + phip[0,:]*b2*v1 + phip[1,:]*b1*v2 + phip[2,:]*b0*v3) / zeta**4
-    C2 = -(b5*v0 + phip[0,:]*b4*v1 + phip[1,:]*b3*v2 + phip[2,:]*b2*v3
-           + phip[3,:]*b1*v4 + phip[4,:]*b0*v5) / zeta**7
+    C0 = -(b1*v0 + phip[0, :]*b0*v1) / zeta
+    C1 = -(b3*v0 + phip[0, :]*b2*v1 + phip[1, :]*b1*v2 + phip[2, :]*b0*v3) / zeta**4
+    C2 = -(b5*v0 + phip[0, :]*b4*v1 + phip[1, :]*b3*v2 + phip[2, :]*b2*v3
+           + phip[3, :]*b1*v4 + phip[4, :]*b0*v5) / zeta**7
     D0 = a0*v0
-    D1 = (a2*v0 + phip[0,:]*a1*v1 + phip[1,:]*a0*v2) / zeta**3
-    D2 = (a4*v0 + phip[0,:]*a3*v1 + phip[1,:]*a2*v2 + phip[2,:]*a1*v3
-          + phip[3,:]*a0*v4) / zeta**6
+    D1 = (a2*v0 + phip[0, :]*a1*v1 + phip[1, :]*a0*v2) / zeta**3
+    D2 = (a4*v0 + phip[0, :]*a3*v1 + phip[1, :]*a2*v2 + phip[2, :]*a1*v3
+          + phip[3, :]*a0*v4) / zeta**6
     # Derivative of U
     # https://dlmf.nist.gov/12.10#E36
     Ud = Pd * (Ai * (C0 + C1/mu**2.0 + C2/mu**4.0) / mu**(4.0/6.0) +
@@ -1376,6 +1386,7 @@ def hermite(n, monic=False):
     else:
         n1 = n
     x, w = roots_hermite(n1)
+
     def wfunc(x):
         return exp(-x * x)
     if n == 0:
@@ -1448,9 +1459,11 @@ def roots_hermitenorm(n, mu=False):
     if n <= 150:
         def an_func(k):
             return 0.0 * k
+
         def bn_func(k):
             return np.sqrt(k)
         f = _ufuncs.eval_hermitenorm
+
         def df(n, x):
             return n * _ufuncs.eval_hermitenorm(n - 1, x)
         return _gen_roots_and_weights(m, mu0, an_func, bn_func, f, df, True, mu)
@@ -1511,7 +1524,7 @@ def hermitenorm(n, monic=False):
     np.float64(-2.0)
 
     Plot probabilist's Hermite polynomials of degree 0 to 4:
-    
+
     >>> x = np.linspace(-3, 3, 100)
     >>> fig, ax = plt.subplots()
     >>> for i in range(5):
@@ -1531,6 +1544,7 @@ def hermitenorm(n, monic=False):
     else:
         n1 = n
     x, w = roots_hermitenorm(n1)
+
     def wfunc(x):
         return exp(-x * x / 2.0)
     if n == 0:
@@ -1600,7 +1614,7 @@ def roots_gegenbauer(n, alpha, mu=False):
 
     if alpha <= 170:
         mu0 = (np.sqrt(np.pi) * _ufuncs.gamma(alpha + 0.5)) \
-              / _ufuncs.gamma(alpha + 1)
+            / _ufuncs.gamma(alpha + 1)
     else:
         # For large alpha we use a Taylor series expansion around inf,
         # expressed as a 6th order polynomial of a^-1 and using Horner's
@@ -1612,12 +1626,16 @@ def roots_gegenbauer(n, alpha, mu=False):
         for term in range(1, len(coeffs)):
             mu0 = mu0 * inv_alpha + coeffs[term]
         mu0 = mu0 * np.sqrt(np.pi / alpha)
+
     def an_func(k):
         return 0.0 * k
+
     def bn_func(k):
         return np.sqrt(k * (k + 2 * alpha - 1) / (4 * (k + alpha) * (k + alpha - 1)))
+
     def f(n, x):
         return _ufuncs.eval_gegenbauer(n, alpha, x)
+
     def df(n, x):
         return (
             -n * x * _ufuncs.eval_gegenbauer(n, alpha, x)
@@ -1691,7 +1709,7 @@ def gegenbauer(n, alpha, monic=False):
     >>> plt.show()
 
     """
-    if not np.isfinite(alpha) or alpha <= -0.5 :
+    if not np.isfinite(alpha) or alpha <= -0.5:
         raise ValueError("`alpha` must be a finite number greater than -1/2")
     base = jacobi(n, alpha - 0.5, alpha - 0.5, monic=monic)
     if monic or n == 0:
@@ -2617,11 +2635,14 @@ def roots_legendre(n, mu=False):
         raise ValueError("n must be a positive integer.")
 
     mu0 = 2.0
+
     def an_func(k):
         return 0.0 * k
+
     def bn_func(k):
         return k * np.sqrt(1.0 / (4 * k * k - 1))
     f = _ufuncs.eval_legendre
+
     def df(n, x):
         return (-n * x * _ufuncs.eval_legendre(n, x)
                 + n * _ufuncs.eval_legendre(n - 1, x)) / (1 - x ** 2)
@@ -2745,7 +2766,7 @@ def roots_sh_legendre(n, mu=False):
     The sum of the weights for shifted Gauss-Legendre quadrature is always 1:
 
     >>> x, w, mu = roots_sh_legendre(10, mu=True)
-    >>> mu 
+    >>> mu
     1.0  # Sum of weights of shifted Gauss-Legendre quadrature is always 1
 
     """

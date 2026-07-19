@@ -121,6 +121,7 @@ class NonlinearConstraint:
     >>> nlc = NonlinearConstraint(con, -np.inf, 1.9)
 
     """
+
     def __init__(self, fun, lb, ub, jac='2-point', hess=None,
                  keep_feasible=False, finite_diff_rel_step=None,
                  finite_diff_jac_sparsity=None):
@@ -182,6 +183,7 @@ class LinearConstraint:
     operation.
 
     """
+
     def _input_validation(self):
         if self.A.ndim != 2:
             message = "`A` must have exactly two dimensions."
@@ -531,8 +533,10 @@ def new_constraint_to_old(con, x0):
         A = con.A
         if issparse(A):
             A = A.toarray()
+
         def fun(x):
             return np.dot(A, x)
+
         def jac(x):
             return A
 
@@ -632,6 +636,7 @@ def old_constraint_to_new(ic, con):
     jac = '2-point'
     if 'args' in con:
         args = con['args']
+
         def fun(x):
             return con["fun"](x, *args)
         if 'jac' in con:

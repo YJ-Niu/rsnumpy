@@ -491,9 +491,9 @@ def network_simplex(G, demand="demand", capacity="capacity", weight="weight"):
            optimization.
            INFOR 17(1):16--34. 1979.
     """
-    ###########################################################################
+    #########################################################################
     # Problem essentials extraction and sanity check
-    ###########################################################################
+    #########################################################################
 
     if len(G) == 0:
         raise nx.NetworkXError("graph has no nodes")
@@ -505,9 +505,9 @@ def network_simplex(G, demand="demand", capacity="capacity", weight="weight"):
         G, multigraph, demand=demand, capacity=capacity, weight=weight
     )
 
-    ###########################################################################
+    #########################################################################
     # Quick Error Detection
-    ###########################################################################
+    #########################################################################
 
     inf = float("inf")
     for u, d in zip(DEAF.node_list, DEAF.node_demands):
@@ -524,9 +524,9 @@ def network_simplex(G, demand="demand", capacity="capacity", weight="weight"):
         if abs(e[-1].get(weight, 0)) == inf:
             raise nx.NetworkXError(f"edge {e[:-1]!r} has infinite weight")
 
-    ###########################################################################
+    #########################################################################
     # Quick Infeasibility Detection
-    ###########################################################################
+    #########################################################################
 
     if sum(DEAF.node_demands) != 0:
         raise nx.NetworkXUnfeasible("total node demand is not zero")
@@ -541,9 +541,9 @@ def network_simplex(G, demand="demand", capacity="capacity", weight="weight"):
         if e[-1].get(capacity, inf) < 0:
             raise nx.NetworkXUnfeasible(f"edge {e[:-1]!r} has negative capacity")
 
-    ###########################################################################
+    #########################################################################
     # Initialization
-    ###########################################################################
+    #########################################################################
 
     # Add a dummy node -1 and connect all existing nodes to it with infinite-
     # capacity dummy edges. Node -1 will serve as the root of the
@@ -576,9 +576,9 @@ def network_simplex(G, demand="demand", capacity="capacity", weight="weight"):
     # Construct the initial spanning tree.
     DEAF.initialize_spanning_tree(n, faux_inf)
 
-    ###########################################################################
+    #########################################################################
     # Pivot loop
-    ###########################################################################
+    #########################################################################
 
     for i, p, q in DEAF.find_entering_edges():
         Wn, We = DEAF.find_cycle(i, p, q)
@@ -597,9 +597,9 @@ def network_simplex(G, demand="demand", capacity="capacity", weight="weight"):
             DEAF.add_edge(i, p, q)
             DEAF.update_potentials(i, p, q)
 
-    ###########################################################################
+    #########################################################################
     # Infeasibility and unboundedness detection
-    ###########################################################################
+    #########################################################################
 
     if any(DEAF.edge_flow[i] != 0 for i in range(-n, 0)):
         raise nx.NetworkXUnfeasible("no flow satisfies all node demands")
@@ -610,11 +610,11 @@ def network_simplex(G, demand="demand", capacity="capacity", weight="weight"):
     ):
         raise nx.NetworkXUnbounded("negative cycle with infinite capacity found")
 
-    ###########################################################################
+    #########################################################################
     # Flow cost calculation and flow dict construction
-    ###########################################################################
+    #########################################################################
 
-    del DEAF.edge_flow[DEAF.edge_count :]
+    del DEAF.edge_flow[DEAF.edge_count:]
     flow_cost = sum(w * x for w, x in zip(DEAF.edge_weights, DEAF.edge_flow))
     flow_dict = {n: {} for n in DEAF.node_list}
 

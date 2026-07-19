@@ -61,16 +61,16 @@ def retmsg(solver, info, iprint, nf, f, x, cstrv=None, constr=None):
     '''
     # Local variables
     valid_exit_codes = [FTARGET_ACHIEVED, MAXFUN_REACHED, MAXTR_REACHED,
-        SMALL_TR_RADIUS, TRSUBP_FAILED, NAN_INF_F, NAN_INF_X, NAN_INF_MODEL, DAMAGING_ROUNDING,
-        NO_SPACE_BETWEEN_BOUNDS, ZERO_LINEAR_CONSTRAINT, CALLBACK_TERMINATE]
+                        SMALL_TR_RADIUS, TRSUBP_FAILED, NAN_INF_F, NAN_INF_X, NAN_INF_MODEL, DAMAGING_ROUNDING,
+                        NO_SPACE_BETWEEN_BOUNDS, ZERO_LINEAR_CONSTRAINT, CALLBACK_TERMINATE]
 
     # Preconditions
     if DEBUGGING:
         assert info in valid_exit_codes
 
-    #====================#
+    # ====================#
     # Calculation starts #
-    #====================#
+    # ====================#
 
     if abs(iprint) < 1:  # No printing (iprint == 0)
         return
@@ -103,7 +103,7 @@ def retmsg(solver, info, iprint, nf, f, x, cstrv=None, constr=None):
 
     if is_constrained:
         nf_message = (f'\nNumber of function values = {nf}{spaces}'
-            f'Least value of F = {f}{spaces}Constraint violation = {cstrv_loc}')
+                      f'Least value of F = {f}{spaces}Constraint violation = {cstrv_loc}')
     else:
         nf_message = f'\nNumber of function values = {nf}{spaces}Least value of F = {f}'
 
@@ -121,7 +121,8 @@ def retmsg(solver, info, iprint, nf, f, x, cstrv=None, constr=None):
     else:
         message = f'{ret_message}{nf_message}{x_message}{constr_message}\n'
     if len(fname) > 0:
-        with open(fname, 'a') as f: f.write(message)
+        with open(fname, 'a') as f:
+            f.write(message)
     else:
         print(message)
 
@@ -131,9 +132,9 @@ def rhomsg(solver, iprint, nf, delta, f, rho, x, cstrv=None, constr=None, cpen=N
     This function prints messages when RHO is updated.
     '''
 
-    #====================#
+    # ====================#
     # Calculation starts #
-    #====================#
+    # ====================#
 
     if abs(iprint) < 2:  # No printing
         return
@@ -158,7 +159,7 @@ def rhomsg(solver, iprint, nf, delta, f, rho, x, cstrv=None, constr=None, cpen=N
 
     if present(cpen):
         rho_message = (f'\nNew RHO = {rho}{spaces}Delta = {delta}{spaces}'
-            f'CPEN = {cpen}')
+                       f'CPEN = {cpen}')
     else:
         rho_message = f'\nNew RHO = {rho}{spaces}Delta = {delta}'
 
@@ -169,7 +170,7 @@ def rhomsg(solver, iprint, nf, delta, f, rho, x, cstrv=None, constr=None, cpen=N
 
     if is_constrained:
         nf_message = (f'\nNumber of function values = {nf}{spaces}'
-            f'Least value of F = {f}{spaces}Constraint violation = {cstrv_loc}')
+                      f'Least value of F = {f}{spaces}Constraint violation = {cstrv_loc}')
     else:
         nf_message = f'\nNumber of function values = {nf}{spaces}Least value of F = {f}'
 
@@ -187,13 +188,14 @@ def rhomsg(solver, iprint, nf, delta, f, rho, x, cstrv=None, constr=None, cpen=N
     else:
         message = f'{rho_message}{nf_message}{x_message}{constr_message}'
     if len(fname) > 0:
-        with open(fname, 'a') as f: f.write(message)
+        with open(fname, 'a') as f:
+            f.write(message)
     else:
         print(message)
 
-    #====================#
+    # ====================#
     #  Calculation ends  #
-    #====================#
+    # ====================#
 
 
 def cpenmsg(solver, iprint, cpen):
@@ -201,9 +203,9 @@ def cpenmsg(solver, iprint, cpen):
     This function prints a message when CPEN is updated.
     '''
 
-    #====================#
+    # ====================#
     # Calculation starts #
-    #====================#
+    # ====================#
 
     if abs(iprint) < 2:  # No printing
         return
@@ -218,13 +220,14 @@ def cpenmsg(solver, iprint, cpen):
     else:
         message = f'\n\nSet CPEN to {cpen}'
     if len(fname) > 0:
-        with open(fname, 'a') as f: f.write(message)
+        with open(fname, 'a') as f:
+            f.write(message)
     else:
         print(message)
 
-    #====================#
+    # ====================#
     #  Calculation ends  #
-    #====================#
+    # ====================#
 
 
 def fmsg(solver, state, iprint, nf, delta, f, x, cstrv=None, constr=None):
@@ -232,9 +235,9 @@ def fmsg(solver, state, iprint, nf, delta, f, x, cstrv=None, constr=None):
     This subroutine prints messages for each evaluation of the objective function.
     '''
 
-    #====================#
+    # ====================#
     # Calculation starts #
-    #====================#
+    # ====================#
 
     if abs(iprint) < 2:  # No printing
         return
@@ -261,7 +264,7 @@ def fmsg(solver, state, iprint, nf, delta, f, x, cstrv=None, constr=None):
 
     if is_constrained:
         nf_message = (f'\nNumber of function values = {nf}{spaces}'
-            f'Least value of F = {f}{spaces}Constraint violation = {cstrv_loc}')
+                      f'Least value of F = {f}{spaces}Constraint violation = {cstrv_loc}')
     else:
         nf_message = f'\nNumber of function values = {nf}{spaces}Least value of F = {f}'
 
@@ -281,10 +284,11 @@ def fmsg(solver, state, iprint, nf, delta, f, x, cstrv=None, constr=None):
     # Print the message.
     message = f'{delta_message}{nf_message}{x_message}{constr_message}'
     if len(fname) > 0:
-        with open(fname, 'a') as f: f.write(message)
+        with open(fname, 'a') as f:
+            f.write(message)
     else:
         print(message)
 
-    #====================#
+    # ====================#
     #  Calculation ends  #
-    #====================#
+    # ====================#

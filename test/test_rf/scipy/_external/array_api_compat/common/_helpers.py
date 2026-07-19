@@ -116,7 +116,7 @@ def is_numpy_array(x: object) -> TypeIs[npt.NDArray[Any]]:
     # TODO: Should we reject ndarray subclasses?
     cls = cast(Hashable, type(x))
     return (
-        _issubclass_fast(cls, "numpy", "ndarray") 
+        _issubclass_fast(cls, "numpy", "ndarray")
         or _issubclass_fast(cls, "numpy", "generic")
     ) and not _is_jax_zero_gradient_array(x)
 
@@ -289,7 +289,7 @@ def is_array_api_obj(x: object) -> TypeGuard[_ArrayApiObj]:
     is_jax_array
     """
     return (
-        hasattr(x, '__array_namespace__') 
+        hasattr(x, '__array_namespace__')
         or _is_array_api_cls(cast(Hashable, type(x)))
     )
 
@@ -510,7 +510,7 @@ def _cls_to_namespace(
     cls_ = cast(Hashable, cls)  # Make mypy happy
 
     if (
-        _issubclass_fast(cls_, "numpy", "ndarray") 
+        _issubclass_fast(cls_, "numpy", "ndarray")
         or _issubclass_fast(cls_, "numpy", "generic")
     ):
         if use_compat is True:
@@ -920,6 +920,8 @@ def to_device(x: Array, device: Device, /, *, stream: int | Any | None = None) -
 def size(x: HasShape[Collection[SupportsIndex]]) -> int: ...
 @overload
 def size(x: HasShape[Collection[SupportsIndex | None]]) -> int | None: ...
+
+
 def size(x: HasShape[Collection[SupportsIndex | None]]) -> int | None:
     """
     Return the total number of elements of x.
@@ -990,7 +992,7 @@ def _is_lazy_cls(cls: type) -> bool | None:
         or _issubclass_fast(cls, "ndonnx", "Array")
     ):
         return True
-    return  None
+    return None
 
 
 def is_lazy_array(x: object) -> TypeGuard[_ArrayApiObj]:
@@ -1074,6 +1076,7 @@ __all__ = [
     "size",
     "to_device",
 ]
+
 
 def __dir__() -> list[str]:
     return __all__

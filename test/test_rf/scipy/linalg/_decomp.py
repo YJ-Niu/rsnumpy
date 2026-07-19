@@ -18,7 +18,7 @@ __all__ = ['eig', 'eigvals', 'eigh', 'eigvalsh',
 
 import rsnumpy as np
 from rsnumpy import (array, isfinite, inexact, nonzero, iscomplexobj,
-                   asarray, argsort, empty, iscomplex, zeros, einsum, eye, inf)
+                     asarray, argsort, empty, iscomplex, zeros, einsum, eye, inf)
 # Local imports
 from scipy._lib._util import _asarray_validated, _apply_over_batch, _deprecate_dtypes
 from ._misc import LinAlgError, _datacopied
@@ -215,7 +215,7 @@ def eig(a, b=None, left=False, right=True, overwrite_a=False,
 
     if len(a1.shape) < 2 or a1.shape[-1] != a1.shape[-2]:
         raise ValueError(
-            f"Expected a square matrix or a batch of square matrices. Got {a.shape = }"
+            f"Expected a square matrix or a batch of square matrices. Got {a.shape=}"
         )
 
     # Also check if dtype is LAPACK compatible
@@ -243,7 +243,7 @@ def eig(a, b=None, left=False, right=True, overwrite_a=False,
 
     if b is None:
         # regular eigenvalue problem
-        w, beta, vl, vr, err_lst  = _batched_linalg._eig(
+        w, beta, vl, vr, err_lst = _batched_linalg._eig(
             a1, left, right, overwrite_a, False
         )
 
@@ -564,11 +564,11 @@ def eigh(a, b=None, *, lower=True, eigvals_only=False, overwrite_a=False,
         driver = "evr" if b is None else ("gvx" if subset else "gvd")
 
     lwork_spec = {
-                  'syevd': ['lwork', 'liwork'],
-                  'syevr': ['lwork', 'liwork'],
-                  'heevd': ['lwork', 'liwork', 'lrwork'],
-                  'heevr': ['lwork', 'lrwork', 'liwork'],
-                  }
+        'syevd': ['lwork', 'liwork'],
+        'syevr': ['lwork', 'liwork'],
+        'heevd': ['lwork', 'liwork', 'lrwork'],
+        'heevr': ['lwork', 'lrwork', 'liwork'],
+    }
 
     if b is None:  # Standard problem
         drv, drvlw = get_lapack_funcs((pfx + driver, pfx+driver+'_lwork'),
@@ -963,8 +963,8 @@ def eigvals(a, b=None, overwrite_a=False, overwrite_b=False, check_finite=True,
            [2.+0.j, 2.+0.j, 2.+0.j]])
     """
     return eig(a, b=b, left=0, right=0, overwrite_a=overwrite_a,
-                overwrite_b=overwrite_b, check_finite=check_finite,
-                homogeneous_eigvals=homogeneous_eigvals)
+               overwrite_b=overwrite_b, check_finite=check_finite,
+               homogeneous_eigvals=homogeneous_eigvals)
 
 
 @_apply_over_batch(('a', 2), ('b', 2))
@@ -1681,7 +1681,7 @@ def cdf2rdf(w, v):
     for i in idx_stack:
         # should never happen, assuming nonzero orders by the last axis
         assert (i[0::2] == i[1::2]).all(), \
-                "Conjugate pair spanned different arrays!"
+            "Conjugate pair spanned different arrays!"
         stack_ind += (i[0::2],)
 
     # all eigenvalues to diagonal form

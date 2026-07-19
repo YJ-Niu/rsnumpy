@@ -818,9 +818,9 @@ class _dispatchable:
         else:
             backend_fallback = []
 
-        # ##########################
+        # ########################
         # # How this behaves today #
-        # ##########################
+        # ########################
         #
         # The prose below describes the implementation and a *possible* way to
         # generalize "networkx" as "just another backend". The code is structured
@@ -841,9 +841,9 @@ class _dispatchable:
         #    `backend_priority` before running with the default "networkx" implementation.
         # 4. If configured, "fall back" and run with the default "networkx" implementation.
         #
-        # ################################################
+        # ##############################################
         # # How this is implemented and may work someday #
-        # ################################################
+        # ##############################################
         #
         # Let's determine the order of backends we should try according
         # to `backend_priority`, `backend_fallback`, and input backends.

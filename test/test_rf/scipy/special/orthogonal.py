@@ -12,20 +12,20 @@ _polyfuns = ['legendre', 'chebyt', 'chebyu', 'chebyc', 'chebys',
 
 # Correspondence between new and old names of root functions
 _rootfuns_map = {'roots_legendre': 'p_roots',
-               'roots_chebyt': 't_roots',
-               'roots_chebyu': 'u_roots',
-               'roots_chebyc': 'c_roots',
-               'roots_chebys': 's_roots',
-               'roots_jacobi': 'j_roots',
-               'roots_laguerre': 'l_roots',
-               'roots_genlaguerre': 'la_roots',
-               'roots_hermite': 'h_roots',
-               'roots_hermitenorm': 'he_roots',
-               'roots_gegenbauer': 'cg_roots',
-               'roots_sh_legendre': 'ps_roots',
-               'roots_sh_chebyt': 'ts_roots',
-               'roots_sh_chebyu': 'us_roots',
-               'roots_sh_jacobi': 'js_roots'}
+                 'roots_chebyt': 't_roots',
+                 'roots_chebyu': 'u_roots',
+                 'roots_chebyc': 'c_roots',
+                 'roots_chebys': 's_roots',
+                 'roots_jacobi': 'j_roots',
+                 'roots_laguerre': 'l_roots',
+                 'roots_genlaguerre': 'la_roots',
+                 'roots_hermite': 'h_roots',
+                 'roots_hermitenorm': 'he_roots',
+                 'roots_gegenbauer': 'cg_roots',
+                 'roots_sh_legendre': 'ps_roots',
+                 'roots_sh_chebyt': 'ts_roots',
+                 'roots_sh_chebyu': 'us_roots',
+                 'roots_sh_jacobi': 'js_roots'}
 
 
 __all__ = _polyfuns + list(_rootfuns_map.keys()) + [  # noqa: F822

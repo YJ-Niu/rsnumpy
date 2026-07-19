@@ -26,6 +26,7 @@ class IndexMixin:
     """
     This class provides common dispatching and validation logic for indexing.
     """
+
     def __getitem__(self, key, /):
         index, new_shape, _, _ = _validate_indices(key, self.shape, self.format)
         if len(new_shape) > 2:
@@ -119,7 +120,7 @@ class IndexMixin:
             # handle formats that support indexing but not 1D (lil for now)
             if self.format == "lil" and len(new_shape) != 2:
                 if res.shape == ():
-                    return self._coo_container([res], shape = new_shape)
+                    return self._coo_container([res], shape=new_shape)
                 return res.tocoo().reshape(new_shape)
             return res.reshape(new_shape)
         return res

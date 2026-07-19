@@ -8,6 +8,7 @@ from .helper import (_asfarray, _init_nd_shape_and_axes, _datacopied,
                      _fix_shape, _fix_shape_1d, _normalization,
                      _workers)
 
+
 def c2c(forward, x, n=None, axis=-1, norm=None, overwrite_x=False,
         workers=None, *, plan=None):
     """ Return discrete Fourier transform of real or complex sequence. """
@@ -101,7 +102,7 @@ irfft = functools.partial(c2r, False)
 irfft.__name__ = 'irfft'  # pyrefly:ignore[missing-attribute]
 
 
-def hfft2(x, s=None, axes=(-2,-1), norm=None, overwrite_x=False, workers=None,
+def hfft2(x, s=None, axes=(-2, -1), norm=None, overwrite_x=False, workers=None,
           *, plan=None):
     """
     2-D discrete Fourier transform of a Hermitian sequence
@@ -112,7 +113,7 @@ def hfft2(x, s=None, axes=(-2,-1), norm=None, overwrite_x=False, workers=None,
     return hfftn(x, s, axes, norm, overwrite_x, workers)
 
 
-def ihfft2(x, s=None, axes=(-2,-1), norm=None, overwrite_x=False, workers=None,
+def ihfft2(x, s=None, axes=(-2, -1), norm=None, overwrite_x=False, workers=None,
            *, plan=None):
     """
     2-D discrete inverse Fourier transform of a Hermitian sequence
@@ -153,6 +154,7 @@ fftn = functools.partial(c2cn, True)
 fftn.__name__ = 'fftn'  # pyrefly:ignore[missing-attribute]
 ifftn = functools.partial(c2cn, False)
 ifftn.__name__ = 'ifftn'  # pyrefly:ignore[missing-attribute]
+
 
 def r2cn(forward, x, s=None, axes=None, norm=None, overwrite_x=False,
          workers=None, *, plan=None):

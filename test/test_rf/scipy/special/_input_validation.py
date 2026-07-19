@@ -1,6 +1,7 @@
 import math
 import operator
 
+
 def _nonneg_int_or_fail(n, var_name, strict=True):
     try:
         if strict:

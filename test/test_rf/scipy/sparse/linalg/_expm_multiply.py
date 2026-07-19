@@ -307,51 +307,51 @@ def _expm_multiply_simple_core(A, B, t, mu, m_star, s, tol=None, balance=False):
 # They seem to have been difficult to calculate, involving symbolic
 # manipulation of equations, followed by numerical root finding.
 _theta = {
-        # The first 30 values are from table A.3 of Computing Matrix Functions.
-        1: 2.29e-16,
-        2: 2.58e-8,
-        3: 1.39e-5,
-        4: 3.40e-4,
-        5: 2.40e-3,
-        6: 9.07e-3,
-        7: 2.38e-2,
-        8: 5.00e-2,
-        9: 8.96e-2,
-        10: 1.44e-1,
-        # 11
-        11: 2.14e-1,
-        12: 3.00e-1,
-        13: 4.00e-1,
-        14: 5.14e-1,
-        15: 6.41e-1,
-        16: 7.81e-1,
-        17: 9.31e-1,
-        18: 1.09,
-        19: 1.26,
-        20: 1.44,
-        # 21
-        21: 1.62,
-        22: 1.82,
-        23: 2.01,
-        24: 2.22,
-        25: 2.43,
-        26: 2.64,
-        27: 2.86,
-        28: 3.08,
-        29: 3.31,
-        30: 3.54,
-        # The rest are from table 3.1 of
-        # Computing the Action of the Matrix Exponential.
-        35: 4.7,
-        40: 6.0,
-        45: 7.2,
-        50: 8.5,
-        55: 9.9,
-        }
+    # The first 30 values are from table A.3 of Computing Matrix Functions.
+    1: 2.29e-16,
+    2: 2.58e-8,
+    3: 1.39e-5,
+    4: 3.40e-4,
+    5: 2.40e-3,
+    6: 9.07e-3,
+    7: 2.38e-2,
+    8: 5.00e-2,
+    9: 8.96e-2,
+    10: 1.44e-1,
+    # 11
+    11: 2.14e-1,
+    12: 3.00e-1,
+    13: 4.00e-1,
+    14: 5.14e-1,
+    15: 6.41e-1,
+    16: 7.81e-1,
+    17: 9.31e-1,
+    18: 1.09,
+    19: 1.26,
+    20: 1.44,
+    # 21
+    21: 1.62,
+    22: 1.82,
+    23: 2.01,
+    24: 2.22,
+    25: 2.43,
+    26: 2.64,
+    27: 2.86,
+    28: 3.08,
+    29: 3.31,
+    30: 3.54,
+    # The rest are from table 3.1 of
+    # Computing the Action of the Matrix Exponential.
+    35: 4.7,
+    40: 6.0,
+    45: 7.2,
+    50: 8.5,
+    55: 9.9,
+}
 
 
 def _onenormest_matrix_power(A, p,
-        t=2, itmax=5, compute_v=False, compute_w=False):
+                             t=2, itmax=5, compute_v=False, compute_w=False):
     """
     Efficiently estimate the 1-norm of A^p.
 
@@ -387,11 +387,12 @@ def _onenormest_matrix_power(A, p,
         that is relatively large in norm compared to the input.
 
     """
-    #XXX Eventually turn this into an API function in the  _onenormest module,
-    #XXX and remove its underscore,
-    #XXX but wait until expm_multiply goes into scipy.
+    # XXX Eventually turn this into an API function in the  _onenormest module,
+    # XXX and remove its underscore,
+    # XXX but wait until expm_multiply goes into scipy.
     from scipy.sparse.linalg._onenormest import onenormest
     return onenormest(aslinearoperator(A) ** p)
+
 
 class LazyOperatorNormInfo:
     """
@@ -427,7 +428,7 @@ class LazyOperatorNormInfo:
         self._d = {}
         self._scale = scale
 
-    def set_scale(self,scale):
+    def set_scale(self, scale):
         """
         Set the scale parameter.
         """
@@ -456,6 +457,7 @@ class LazyOperatorNormInfo:
         Lazily compute max(d(p), d(p+1)).
         """
         return max(self.d(p), self.d(p+1))
+
 
 def _compute_cost_div_m(m, p, norm_info):
     """
@@ -715,19 +717,19 @@ def _expm_multiply_interval(A, B, start=None, stop=None, num=None,
             return 0
         else:
             return _expm_multiply_interval_core_0(A, X,
-                    h, mu, q, norm_info, tol, ell,n0)
+                                                  h, mu, q, norm_info, tol, ell, n0)
     elif not (q % s):
         if status_only:
             return 1
         else:
             return _expm_multiply_interval_core_1(A, X,
-                    h, mu, m_star, s, q, tol)
+                                                  h, mu, m_star, s, q, tol)
     elif (q % s):
         if status_only:
             return 2
         else:
             return _expm_multiply_interval_core_2(A, X,
-                    h, mu, m_star, s, q, tol)
+                                                  h, mu, m_star, s, q, tol)
     else:
         raise Exception('internal error')
 

@@ -464,7 +464,7 @@ def diags_array(diagonals, /, *, offsets=0, shape=None, format=None, dtype=_NoVa
         if length < 0:
             raise ValueError(f"Offset {offset} (index {j}) out of bounds")
         try:
-            data_arr[j, k:k+length] = diagonal[...,:length]
+            data_arr[j, k:k+length] = diagonal[..., :length]
         except ValueError as e:
             if len(diagonal) != length and len(diagonal) != 1:
                 raise ValueError(
@@ -1043,10 +1043,10 @@ def _compressed_sparse_stack(blocks, axis, return_spmatrix):
 
     if axis == 0:
         return csr_array((data, indices, indptr),
-                          shape=(sum_dim, constant_dim))
+                         shape=(sum_dim, constant_dim))
     else:
         return csc_array((data, indices, indptr),
-                          shape=(constant_dim, sum_dim))
+                         shape=(constant_dim, sum_dim))
 
 
 def _stack_along_minor_axis(blocks, axis):
@@ -1099,10 +1099,10 @@ def _stack_along_minor_axis(blocks, axis):
 
     if axis == 0:
         return blocks[0]._csc_container((data, indices, indptr),
-                          shape=(sum_dim, constant_dim))
+                                        shape=(sum_dim, constant_dim))
     else:
         return blocks[0]._csr_container((data, indices, indptr),
-                          shape=(constant_dim, sum_dim))
+                                        shape=(constant_dim, sum_dim))
 
 
 def hstack(blocks, format=None, dtype=None):
@@ -1317,12 +1317,12 @@ def _block(blocks, format, dtype, return_spmatrix=False):
     if blocks.ndim != 2:
         raise ValueError('blocks must be 2-D, and some must be sparse')
 
-    M,N = blocks.shape
+    M, N = blocks.shape
 
     # check for fast path cases
     if (format in (None, 'csr') and
         all(issparse(b) and b.format == 'csr' for b in blocks.flat)
-    ):
+        ):
         if N > 1:
             # stack along columns (axis 1): must have shape (M, 1)
             blocks = [[_stack_along_minor_axis(blocks[b, :], 1)] for b in range(M)]
@@ -1335,7 +1335,7 @@ def _block(blocks, format, dtype, return_spmatrix=False):
         return A
     elif (format in (None, 'csc') and
           all(issparse(b) and b.format == 'csc' for b in blocks.flat)
-    ):
+          ):
         if M > 1:
             # stack along rows (axis 0): must have shape (1, N)
             blocks = [[_stack_along_minor_axis(blocks[:, b], 0) for b in range(N)]]
@@ -1354,10 +1354,10 @@ def _block(blocks, format, dtype, return_spmatrix=False):
     # convert everything to COO format
     for i in range(M):
         for j in range(N):
-            if blocks[i,j] is not None:
-                A = coo_array(blocks[i,j])
-                blocks[i,j] = A
-                block_mask[i,j] = True
+            if blocks[i, j] is not None:
+                A = coo_array(blocks[i, j])
+                blocks[i, j] = A
+                block_mask[i, j] = True
 
                 if brow_lengths[i] == 0:
                     brow_lengths[i] = A._shape_as_2d[0]

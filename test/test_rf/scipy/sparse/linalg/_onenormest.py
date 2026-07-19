@@ -94,11 +94,11 @@ def onenormest(A, t=2, itmax=5, compute_v=False, compute_w=False):
         A_explicit = np.asarray(aslinearoperator(A).matmat(np.identity(n)))
         if A_explicit.shape != (n, n):
             raise Exception('internal error: ',
-                    'unexpected shape ' + str(A_explicit.shape))
+                            'unexpected shape ' + str(A_explicit.shape))
         col_abs_sums = abs(A_explicit).sum(axis=0)
         if col_abs_sums.shape != (n, ):
             raise Exception('internal error: ',
-                    'unexpected shape ' + str(col_abs_sums.shape))
+                            'unexpected shape ' + str(col_abs_sums.shape))
         argmax_j = np.argmax(col_abs_sums)
         v = elementary_vector(n, argmax_j)
         w = A_explicit[:, argmax_j]

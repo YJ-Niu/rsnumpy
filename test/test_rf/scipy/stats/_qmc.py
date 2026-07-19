@@ -2876,8 +2876,8 @@ def _lloyd_centroidal_voronoi_tessellation(
     l1_old = _l1_norm(sample=sample)
     for i in range(maxiter):
         sample = _lloyd_iteration(
-                sample=sample, decay=decay[i],
-                qhull_options=qhull_options,
+            sample=sample, decay=decay[i],
+            qhull_options=qhull_options,
         )
 
         l1_new = _l1_norm(sample=sample)

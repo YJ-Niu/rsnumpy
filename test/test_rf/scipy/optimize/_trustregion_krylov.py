@@ -3,6 +3,7 @@ from ._trlib import (get_trlib_quadratic_subproblem)
 
 __all__ = ['_minimize_trust_krylov']
 
+
 def _minimize_trust_krylov(fun, x0, args=(), jac=None, hess=None, hessp=None,
                            inexact=True, **trust_region_options):
     """
@@ -53,7 +54,7 @@ def _minimize_trust_krylov(fun, x0, args=(), jac=None, hess=None, hessp=None,
                                       subproblem=get_trlib_quadratic_subproblem(
                                           tol_rel_i=-2.0, tol_rel_b=-3.0,
                                           disp=trust_region_options.get('disp', False)
-                                          ),
+                                      ),
                                       **trust_region_options)
     else:
         return _minimize_trust_region(fun, x0, args=args, jac=jac,
@@ -61,5 +62,5 @@ def _minimize_trust_krylov(fun, x0, args=(), jac=None, hess=None, hessp=None,
                                       subproblem=get_trlib_quadratic_subproblem(
                                           tol_rel_i=1e-8, tol_rel_b=1e-6,
                                           disp=trust_region_options.get('disp', False)
-                                          ),
+                                      ),
                                       **trust_region_options)

@@ -155,23 +155,19 @@ References
 # author: Robert Kern <robert.kern@gmail.com>
 # date: 2006-09-21
 
-from ._odrpack import *
-from ._models import *
-from . import _add_newdocs
+from scipy._lib._testutils import PytestTester
 
 # Deprecated namespaces, to be removed in v2.0.0
-from . import models, odrpack
 
 __all__ = [s for s in dir()
            if not (s.startswith('_') or s in ('odr_stop', 'odr_error'))]
 
 import warnings
 msg = ("`scipy.odr` is deprecated as of version 1.17.0 and will be removed in "
-        "SciPy 1.19.0. Please use `https://pypi.org/project/odrpack/` instead.")
+       "SciPy 1.19.0. Please use `https://pypi.org/project/odrpack/` instead.")
 warnings.warn(msg, DeprecationWarning, stacklevel=2)
 del warnings
 
 
-from scipy._lib._testutils import PytestTester
 test = PytestTester(__name__)
 del PytestTester

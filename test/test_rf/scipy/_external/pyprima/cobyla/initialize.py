@@ -19,6 +19,7 @@ from ..common.selectx import savefilt
 
 import rsnumpy as np
 
+
 def initxfc(calcfc, iprint, maxfun, constr0, amat, bvec, ctol, f0, ftarget, rhobeg, x0,
             xhist, fhist, chist, conhist, maxhist):
     '''
@@ -50,9 +51,9 @@ def initxfc(calcfc, iprint, maxfun, constr0, amat, bvec, ctol, f0, ftarget, rhob
         assert all(np.isfinite(x0)), f'X0 is finite {srname}'
         assert rhobeg > 0, f'RHOBEG > 0 {srname}'
 
-    #====================#
+    # ====================#
     # Calculation starts #
-    #====================#
+    # ====================#
 
     # Initialize info to the default value. At return, a value different from this
     # value will indicate an abnormal return
@@ -72,7 +73,6 @@ def initxfc(calcfc, iprint, maxfun, constr0, amat, bvec, ctol, f0, ftarget, rhob
     fval = np.zeros(num_vars+1) + REALMAX
     cval = np.zeros(num_vars+1) + REALMAX
     conmat = np.zeros((num_constraints, num_vars+1)) + REALMAX
-
 
     for k in range(num_vars + 1):
         x = sim[:, num_vars].copy()
@@ -120,9 +120,9 @@ def initxfc(calcfc, iprint, maxfun, constr0, amat, bvec, ctol, f0, ftarget, rhob
         # Initialize SIMI to the inverse of SIM[:, :num_vars]
         simi = inv(sim[:, :num_vars])
 
-    #==================#
+    # ==================#
     # Calculation ends #
-    #==================#
+    # ==================#
 
     # Postconditions
     if DEBUGGING:
@@ -181,10 +181,9 @@ def initfilt(conmat, ctol, cweight, cval, fval, sim, evaluated, cfilt, confilt, 
         assert all(np.max(abs(sim[:, :num_vars]), axis=0) > 0)
         assert np.size(evaluated) == num_vars + 1
 
-    #====================#
+    # ====================#
     # Calculation starts #
-    #====================#
-
+    # ====================#
 
     nfilt = 0
     for i in range(num_vars+1):
@@ -195,9 +194,9 @@ def initfilt(conmat, ctol, cweight, cval, fval, sim, evaluated, cfilt, confilt, 
                 x = sim[:, i]  # i == num_vars, i.e. the last column
             nfilt, cfilt, ffilt, xfilt, confilt = savefilt(cval[i], ctol, cweight, fval[i], x, nfilt, cfilt, ffilt, xfilt, conmat[:, i], confilt)
 
-    #==================#
+    # ==================#
     # Calculation ends #
-    #==================#
+    # ==================#
 
     # Postconditions
     if DEBUGGING:

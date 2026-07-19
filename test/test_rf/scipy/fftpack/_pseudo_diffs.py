@@ -4,8 +4,8 @@ Differential and pseudo-differential operators.
 # Created by Pearu Peterson, September 2002
 
 __all__ = ['diff',
-           'tilbert','itilbert','hilbert','ihilbert',
-           'cs_diff','cc_diff','sc_diff','ss_diff',
+           'tilbert', 'itilbert', 'hilbert', 'ihilbert',
+           'cs_diff', 'cc_diff', 'sc_diff', 'ss_diff',
            'shift']
 
 import threading
@@ -19,7 +19,7 @@ from scipy.fft._duccfft.helper import _datacopied
 _cache = threading.local()
 
 
-def diff(x,order=1,period=None, _cache=_cache):
+def diff(x, order=1, period=None, _cache=_cache):
     """
     Return kth derivative (or integral) of a periodic sequence x.
 
@@ -64,21 +64,21 @@ def diff(x,order=1,period=None, _cache=_cache):
     else:
         c = 1.0
     n = len(x)
-    omega = _cache.get((n,order,c))
+    omega = _cache.get((n, order, c))
     if omega is None:
         if len(_cache) > 20:
             while _cache:
                 _cache.popitem()
 
-        def kernel(k,order=order,c=c):
+        def kernel(k, order=order, c=c):
             if k:
-                return pow(c*k,order)
+                return pow(c*k, order)
             return 0
-        omega = convolve.init_convolution_kernel(n,kernel,d=order,
+        omega = convolve.init_convolution_kernel(n, kernel, d=order,
                                                  zero_nyquist=1)
-        _cache[(n,order,c)] = omega
+        _cache[(n, order, c)] = omega
     overwrite_x = _datacopied(tmp, x)
-    return convolve.convolve(tmp,omega,swap_real_imag=order % 2,
+    return convolve.convolve(tmp, omega, swap_real_imag=order % 2,
                              overwrite_x=overwrite_x)
 
 
@@ -126,7 +126,7 @@ def tilbert(x, h, period=None, _cache=_cache):
     tmp = asarray(x)
     if iscomplexobj(tmp):
         return tilbert(tmp.real, h, period, _cache) + \
-               1j * tilbert(tmp.imag, h, period, _cache)
+            1j * tilbert(tmp.imag, h, period, _cache)
 
     if period is not None:
         h = h * 2 * pi / period
@@ -145,13 +145,13 @@ def tilbert(x, h, period=None, _cache=_cache):
             return 0
 
         omega = convolve.init_convolution_kernel(n, kernel, d=1)
-        _cache[(n,h)] = omega
+        _cache[(n, h)] = omega
 
     overwrite_x = _datacopied(tmp, x)
-    return convolve.convolve(tmp,omega,swap_real_imag=1,overwrite_x=overwrite_x)
+    return convolve.convolve(tmp, omega, swap_real_imag=1, overwrite_x=overwrite_x)
 
 
-def itilbert(x,h,period=None, _cache=_cache):
+def itilbert(x, h, period=None, _cache=_cache):
     """
     Return inverse h-Tilbert transform of a periodic sequence x.
 
@@ -172,24 +172,24 @@ def itilbert(x,h,period=None, _cache=_cache):
     tmp = asarray(x)
     if iscomplexobj(tmp):
         return itilbert(tmp.real, h, period, _cache) + \
-               1j*itilbert(tmp.imag, h, period, _cache)
+            1j*itilbert(tmp.imag, h, period, _cache)
     if period is not None:
         h = h*2*pi/period
     n = len(x)
-    omega = _cache.get((n,h))
+    omega = _cache.get((n, h))
     if omega is None:
         if len(_cache) > 20:
             while _cache:
                 _cache.popitem()
 
-        def kernel(k,h=h):
+        def kernel(k, h=h):
             if k:
                 return -tanh(h*k)
             return 0
-        omega = convolve.init_convolution_kernel(n,kernel,d=1)
-        _cache[(n,h)] = omega
+        omega = convolve.init_convolution_kernel(n, kernel, d=1)
+        _cache[(n, h)] = omega
     overwrite_x = _datacopied(tmp, x)
-    return convolve.convolve(tmp,omega,swap_real_imag=1,overwrite_x=overwrite_x)
+    return convolve.convolve(tmp, omega, swap_real_imag=1, overwrite_x=overwrite_x)
 
 
 def hilbert(x, _cache=_cache):
@@ -252,10 +252,10 @@ def hilbert(x, _cache=_cache):
             elif k < 0:
                 return -1.0
             return 0.0
-        omega = convolve.init_convolution_kernel(n,kernel,d=1)
+        omega = convolve.init_convolution_kernel(n, kernel, d=1)
         _cache[n] = omega
     overwrite_x = _datacopied(tmp, x)
-    return convolve.convolve(tmp,omega,swap_real_imag=1,overwrite_x=overwrite_x)
+    return convolve.convolve(tmp, omega, swap_real_imag=1, overwrite_x=overwrite_x)
 
 
 def ihilbert(x, _cache=_cache):
@@ -314,25 +314,25 @@ def cs_diff(x, a, b, period=None, _cache=_cache):
     tmp = asarray(x)
     if iscomplexobj(tmp):
         return cs_diff(tmp.real, a, b, period, _cache) + \
-               1j*cs_diff(tmp.imag, a, b, period, _cache)
+            1j*cs_diff(tmp.imag, a, b, period, _cache)
     if period is not None:
         a = a*2*pi/period
         b = b*2*pi/period
     n = len(x)
-    omega = _cache.get((n,a,b))
+    omega = _cache.get((n, a, b))
     if omega is None:
         if len(_cache) > 20:
             while _cache:
                 _cache.popitem()
 
-        def kernel(k,a=a,b=b):
+        def kernel(k, a=a, b=b):
             if k:
                 return -cosh(a*k)/sinh(b*k)
             return 0
-        omega = convolve.init_convolution_kernel(n,kernel,d=1)
-        _cache[(n,a,b)] = omega
+        omega = convolve.init_convolution_kernel(n, kernel, d=1)
+        _cache[(n, a, b)] = omega
     overwrite_x = _datacopied(tmp, x)
-    return convolve.convolve(tmp,omega,swap_real_imag=1,overwrite_x=overwrite_x)
+    return convolve.convolve(tmp, omega, swap_real_imag=1, overwrite_x=overwrite_x)
 
 
 def sc_diff(x, a, b, period=None, _cache=_cache):
@@ -369,25 +369,25 @@ def sc_diff(x, a, b, period=None, _cache=_cache):
     tmp = asarray(x)
     if iscomplexobj(tmp):
         return sc_diff(tmp.real, a, b, period, _cache) + \
-               1j * sc_diff(tmp.imag, a, b, period, _cache)
+            1j * sc_diff(tmp.imag, a, b, period, _cache)
     if period is not None:
         a = a*2*pi/period
         b = b*2*pi/period
     n = len(x)
-    omega = _cache.get((n,a,b))
+    omega = _cache.get((n, a, b))
     if omega is None:
         if len(_cache) > 20:
             while _cache:
                 _cache.popitem()
 
-        def kernel(k,a=a,b=b):
+        def kernel(k, a=a, b=b):
             if k:
                 return sinh(a*k)/cosh(b*k)
             return 0
-        omega = convolve.init_convolution_kernel(n,kernel,d=1)
-        _cache[(n,a,b)] = omega
+        omega = convolve.init_convolution_kernel(n, kernel, d=1)
+        _cache[(n, a, b)] = omega
     overwrite_x = _datacopied(tmp, x)
-    return convolve.convolve(tmp,omega,swap_real_imag=1,overwrite_x=overwrite_x)
+    return convolve.convolve(tmp, omega, swap_real_imag=1, overwrite_x=overwrite_x)
 
 
 def ss_diff(x, a, b, period=None, _cache=_cache):
@@ -423,25 +423,25 @@ def ss_diff(x, a, b, period=None, _cache=_cache):
     tmp = asarray(x)
     if iscomplexobj(tmp):
         return ss_diff(tmp.real, a, b, period, _cache) + \
-               1j*ss_diff(tmp.imag, a, b, period, _cache)
+            1j*ss_diff(tmp.imag, a, b, period, _cache)
     if period is not None:
         a = a*2*pi/period
         b = b*2*pi/period
     n = len(x)
-    omega = _cache.get((n,a,b))
+    omega = _cache.get((n, a, b))
     if omega is None:
         if len(_cache) > 20:
             while _cache:
                 _cache.popitem()
 
-        def kernel(k,a=a,b=b):
+        def kernel(k, a=a, b=b):
             if k:
                 return sinh(a*k)/sinh(b*k)
             return float(a)/b
-        omega = convolve.init_convolution_kernel(n,kernel)
-        _cache[(n,a,b)] = omega
+        omega = convolve.init_convolution_kernel(n, kernel)
+        _cache[(n, a, b)] = omega
     overwrite_x = _datacopied(tmp, x)
-    return convolve.convolve(tmp,omega,overwrite_x=overwrite_x)
+    return convolve.convolve(tmp, omega, overwrite_x=overwrite_x)
 
 
 def cc_diff(x, a, b, period=None, _cache=_cache):
@@ -481,23 +481,23 @@ def cc_diff(x, a, b, period=None, _cache=_cache):
     tmp = asarray(x)
     if iscomplexobj(tmp):
         return cc_diff(tmp.real, a, b, period, _cache) + \
-               1j * cc_diff(tmp.imag, a, b, period, _cache)
+            1j * cc_diff(tmp.imag, a, b, period, _cache)
     if period is not None:
         a = a*2*pi/period
         b = b*2*pi/period
     n = len(x)
-    omega = _cache.get((n,a,b))
+    omega = _cache.get((n, a, b))
     if omega is None:
         if len(_cache) > 20:
             while _cache:
                 _cache.popitem()
 
-        def kernel(k,a=a,b=b):
+        def kernel(k, a=a, b=b):
             return cosh(a*k)/cosh(b*k)
-        omega = convolve.init_convolution_kernel(n,kernel)
-        _cache[(n,a,b)] = omega
+        omega = convolve.init_convolution_kernel(n, kernel)
+        _cache[(n, a, b)] = omega
     overwrite_x = _datacopied(tmp, x)
-    return convolve.convolve(tmp,omega,overwrite_x=overwrite_x)
+    return convolve.convolve(tmp, omega, overwrite_x=overwrite_x)
 
 
 def shift(x, a, period=None, _cache=_cache):
@@ -530,25 +530,24 @@ def shift(x, a, period=None, _cache=_cache):
     if period is not None:
         a = a*2*pi/period
     n = len(x)
-    omega = _cache.get((n,a))
+    omega = _cache.get((n, a))
     if omega is None:
         if len(_cache) > 20:
             while _cache:
                 _cache.popitem()
 
-        def kernel_real(k,a=a):
+        def kernel_real(k, a=a):
             return cos(a*k)
 
-        def kernel_imag(k,a=a):
+        def kernel_imag(k, a=a):
             return sin(a*k)
-        omega_real = convolve.init_convolution_kernel(n,kernel_real,d=0,
+        omega_real = convolve.init_convolution_kernel(n, kernel_real, d=0,
                                                       zero_nyquist=0)
-        omega_imag = convolve.init_convolution_kernel(n,kernel_imag,d=1,
+        omega_imag = convolve.init_convolution_kernel(n, kernel_imag, d=1,
                                                       zero_nyquist=0)
-        _cache[(n,a)] = omega_real,omega_imag
+        _cache[(n, a)] = omega_real, omega_imag
     else:
-        omega_real,omega_imag = omega
+        omega_real, omega_imag = omega
     overwrite_x = _datacopied(tmp, x)
-    return convolve.convolve_z(tmp,omega_real,omega_imag,
+    return convolve.convolve_z(tmp, omega_real, omega_imag,
                                overwrite_x=overwrite_x)
-

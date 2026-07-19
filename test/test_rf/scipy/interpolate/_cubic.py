@@ -160,10 +160,10 @@ class CubicHermiteSpline(PPoly):
         t = (dydx[:-1, ...] + dydx[1:, ...] - 2 * slope) / dxr
 
         c = xp.stack((
-           t / dxr,
-           (slope - dydx[:-1, ...]) / dxr - t,
-           dydx[:-1, ...],
-           y[:-1, ...]
+            t / dxr,
+            (slope - dydx[:-1, ...]) / dxr - t,
+            dydx[:-1, ...],
+            y[:-1, ...]
         ))
 
         super().__init__(c, x, extrapolate=extrapolate)
@@ -527,8 +527,8 @@ class Akima1DInterpolator(CubicHermiteSpline):
     # PchipInterpolator is not generic in scipy-stubs
     __class_getitem__ = None  # type:ignore[assignment]
 
-    def __init__(self, x, y, axis=0, *, method: Literal["akima", "makima"]="akima",
-                 extrapolate:bool | None = None):
+    def __init__(self, x, y, axis=0, *, method: Literal["akima", "makima"] = "akima",
+                 extrapolate: bool | None = None):
         if method not in {"akima", "makima"}:
             raise NotImplementedError(f"`method`={method} is unsupported.")
         # Original implementation in MATLAB by N. Shamsundar (BSD licensed), see

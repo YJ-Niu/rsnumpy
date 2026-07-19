@@ -17,6 +17,7 @@ class _ScalarGradWrapper:
     """
     Wrapper class for gradient calculation
     """
+
     def __init__(
             self,
             grad,
@@ -54,6 +55,7 @@ class _ScalarHessWrapper:
     """
     Wrapper class for hess calculation via finite differences
     """
+
     def __init__(
             self,
             hess,
@@ -86,7 +88,7 @@ class _ScalarHessWrapper:
                 self._hess_func = "dense_callable"
                 self.H = np.atleast_2d(np.asarray(self.H))
         elif hess in FD_METHODS:
-                self._hess_func = "fd_hess"
+            self._hess_func = "fd_hess"
 
     def __call__(self, x, f0=None, **kwds):
         match self._hess_func:
@@ -124,6 +126,7 @@ class _ScalarHessWrapper:
         self.nhev += 1
         self.H = self.hess(x, *self.args)
         return self.H
+
 
 class ScalarFunction:
     """Scalar function and its derivatives.
@@ -215,6 +218,7 @@ class ScalarFunction:
            will be set. However, a subsequent call with a different argument
            of *any* of the methods may overwrite the attribute.
     """
+
     def __init__(self, fun, x0, args, grad, hess, finite_diff_rel_step=None,
                  finite_diff_bounds=(-np.inf, np.inf), epsilon=None, workers=None):
 
@@ -328,7 +332,7 @@ class ScalarFunction:
 
     @property
     def ngev(self):
-        return self._wrapped_grad.ngev  #+ self._wrapped_hess.ngev
+        return self._wrapped_grad.ngev  # + self._wrapped_hess.ngev
 
     @property
     def nhev(self):
@@ -428,6 +432,7 @@ class _VectorJacWrapper:
     """
     Wrapper class for Jacobian calculation
     """
+
     def __init__(
             self,
             jac,
@@ -473,6 +478,7 @@ class _VectorHessWrapper:
     """
     Wrapper class for Jacobian calculation
     """
+
     def __init__(
             self,
             hess,
@@ -539,6 +545,7 @@ class VectorFunction:
            will be set. However, a subsequent call with a different argument
            of *any* of the methods may overwrite the attribute.
     """
+
     def __init__(self, fun, x0, jac, hess,
                  finite_diff_rel_step=None, finite_diff_jac_sparsity=None,
                  finite_diff_bounds=(-np.inf, np.inf), sparse_jacobian=None,
@@ -773,6 +780,7 @@ class LinearVectorFunction:
     A is m-by-n matrix. The Jacobian is constant and equals to A. The Hessian
     is identically zero and it is returned as a csr matrix.
     """
+
     def __init__(self, A, x0, sparse_jacobian):
         if sparse_jacobian or sparse_jacobian is None and sps.issparse(A):
             self.J = sps.csr_array(A)
@@ -833,6 +841,7 @@ class IdentityVectorFunction(LinearVectorFunction):
     `sparse_jacobian=False` and as a csr matrix otherwise. The Hessian is
     identically zero and it is returned as a csr matrix.
     """
+
     def __init__(self, x0, sparse_jacobian):
         n = len(x0)
         if sparse_jacobian or sparse_jacobian is None:

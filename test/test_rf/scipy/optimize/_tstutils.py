@@ -123,6 +123,8 @@ def f5(x):
 # same x returns different values, hence a "random value", not a
 # "function with random values"
 _f6_cache = {}
+
+
 def f6(x):
     v = _f6_cache.get(x, None)
     if v is None:
@@ -161,7 +163,7 @@ _ORIGINAL_TESTS_DICTS = [
     dict(zip(_ORIGINAL_TESTS_KEYS, testcase)) for testcase in _ORIGINAL_TESTS
 ]
 
-#   ##################
+#   ################
 #   "APS" test cases
 #   Functions and test cases that appear in [1]
 
@@ -731,7 +733,7 @@ _APS_TESTS = [
 _APS_TESTS_DICTS = [dict(zip(_APS_TESTS_KEYS, testcase)) for testcase in _APS_TESTS]
 
 
-#   ##################
+#   ################
 #   "complex" test cases
 #   A few simple, complex-valued, functions, defined on the complex plane.
 
@@ -853,43 +855,58 @@ mstrings = ['cc.bisect', 'cc.ridder', 'cc.brenth', 'cc.brentq']
 functions = [f2, f3, f4, f5, f6]
 fstrings = ['f2', 'f3', 'f4', 'f5', 'f6']
 
-#   ##################
+#   ################
 #   "Chandrupatla" test cases
 #   Functions and test cases that appear in [2]
 
+
 def fun1(x):
     return x**3 - 2*x - 5
+
+
 fun1.root = 2.0945514815423265  # additional precision using mpmath.findroot
 
 
 def fun2(x):
     return 1 - 1/x**2
+
+
 fun2.root = 1
 
 
 def fun3(x):
     return (x-3)**3
+
+
 fun3.root = 3
 
 
 def fun4(x):
     return 6*(x-2)**5
+
+
 fun4.root = 2
 
 
 def fun5(x):
     return x**9
+
+
 fun5.root = 0
 
 
 def fun6(x):
     return x**19
+
+
 fun6.root = 0
 
 
 def fun7(x):
     xp = array_namespace(x)
     return 0 if xp.abs(x) < 3.8e-4 else x*xp.exp(-x**(-2))
+
+
 fun7.root = 0
 
 
@@ -897,12 +914,16 @@ def fun8(x):
     xp = array_namespace(x)
     xi = 0.61489
     return -(3062*(1-xi)*xp.exp(-x))/(xi + (1-xi)*xp.exp(-x)) - 1013 + 1628/x
+
+
 fun8.root = 1.0375360332870405
 
 
 def fun9(x):
     xp = array_namespace(x)
     return xp.exp(x) - 2 - 0.01/x**2 + .000002/x**3
+
+
 fun9.root = 0.7032048403631358
 
 # Each "chandropatla" test case has
@@ -964,7 +985,7 @@ _CHANDRUPATLA_TESTS = [
     [fun9, [2e-4, 27], fun9.root, 11],
     [fun9, [2e-4, 81], fun9.root, 13],
 ]
-_CHANDRUPATLA_TESTS = [test + [f'{test[0].__name__}.{i%5+1}']
+_CHANDRUPATLA_TESTS = [test + [f'{test[0].__name__}.{i % 5+1}']
                        for i, test in enumerate(_CHANDRUPATLA_TESTS)]
 
 _CHANDRUPATLA_TESTS_DICTS = [dict(zip(_CHANDRUPATLA_TESTS_KEYS, testcase))

@@ -19,6 +19,7 @@ _mls_taps = {2: [1], 3: [2], 4: [3], 5: [3], 6: [5], 7: [6], 8: [7, 6, 1],
              27: [26, 25, 22], 28: [25], 29: [27], 30: [29, 28, 7],
              31: [28], 32: [31, 30, 10]}
 
+
 def max_len_seq(nbits, state=None, length=None, taps=None):
     """
     Maximum length sequence (MLS) generator.

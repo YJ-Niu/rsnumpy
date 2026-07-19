@@ -152,7 +152,6 @@ class Pointer:
 
 class ObjectPointer(Pointer):
     '''Class used to define object pointers'''
-    pass
 
 
 def _read_string(f):
@@ -236,7 +235,7 @@ def _read_structure(f, array_desc, struct_desc):
         else:
             if col['typecode'] in DTYPE_DICT:
                 dtype.append(((col['name'].lower(), col['name']),
-                                    DTYPE_DICT[col['typecode']]))
+                              DTYPE_DICT[col['typecode']]))
             else:
                 raise Exception(f"Variable type {col['typecode']} not implemented")
 
@@ -247,11 +246,11 @@ def _read_structure(f, array_desc, struct_desc):
             dtype = col['typecode']
             if col['structure']:
                 structure[col['name']][i] = _read_structure(f,
-                                      struct_desc['arrtable'][col['name']],
-                                      struct_desc['structtable'][col['name']])
+                                                            struct_desc['arrtable'][col['name']],
+                                                            struct_desc['structtable'][col['name']])
             elif col['array']:
                 structure[col['name']][i] = _read_array(f, dtype,
-                                      struct_desc['arrtable'][col['name']])
+                                                        struct_desc['arrtable'][col['name']])
             else:
                 structure[col['name']][i] = _read_data(f, dtype)
 
@@ -352,10 +351,10 @@ def _read_record(f):
 
             if rectypedesc['structure']:
                 record['data'] = _read_structure(f, rectypedesc['array_desc'],
-                                                    rectypedesc['struct_desc'])
+                                                 rectypedesc['struct_desc'])
             elif rectypedesc['array']:
                 record['data'] = _read_array(f, rectypedesc['typecode'],
-                                                rectypedesc['array_desc'])
+                                             rectypedesc['array_desc'])
             else:
                 dtype = rectypedesc['typecode']
                 record['data'] = _read_data(f, dtype)

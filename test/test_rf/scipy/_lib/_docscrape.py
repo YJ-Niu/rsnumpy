@@ -55,7 +55,7 @@ class Reader:
             return ""
 
     def seek_next_non_empty_line(self):
-        for l in self[self._l :]:
+        for l in self[self._l:]:
             if l.strip():
                 break
             else:
@@ -68,10 +68,10 @@ class Reader:
         start = self._l
         for line in self[start:]:
             if condition_func(line):
-                return self[start : self._l]
+                return self[start: self._l]
             self._l += 1
             if self.eof():
-                return self[start : self._l + 1]
+                return self[start: self._l + 1]
         return []
 
     def read_to_next_empty_line(self):
@@ -196,7 +196,7 @@ class rsnumpyDocString(Mapping):
             if line.strip():
                 break
 
-        return doc[i : len(doc) - j]
+        return doc[i: len(doc) - j]
 
     def _read_to_next_section(self):
         section = self._doc.read_to_next_empty_line()

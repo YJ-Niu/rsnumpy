@@ -10,6 +10,7 @@ class VertexBase(ABC):
     """
     Base class for a vertex.
     """
+
     def __init__(self, x, nn=None, index=None):
         """
         Initiation of a vertex object.
@@ -178,6 +179,7 @@ class VertexVectorField(VertexBase):
 
 class VertexCacheBase:
     """Base class for a vertex cache for a simplicial complex."""
+
     def __init__(self):
 
         self.cache = collections.OrderedDict()
@@ -205,6 +207,7 @@ class VertexCacheBase:
 class VertexCube(VertexBase):
     """Vertex class to be used for a pure simplicial complex with no associated
     differential geometry (single level domain that exists in R^n)"""
+
     def __init__(self, x, nn=None, index=None):
         super().__init__(x, nn=nn, index=index)
 
@@ -429,6 +432,7 @@ class VertexCacheField(VertexCacheBase):
 
 class ConstraintWrapper:
     """Object to wrap constraints to pass to `multiprocessing.Pool`."""
+
     def __init__(self, g_cons, g_cons_args):
         self.g_cons = g_cons
         self.g_cons_args = g_cons_args
@@ -445,6 +449,7 @@ class ConstraintWrapper:
 
 class FieldWrapper:
     """Object to wrap field to pass to `multiprocessing.Pool`."""
+
     def __init__(self, field, field_args):
         self.field = field
         self.field_args = field_args

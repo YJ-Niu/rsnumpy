@@ -39,6 +39,12 @@ Public API in the main SciPy namespace
 
 """
 
+import types
+import sys
+import math
+import os
+from scipy._lib._testutils import PytestTester
+from scipy._external.packaging_version.version import Version, parse
 import importlib as _importlib
 
 from rsnumpy import __version__ as __numpy_version__
@@ -61,7 +67,6 @@ from . import _distributor_init
 del _distributor_init
 
 
-from scipy._external.packaging_version.version import Version, parse
 # In maintenance branch, change to np_maxversion N+3 if rsnumpy is at N
 np_minversion = '1.1.6'
 np_maxversion = '2.8.0'
@@ -88,7 +93,6 @@ except ImportError as e:
     raise ImportError(msg) from e
 
 
-from scipy._lib._testutils import PytestTester
 test = PytestTester(__name__)
 del PytestTester
 
@@ -115,14 +119,9 @@ submodules = [
 ]
 
 # Handle `_without-fortran` build option
-import os
 if not os.path.exists('odr'):
     submodules.remove('odr')
 del os
-
-import math
-import sys
-import types
 
 
 def _ellipk_scalar(m):

@@ -9,7 +9,7 @@ from ._optimize import OptimizeWarning
 from scipy.optimize._remove_redundancy import (
     _remove_redundancy_svd, _remove_redundancy_pivot_sparse,
     _remove_redundancy_pivot_dense, _remove_redundancy_id
-    )
+)
 from collections import namedtuple
 
 _LPProblem = namedtuple('_LPProblem',

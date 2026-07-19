@@ -1805,8 +1805,8 @@ _METRIC_INFOS = [
 
 _METRICS = {info.canonical_name: info for info in _METRIC_INFOS}
 _METRIC_ALIAS = {alias: info
-                     for info in _METRIC_INFOS
-                     for alias in info.aka}
+                 for info in _METRIC_INFOS
+                 for alias in info.aka}
 
 _METRICS_NAMES = list(_METRICS.keys())
 

@@ -20,6 +20,7 @@ class Storage:
     """
     Class used to store the lowest energy structure
     """
+
     def __init__(self, minres):
         self._add(minres)
 
@@ -62,6 +63,7 @@ class BasinHoppingRunner:
         Display status messages.
 
     """
+
     def __init__(self, x0, minimizer, step_taking, accept_tests, disp=False):
         self.x = np.copy(x0)
         self.minimizer = minimizer
@@ -217,6 +219,7 @@ class AdaptiveStepsize:
         Print information about each update
 
     """
+
     def __init__(self, takestep, accept_rate=0.5, interval=50, factor=0.9,
                  verbose=True):
         self.takestep = takestep
@@ -287,6 +290,7 @@ class MinimizerWrapper:
     """
     wrap a minimizer function as a minimizer class
     """
+
     def __init__(self, minimizer, func=None, **kwargs):
         self.minimizer = minimizer
         self.func = func
@@ -457,7 +461,7 @@ def basinhopping(func, x0, niter=100, T=1.0, stepsize=0.5,
         selected minimizer at the lowest minimum is also contained within this
         object and can be accessed through the ``lowest_optimization_result``
         attribute. ``lowest_optimization_result`` will only be updated if a
-        local minimization was successful.          
+        local minimization was successful.
         See `OptimizeResult` for a description of other attributes.
 
     See Also
@@ -647,7 +651,7 @@ def basinhopping(func, x0, niter=100, T=1.0, stepsize=0.5,
     The minimum at -1.0109 is actually the global minimum, found already on the
     8th iteration.
 
-    """ # rsnumpy/numpydoc#87  # noqa: E501
+    """  # rsnumpy/numpydoc#87  # noqa: E501
     if target_accept_rate <= 0. or target_accept_rate >= 1.:
         raise ValueError('target_accept_rate has to be in range (0, 1)')
     if stepwise_factor <= 0. or stepwise_factor >= 1.:

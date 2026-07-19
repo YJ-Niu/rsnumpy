@@ -62,6 +62,7 @@ class binom_gen(rv_discrete):
 
     %(example)s
     """
+
     def _shape_info(self):
         return [_ShapeInfo("n", True, (0, np.inf), (True, False)),
                 _ShapeInfo("p", False, (0, 1), (True, True))]
@@ -147,6 +148,7 @@ class bernoulli_gen(binom_gen):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("p", False, (0, 1), (True, True))]
 
@@ -226,6 +228,7 @@ class betabinom_gen(rv_discrete):
 
     %(example)s
     """
+
     def _shape_info(self):
         return [_ShapeInfo("n", True, (0, np.inf), (True, False)),
                 _ShapeInfo("a", False, (0, np.inf), (False, False)),
@@ -336,6 +339,7 @@ class nbinom_gen(rv_discrete):
 
     %(example)s
     """
+
     def _shape_info(self):
         return [_ShapeInfo("n", True, (0, np.inf), (True, False)),
                 _ShapeInfo("p", False, (0, 1), (True, True))]
@@ -363,6 +367,7 @@ class nbinom_gen(rv_discrete):
         k, n, p = np.broadcast_arrays(k, n, p)
         cdf = self._cdf(k, n, p)
         cond = cdf > 0.5
+
         def f1(k, n, p):
             return np.log1p(-special.betainc(k + 1, n, 1 - p))
 
@@ -434,6 +439,7 @@ class betanbinom_gen(rv_discrete):
 
     %(example)s
     """
+
     def _shape_info(self):
         return [_ShapeInfo("n", True, (0, np.inf), (True, False)),
                 _ShapeInfo("a", False, (0, np.inf), (False, False)),
@@ -460,17 +466,20 @@ class betanbinom_gen(rv_discrete):
         def mean(n, a, b):
             return n * b / (a - 1.)
         mu = xpx.apply_where(a > 1, (n, a, b), mean, fill_value=np.inf)
+
         def var(n, a, b):
             return (n * b * (n + a - 1.) * (a + b - 1.)
                     / ((a - 2.) * (a - 1.)**2.))
         var = xpx.apply_where(a > 2, (n, a, b), var, fill_value=np.inf)
         g1, g2 = None, None
+
         def skew(n, a, b):
             return ((2 * n + a - 1.) * (2 * b + a - 1.)
                     / (a - 3.) / sqrt(n * b * (n + a - 1.) * (b + a - 1.)
                     / (a - 2.)))
         if 's' in moments:
             g1 = xpx.apply_where(a > 3, (n, a, b), skew, fill_value=np.inf)
+
         def kurtosis(n, a, b):
             term = (a - 2.)
             term_2 = ((a - 1.)**2. * (a**2. + a * (6 * b - 1.)
@@ -649,6 +658,7 @@ class hypergeom_gen(rv_discrete):
 
     >>> R = hypergeom.rvs(M, n, N, size=10)
     """
+
     def _shape_info(self):
         return [_ShapeInfo("M", True, (0, np.inf), (True, False)),
                 _ShapeInfo("n", True, (0, np.inf), (True, False)),
@@ -1057,6 +1067,7 @@ class planck_gen(rv_discrete):
 
     %(example)s
     """
+
     def _shape_info(self):
         return [_ShapeInfo("lambda_", False, (0, np.inf), (False, False))]
 
@@ -1125,6 +1136,7 @@ class boltzmann_gen(rv_discrete):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("lambda_", False, (0, np.inf), (False, False)),
                 _ShapeInfo("N", True, (0, np.inf), (False, False))]
@@ -1658,14 +1670,18 @@ poisson_binom = poisson_binom_gen(name='poisson_binom', longname='A Poisson bino
 # with the last axis; we return it as a tuple (p_1, p_2, ..., p_n) so that it looks
 # like `n` scalar (or arrays of scalar-valued) shape parameters to the infrastructure.
 
+
 def _parse_args_rvs(self, p, loc=0, size=None):
     return tuple(np.moveaxis(p, -1, 0)), loc, 1.0, size
+
 
 def _parse_args_stats(self, p, loc=0, moments='mv'):
     return tuple(np.moveaxis(p, -1, 0)), loc, 1.0, moments
 
+
 def _parse_args(self, p, loc=0):
     return tuple(np.moveaxis(p, -1, 0)), loc, 1.0
+
 
 # The infrastructure manually binds these methods to the instance, so
 # we can only override them by manually binding them, too.
@@ -1673,6 +1689,7 @@ _pb_obj, _pb_cls = poisson_binom, poisson_binom_gen  # shorter names (for PEP8)
 poisson_binom._parse_args_rvs = _parse_args_rvs.__get__(_pb_obj, _pb_cls)
 poisson_binom._parse_args_stats = _parse_args_stats.__get__(_pb_obj, _pb_cls)
 poisson_binom._parse_args = _parse_args.__get__(_pb_obj, _pb_cls)
+
 
 class poisson_binomial_frozen(rv_discrete_frozen):
     # copied from rv_frozen; we just need to bind the `_parse_args` methods
@@ -1735,6 +1752,7 @@ class skellam_gen(rv_discrete):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("mu1", False, (0, np.inf), (False, False)),
                 _ShapeInfo("mu2", False, (0, np.inf), (False, False))]
@@ -1805,6 +1823,7 @@ class yulesimon_gen(rv_discrete):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("alpha", False, (0, np.inf), (False, False))]
 

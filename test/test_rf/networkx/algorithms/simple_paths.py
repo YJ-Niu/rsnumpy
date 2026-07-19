@@ -959,7 +959,6 @@ def _bidirectional_dijkstra(
                     # discovered shortest path
                     totaldist = seen[0][w] + seen[1][w]
                     if finalpath == [] or finaldist > totaldist:
-                        finaldist = totaldist
                         revpath = paths[1][w][:]
                         revpath.reverse()
                         finalpath = paths[0][w] + revpath[1:]

@@ -18,7 +18,7 @@ import rsnumpy as np
 from ._optimize import OptimizeWarning, OptimizeResult
 from warnings import warn
 from ._highspy._highs_wrapper import _highs_wrapper
-from ._highspy._core import(
+from ._highspy._core import (
     kHighsInf,
     HighsDebugLevel,
     ObjSense,
@@ -30,6 +30,7 @@ from scipy.sparse import csc_array, vstack, issparse
 # [1]: Directly importing from "._highspy._core.simplex_constants"
 # causes problems when reloading.
 # See https://github.com/scipy/scipy/pull/22869 for details.
+
 
 def _highs_to_scipy_status_message(highs_status, highs_message):
     """Converts HiGHS status number/message to SciPy status number/message"""
@@ -292,13 +293,13 @@ def _linprog_highs(lp, solver, time_limit=None, presolve=True,
     simplex_dual_edge_weight_strategy_enum = _convert_to_highs_enum(
         simplex_dual_edge_weight_strategy,
         'simplex_dual_edge_weight_strategy',
-        choices={'dantzig': \
+        choices={'dantzig':
                  s_c.SimplexEdgeWeightStrategy.kSimplexEdgeWeightStrategyDantzig,
-                 'devex': \
+                 'devex':
                  s_c.SimplexEdgeWeightStrategy.kSimplexEdgeWeightStrategyDevex,
-                 'steepest-devex': \
+                 'steepest-devex':
                  s_c.SimplexEdgeWeightStrategy.kSimplexEdgeWeightStrategyChoose,
-                 'steepest': \
+                 'steepest':
                  s_c.SimplexEdgeWeightStrategy.kSimplexEdgeWeightStrategySteepestEdge,
                  None: None})
 
@@ -384,7 +385,7 @@ def _linprog_highs(lp, solver, time_limit=None, presolve=True,
     status, message = _highs_to_scipy_status_message(highs_status,
                                                      highs_message)
 
-    x = res['x'] # is None if not set
+    x = res['x']  # is None if not set
     sol = {'x': x,
            'slack': slack,
            'con': con,
@@ -403,7 +404,7 @@ def _linprog_highs(lp, solver, time_limit=None, presolve=True,
            'upper': OptimizeResult({
                'residual': None if x is None else ub - x,
                'marginals': marg_upper
-            }),
+           }),
            'fun': res.get('fun'),
            'status': status,
            'success': res['status'] == HighsModelStatus.kOptimal,

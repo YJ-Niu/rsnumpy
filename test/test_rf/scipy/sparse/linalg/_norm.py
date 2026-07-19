@@ -149,7 +149,7 @@ def norm(x, ord=None, axis=None):
             return s[0]
         if ord == -2:
             raise NotImplementedError
-            #return _multi_svd_norm(x, row_axis, col_axis, amin)
+            # return _multi_svd_norm(x, row_axis, col_axis, amin)
         if ord in (None, 'f', 'fro'):
             # The axis order does not matter for this norm.
             return _sparse_frobenius_norm(x)

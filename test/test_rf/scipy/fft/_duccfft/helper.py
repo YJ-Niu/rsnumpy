@@ -131,6 +131,7 @@ def _asfarray(x):
     copy = True if not x.flags['ALIGNED'] else copy_if_needed
     return np.array(x, dtype=dtype, copy=copy)
 
+
 def _datacopied(arr, original):
     """
     Strict check for `arr` not sharing any data with `original`,

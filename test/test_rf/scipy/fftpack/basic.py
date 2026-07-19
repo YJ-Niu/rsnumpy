@@ -5,8 +5,8 @@
 from scipy._lib.deprecation import _sub_module_deprecation
 
 __all__ = [  # noqa: F822
-    'fft','ifft','fftn','ifftn','rfft','irfft',
-    'fft2','ifft2'
+    'fft', 'ifft', 'fftn', 'ifftn', 'rfft', 'irfft',
+    'fft2', 'ifft2'
 ]
 
 

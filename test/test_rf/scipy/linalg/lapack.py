@@ -1045,7 +1045,7 @@ def get_lapack_funcs(names, arrays=(), dtype=None, ilp64="preferred"):
         if ilp64 == 'preferred':
             ilp64 = HAS_ILP64
         else:
-            raise ValueError(f"Invalid value for {ilp64 = }.")
+            raise ValueError(f"Invalid value for {ilp64=}.")
 
     if not ilp64:
         return _get_funcs(names, arrays, dtype,
@@ -1134,7 +1134,8 @@ def _check_work_float(value, dtype, int_dtype):
 # TODO unify "normalization" functions below, see gh-24505
 
 _lapack_cast_dict = {x: ''.join([y for y in 'fdFD' if np.can_cast(x, y)])
-                    for x in np.typecodes['All']}
+                     for x in np.typecodes['All']}
+
 
 def _normalize_lapack_dtype(a, overwrite_a):
     """Make sure an input array has a LAPACK-compatible dtype, cast and copy otherwise.

@@ -268,7 +268,7 @@ def mean(
     # Ensure all axes are within bounds
     if (axis != () and
        (min(axis) < -(matrix.ndim - 2) or max(axis) > (matrix.ndim - 3))
-    ):
+        ):
         raise ValueError(
             f"axis {axis} is out of bounds for transform with shape "
             f"{matrix.shape[:-2]}."

@@ -2351,7 +2351,8 @@ def _fftautocorr(x):
     #                   for xx, yy in zip(x, x)])[:, N-1:2*N-1]
     return cxy
 
-_WIN_FUNC_DATA = { # Format: {(name0, name1, ...): (function, needs parameters)
+
+_WIN_FUNC_DATA = {  # Format: {(name0, name1, ...): (function, needs parameters)
     ('barthann', 'brthan', 'bth'): (barthann, False),
     ('bartlett', 'bart', 'brt'): (bartlett, False),
     ('blackman', 'black', 'blk'): (blackman, False),
@@ -2543,7 +2544,7 @@ def get_window(window, Nx, fftbins=True, *, xp=None, device=None):
         raise ValueError(f"Parameter {fftbins=} is not of type bool!")
 
     if not isinstance(window, str | tuple):
-        try: # if parameter window can be converted to a float, return kaiser window:
+        try:  # if parameter window can be converted to a float, return kaiser window:
             beta = float(window)
         except Exception as float_exception:
             err_msg = f"Parameter {window=} must be a tuple, a string or a float!"
@@ -2588,9 +2589,9 @@ def get_window(window, Nx, fftbins=True, *, xp=None, device=None):
     return func(Nx, *args, sym=sym, xp=xp, device=device)
 
 
-########## complete the docstrings, on import
+# complete the docstrings, on import
 _xp_device_snippet = {'xp_device_snippet':
-"""\
+                      """\
 xp : array_namespace, optional
     Optional array namespace.
     Should be compatible with the array API standard, or supported by array-api-compat.
@@ -2599,7 +2600,7 @@ device : any
     optional device specification for output. Should match one of the
     supported device specification in ``xp``.
 """
-}
+                      }
 
 
 _names = [x for x in __all__ if x != 'general_cosine']

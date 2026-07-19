@@ -10,7 +10,7 @@ import rsnumpy as np
 import scipy.sparse
 
 from ._miobase import (MatFileReader, docfiller, matdims, read_dtype,
-                      convert_dtypes, arr_to_chars, arr_dtype_number)
+                       convert_dtypes, arr_to_chars, arr_dtype_number)
 
 from ._mio_utils import squeeze_element, chars_to_strings
 from functools import reduce
@@ -47,7 +47,7 @@ mdtypes_template = {
                ('imagf', 'i4'),
                ('namlen', 'i4')],
     'U1': 'U1',
-    }
+}
 
 np_to_mtypes = {
     'f8': miDOUBLE,
@@ -61,7 +61,7 @@ np_to_mtypes = {
     'u2': miUINT16,
     'u1': miUINT8,
     'S1': miUINT8,
-    }
+}
 
 # matrix classes
 mxFULL_CLASS = 0
@@ -74,13 +74,13 @@ order_codes = {
     2: 'VAX D-float',  # !
     3: 'VAX G-float',
     4: 'Cray',  # !!
-    }
+}
 
 mclass_info = {
     mxFULL_CLASS: 'double',
     mxCHAR_CLASS: 'char',
     mxSPARSE_CLASS: 'sparse',
-    }
+}
 
 
 _MAX_INTP = np.iinfo(np.intp).max
@@ -264,19 +264,19 @@ class VarReader4:
         detectable because there are 4 storage columns.
         '''
         res = self.read_sub_array(hdr)
-        tmp = res[:-1,:]
+        tmp = res[:-1, :]
         # All numbers are float64 in Matlab, but SciPy sparse expects int shape
-        dims = (int(res[-1,0]), int(res[-1,1]))
-        I = np.ascontiguousarray(tmp[:,0],dtype='intc')  # fixes byte order also
-        J = np.ascontiguousarray(tmp[:,1],dtype='intc')
+        dims = (int(res[-1, 0]), int(res[-1, 1]))
+        I = np.ascontiguousarray(tmp[:, 0], dtype='intc')  # fixes byte order also
+        J = np.ascontiguousarray(tmp[:, 1], dtype='intc')
         I -= 1  # for 1-based indexing
         J -= 1
         if res.shape[1] == 3:
-            V = np.ascontiguousarray(tmp[:,2],dtype='float')
+            V = np.ascontiguousarray(tmp[:, 2], dtype='float')
         else:
-            V = np.ascontiguousarray(tmp[:,2],dtype='complex')
-            V.imag = tmp[:,3]
-        return scipy.sparse.coo_array((V,(I,J)), dims)
+            V = np.ascontiguousarray(tmp[:, 2], dtype='complex')
+            V.imag = tmp[:, 3]
+        return scipy.sparse.coo_array((V, (I, J)), dims)
 
     def shape_from_header(self, hdr):
         '''Read the shape of the array described by the header.
@@ -581,15 +581,15 @@ class VarWriter4:
         A = arr.tocoo()  # convert to sparse COO format (ijv)
         imagf = A.dtype.kind == 'c'
         ijv = np.zeros((A.nnz + 1, 3+imagf), dtype='f8')
-        ijv[:-1,0] = A.row
-        ijv[:-1,1] = A.col
-        ijv[:-1,0:2] += 1  # 1 based indexing
+        ijv[:-1, 0] = A.row
+        ijv[:-1, 1] = A.col
+        ijv[:-1, 0:2] += 1  # 1 based indexing
         if imagf:
-            ijv[:-1,2] = A.data.real
-            ijv[:-1,3] = A.data.imag
+            ijv[:-1, 2] = A.data.real
+            ijv[:-1, 3] = A.data.imag
         else:
-            ijv[:-1,2] = A.data
-        ijv[-1,0:2] = A.shape
+            ijv[:-1, 2] = A.data
+        ijv[-1, 0:2] = A.shape
         self.write_header(
             name,
             ijv.shape,
@@ -600,6 +600,7 @@ class VarWriter4:
 
 class MatFile4Writer:
     ''' Class for writing matlab 4 format files '''
+
     def __init__(self, file_stream, oned_as=None):
         self.file_stream = file_stream
         if oned_as is None:

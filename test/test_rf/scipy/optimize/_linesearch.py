@@ -20,6 +20,7 @@ __all__ = ['LineSearchWarning', 'line_search_wolfe1', 'line_search_wolfe2',
            'scalar_search_wolfe1', 'scalar_search_wolfe2',
            'line_search_armijo']
 
+
 class LineSearchWarning(RuntimeWarning):
     pass
 
@@ -30,9 +31,9 @@ def _check_c1_c2(c1, c2):
                          "'0 < c1 < c2 < 1'.")
 
 
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Minpack's Wolfe line and scalar searches
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 def line_search_wolfe1(f, fprime, xk, pk, gfk=None,
                        old_fval=None, old_old_fval=None,
@@ -99,8 +100,8 @@ def line_search_wolfe1(f, fprime, xk, pk, gfk=None,
     derphi0 = np.dot(gfk, pk)
 
     stp, fval, old_fval = scalar_search_wolfe1(
-            phi, derphi, old_fval, old_old_fval, derphi0,
-            c1=c1, c2=c2, amax=amax, amin=amin, xtol=xtol)
+        phi, derphi, old_fval, old_old_fval, derphi0,
+        c1=c1, c2=c2, amax=amax, amin=amin, xtol=xtol)
 
     return stp, fc[0], gc[0], fval, old_fval, gval[0]
 
@@ -146,7 +147,7 @@ def scalar_search_wolfe1(phi, derphi, phi0=None, old_phi0=None, derphi0=None,
     Notes
     -----
     Uses routine DCSRCH from MINPACK.
-    
+
     Parameters `c1` and `c2` must satisfy ``0 < c1 < c2 < 1`` as described in [1]_.
 
     References
@@ -183,9 +184,9 @@ def scalar_search_wolfe1(phi, derphi, phi0=None, old_phi0=None, derphi0=None,
 line_search = line_search_wolfe1
 
 
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Pure-Python Wolfe line and scalar searches
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 # Note: `line_search_wolfe2` is the public `scipy.optimize.line_search`
 
@@ -324,8 +325,8 @@ def line_search_wolfe2(f, myfprime, xk, pk, gfk=None, old_fval=None,
         extra_condition2 = None
 
     alpha_star, phi_star, old_fval, derphi_star = scalar_search_wolfe2(
-            phi, derphi, old_fval, old_old_fval, derphi0, c1, c2, amax,
-            extra_condition2, maxiter=maxiter)
+        phi, derphi, old_fval, old_old_fval, derphi0, c1, c2, amax,
+        extra_condition2, maxiter=maxiter)
 
     if derphi_star is None:
         warn('The line search algorithm did not converge',
@@ -417,7 +418,7 @@ def scalar_search_wolfe2(phi, derphi, phi0=None,
         alpha1 = min(alpha1, amax)
 
     phi_a1 = phi(alpha1)
-    #derphi_a1 = derphi(alpha1) evaluated below
+    # derphi_a1 = derphi(alpha1) evaluated below
 
     phi_a0 = phi0
     derphi_a0 = derphi0
@@ -448,9 +449,9 @@ def scalar_search_wolfe2(phi, derphi, phi0=None,
         if (phi_a1 > phi0 + c1 * alpha1 * derphi0) or \
            ((phi_a1 >= phi_a0) and not_first_iteration):
             alpha_star, phi_star, derphi_star = \
-                        _zoom(alpha0, alpha1, phi_a0,
-                              phi_a1, derphi_a0, phi, derphi,
-                              phi0, derphi0, c1, c2, extra_condition)
+                _zoom(alpha0, alpha1, phi_a0,
+                      phi_a1, derphi_a0, phi, derphi,
+                      phi0, derphi0, c1, c2, extra_condition)
             break
 
         derphi_a1 = derphi(alpha1)
@@ -463,9 +464,9 @@ def scalar_search_wolfe2(phi, derphi, phi0=None,
 
         if (derphi_a1 >= 0):
             alpha_star, phi_star, derphi_star = \
-                        _zoom(alpha1, alpha0, phi_a1,
-                              phi_a0, derphi_a1, phi, derphi,
-                              phi0, derphi0, c1, c2, extra_condition)
+                _zoom(alpha1, alpha0, phi_a1,
+                      phi_a0, derphi_a1, phi, derphi,
+                      phi0, derphi0, c1, c2, extra_condition)
             break
 
         alpha2 = 2 * alpha1  # increase by factor of two on each iteration
@@ -630,9 +631,9 @@ def _zoom(a_lo, a_hi, phi_lo, phi_hi, derphi_lo,
     return a_star, val_star, valprime_star
 
 
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Armijo line and scalar searches
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 def line_search_armijo(f, xk, pk, gfk, old_fval, args=(), c1=1e-4, alpha0=1):
     """Minimize over alpha, the function ``f(xk+alpha pk)``.
@@ -753,9 +754,9 @@ def scalar_search_armijo(phi, phi0, derphi0, c1=1e-4, alpha0=1, amin=0):
     return None, phi_a1
 
 
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Non-monotone line search for DF-SANE
-#------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 def _nonmonotone_line_search_cruz(f, x_k, d, prev_fs, eta,
                                   gamma=1e-4, tau_min=0.1, tau_max=0.5):

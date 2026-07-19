@@ -11,6 +11,7 @@ Python translation by Nickolai Belakovski.
 from .consts import DEBUGGING
 import rsnumpy as np
 
+
 def redrho(rho_in, rhoend):
     '''
     This function calculates RHO when it needs to be reduced.
@@ -23,9 +24,9 @@ def redrho(rho_in, rhoend):
     if DEBUGGING:
         assert rho_in > rhoend > 0
 
-    #====================#
+    # ====================#
     # Calculation starts #
-    #====================#
+    # ====================#
 
     rho_ratio = rho_in / rhoend
 
@@ -36,9 +37,9 @@ def redrho(rho_in, rhoend):
     else:
         rho = np.sqrt(rho_ratio) * rhoend  # rho = np.sqrt(rho * rhoend)
 
-    #==================#
+    # ==================#
     # Calculation ends #
-    #==================#
+    # ==================#
 
     # Postconditions
     if DEBUGGING:

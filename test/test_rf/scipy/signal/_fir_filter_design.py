@@ -536,7 +536,6 @@ def firwin(numtaps, cutoff, *, width=None, window='hamming', pass_zero=True,
     # is even, and each pair in cutoff corresponds to passband.
     cutoff = xp.concat((xp.zeros(int(pass_zero)), cutoff, xp.ones(int(pass_nyquist))))
 
-
     # `bands` is a 2-D array; each row gives the left and right edges of
     # a passband.
     bands = xp.reshape(cutoff, (-1, 2))
@@ -1527,7 +1526,7 @@ def firwin_2d(hsize, window, *, fc=None, fs=2, circular=False,
     >>> plt.show()
     """
     if len(hsize) != 2:
-            raise ValueError("hsize must be a 2-element tuple or list")
+        raise ValueError("hsize must be a 2-element tuple or list")
 
     if circular:
         if fc is None:

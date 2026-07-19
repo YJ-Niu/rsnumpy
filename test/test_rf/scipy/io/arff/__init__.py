@@ -15,7 +15,6 @@ See the `WEKA website <http://weka.wikispaces.com/ARFF>`_
 for more details about the ARFF format and available datasets.
 
 """
-from ._arffread import *
 from . import _arffread
 
 # Deprecated namespaces, to be removed in v2.0.0

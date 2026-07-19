@@ -90,7 +90,7 @@ untested = {
     "find_peaks_cwt",
     "freqresp",
     "gausspulse",
-    "iirdesign", # There's no reason this shouldn't work. It just needs tests.
+    "iirdesign",  # There's no reason this shouldn't work. It just needs tests.
     "istft",
     "lombscargle",
     "lsim",
@@ -119,6 +119,7 @@ def get_default_capabilities(func_name, delegator):
     if delegator is None or func_name in untested:
         return xp_capabilities(np_only=True)
     return xp_capabilities()
+
 
 bilinear_extra_note = \
     """CuPy does not accept complex inputs.
@@ -277,7 +278,7 @@ capabilities_overrides = {
     "lp2hp_zpk": xp_capabilities(cpu_only=True, exceptions=["cupy", "torch"],
                                  allow_dask_compute=True, jax_jit=False),
     "lti": xp_capabilities(np_only=True,
-                            reason="works in CuPy but delegation isn't set up yet"),
+                           reason="works in CuPy but delegation isn't set up yet"),
     "medfilt": xp_capabilities(cpu_only=True, exceptions=["cupy"],
                                allow_dask_compute=True, jax_jit=False,
                                reason="uses scipy.ndimage.rank_filter"),
@@ -371,7 +372,7 @@ capabilities_overrides = {
 }
 
 
-# ### decorate ###
+# ## decorate
 for obj_name in _signal_api.__all__:
     bare_obj = getattr(_signal_api, obj_name)
     delegator = getattr(_delegators, obj_name + "_signature", None)

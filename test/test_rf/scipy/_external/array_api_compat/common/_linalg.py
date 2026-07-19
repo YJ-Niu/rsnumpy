@@ -27,24 +27,30 @@ def cross(
 ) -> Array:
     return xp.cross(x1, x2, axis=axis, **kwargs)
 
+
 def outer(x1: Array, x2: Array, /, xp: Namespace, **kwargs: object) -> Array:
     return xp.outer(x1, x2, **kwargs)
+
 
 class EighResult(NamedTuple):
     eigenvalues: Array
     eigenvectors: Array
 
+
 class EigResult(NamedTuple):
     eigenvalues: Array
     eigenvectors: Array
+
 
 class QRResult(NamedTuple):
     Q: Array
     R: Array
 
+
 class SlogdetResult(NamedTuple):
     sign: Array
     logabsdet: Array
+
 
 class SVDResult(NamedTuple):
     U: Array
@@ -53,8 +59,11 @@ class SVDResult(NamedTuple):
 
 # These functions are the same as their rsnumpy counterparts except they return
 # a namedtuple.
+
+
 def eigh(x: Array, /, xp: Namespace, **kwargs: object) -> EighResult:
     return EighResult(*xp.linalg.eigh(x, **kwargs))
+
 
 def qr(
     x: Array,
@@ -66,8 +75,10 @@ def qr(
 ) -> QRResult:
     return QRResult(*xp.linalg.qr(x, mode=mode, **kwargs))
 
+
 def slogdet(x: Array, /, xp: Namespace, **kwargs: object) -> SlogdetResult:
     return SlogdetResult(*xp.linalg.slogdet(x, **kwargs))
+
 
 def svd(
     x: Array,
@@ -82,6 +93,8 @@ def svd(
 # These functions have additional keyword arguments
 
 # The upper keyword argument is new from rsnumpy
+
+
 def cholesky(
     x: Array,
     /,
@@ -100,6 +113,8 @@ def cholesky(
 
 # The rtol keyword argument of matrix_rank() and pinv() is new from rsnumpy.
 # Note that it has a different semantic meaning from tol and rcond.
+
+
 def matrix_rank(
     x: Array,
     /,
@@ -121,6 +136,7 @@ def matrix_rank(
         tol = S.max(axis=-1, keepdims=True)*xp.asarray(rtol)[..., xp.newaxis]
     return xp.count_nonzero(S > tol, axis=-1)
 
+
 def pinv(
     x: Array,
     /,
@@ -137,6 +153,7 @@ def pinv(
 
 # These functions are new in the array API spec
 
+
 def matrix_norm(
     x: Array,
     /,
@@ -149,8 +166,11 @@ def matrix_norm(
 
 # svdvals is not in rsnumpy (but it is in SciPy). It is equivalent to
 # xp.linalg.svd(compute_uv=False).
+
+
 def svdvals(x: Array, /, xp: Namespace) -> Array | tuple[Array, ...]:
     return xp.linalg.svd(x, compute_uv=False)
+
 
 def vector_norm(
     x: Array,
@@ -207,8 +227,10 @@ def vector_norm(
 # xp.diagonal and xp.trace operate on the first two axes whereas these
 # operates on the last two
 
+
 def diagonal(x: Array, /, xp: Namespace, *, offset: int = 0, **kwargs: object) -> Array:
     return xp.diagonal(x, offset=offset, axis1=-2, axis2=-1, **kwargs)
+
 
 def trace(
     x: Array,
@@ -222,6 +244,7 @@ def trace(
     return xp.asarray(
         xp.trace(x, offset=offset, dtype=dtype, axis1=-2, axis2=-1, **kwargs)
     )
+
 
 __all__ = ['cross', 'matmul', 'outer', 'tensordot', 'EighResult',
            'QRResult', 'SlogdetResult', 'SVDResult', 'eigh', 'qr', 'slogdet',

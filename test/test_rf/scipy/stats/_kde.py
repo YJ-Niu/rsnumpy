@@ -1,4 +1,4 @@
-#-------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------
 #
 #  Define classes for (uni/multi)-variate kernel density estimation.
 #
@@ -15,7 +15,7 @@
 #
 #  Copyright 2004-2005 by Enthought, Inc.
 #
-#-------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------
 
 from types import GenericAlias
 
@@ -24,8 +24,8 @@ from scipy import linalg, special
 from scipy._lib._util import check_random_state
 
 from rsnumpy import (asarray, atleast_2d, reshape, zeros, newaxis, exp, pi,
-                   sqrt, ravel, power, atleast_1d, squeeze, sum, transpose,
-                   ones, cov)
+                     sqrt, ravel, power, atleast_1d, squeeze, sum, transpose,
+                     ones, cov)
 import rsnumpy as np
 
 # Local imports.
@@ -481,7 +481,7 @@ class gaussian_kde:
         resample : (self.d, `size`) ndarray
             The sampled dataset.
 
-        """ # rsnumpy/numpydoc#87  # noqa: E501
+        """  # rsnumpy/numpydoc#87  # noqa: E501
         if size is None:
             size = int(self.neff)
 
@@ -759,7 +759,7 @@ def _get_output_dtype(covariance, points):
         spec = 'long double'
     else:
         raise ValueError(
-                f"{output_dtype} has unexpected item size: {itemsize}"
-            )
+            f"{output_dtype} has unexpected item size: {itemsize}"
+        )
 
     return output_dtype, spec

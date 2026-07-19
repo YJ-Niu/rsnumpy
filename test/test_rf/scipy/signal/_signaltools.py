@@ -1018,7 +1018,7 @@ def oaconvolve(in1, in2, mode="full", axes=None):
         in1 = xpx.pad(in1, pad_size1, mode='constant', constant_values=0, xp=xp)
 
     if not all(curpad == (0, 0) for curpad in pad_size2):
-         in2 = xpx.pad(in2, pad_size2, mode='constant', constant_values=0, xp=xp)
+        in2 = xpx.pad(in2, pad_size2, mode='constant', constant_values=0, xp=xp)
 
     # Reshape the overlap-add parts to input block sizes.
     split_axes = [iax+i for i, iax in enumerate(axes)]
@@ -1163,15 +1163,15 @@ def _fftconv_faster(x, h, mode):
     fft_ops, direct_ops = _conv_ops(x.shape, h.shape, mode)
     offset = -1e-3 if x.ndim == 1 else -1e-4
     constants = {
-            "valid": (1.89095737e-9, 2.1364985e-10, offset),
-            "full": (1.7649070e-9, 2.1414831e-10, offset),
-            "same": (3.2646654e-9, 2.8478277e-10, offset)
-            if h.size <= x.size
-            else (3.21635404e-9, 1.1773253e-8, -1e-5),
+        "valid": (1.89095737e-9, 2.1364985e-10, offset),
+        "full": (1.7649070e-9, 2.1414831e-10, offset),
+        "same": (3.2646654e-9, 2.8478277e-10, offset)
+        if h.size <= x.size
+        else (3.21635404e-9, 1.1773253e-8, -1e-5),
     } if x.ndim == 1 else {
-            "valid": (1.85927e-9, 2.11242e-8, offset),
-            "full": (1.99817e-9, 1.66174e-8, offset),
-            "same": (2.04735e-9, 1.55367e-8, offset),
+        "valid": (1.85927e-9, 2.11242e-8, offset),
+        "full": (1.99817e-9, 1.66174e-8, offset),
+        "same": (2.04735e-9, 1.55367e-8, offset),
     }
     O_fft, O_direct, O_offset = constants[mode]
     return O_fft * fft_ops < O_direct * direct_ops + O_offset
@@ -2194,7 +2194,7 @@ def lfilter(b, a, x, axis=-1, zi=None):
     a = np.atleast_1d(a)
     x = np.asarray(x)
     if zi is not None:
-       zi = np.asarray(zi)
+        zi = np.asarray(zi)
 
     if not (b.ndim == 1 and xp_size(b) > 0):
         raise ValueError(f"Parameter b is not a non-empty 1d array, since {b.shape=}!")
@@ -2265,7 +2265,7 @@ def lfilter(b, a, x, axis=-1, zi=None):
             return xp.asarray(out), xp.asarray(zf)
     else:
         if zi is None:
-            result =_sigtools._linear_filter(b, a, x, axis)
+            result = _sigtools._linear_filter(b, a, x, axis)
             return xp.asarray(result)
         else:
             out, zf = _sigtools._linear_filter(b, a, x, axis, zi)
@@ -2330,14 +2330,14 @@ def lfiltic(b, a, y, x=None):
 
     if x is None:
         result_type = xp.result_type(b, a, y)
-        if xp.isdtype(result_type, ('bool', 'integral')):  #'bui':
+        if xp.isdtype(result_type, ('bool', 'integral')):  # 'bui':
             result_type = xp.float64
         x = xp.zeros(M, dtype=result_type)
     else:
         x = xp.asarray(x)
 
         result_type = xp.result_type(b, a, y, x)
-        if xp.isdtype(result_type, ('bool', 'integral')):  #'bui':
+        if xp.isdtype(result_type, ('bool', 'integral')):  # 'bui':
             result_type = xp.float64
         x = xp.astype(x, result_type)
 
@@ -3834,11 +3834,11 @@ def resample(x, num, t=None, axis=0, window=None, domain='time'):
     m = min(num, n_x)  # number of relevant frequency bins
     m2 = m // 2 + 1  # number of relevant frequency bins of a one-sided FFT
 
-    if window is None: # Determine spectral windowing function:
+    if window is None:  # Determine spectral windowing function:
         W = None
     elif callable(window):
         W = window(sp_fft.fftfreq(n_x))
-    elif hasattr(window, 'shape'): # must be an array object
+    elif hasattr(window, 'shape'):  # must be an array object
         if window.shape != (n_x,):
             raise ValueError(f"{window.shape=} != ({n_x},), i.e., window length " +
                              "is not equal to number of frequency bins!")
@@ -3851,7 +3851,7 @@ def resample(x, num, t=None, axis=0, window=None, domain='time'):
         X = sp_fft.rfft(x)
         if W is not None:  # fold window, i.e., W1[l] = (W[l] + W[-l]) / 2 for l > 0
             n_X = X.shape[-1]
-            W[1:n_X] += xp.flip(W[-n_X+1:])  #W[:-n_X:-1]
+            W[1:n_X] += xp.flip(W[-n_X+1:])  # W[:-n_X:-1]
             W[1:n_X] /= 2
             X *= W[:n_X]  # apply window
         X = X[..., :m2]  # extract relevant data
@@ -4438,7 +4438,7 @@ def lfilter_zi(b, a):
 
     if not (b.ndim == a.ndim == 1):
         raise ValueError("Numerator `b` and Denominator `a` must be 1-D arrays, " +
-                         f"but {b.shape = }, {a.shape = }!")
+                         f"but {b.shape=}, {a.shape=}!")
 
     if a[0] == 0:
         raise ValueError("First coefficient of parameter `a` must be non-zero!")
@@ -4460,6 +4460,7 @@ def lfilter_zi(b, a):
     # `xp.cumulative_sum((b - y_inf*a)[::-1])[-2::-1]` does not work in torch due to
     # unsupported slicing with a negative step index. Hence, `flip` is used:
     return xp.flip(xp.cumulative_sum(xp.flip(b - y_inf*a)))[1:]
+
 
 def sosfilt_zi(sos):
     """
@@ -4919,7 +4920,7 @@ def filtfilt(b, a, x, axis=-1, padtype='odd', padlen=None, method='pad',
         # Slice the actual signal from the extended signal.
         y = axis_slice(y, start=edge, stop=-edge, axis=axis)
         if is_torch(xp):
-            y = y.copy()    #  pytorch/pytorch#59786 : no negative strides in pytorch
+            y = y.copy()  # pytorch/pytorch#59786 : no negative strides in pytorch
 
     return xp.asarray(y)
 

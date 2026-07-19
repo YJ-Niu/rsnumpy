@@ -81,7 +81,7 @@ def tutte_polynomial(G):
 
     .. math::
         T_G(x, y) = \begin{cases}
-    	   x^{k(G)} y^{l(G)}, & \text{if all edges are cut-edges or self-loops} \\
+           x^{k(G)} y^{l(G)}, & \text{if all edges are cut-edges or self-loops} \\
            T_{G-e}(x, y) + T_{G/e}(x, y), & \text{otherwise, for an arbitrary edge $e$ not a cut-edge or loop}
         \end{cases}
 
@@ -219,7 +219,7 @@ def chromatic_polynomial(G):
 
     .. math::
         X_G(x) = \begin{cases}
-    	   x^{n(G)}, & \text{if $e(G)=0$} \\
+           x^{n(G)}, & \text{if $e(G)=0$} \\
            X_{G-e}(x) - X_{G/e}(x), & \text{otherwise, for an arbitrary edge $e$}
         \end{cases}
 

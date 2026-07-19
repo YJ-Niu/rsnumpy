@@ -18,7 +18,6 @@ class FortranEOFError(TypeError, OSError):
     ended) so users might have ``except TypeError:``.
 
     """
-    pass
 
 
 class FortranFormattingError(TypeError, OSError):
@@ -27,7 +26,6 @@ class FortranFormattingError(TypeError, OSError):
     Descends from TypeError for backward compatibility.
 
     """
-    pass
 
 
 class FortranFile:
@@ -106,6 +104,7 @@ class FortranFile:
         end do
 
     """
+
     def __init__(self, filename, mode='r', header_dtype=np.uint32):
         if header_dtype is None:
             raise ValueError('Must specify dtype')

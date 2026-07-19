@@ -514,7 +514,7 @@ def labeled_comprehension(input, labels, index, func, out_dtype, default,
         input, labels = np.broadcast_arrays(input, labels)
     except ValueError as e:
         raise ValueError("input and labels must have the same shape "
-                            "(excepting dimensions with width 1)") from e
+                         "(excepting dimensions with width 1)") from e
 
     if index is None:
         if not pass_positions:
@@ -648,8 +648,8 @@ def _stats(input, labels=None, index=None, centered=False):
         centered_input = input - means[labels]
         # bincount expects 1-D inputs, so we ravel the arguments.
         bc = np.bincount(labels.ravel(),
-                              weights=(centered_input *
-                                       centered_input.conjugate()).ravel())
+                         weights=(centered_input *
+                                  centered_input.conjugate()).ravel())
         return bc
 
     # Remap labels to unique integers if necessary, or if the largest

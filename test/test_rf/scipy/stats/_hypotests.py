@@ -122,9 +122,9 @@ def epps_singleton_2samp(x, y, t=(0.4, 0.8), *, axis=0):
     np.float64(316.6441136688085)
     >>> res.pvalue
     np.float64(2.778946959815902e-67)
-    
+
     The large value of the statistic and small p-value may be taken as evidence that
-    ``x`` and ``y`` were not sampled from the same distribution. 
+    ``x`` and ``y`` were not sampled from the same distribution.
     """
     xp = array_namespace(x, y)
     # x and y are converted to arrays by the decorator
@@ -176,7 +176,7 @@ def epps_singleton_2samp(x, y, t=(0.4, 0.8), *, axis=0):
     if not is_lazy_array(r) and xp.any(r < 2*xp_size(t)):
         warnings.warn('Estimated covariance matrix does not have full rank. '
                       'This indicates a bad choice of the input t and the '
-                      'test might not be consistent.', # see p. 183 in [1]_
+                      'test might not be consistent.',  # see p. 183 in [1]_
                       stacklevel=2)
 
     # compute test statistic w distributed asympt. as chisquare with df=r
@@ -1658,7 +1658,7 @@ def _pval_cvm_2samp_asymptotic(t, N, nx, ny, k, *, xp):
     p = xpx.apply_where(tn >= 0.003,
                         (tn,),
                         lambda tn: xp.clip(1. - _cdf_cvm_inf(tn, xp=xp), 0.),
-                        fill_value = 1.)
+                        fill_value=1.)
     return p
 
 

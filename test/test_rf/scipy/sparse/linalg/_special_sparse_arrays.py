@@ -363,7 +363,7 @@ of_the_second_derivative
             grid_shape_min = self.grid_shape
         else:
             grid_shape_min = min(self.grid_shape,
-                                tuple(np.ones_like(self.grid_shape) * m))
+                                 tuple(np.ones_like(self.grid_shape) * m))
 
         N_indices = np.unravel_index(ind, grid_shape_min)
         N_indices = [tuple(x) for x in zip(*N_indices)]
@@ -428,7 +428,7 @@ of_the_second_derivative
             L_i.reshape(
                 (new_dim, tiles,
                  new_dim, tiles)
-                )[:, idx, :, idx] = Ltemp[:new_dim, :new_dim]
+            )[:, idx, :, idx] = Ltemp[:new_dim, :new_dim]
 
             L += L_i
 
@@ -609,6 +609,7 @@ class Sakurai(LinearOperator):
     True
 
     """
+
     def __init__(self, n, dtype=np.int8):
         self.n = n
         self.dtype = dtype
@@ -631,7 +632,7 @@ class Sakurai(LinearOperator):
         """
         if m is None:
             m = self.n
-        k = np.arange(self.n + 1 -m, self.n + 1)
+        k = np.arange(self.n + 1 - m, self.n + 1)
         return np.flip(16. * np.power(np.cos(0.5 * k * np.pi / (self.n + 1)), 4))
 
     def tobanded(self):
@@ -669,8 +670,8 @@ class Sakurai(LinearOperator):
         sx[0, :] = 5 * x[0, :] - 4 * x[1, :] + x[2, :]
         sx[-1, :] = 5 * x[-1, :] - 4 * x[-2, :] + x[-3, :]
         sx[1: -1, :] = (6 * x[1: -1, :] - 4 * (x[:-2, :] + x[2:, :])
-                      + np.pad(x[:-3, :], ((1, 0), (0, 0)))
-                      + np.pad(x[3:, :], ((0, 1), (0, 0))))
+                        + np.pad(x[:-3, :], ((1, 0), (0, 0)))
+                        + np.pad(x[3:, :], ((0, 1), (0, 0))))
         return sx
 
     def _matmat(self, x):
@@ -712,6 +713,7 @@ class MikotaM(LinearOperator):
         The format for banded symmetric matrices,
         i.e., (1, n) ndarray with the main diagonal.
     """
+
     def __init__(self, shape, dtype=np.float64):
         self.shape = shape
         self.dtype = dtype
@@ -782,6 +784,7 @@ class MikotaK(LinearOperator):
         i.e., (2, n) ndarray with 2 upper diagonals
         placing the main diagonal at the bottom.
     """
+
     def __init__(self, shape, dtype=np.int32):
         self.shape = shape
         self.dtype = dtype
@@ -925,6 +928,7 @@ class MikotaPair:
     array([ 1,  4])
 
     """
+
     def __init__(self, n, dtype=np.float64):
         self.n = n
         self.dtype = dtype

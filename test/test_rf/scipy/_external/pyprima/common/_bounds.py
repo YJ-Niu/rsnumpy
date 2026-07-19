@@ -1,6 +1,7 @@
 import rsnumpy as np
 from scipy.optimize import Bounds
 
+
 def process_bounds(bounds, lenx0):
     '''
     `bounds` can either be an object with the properties lb and ub, or a list of tuples
@@ -16,19 +17,19 @@ def process_bounds(bounds, lenx0):
         lb = np.array([-np.inf]*lenx0, dtype=np.float64)
         ub = np.array([np.inf]*lenx0, dtype=np.float64)
         return lb, ub
-    
+
     if isinstance(bounds, Bounds):
         lb = np.array(bounds.lb, dtype=np.float64)
         ub = np.array(bounds.ub, dtype=np.float64)
         lb = np.concatenate((lb, -np.inf*np.ones(lenx0 - len(lb))))
         ub = np.concatenate((ub, np.inf*np.ones(lenx0 - len(ub))))
         return lb, ub
-    
+
     # If neither of the above conditions are true, we assume that bounds is a list of tuples
     lb = np.array([bound[0] if bound[0] is not None else -np.inf for bound in bounds], dtype=np.float64)
     ub = np.array([bound[1] if bound[1] is not None else np.inf for bound in bounds], dtype=np.float64)
     # If there were fewer bounds than variables, pad the rest with -/+ infinity
     lb = np.concatenate((lb, -np.inf*np.ones(lenx0 - len(lb))))
     ub = np.concatenate((ub, np.inf*np.ones(lenx0 - len(ub))))
-    
+
     return lb, ub

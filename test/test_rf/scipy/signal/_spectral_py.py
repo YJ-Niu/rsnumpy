@@ -872,7 +872,7 @@ def csd(x, y, fs=1.0, window='hann_periodic', nperseg=None, noverlap=None, nfft=
     if not same_data:
         y = np.asarray(y)
         # Check if we can broadcast the outer axes together
-        x_outer, y_outer  = list(x.shape), list(y.shape)
+        x_outer, y_outer = list(x.shape), list(y.shape)
         x_outer.pop(axis)
         y_outer.pop(axis)
         try:

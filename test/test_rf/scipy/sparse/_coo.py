@@ -41,7 +41,7 @@ class _coo_base(_data_matrix, _minmax_mixin):
                 idx_dtype = self._get_index_dtype(maxval=max(self._shape))
                 data_dtype = getdtype(dtype, default=float)
                 self.coords = tuple(np.array([], dtype=idx_dtype)
-                                     for _ in range(len(self._shape)))
+                                    for _ in range(len(self._shape)))
                 self.data = np.array([], dtype=data_dtype)
                 self.has_canonical_format = True
             else:
@@ -61,7 +61,7 @@ class _coo_base(_data_matrix, _minmax_mixin):
                                                   maxval=max(self.shape),
                                                   check_contents=True)
                 self.coords = tuple(np.array(idx, copy=copy, dtype=idx_dtype)
-                                     for idx in coords)
+                                    for idx in coords)
                 self.data = getdata(obj, copy=copy, dtype=dtype)
                 self.has_canonical_format = False
         else:
@@ -94,7 +94,7 @@ class _coo_base(_data_matrix, _minmax_mixin):
                 index_dtype = self._get_index_dtype(maxval=max(self._shape))
                 coords = M.nonzero()
                 self.coords = tuple(idx.astype(index_dtype, copy=False)
-                                     for idx in coords)
+                                    for idx in coords)
                 self.data = getdata(M[coords], copy=copy, dtype=dtype)
                 self.has_canonical_format = True
 
@@ -110,7 +110,6 @@ class _coo_base(_data_matrix, _minmax_mixin):
         result = np.zeros_like(self.col)
         result.setflags(write=False)
         return result
-
 
     @row.setter
     def row(self, new_row):
@@ -215,7 +214,7 @@ class _coo_base(_data_matrix, _minmax_mixin):
 
         idx_dtype = self._get_index_dtype(self.coords, maxval=max(self.shape))
         self.coords = tuple(np.asarray(idx, dtype=idx_dtype)
-                             for idx in self.coords)
+                            for idx in self.coords)
         self.data = to_native(self.data)
 
         if self.nnz > 0:
@@ -245,14 +244,14 @@ class _coo_base(_data_matrix, _minmax_mixin):
                               shape=permuted_shape, copy=copy)
 
     transpose.__doc__ = _spbase.transpose.__doc__
-    
+
     @property
     def mT(self):
         if (n := self.ndim) < 2:
             raise ValueError(f"Array must be at least 2-dimensional, but it is {n}-D")
         axes = None if n == 2 else tuple(range(n - 2)) + (-1, -2)
         return self.transpose(axes=axes)
-    
+
     mT.__doc__ = _spbase.mT.__doc__
 
     def resize(self, *shape) -> None:
@@ -460,7 +459,7 @@ class _coo_base(_data_matrix, _minmax_mixin):
                  "is inefficient",
                  SparseEfficiencyWarning, stacklevel=2)
 
-        #initialize and fill in data array
+        # initialize and fill in data array
         if self.data.size == 0:
             data = np.zeros((0, 0), dtype=self.dtype)
         else:
@@ -757,7 +756,7 @@ class _coo_base(_data_matrix, _minmax_mixin):
     def _zero_many(self, index):
         # handle int, slice and integer-array indices
         # index_mask accumulates a bool array of nonzeros that match index
-        index_mask=np.ones(len(self.data), dtype=np.bool_)
+        index_mask = np.ones(len(self.data), dtype=np.bool_)
         arr_coords = []
         arr_indices = []
         for i, (idx, co) in enumerate(zip(index, self.coords)):
@@ -836,9 +835,9 @@ class _coo_base(_data_matrix, _minmax_mixin):
         self.data = self.data[mask]
         self.coords = tuple(idx[mask] for idx in self.coords)
 
-    #######################
+    #####################
     # Arithmetic handlers #
-    #######################
+    #####################
 
     def _add_dense(self, other):
         if other.shape != self.shape:
@@ -862,7 +861,6 @@ class _coo_base(_data_matrix, _minmax_mixin):
             coo_todense_nd(strides, self.nnz, self.ndim,
                            coords, self.data, result.ravel('A'), fortran)
         return self._container(result, copy=False)
-
 
     def _add_sparse(self, other):
         if self.ndim < 3:
@@ -1005,10 +1003,10 @@ class _coo_base(_data_matrix, _minmax_mixin):
 
             # reshape to 2-D if self or other is 1-D
             if self_is_1d:
-                self = self.reshape(self._shape_as_2d) # prepend 1 to shape
+                self = self.reshape(self._shape_as_2d)  # prepend 1 to shape
 
             if other_is_1d:
-                other = other.reshape((other.shape[0], 1)) # append 1 to shape
+                other = other.reshape((other.shape[0], 1))  # append 1 to shape
 
             # Check if the inner dimensions match for matrix multiplication
             if N != other.shape[-2]:
@@ -1200,7 +1198,6 @@ class _coo_base(_data_matrix, _minmax_mixin):
         # Combine the shapes of the non-contracted axes
         combined_shape = s_new_shape + o_new_shape
         return prod.reshape(combined_shape)
-
 
     def tensordot(self, other, axes=2):
         """Return the tensordot product with another array along the given axes.
@@ -1428,9 +1425,9 @@ class _coo_base(_data_matrix, _minmax_mixin):
         coords = self.coords
         new_data = self.data
         new_coords = coords[-1:]  # Copy last coordinate to start
-        cum_repeat = 1 # Cumulative repeat factor for broadcasting
+        cum_repeat = 1  # Cumulative repeat factor for broadcasting
 
-        if shape[-1] != new_shape[-1]: # broadcasting the n-th (col) dimension
+        if shape[-1] != new_shape[-1]:  # broadcasting the n-th (col) dimension
             repeat_count = new_shape[-1]
             cum_repeat *= repeat_count
             new_data = np.tile(new_data, repeat_count)
@@ -1439,9 +1436,9 @@ class _coo_base(_data_matrix, _minmax_mixin):
 
         for i in range(-2, -(len(shape)+1), -1):
             if shape[i] != new_shape[i]:
-                repeat_count = new_shape[i] # number of times to repeat data, coords
-                cum_repeat *= repeat_count # update cumulative repeat factor
-                nnz = len(new_data) # Number of non-zero elements so far
+                repeat_count = new_shape[i]  # number of times to repeat data, coords
+                cum_repeat *= repeat_count  # update cumulative repeat factor
+                nnz = len(new_data)  # Number of non-zero elements so far
 
                 # Tile data and coordinates to match the new repeat count
                 new_data = np.tile(new_data, repeat_count)
@@ -1488,7 +1485,7 @@ def _block_diag(self):
     Returns:
     coo_array: A 2-Dimensional COO sparse array in block diagonal form.
     """
-    if self.ndim<2:
+    if self.ndim < 2:
         raise ValueError("array must have atleast dim=2")
     num_blocks = math.prod(self.shape[:-2])
     n_col = self.shape[-1]

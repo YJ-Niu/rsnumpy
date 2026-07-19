@@ -24,6 +24,7 @@ def moderatex(x):
     x = np.clip(x, -REALMAX, REALMAX)
     return x
 
+
 def moderatef(f):
     """
     This function moderates the function value of a MINIMIZATION problem. It replaces
@@ -63,9 +64,9 @@ def evaluate(calcfc, x, m_nlcon, amat, bvec):
         # they never produce a step containing NaN/Inf.
         assert not any(np.isnan(x))
 
-    #====================#
+    # ====================#
     # Calculation starts #
-    #====================#
+    # ====================#
 
     constr = np.zeros(m_lcon + m_nlcon)
     if amat is not None:
@@ -85,9 +86,9 @@ def evaluate(calcfc, x, m_nlcon, amat, bvec):
         f = moderatef(f)
         constr[m_lcon:] = moderatec(constr[m_lcon:])
 
-    #==================#
+    # ==================#
     # Calculation ends #
-    #==================#
+    # ==================#
 
     # Postconditions
     if DEBUGGING:

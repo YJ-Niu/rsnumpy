@@ -28,8 +28,8 @@ from . import _stats
 from ._tukeylambda_stats import (tukeylambda_variance as _tlvar,
                                  tukeylambda_kurtosis as _tlkurt)
 from ._distn_infrastructure import (_vectorize_rvs_over_shapes,
-    get_distribution_names, _kurtosis, _isintegral,
-    rv_continuous, _skew, _get_fixed_fit_value, _check_shape, _ShapeInfo)
+                                    get_distribution_names, _kurtosis, _isintegral,
+                                    rv_continuous, _skew, _get_fixed_fit_value, _check_shape, _ShapeInfo)
 from ._ksstats import kolmogn, kolmognp, kolmogni
 from ._constants import (_XMIN, _LOGXMIN, _EULER, _ZETA3, _SQRT_PI,
                          _SQRT_2_OVER_PI, _LOG_PI, _LOG_SQRT_2_OVER_PI)
@@ -37,6 +37,7 @@ from ._censored_data import CensoredData
 from scipy.optimize import root_scalar
 from scipy.stats._warnings_errors import FitError
 import scipy.stats as stats
+
 
 def _remove_optimizer_parameters(kwds):
     """
@@ -169,6 +170,7 @@ class ksone_gen(rv_continuous):
     True
 
     """
+
     def _argcheck(self, n):
         return (n >= 1) & (n == np.round(n))
 
@@ -261,6 +263,7 @@ class kstwo_gen(rv_continuous):
     True
 
     """
+
     def _argcheck(self, n):
         return (n >= 1) & (n == np.round(n))
 
@@ -328,6 +331,7 @@ class kstwobign_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return []
 
@@ -350,7 +354,7 @@ class kstwobign_gen(rv_continuous):
 kstwobign = kstwobign_gen(a=0.0, name='kstwobign')
 
 
-## Normal distribution
+# Normal distribution
 
 # loc = mu, scale = std
 # Keep these implementations out of the class definition so they can be reused
@@ -414,6 +418,7 @@ class norm_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return []
 
@@ -583,6 +588,7 @@ class anglit_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return []
 
@@ -629,6 +635,7 @@ class arcsine_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return []
 
@@ -662,6 +669,7 @@ class FitDataError(ValueError):
     # This exception is raised by, for example, beta_gen.fit when both floc
     # and fscale are fixed and there are values in the data not in the open
     # interval (floc, floc+fscale).
+
     def __init__(self, distr, lower, upper):
         self.args = (
             "Invalid values in `data`.  Maximum likelihood "
@@ -676,6 +684,7 @@ class FitSolverError(FitError):
     """
     # This exception is raised by, for example, beta_gen.fit when
     # optimize.fsolve returns with ier != 1.
+
     def __init__(self, mesg):
         emsg = "Solver for the MLE equations failed to converge: "
         emsg += mesg.replace('\n', '')
@@ -746,6 +755,7 @@ class beta_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         ia = _ShapeInfo("a", False, (0, np.inf), (False, False))
         ib = _ShapeInfo("b", False, (0, np.inf), (False, False))
@@ -960,11 +970,11 @@ class beta_gen(rv_continuous):
                             (a <= 4.9e6) & (b - a >= 1e6) & (b >= threshold_a),
                             (b <= 4.9e6) & (a - b >= 1e6) & (a >= threshold_b),
                             (a < 4.9e6) & (b < 4.9e6)
-                           ],
+                            ],
                            [asymptotic_ab_large, asymptotic_b_large,
                             asymptotic_a_large, regular],
                            [a, b]
-        )
+                           )
 
 
 beta = beta_gen(a=0.0, b=1.0, name='beta')
@@ -1106,6 +1116,7 @@ class bradford_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("c", False, (0, np.inf), (False, False))]
 
@@ -1235,7 +1246,7 @@ class burr_gen(rv_continuous):
         return sc.expm1(_q) ** (-1.0 / c)
 
     def _stats(self, c, d):
-        nc = np.arange(1, 5).reshape(4,1) / c
+        nc = np.arange(1, 5).reshape(4, 1) / c
         # ek is the kth raw moment, e1 is the mean e2-e1**2 variance etc.
         e1, e2, e3, e4 = sc.beta(d + nc, 1. - nc) * d
         mu = np.where(c > 1.0, e1, np.nan)
@@ -1244,7 +1255,7 @@ class burr_gen(rv_continuous):
         g1 = xpx.apply_where(
             c > 3.0, (e1, e2, e3, mu2_if_c),
             lambda e1, e2, e3, mu2_if_c: ((e3 - 3*e2*e1 + 2*e1**3)
-                                           / np.sqrt((mu2_if_c)**3)),
+                                          / np.sqrt((mu2_if_c)**3)),
             fill_value=np.nan)
         g2 = xpx.apply_where(
             c > 4.0, (e1, e2, e3, e4, mu2_if_c),
@@ -1312,6 +1323,7 @@ class burr12_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         ic = _ShapeInfo("c", False, (0, np.inf), (False, False))
         id = _ShapeInfo("d", False, (0, np.inf), (False, False))
@@ -1400,6 +1412,7 @@ class fisk_gen(burr_gen):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("c", False, (0, np.inf), (False, False))]
 
@@ -1469,6 +1482,7 @@ class cauchy_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return []
 
@@ -1552,6 +1566,7 @@ class chi_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("df", False, (0, np.inf), (False, False))]
 
@@ -1639,6 +1654,7 @@ class chi2_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("df", False, (0, np.inf), (False, False))]
 
@@ -1717,6 +1733,7 @@ class cosine_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return []
 
@@ -1786,6 +1803,7 @@ class dgamma_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("a", False, (0, np.inf), (False, False))]
 
@@ -1941,7 +1959,7 @@ class dpareto_lognorm_gen(rv_continuous):
             # t3 can be smaller than t4, so we have to consider log of negative number
             # This would be much simpler, but `return_sign` is available, so use it?
             # t5 =  sc.logsumexp([t3, t4 + np.pi*1j])
-            t5, sign =  sc.logsumexp([t3, t4], b=[one, -one], axis=0, return_sign=True)
+            t5, sign = sc.logsumexp([t3, t4], b=[one, -one], axis=0, return_sign=True)
             temp = [t1, t2 + t5 - np.log(a + b)]
             out = np.asarray(sc.logsumexp(temp, b=[one, -one*sign], axis=0))
         out[x == 0] = -np.inf
@@ -1994,6 +2012,7 @@ class dweibull_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("c", False, (0, np.inf), (False, False))]
 
@@ -2074,6 +2093,7 @@ class expon_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return []
 
@@ -2201,6 +2221,7 @@ class exponnorm_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("K", False, (0, np.inf), (False, False))]
 
@@ -2214,9 +2235,11 @@ class exponnorm_gen(rv_continuous):
 
     def _logpdf(self, x, K):
         u = (-x + 1.0 / K) / np.sqrt(2)
+
         def logpdf_erfcx(x, K, u):
             erfcx_term = np.log(sc.erfcx(u))
             return -np.log(2) - 0.5 * (x ** 2) - np.log(K) + erfcx_term
+
         def logpdf_default(x, K, u):
             invK = 1.0 / K
             exparg = invK * (-x + 0.5 * invK)
@@ -2227,8 +2250,10 @@ class exponnorm_gen(rv_continuous):
 
     def _cdf(self, x, K):
         u = (-x + 1.0 / K) / np.sqrt(2)
+
         def cdf_erfcx(x, K, u):
             return _norm_cdf(x) - 0.5 * np.exp(-0.5 * x ** 2) * sc.erfcx(u)
+
         def cdf_default(x, K, u):
             invK = 1.0 / K
             expval = invK * (0.5 * invK - x)
@@ -2240,8 +2265,10 @@ class exponnorm_gen(rv_continuous):
 
     def _sf(self, x, K):
         u = (-x + 1.0 / K) / np.sqrt(2)
+
         def sf_erfcx(x, K, u):
             return _norm_cdf(-x) + 0.5 * np.exp(-0.5 * x ** 2) * sc.erfcx(u)
+
         def sf_default(x, K, u):
             invK = 1.0 / K
             expval = invK * (0.5 * invK - x)
@@ -2257,6 +2284,7 @@ class exponnorm_gen(rv_continuous):
         skw = 2 * K**3 * opK2**(-1.5)
         krt = 6.0 * K2 * K2 * opK2**(-2)
         return K, opK2, skw, krt
+
 
 exponnorm = exponnorm_gen(name='exponnorm')
 
@@ -2321,6 +2349,7 @@ class exponweib_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         ia = _ShapeInfo("a", False, (0, np.inf), (False, False))
         ic = _ShapeInfo("c", False, (0, np.inf), (False, False))
@@ -2383,6 +2412,7 @@ class exponpow_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("b", False, (0, np.inf), (False, False))]
 
@@ -2511,6 +2541,7 @@ class foldcauchy_gen(rv_continuous):
     %(example)s
 
     """
+
     def _argcheck(self, c):
         return c >= 0
 
@@ -2579,6 +2610,7 @@ class f_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         idfn = _ShapeInfo("dfn", False, (0, np.inf), (False, False))
         idfd = _ShapeInfo("dfd", False, (0, np.inf), (False, False))
@@ -2655,13 +2687,13 @@ class f_gen(rv_continuous):
 f = f_gen(a=0.0, name='f')
 
 
-## Folded Normal
-##   abs(Z) where (Z is normal with mu=L and std=S so that c=abs(L)/S)
+# Folded Normal
+# abs(Z) where (Z is normal with mu=L and std=S so that c=abs(L)/S)
 ##
-##  note: regress docs have scale parameter correct, but first parameter
-##    he gives is a shape parameter A = c * scale
+# note: regress docs have scale parameter correct, but first parameter
+# he gives is a shape parameter A = c * scale
 
-##  Half-normal is folded normal with shape-parameter c=0.
+# Half-normal is folded normal with shape-parameter c=0.
 
 class foldnorm_gen(rv_continuous):
     r"""A folded normal continuous random variable.
@@ -2685,6 +2717,7 @@ class foldnorm_gen(rv_continuous):
     %(example)s
 
     """
+
     def _argcheck(self, c):
         return c >= 0
 
@@ -2773,6 +2806,7 @@ class weibull_min_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("c", False, (0, np.inf), (False, False))]
 
@@ -2937,6 +2971,7 @@ class truncweibull_min_gen(rv_continuous):
     %(example)s
 
     """
+
     def _argcheck(self, c, a, b):
         return (a >= 0.) & (b > a) & (c > 0.)
 
@@ -2984,17 +3019,17 @@ class truncweibull_min_gen(rv_continuous):
     def _isf(self, q, c, a, b):
         return pow(
             -np.log((1 - q) * np.exp(-pow(b, c)) + q * np.exp(-pow(a, c))), 1/c
-            )
+        )
 
     def _ppf(self, q, c, a, b):
         return pow(
             -np.log((1 - q) * np.exp(-pow(a, c)) + q * np.exp(-pow(b, c))), 1/c
-            )
+        )
 
     def _munp(self, n, c, a, b):
         gamma_fun = sc.gamma(n/c + 1.) * (
             sc.gammainc(n/c + 1., pow(b, c)) - sc.gammainc(n/c + 1., pow(a, c))
-            )
+        )
         denum = (np.exp(-pow(a, c)) - np.exp(-pow(b, c)))
         return gamma_fun / denum
 
@@ -3040,6 +3075,7 @@ class weibull_max_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("c", False, (0, np.inf), (False, False))]
 
@@ -3110,6 +3146,7 @@ class genlogistic_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("c", False, (0, np.inf), (False, False))]
 
@@ -3201,6 +3238,7 @@ class genpareto_gen(rv_continuous):
     %(example)s
 
     """
+
     def _argcheck(self, c):
         return np.isfinite(c)
 
@@ -3263,7 +3301,7 @@ class genpareto_gen(rv_continuous):
             k = xpx.apply_where(
                 c < 1/4, c,
                 lambda xi: 3 * (1 - 2*xi) * (2*xi**2 + xi + 3)
-                           / (1 - 3*xi) / (1 - 4*xi) - 3,
+                / (1 - 3*xi) / (1 - 4*xi) - 3,
                 fill_value=np.nan)
 
         return m, v, s, k
@@ -3317,6 +3355,7 @@ class genexpon_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         ia = _ShapeInfo("a", False, (0, np.inf), (False, False))
         ib = _ShapeInfo("b", False, (0, np.inf), (False, False))
@@ -3391,6 +3430,7 @@ class genextreme_gen(rv_continuous):
     %(example)s
 
     """
+
     def _argcheck(self, c):
         return np.isfinite(c)
 
@@ -3464,10 +3504,12 @@ class genextreme_gen(rv_continuous):
         g3 = g(3)
         g4 = g(4)
         g2mg12 = np.where(abs(c) < 1e-7, (c*np.pi)**2.0/6.0, g2-g1**2.0)
+
         def gam2k_f(c):
             return sc.expm1(sc.gammaln(2.0*c+1.0)-2*sc.gammaln(c + 1.0))/c**2.0
         gam2k = xpx.apply_where(abs(c) >= 1e-7, c, gam2k_f, fill_value=np.pi**2.0/6.0)
         eps = 1e-14
+
         def gamk_f(c):
             return sc.expm1(sc.gammaln(c + 1))/c
         gamk = xpx.apply_where(abs(c) >= eps, c, gamk_f, fill_value=-_EULER)
@@ -3572,11 +3614,11 @@ def _digammainv(y):
     return value[0]
 
 
-## Gamma (Use MATLAB and MATHEMATICA (b=theta=scale, a=alpha=shape) definition)
+# Gamma (Use MATLAB and MATHEMATICA (b=theta=scale, a=alpha=shape) definition)
 
-## gamma(a, loc, scale)  with a an integer is the Erlang distribution
-## gamma(1, loc, scale)  is the Exponential distribution
-## gamma(df/2, 0, 2) is the chi2 distribution with df degrees of freedom.
+# gamma(a, loc, scale)  with a an integer is the Erlang distribution
+# gamma(1, loc, scale)  is the Exponential distribution
+# gamma(df/2, 0, 2) is the chi2 distribution with df degrees of freedom.
 
 class gamma_gen(rv_continuous):
     r"""A gamma continuous random variable.
@@ -3619,6 +3661,7 @@ class gamma_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("a", False, (0, np.inf), (False, False))]
 
@@ -3886,6 +3929,7 @@ class gengamma_gen(rv_continuous):
     %(example)s
 
     """
+
     def _argcheck(self, a, c):
         return (a > 0) & (c != 0)
 
@@ -3976,6 +4020,7 @@ class genhalflogistic_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("c", False, (0, np.inf), (False, False))]
 
@@ -4189,7 +4234,7 @@ class genhyperbolic_gen(rv_continuous):
             scale=t3,
             size=size,
             random_state=random_state
-            )
+        )
         normst = norm.rvs(size=size, random_state=random_state)
 
         return b * gig + np.sqrt(gig) * normst
@@ -4261,6 +4306,7 @@ class gompertz_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("c", False, (0, np.inf), (False, False))]
 
@@ -4326,6 +4372,7 @@ class gumbel_r_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return []
 
@@ -4531,6 +4578,7 @@ class halfcauchy_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return []
 
@@ -4630,6 +4678,7 @@ class halflogistic_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return []
 
@@ -4695,7 +4744,7 @@ class halflogistic_gen(rv_continuous):
             C = 2 * np.sum(beta[1:] * sorted_data[1:]**2)
             # starting guess
             scale = ((B + np.sqrt(B**2 + 8 * n_observations * C))
-                    /(4 * n_observations))
+                     / (4 * n_observations))
 
             # relative tolerance of fix point iterator
             rtol = 1e-8
@@ -4755,6 +4804,7 @@ class halfnorm_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return []
 
@@ -4839,6 +4889,7 @@ class hypsecant_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return []
 
@@ -5214,6 +5265,7 @@ class geninvgauss_gen(rv_continuous):
     %(example)s
 
     """
+
     def _argcheck(self, p, b):
         return (p == p) & (b > 0)
 
@@ -5763,6 +5815,7 @@ class jf_skew_t_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         ia = _ShapeInfo("a", False, (0, np.inf), (False, False))
         ib = _ShapeInfo("b", False, (0, np.inf), (False, False))
@@ -5924,6 +5977,7 @@ class johnsonsu_gen(rv_continuous):
     %(example)s
 
     """
+
     def _argcheck(self, a, b):
         return (b > 0) & (a == a)
 
@@ -6032,6 +6086,7 @@ class landau_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return []
 
@@ -6100,6 +6155,7 @@ class laplace_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return []
 
@@ -6199,6 +6255,7 @@ class laplace_asymmetric_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("kappa", False, (0, np.inf), (False, False))]
 
@@ -6535,6 +6592,7 @@ class logistic_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return []
 
@@ -6783,6 +6841,7 @@ class loglaplace_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("c", False, (0, np.inf), (False, False))]
 
@@ -6845,6 +6904,7 @@ class loglaplace_gen(rv_continuous):
         scale = np.exp(a) if fscale is None else fscale
         c = 1 / b if fc is None else fc
         return c, loc, scale
+
 
 loglaplace = loglaplace_gen(a=0.0, name='loglaplace')
 
@@ -7149,6 +7209,7 @@ class maxwell_gen(rv_continuous):
 
     %(example)s
     """
+
     def _shape_info(self):
         return []
 
@@ -7224,6 +7285,7 @@ class mielke_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         ik = _ShapeInfo("k", False, (0, np.inf), (False, False))
         i_s = _ShapeInfo("s", False, (0, np.inf), (False, False))
@@ -7344,6 +7406,7 @@ class kappa4_gen(rv_continuous):
     %(example)s
 
     """
+
     def _argcheck(self, h, k):
         shape = np.broadcast_arrays(h, k)[0].shape
         return np.full(shape, fill_value=True)
@@ -7562,6 +7625,7 @@ class kappa3_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("a", False, (0, np.inf), (False, False))]
 
@@ -7652,6 +7716,7 @@ class moyal_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return []
 
@@ -7736,6 +7801,7 @@ class nakagami_gen(rv_continuous):
     %(example)s
 
     """
+
     def _argcheck(self, nu):
         return nu > 0
 
@@ -7860,6 +7926,7 @@ class ncx2_gen(rv_continuous):
     %(example)s
 
     """
+
     def _argcheck(self, df, nc):
         return (df > 0) & np.isfinite(df) & (nc >= 0)
 
@@ -7902,9 +7969,10 @@ class ncx2_gen(rv_continuous):
 
     def _stats(self, df, nc):
         _ncx2_mean = df + nc
+
         def k_plus_cl(k, l, c):
             return k + c*l
-        _ncx2_variance =  2.0 * k_plus_cl(df, nc, 2.0)
+        _ncx2_variance = 2.0 * k_plus_cl(df, nc, 2.0)
         _ncx2_skewness = (np.sqrt(8.0) * k_plus_cl(df, nc, 3) /
                           np.sqrt(k_plus_cl(df, nc, 2.0)**3))
         _ncx2_kurtosis_excess = (12.0 * k_plus_cl(df, nc, 4.0) /
@@ -7969,6 +8037,7 @@ class ncf_gen(rv_continuous):
     %(example)s
 
     """
+
     def _argcheck(self, dfn, dfd, nc):
         return (dfn > 0) & (dfd > 0) & (nc >= 0)
 
@@ -8050,6 +8119,7 @@ class t_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("df", False, (0, np.inf), (False, False))]
 
@@ -8167,6 +8237,7 @@ class nct_gen(rv_continuous):
     %(example)s
 
     """
+
     def _argcheck(self, df, nc):
         return (df > 0) & (nc == nc)
 
@@ -8230,6 +8301,7 @@ class pareto_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("b", False, (0, np.inf), (False, False))]
 
@@ -8393,6 +8465,7 @@ class lomax_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("c", False, (0, np.inf), (False, False))]
 
@@ -8475,6 +8548,7 @@ class pearson3_gen(rv_continuous):
 
     %(example)s
     """
+
     def _preprocess(self, x, skew):
         # The real 'loc' and 'scale' are handled in the calling pdf(...). The
         # local variables 'loc' and 'scale' within pearson3._pdf are set to
@@ -8667,6 +8741,7 @@ class powerlaw_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("a", False, (0, np.inf), (False, False))]
 
@@ -9005,6 +9080,7 @@ class powernorm_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("c", False, (0, np.inf), (False, False))]
 
@@ -9068,6 +9144,7 @@ class rdist_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("c", False, (0, np.inf), (False, False))]
 
@@ -9274,6 +9351,7 @@ class reciprocal_gen(rv_continuous):
     >>> plt.show()
 
     """
+
     def _argcheck(self, a, b):
         return (a > 0) & (b > a)
 
@@ -9363,6 +9441,7 @@ class rice_gen(rv_continuous):
     %(example)s
 
     """
+
     def _argcheck(self, b):
         return b >= 0
 
@@ -9398,6 +9477,7 @@ class rice_gen(rv_continuous):
 
 
 rice = rice_gen(a=0.0, name="rice")
+
 
 class irwinhall_gen(rv_continuous):
     r"""An Irwin-Hall (Uniform Sum) continuous random variable.
@@ -9554,6 +9634,7 @@ class recipinvgauss_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("mu", False, (0, np.inf), (False, False))]
 
@@ -9619,6 +9700,7 @@ class semicircular_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return []
 
@@ -9685,6 +9767,7 @@ class skewcauchy_gen(rv_continuous):
     %(example)s
 
     """
+
     def _argcheck(self, a):
         return np.abs(a) < 1
 
@@ -9751,6 +9834,7 @@ class skewnorm_gen(rv_continuous):
     %(example)s
 
     """
+
     def _argcheck(self, a):
         return np.isfinite(a)
 
@@ -9982,6 +10066,7 @@ class trapezoid_gen(rv_continuous):
 
     %(example)s
     """
+
     def _argcheck(self, c, d):
         return (c >= 0) & (c <= 1) & (d >= 0) & (d <= 1) & (d >= c)
 
@@ -10085,6 +10170,7 @@ class triang_gen(rv_continuous):
     %(example)s
 
     """
+
     def _rvs(self, c, size=None, random_state=None):
         return random_state.triangular(0, c, 1, size)
 
@@ -10161,6 +10247,7 @@ class truncexpon_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("b", False, (0, np.inf), (False, False))]
 
@@ -10956,6 +11043,7 @@ class uniform_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return []
 
@@ -11233,6 +11321,7 @@ class vonmises_gen(rv_continuous):
     >>> right.legend(bbox_to_anchor=(0.15, 1.06))
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("kappa", False, (0, np.inf), (True, False))]
 
@@ -11469,6 +11558,7 @@ class wrapcauchy_gen(rv_continuous):
     %(example)s
 
     """
+
     def _argcheck(self, c):
         return (c > 0) & (c < 1)
 
@@ -11513,6 +11603,7 @@ class wrapcauchy_gen(rv_continuous):
     def rvs(self, *args, **kwds):
         rvs = super().rvs(*args, **kwds)
         return np.mod(rvs, 2*np.pi)
+
 
 wrapcauchy = wrapcauchy_gen(a=0.0, b=2*np.pi, name='wrapcauchy')
 
@@ -11564,6 +11655,7 @@ class gennorm_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("beta", False, (0, np.inf), (False, False))]
 
@@ -11666,6 +11758,7 @@ class halfgennorm_gen(rv_continuous):
     %(example)s
 
     """
+
     def _shape_info(self):
         return [_ShapeInfo("beta", False, (0, np.inf), (False, False))]
 
@@ -11736,6 +11829,7 @@ class crystalball_gen(rv_continuous):
 
     %(example)s
     """
+
     def _argcheck(self, beta, m):
         """
         Shape parameter bounds are m > 1 and beta > 0.
@@ -11926,6 +12020,7 @@ class argus_gen(rv_continuous):
 
     %(example)s
     """
+
     def _shape_info(self):
         return [_ShapeInfo("chi", False, (0, np.inf), (False, False))]
 
@@ -12532,6 +12627,7 @@ class rel_breitwigner_gen(rv_continuous):
     %(example)s
 
     """
+
     def _argcheck(self, rho):
         return rho > 0
 

@@ -568,7 +568,7 @@ def convert_pydata_sparse_to_scipy(
     return arg
 
 
-###############################################################################
+#############################################################################
 # Wrappers for rsnumpy types that are deprecated
 
 # rsnumpy versions of these functions raise deprecation warnings, the
@@ -583,7 +583,7 @@ def asmatrix(data, dtype=None):
         return data
     return np.asarray(data, dtype=dtype).view(np.matrix)
 
-###############################################################################
+#############################################################################
 
 
 def _todata(s) -> np.ndarray:

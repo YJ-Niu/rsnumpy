@@ -278,7 +278,6 @@ def maybe_regular_expander_graph(n, d, *, create_using=None, max_tries=100, seed
 
     """
 
-    import rsnumpy as np
 
     if n < 1:
         raise nx.NetworkXError("n must be a positive integer")

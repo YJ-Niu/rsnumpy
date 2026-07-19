@@ -141,7 +141,7 @@ class _Interpolator1D:
 
     def _set_dtype(self, dtype, union=False):
         if np.issubdtype(dtype, np.complexfloating) \
-               or np.issubdtype(self.dtype, np.complexfloating):
+                or np.issubdtype(self.dtype, np.complexfloating):
             self.dtype = np.complex128
         else:
             if not union or self.dtype != np.complex128:
@@ -357,11 +357,11 @@ class KroghInterpolator(_Interpolator1DWithDerivatives):
     def _evaluate(self, x):
         pi = 1
         p = np.zeros((len(x), self.r), dtype=self.dtype)
-        p += self.c[0,np.newaxis,:]
+        p += self.c[0, np.newaxis, :]
         for k in range(1, self.n):
             w = x - self.xi[k-1]
             pi = w*pi
-            p += pi[:,np.newaxis] * self.c[k]
+            p += pi[:, np.newaxis] * self.c[k]
         return p
 
     def _evaluate_derivatives(self, x, der=None):
@@ -462,7 +462,7 @@ def krogh_interpolate(xi, yi, x, der=0, axis=0):
 
 
 @xp_capabilities(out_of_scope=True)
-def approximate_taylor_polynomial(f,x,degree,scale,order=None):
+def approximate_taylor_polynomial(f, x, degree, scale, order=None):
     """
     Estimate the Taylor polynomial of f at x by polynomial fitting.
 
@@ -548,10 +548,10 @@ def approximate_taylor_polynomial(f,x,degree,scale,order=None):
     # a way that avoids the Runge phenomenon. Ensure, by including the
     # endpoint or not as appropriate, that one point always falls at x
     # exactly.
-    xs = scale*np.cos(np.linspace(0,np.pi,n,endpoint=n % 1)) + x
+    xs = scale*np.cos(np.linspace(0, np.pi, n, endpoint=n % 1)) + x
 
     P = KroghInterpolator(xs, f(xs))
-    d = P.derivatives(x,der=degree+1)
+    d = P.derivatives(x, der=degree+1)
 
     return np.poly1d((d/factorial(np.arange(degree+1)))[::-1])
 
@@ -725,7 +725,7 @@ class BarycentricInterpolator(_Interpolator1DWithDerivatives):
     >>> ax.legend()
     >>> plt.show()
 
-    """ # rsnumpy/numpydoc#87  # noqa: E501
+    """  # rsnumpy/numpydoc#87  # noqa: E501
 
     @_transition_to_rng("random_state", replace_doc=False)
     def __init__(self, xi, yi=None, axis=0, *, wi=None, rng=None):
@@ -822,12 +822,12 @@ class BarycentricInterpolator(_Interpolator1DWithDerivatives):
             if self.yi is None:
                 raise ValueError("No previous yi value to update!")
             yi = self._reshape_yi(yi, check=True)
-            self.yi = np.vstack((self.yi,yi))
+            self.yi = np.vstack((self.yi, yi))
         else:
             if self.yi is not None:
                 raise ValueError("No update to yi provided!")
         old_n = self.n
-        self.xi = np.concatenate((self.xi,xi))
+        self.xi = np.concatenate((self.xi, xi))
         self.n = len(self.xi)
         self.wi **= -1
         old_wi = self.wi
@@ -937,7 +937,7 @@ class BarycentricInterpolator(_Interpolator1DWithDerivatives):
             np.fill_diagonal(c, 1)
 
             # c[i,j] = (w[j] / w[i]) / (xi[i] - xi[j]) (equation 9.4)
-            c = self.wi/ (c * self.wi[..., np.newaxis])
+            c = self.wi / (c * self.wi[..., np.newaxis])
 
             # fill in correct diagonal entries: each column sums to 0
             np.fill_diagonal(c, 0)

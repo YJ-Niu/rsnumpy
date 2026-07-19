@@ -88,13 +88,13 @@ mdtypes_template = {
                     ('version', 'u2'),
                     ('endian_test', 'S2')],
     'tag_full': [('mdtype', 'u4'), ('byte_count', 'u4')],
-    'tag_smalldata':[('byte_count_mdtype', 'u4'), ('data', 'S4')],
+    'tag_smalldata': [('byte_count_mdtype', 'u4'), ('data', 'S4')],
     'array_flags': [('data_type', 'u4'),
                     ('byte_count', 'u4'),
-                    ('flags_class','u4'),
+                    ('flags_class', 'u4'),
                     ('nzmax', 'u4')],
     'U1': 'U1',
-    }
+}
 
 mclass_dtypes_template = {
     mxINT8_CLASS: 'i1',
@@ -107,7 +107,7 @@ mclass_dtypes_template = {
     mxUINT64_CLASS: 'u8',
     mxSINGLE_CLASS: 'f4',
     mxDOUBLE_CLASS: 'f8',
-    }
+}
 
 mclass_info = {
     mxINT8_CLASS: 'int8',
@@ -127,7 +127,7 @@ mclass_info = {
     mxSPARSE_CLASS: 'sparse',
     mxFUNCTION_CLASS: 'function',
     mxOPAQUE_CLASS: 'opaque',
-    }
+}
 
 NP_TO_MTYPES = {
     'f8': miDOUBLE,
@@ -147,7 +147,7 @@ NP_TO_MTYPES = {
     'S1': miUINT8,
     'U1': miUTF16,
     'b1': miUINT8,  # not standard but seems MATLAB uses this (gh-4022)
-    }
+}
 
 
 NP_TO_MXTYPES = {
@@ -167,7 +167,7 @@ NP_TO_MXTYPES = {
     'u1': mxUINT8_CLASS,
     'S1': mxUINT8_CLASS,
     'b1': mxUINT8_CLASS,  # not standard but seems MATLAB uses this
-    }
+}
 
 ''' Before release v7.1 (release 14) matlab (TM) used the system
 default character encoding scheme padded out to 16-bits. Release 14
@@ -177,8 +177,8 @@ can be encoded in 7-bit ascii, and saves in that format if so.'''
 codecs_template = {
     miUTF8: {'codec': 'utf_8', 'width': 1},
     miUTF16: {'codec': 'utf_16', 'width': 2},
-    miUTF32: {'codec': 'utf_32','width': 4},
-    }
+    miUTF32: {'codec': 'utf_32', 'width': 4},
+}
 
 
 def _convert_codecs(template, byte_order):
@@ -228,7 +228,6 @@ class mat_struct:
     We use instances of this class when the user passes False as a value to the
     ``struct_as_record`` parameter of the :func:`scipy.io.loadmat` function.
     """
-    pass
 
 
 class MatlabObject(np.ndarray):
@@ -254,7 +253,7 @@ class MatlabObject(np.ndarray):
         # Finally, we must return the newly created object:
         return obj
 
-    def __array_finalize__(self,obj):
+    def __array_finalize__(self, obj):
         # reset the attribute from passed original object
         self.classname = getattr(obj, 'classname', None)
         # We do not need to return anything

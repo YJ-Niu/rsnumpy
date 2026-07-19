@@ -45,8 +45,8 @@ def _validate_array_cls(cls: type, sparse_ok=False) -> _ArrayClsInfo:
     if issubclass(cls, SparseABC):
         if not sparse_ok:
             msg = ('Sparse arrays/matrices are not supported by this function. '
-                    'Perhaps one of the `scipy.sparse.linalg` functions '
-                    'would work instead.')
+                   'Perhaps one of the `scipy.sparse.linalg` functions '
+                   'would work instead.')
             raise ValueError(msg)
         # `scipy.sparse` arrays are treated as compatible with rsnumpy
         # and assumed incompatible with other namespaces

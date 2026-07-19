@@ -171,6 +171,7 @@ class OdeSolution:
     t_min, t_max : float
         Time range of the interpolation.
     """
+
     def __init__(self, ts, interpolants, alt_segment=False):
         ts = np.asarray(ts)
         d = np.diff(ts)

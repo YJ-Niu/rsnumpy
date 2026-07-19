@@ -1136,7 +1136,7 @@ def _spectral(A, dim=2):
 
     eigenvalues, eigenvectors = np.linalg.eig(L)
     # sort and keep smallest nonzero
-    index = np.argsort(eigenvalues)[1 : dim + 1]  # 0 index is zero eigenvalue
+    index = np.argsort(eigenvalues)[1: dim + 1]  # 0 index is zero eigenvalue
     return np.real(eigenvectors[:, index])
 
 
