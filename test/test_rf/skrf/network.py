@@ -7983,21 +7983,27 @@ def y2s(y: NumberLike, z0: NumberLike = 50,
     # The following is a vectorized version of a for loop for all frequencies.
     # Creating Identity matrices of shape (nports,nports) for each nfreqs
     Id = np.zeros_like(y)  # (nfreqs, nports, nports)
-    np.einsum('ijj->ij', Id)[...] = 1.0
+    for i in range(nfreqs):
+        for j in range(nports):
+            Id[i, j, j] = 1.0
 
     if s_def == 'power':
         # Creating diagonal matrices of shape (nports,nports) for each nfreqs
         F, G = np.zeros_like(y), np.zeros_like(y)
-        np.einsum('ijj->ij', F)[...] = 1.0/(2*np.sqrt(z0.real))
-        np.einsum('ijj->ij', G)[...] = z0
+        for i in range(nfreqs):
+            for j in range(nports):
+                F[i, j, j] = 1.0/(2*np.sqrt(z0.real[i, j]))
+                G[i, j, j] = z0[i, j]
         s = mf.rsolve(F @ (Id + G @ y), F @ (Id - np.conjugate(G) @ y))
 
     elif s_def == 'pseudo':
         # Pseudo-waves
         # Creating diagonal matrices of shape (nports,nports) for each nfreqs
         ZR, U = np.zeros_like(y), np.zeros_like(y)
-        np.einsum('ijj->ij', U)[...] = np.sqrt(z0.real)/np.abs(z0)
-        np.einsum('ijj->ij', ZR)[...] = z0
+        for i in range(nfreqs):
+            for j in range(nports):
+                U[i, j, j] = np.sqrt(z0.real[i, j])/np.abs(z0[i, j])
+                ZR[i, j, j] = z0[i, j]
         # This formulation is not very good numerically
         UY = mf.rsolve(mf.nudge_eig(y, cond=1e-12), U)
         s = mf.rsolve(UY + U @ ZR, -2 * U @ ZR) + Id
@@ -8006,7 +8012,9 @@ def y2s(y: NumberLike, z0: NumberLike = 50,
         # Traveling-waves definition. Cf.Wikipedia "Impedance parameters" page.
         # Creating diagonal matrices of shape (nports, nports) for each nfreqs
         sqrtz0 = np.zeros_like(y)  # (nfreqs, nports, nports)
-        np.einsum('ijj->ij', sqrtz0)[...] = np.sqrt(z0)
+        for i in range(nfreqs):
+            for j in range(nports):
+                sqrtz0[i, j, j] = np.sqrt(z0[i, j])
         s = mf.rsolve(Id + sqrtz0 @ y @ sqrtz0, Id - sqrtz0 @ y @ sqrtz0)
     else:
         raise ValueError(f'Unknown s_def: {s_def}')

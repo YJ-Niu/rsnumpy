@@ -106,7 +106,7 @@ class Media(ABC):
         self.z0_port = z0_port
         self.z0_override = z0_override
 
-    def mode(self,  **kw) -> Media:
+    def mode(self, **kw) -> Media:
         r"""
         Create another mode in this medium.
 
@@ -675,17 +675,17 @@ class Media(ABC):
         result = self.match(nports=2, s_def='power', **kwargs)
         s = np.zeros(shape=result.s.shape, dtype=complex)
         R = np.array(R)
-        # Convert Y-parameters resistor to S-parameters in power wave to accommodate any R value.
-        # y[:, 0, 0] = 1.0 / R
-        # y[:, 1, 1] = 1.0 / R
-        # y[:, 0, 1] = -1.0 / R
-        # y[:, 1, 0] = -1.0 / R
-        z0_0, z0_1 = result.z0[:, 0], result.z0[:, 1]
-        denom = R + (z0_0 + z0_1)
-        s[:, 0, 0] = (R - z0_0.conj() + z0_1) / denom
-        s[:, 1, 1] = (R + z0_0 - z0_1.conj()) / denom
-        s[:, 0, 1] = 2 * (z0_0.real * z0_1.real)**0.5 / denom
-        s[:, 1, 0] = 2 * (z0_0.real * z0_1.real)**0.5 / denom
+        z0 = result.z0[:, 0]
+        
+        Y = 1.0 / R
+        y = np.zeros(shape=result.s.shape, dtype=complex)
+        y[:, 0, 0] = Y
+        y[:, 1, 1] = Y
+        y[:, 0, 1] = -Y
+        y[:, 1, 0] = -Y
+        from ..network import y2s
+        s = y2s(y, z0=result.z0, s_def='power')
+        
         result.s = s
 
         # Renormalize into s_def if required
@@ -1414,8 +1414,7 @@ class Media(ABC):
         shunt_inductor
         shunt_capacitor
         """
-        return self.shunt(self.resistor(R=R, **kwargs) **
-                          self.short(**kwargs), **kwargs)
+        return self.shunt(self.resistor(R=R, **kwargs) ** self.short(**kwargs), **kwargs)
 
     def shunt_capacitor(self, C: NumberLike, **kwargs) -> Network:
         r"""
@@ -1448,8 +1447,7 @@ class Media(ABC):
         shunt_resistor
         shunt_inductor
         """
-        return self.shunt(self.capacitor(C=C, **kwargs) **
-                          self.short(**kwargs), **kwargs)
+        return self.shunt(self.capacitor(C=C, **kwargs) ** self.short(**kwargs), **kwargs)
 
     def shunt_inductor(self, L: NumberLike, **kwargs) -> Network:
         r"""
@@ -1482,8 +1480,7 @@ class Media(ABC):
         shunt_resistor
         shunt_capacitor
         """
-        return self.shunt(self.inductor(L=L, **kwargs) **
-                          self.short(**kwargs), **kwargs)
+        return self.shunt(self.inductor(L=L, **kwargs) ** self.short(**kwargs), **kwargs)
 
     def capacitor_q(
             self,
@@ -1632,8 +1629,7 @@ class Media(ABC):
         result.s[:, 1, 1] = s11
 
         s21_mag = np.sqrt(1 - np.abs(s11) ** 2)
-        s21_phase = np.angle(s11) + np.pi / 2 * (np.angle(s11)
-                                                 <= 0) - np.pi / 2 * (np.angle(s11) > 0)
+        s21_phase = np.angle(s11) + np.pi / 2 * (np.angle(s11) <= 0) - np.pi / 2 * (np.angle(s11) > 0)
         result.s[:, 0, 1] = s21_mag * np.exp(1j * s21_phase)
         result.s[:, 1, 0] = result.s[:, 0, 1]
         return result
@@ -1906,7 +1902,7 @@ class DefinedGammaZ0(Media):
         f_unit = header.split(',')[0].split('[')[1].split(']')[0]
 
         f, z_re, z_im, g_re, g_im, pz_re, pz_im = \
-            np.loadtxt(fid,  delimiter=',').T
+            np.loadtxt(fid, delimiter=',').T
 
         if isinstance(filename, str | Path):
             fid.close()
@@ -2030,7 +2026,7 @@ def parse_z0(s: str) -> NumberLike:
     return out
 
 
-def get_z0_load(z0: np.ndarray,  port_idx: int) -> np.ndarray:
+def get_z0_load(z0: np.ndarray, port_idx: int) -> np.ndarray:
     r"""
     Calculate the load impedance for a given port index by parallel combining the impedances
     of all other ports.

@@ -2,8 +2,8 @@ import skrf as rf
 from skrf import Frequency, Network
 from skrf.data import ring_slot  # noqa: F811
 import rsnumpy as np
-import matplotlib.pyplot as plt
-from matplotlib import style
+import rsplotlib.pyplot as plt
+from rsplotlib import style
 from skrf.networkSet import NetworkSet
 from skrf.media import CPW, Coaxial
 from skrf.data import wr2p2_line1 as line1
@@ -54,17 +54,17 @@ pprint(6, rs.s_mag[:, 1, 0].min())
 f_match = rs.f[np.argmin(rs.s_mag[:, 0, 0])]  # frequency for min(|S11|)
 pprint(7, f_match)
 
-rf.stylely(figsize=(20, 16), dpi=144)
+# rf.stylely(figsize=(20, 16), dpi=144)
 ring_slot.plot_s_db()
 # ssaver('./test/test_rf/test1.png')
 
 
-rf.stylely(figsize=(20, 16), dpi=144)
+# rf.stylely(figsize=(20, 16), dpi=144)
 ring_slot.plot_s_deg(m=0, n=1)
 # ssaver('./test/test_rf/test2.png')
 
 
-rf.stylely(figsize=(20, 16), dpi=144)
+# rf.stylely(figsize=(20, 16), dpi=144)
 ring_slot.plot_s_smith(lw=2)
 plt.title('Big ole Smith Chart')
 # ssaver('./test/test_rf/test3.png')
@@ -580,8 +580,31 @@ cir = Circuit(cnx)
 # the result if the same :
 pprint(70, cir.network.s[0])
 
-cir.plot_graph(network_labels=True, network_fontsize=15,
-               port_labels=True, port_fontsize=15,
-               edge_labels=True, edge_fontsize=10)
+plt.figure()
+freq = rf.Frequency(start=0.1, stop=10, unit='GHz', npoints=1001)
+tl_media = rf.media.DefinedGammaZ0(freq, z0=50, gamma=1j*freq.w/rf.constants.c)
+C1 = tl_media.capacitor(3.222e-12, name='C1')
+C2 = tl_media.capacitor(82.25e-15, name='C2')
+C3 = tl_media.capacitor(3.222e-12, name='C3')
+L2 = tl_media.inductor(8.893e-9, name='L2')
+RL = tl_media.resistor(50, name='RL')
+gnd = Circuit.Ground(freq, name='gnd')
+port1 = Circuit.Port(freq, name='port1', z0=50)
+port2 = Circuit.Port(freq, name='port2', z0=50)
 
+cnx = [
+    [(port1, 0), (C1, 0), (L2, 0), (C2, 0)],
+    [(L2, 1), (C2, 1), (C3, 0), (port2, 0)],
+    [(gnd, 0), (C1, 1), (C3, 1)],
+]
+cir = Circuit(cnx)
+ntw = cir.network
+ntw.plot_s_db(m=0, n=0, lw=2, logx=True)
+ntw.plot_s_db(m=1, n=0, lw=2, logx=True)
 ssaver('./test/test_rf/test38.png')
+
+# cir.plot_graph(network_labels=True, network_fontsize=15,
+#                port_labels=True, port_fontsize=15,
+#                edge_labels=True, edge_fontsize=10)
+
+# ssaver('./test/test_rf/test39.png')

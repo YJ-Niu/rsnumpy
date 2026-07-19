@@ -990,7 +990,9 @@ class Circuit:
 
         Xs = 2 * np.sqrt(np.einsum('ij,ik->ijk', y0s, y0s)) / \
             y_k[:, None, None]
-        np.einsum('kii->ki', Xs)[:] -= 1  # Sii
+        for i in range(len(self.frequency)):
+            for j in range(len(cnx_k)):
+                Xs[i, j, j] -= 1  # Sii
 
         if inverse:
             # Check if unitary: all ports have same real admittance
@@ -1374,7 +1376,9 @@ class Circuit:
         # Get the buffer of global matrix in f-order [X_T] and intermediate temporary matrix [T]
         # [T] = - [C] @ [X]
         x, t = self.X_F, np.array(self.T)
-        np.einsum('...ii->...i', t)[:] += 1
+        for i in range(t.shape[0]):
+            for j in range(t.shape[1]):
+                t[i, j, j] += 1
 
         # Get the sub-matrices of inverse of intermediate temporary matrix t
         # The method np.linalg.solve(A, B) is equivalent to np.inv(A) @ B, but

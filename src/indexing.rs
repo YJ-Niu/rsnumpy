@@ -693,8 +693,10 @@ fn scatter_advanced(
     let total: usize = slice_dim_lists.iter().map(|d| d.len()).product::<usize>() * adv_size;
 
     for lin in 0..total {
-        let mut rem = lin;
+        let adv_lin = lin % adv_size;
+        let slice_lin = lin / adv_size;
         let mut out_coord = vec![0usize; adv_ndim];
+        let mut rem = adv_lin;
         for k in (0..adv_ndim).rev() {
             out_coord[k] = rem / adv_strides[k];
             rem %= adv_strides[k];
@@ -720,7 +722,7 @@ fn scatter_advanced(
             }
         }
 
-        let mut slice_rem = rem;
+        let mut slice_rem = slice_lin;
         let slice_strides: Vec<usize> = {
             let mut s = vec![1; slice_dim_lists.len()];
             if slice_dim_lists.len() > 1 {

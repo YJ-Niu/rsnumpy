@@ -3,7 +3,7 @@
 Matplotlib
 **********
 
-Draw networks with matplotlib.
+Draw networks with rsplotlib.
 
 Examples
 --------
@@ -22,7 +22,7 @@ import itertools
 import math
 from numbers import Number
 
-import matplotlib.pyplot as plt
+import rsplotlib.pyplot as plt
 import networkx as nx
 
 __all__ = [
@@ -50,9 +50,9 @@ def apply_matplotlib_colors(
     G, src_attr, dest_attr, map, vmin=None, vmax=None, nodes=True
 ):
     """
-    Apply colors from a matplotlib colormap to a graph.
+    Apply colors from a rsplotlib colormap to a graph.
 
-    Reads values from the `src_attr` and use a matplotlib colormap
+    Reads values from the `src_attr` and use a rsplotlib colormap
     to produce a color. Write the color to `dest_attr`.
 
     Parameters
@@ -66,8 +66,8 @@ def apply_matplotlib_colors(
     dest_attr : str or other attribute name
         The name of the attribute to write to on the graph.
 
-    map : matplotlib.colormap
-        The matplotlib colormap to use.
+    map : rsplotlib.colormap
+        The rsplotlib colormap to use.
 
     vmin : float, default None
         The minimum value for scaling the colormap. If `None`, find the
@@ -80,7 +80,7 @@ def apply_matplotlib_colors(
     nodes : bool, default True
         Whether the attribute names are edge attributes or node attributes.
     """
-    import matplotlib as mpl
+    import rsplotlib as mpl
 
     if nodes:
         type_iter = G.nodes()
@@ -172,7 +172,7 @@ class CurvedArrowTextBase:
         # Fractional label position
         # Text position at a proportion t along the line in display coords
         # default is 0.5 so text appears at the halfway point
-        import matplotlib as mpl
+        import rsplotlib as mpl
         import rsnumpy as np
 
         t = self.label_pos
@@ -370,8 +370,8 @@ def display(
     G : graph
         A networkx graph
 
-    canvas : matplotlib Axes object, optional
-        Draw the graph in specified matplotlib axes
+    canvas : rsplotlib Axes object, optional
+        Draw the graph in specified rsplotlib axes
 
     node_pos : string or function, default "pos"
         A string naming the node attribute storing the position of nodes as a tuple.
@@ -415,7 +415,7 @@ def display(
 
     node_shape : string, default "shape"
         A string naming the node attribute which stores the label of each node.
-        The values of this attribute are expected to be one of the matplotlib shapes,
+        The values of this attribute are expected to be one of the rsplotlib shapes,
         one of 'so^>v<dph8'. Visible nodes without this attribute will use 'o'.
 
     node_alpha : string, default "alpha"
@@ -510,7 +510,7 @@ def display(
         will use a default value of 0.
 
     hide_ticks : bool, default True
-        Weather to remove the ticks from the axes of the matplotlib object.
+        Weather to remove the ticks from the axes of the rsplotlib object.
 
     Raises
     ------
@@ -529,8 +529,8 @@ def display(
     """
     from collections import Counter
 
-    import matplotlib as mpl
-    import matplotlib.pyplot as plt
+    import rsplotlib as mpl
+    import rsplotlib.pyplot as plt
     import rsnumpy as np
 
     defaults = {
@@ -1082,10 +1082,10 @@ def display(
 
 
 def draw(G, pos=None, ax=None, **kwds):
-    """Draw the graph G with matplotlib.
+    """Draw the graph G with rsplotlib.
 
     Draw the graph as a simple representation with no node
-    labels or edge labels and using the full matplotlib figure area
+    labels or edge labels and using the full rsplotlib figure area
     and no axis labels by default.  See draw_networkx() for more
     full-featured drawing that allows title, axis labels etc.
 
@@ -1100,8 +1100,8 @@ def draw(G, pos=None, ax=None, **kwds):
         See :py:mod:`networkx.drawing.layout` for functions that
         compute node positions.
 
-    ax : matplotlib Axes object, optional
-        Draw the graph in specified matplotlib axes.
+    ax : rsplotlib Axes object, optional
+        Draw the graph in specified rsplotlib axes.
 
     kwds : optional keywords
         See networkx.draw_networkx() for a description of optional keywords.
@@ -1129,7 +1129,7 @@ def draw(G, pos=None, ax=None, **kwds):
 
     With pyplot use
 
-    >>> import matplotlib.pyplot as plt
+    >>> import rsplotlib.pyplot as plt
     >>> G = nx.dodecahedral_graph()
     >>> nx.draw(G)  # networkx draw()
     >>> plt.draw()  # pyplot draw()
@@ -1138,7 +1138,7 @@ def draw(G, pos=None, ax=None, **kwds):
     https://networkx.org/documentation/latest/auto_examples/index.html
     """
 
-    import matplotlib.pyplot as plt
+    import rsplotlib.pyplot as plt
 
     if ax is None:
         cf = plt.gcf()
@@ -1161,9 +1161,9 @@ def draw(G, pos=None, ax=None, **kwds):
 
 
 def draw_networkx(G, pos=None, arrows=None, with_labels=True, **kwds):
-    r"""Draw the graph G using matplotlib.
+    r"""Draw the graph G using rsplotlib.
 
-    Draw the graph with matplotlib with options for node positions,
+    Draw the graph with rsplotlib with options for node positions,
     labeling, titles, and many other drawing features.
     See draw() for simple drawing without labels or axes.
 
@@ -1202,8 +1202,8 @@ def draw_networkx(G, pos=None, arrows=None, with_labels=True, **kwds):
     with_labels :  bool (default=True)
         Set to True to draw labels on the nodes.
 
-    ax : matplotlib Axes object, optional
-        Draw the graph in the specified matplotlib axes.
+    ax : rsplotlib Axes object, optional
+        Draw the graph in the specified rsplotlib axes.
 
     nodelist : list (default=list(G))
         Draw only specified nodes
@@ -1220,16 +1220,16 @@ def draw_networkx(G, pos=None, arrows=None, with_labels=True, **kwds):
         length as nodelist. Color can be string or rgb (or rgba) tuple of
         floats from 0-1. If numeric values are specified they will be
         mapped to colors using the cmap and vmin,vmax parameters. See
-        matplotlib.scatter for more details.
+        rsplotlib.scatter for more details.
 
     node_shape :  string (default='o')
-        The shape of the node.  Specification is as matplotlib.scatter
+        The shape of the node.  Specification is as rsplotlib.scatter
         marker, one of 'so^>v<dph8'.
 
     alpha : float or None (default=None)
         The node and edge transparency
 
-    cmap : matplotlib colormap, optional
+    cmap : rsplotlib colormap, optional
         Colormap for mapping intensities of nodes
 
     vmin,vmax : float, optional
@@ -1247,7 +1247,7 @@ def draw_networkx(G, pos=None, arrows=None, with_labels=True, **kwds):
         floats from 0-1. If numeric values are specified they will be
         mapped to colors using the edge_cmap and edge_vmin,edge_vmax parameters.
 
-    edge_cmap : matplotlib colormap, optional
+    edge_cmap : rsplotlib colormap, optional
         Colormap for mapping intensities of edges
 
     edge_vmin,edge_vmax : floats, optional
@@ -1297,7 +1297,7 @@ def draw_networkx(G, pos=None, arrows=None, with_labels=True, **kwds):
     >>> nx.draw(G)
     >>> nx.draw(G, pos=nx.spring_layout(G))  # use spring layout
 
-    >>> import matplotlib.pyplot as plt
+    >>> import rsplotlib.pyplot as plt
     >>> limits = plt.axis("off")  # turn off axis
 
     Also see the NetworkX drawing examples at
@@ -1313,7 +1313,7 @@ def draw_networkx(G, pos=None, arrows=None, with_labels=True, **kwds):
     """
     from inspect import signature
 
-    import matplotlib.pyplot as plt
+    import rsplotlib.pyplot as plt
 
     # Get all valid keywords by inspecting the signatures of draw_networkx_nodes,
     # draw_networkx_edges, draw_networkx_labels
@@ -1380,8 +1380,8 @@ def draw_networkx_nodes(
         A dictionary with nodes as keys and positions as values.
         Positions should be sequences of length 2.
 
-    ax : matplotlib Axes object, optional
-        Draw the graph in the specified matplotlib axes.
+    ax : rsplotlib Axes object, optional
+        Draw the graph in the specified rsplotlib axes.
 
     nodelist : list (default list(G))
         Draw only specified nodes
@@ -1394,10 +1394,10 @@ def draw_networkx_nodes(
         length as nodelist. Color can be string or rgb (or rgba) tuple of
         floats from 0-1. If numeric values are specified they will be
         mapped to colors using the cmap and vmin,vmax parameters. See
-        matplotlib.scatter for more details.
+        rsplotlib.scatter for more details.
 
     node_shape :  string (default='o')
-        The shape of the node.  Specification is as matplotlib.scatter
+        The shape of the node.  Specification is as rsplotlib.scatter
         marker, one of 'so^>v<dph8'.
 
     alpha : float or array of floats (default=None)
@@ -1406,7 +1406,7 @@ def draw_networkx_nodes(
         if it is an array, the elements of alpha will be applied to the colors
         in order (cycling through alpha multiple times if necessary).
 
-    cmap : matplotlib colormap (default=None)
+    cmap : rsplotlib colormap (default=None)
         Colormap for mapping intensities of nodes
 
     vmin,vmax : floats or None (default=None)
@@ -1428,7 +1428,7 @@ def draw_networkx_nodes(
         Sets the padding for axis autoscaling. Increase margin to prevent
         clipping for nodes that are near the edges of an image. Values should
         be in the range ``[0, 1]``. See :meth:`matplotlib.axes.Axes.margins`
-        for details. The default is `None`, which uses the matplotlib default.
+        for details. The default is `None`, which uses the rsplotlib default.
 
     hide_ticks : bool, optional
         Hide ticks of axes. When `True` (the default), ticks and ticklabels
@@ -1437,7 +1437,7 @@ def draw_networkx_nodes(
 
     Returns
     -------
-    matplotlib.collections.PathCollection
+    rsplotlib.collections.PathCollection
         `PathCollection` of the nodes.
 
     Examples
@@ -1458,9 +1458,9 @@ def draw_networkx_nodes(
     """
     from collections.abc import Iterable
 
-    import matplotlib as mpl
-    import matplotlib.collections  # call as mpl.collections
-    import matplotlib.pyplot as plt
+    import rsplotlib as mpl
+    import rsplotlib.collections  # call as mpl.collections
+    import rsplotlib.pyplot as plt
     import rsnumpy as np
     if ax is None:
         ax = plt.gca()
@@ -1525,8 +1525,8 @@ class FancyArrowFactory:
 
     class ConnectionStyleFactory:
         def __init__(self, connectionstyles, selfloop_height, ax=None):
-            import matplotlib as mpl
-            import matplotlib.path  # call as mpl.path
+            import rsplotlib as mpl
+            import rsplotlib.path  # call as mpl.path
             import rsnumpy as np
 
             self.ax = ax
@@ -1601,8 +1601,8 @@ class FancyArrowFactory:
         min_target_margin=0,
         ax=None,
     ):
-        import matplotlib as mpl
-        import matplotlib.patches  # call as mpl.patches
+        import rsplotlib as mpl
+        import rsplotlib.patches  # call as mpl.patches
         import rsnumpy as np
 
         if isinstance(connectionstyle, str):
@@ -1796,14 +1796,14 @@ def draw_networkx_edges(
         if it is an array, the elements of alpha will be applied to the colors
         in order (cycling through alpha multiple times if necessary).
 
-    edge_cmap : matplotlib colormap, optional
+    edge_cmap : rsplotlib colormap, optional
         Colormap for mapping intensities of edges
 
     edge_vmin,edge_vmax : floats, optional
         Minimum and maximum for edge colormap scaling
 
-    ax : matplotlib Axes object, optional
-        Draw the graph in the specified matplotlib axes.
+    ax : rsplotlib Axes object, optional
+        Draw the graph in the specified rsplotlib axes.
 
     arrows : bool or None, optional (default=None)
         If `None`, directed graphs draw arrowheads with
@@ -1859,7 +1859,7 @@ def draw_networkx_edges(
 
     Returns
     -------
-     matplotlib.collections.LineCollection or a list of matplotlib.patches.FancyArrowPatch
+     rsplotlib.collections.LineCollection or a list of rsplotlib.patches.FancyArrowPatch
         If ``arrows=True``, a list of FancyArrowPatches is returned.
         If ``arrows=False``, a LineCollection is returned.
         If ``arrows=None`` (the default), then a LineCollection is returned if
@@ -1897,7 +1897,7 @@ def draw_networkx_edges(
     returned, but can always be accessed via the ``patches`` attribute of the
     `matplotlib.Axes` object.
 
-    >>> import matplotlib.pyplot as plt
+    >>> import rsplotlib.pyplot as plt
     >>> fig, ax = plt.subplots()
     >>> G = nx.Graph([(0, 1), (0, 0)])  # Self-loop at node 0
     >>> edge_collection = nx.draw_networkx_edges(G, pos=nx.circular_layout(G), ax=ax)
@@ -1917,10 +1917,10 @@ def draw_networkx_edges(
     """
     import warnings
 
-    import matplotlib as mpl
-    import matplotlib.collections  # call as mpl.collections
-    import matplotlib.colors  # call as mpl.colors
-    import matplotlib.pyplot as plt
+    import rsplotlib as mpl
+    import rsplotlib.collections  # call as mpl.collections
+    import rsplotlib.colors  # call as mpl.colors
+    import rsplotlib.pyplot as plt
     import rsnumpy as np
 
     # The default behavior is to use LineCollection to draw edges for
@@ -2000,7 +2000,7 @@ def draw_networkx_edges(
     edge_pos = np.asarray([(pos[e[0]], pos[e[1]]) for e in edgelist])
 
     # Check if edge_color is an array of floats and map to edge_cmap.
-    # This is the only case handled differently from matplotlib
+    # This is the only case handled differently from rsplotlib
     if (
         np.iterable(edge_color) and (len(edge_color) == len(edge_pos)) and np.all([isinstance(c, Number) for c in edge_color])
     ):
@@ -2149,7 +2149,7 @@ def draw_networkx_labels(
     alpha : float or None or dictionary of nodes to floats (default=None)
         The text transparency.
 
-    bbox : matplotlib bbox, (default is matplotlib's ax.text default)
+    bbox : rsplotlib bbox, (default is rsplotlib's ax.text default)
         Specify text box properties (e.g. shape, color etc.) for node labels.
 
     horizontalalignment : string or array of strings (default='center')
@@ -2160,8 +2160,8 @@ def draw_networkx_labels(
         Vertical alignment {'center', 'top', 'bottom', 'baseline', 'center_baseline'}.
         If an array is specified it must be the same length as `nodelist`.
 
-    ax : matplotlib Axes object, optional
-        Draw the graph in the specified matplotlib axes.
+    ax : rsplotlib Axes object, optional
+        Draw the graph in the specified rsplotlib axes.
 
     clip_on : bool (default=True)
         Turn on clipping of node labels at axis boundaries
@@ -2192,7 +2192,7 @@ def draw_networkx_labels(
     draw_networkx_edges
     draw_networkx_edge_labels
     """
-    import matplotlib.pyplot as plt
+    import rsplotlib.pyplot as plt
 
     if ax is None:
         ax = plt.gca()
@@ -2309,7 +2309,7 @@ def draw_networkx_edge_labels(
     alpha : float or None (default=None)
         The text transparency
 
-    bbox : matplotlib bbox, optional
+    bbox : rsplotlib bbox, optional
         Specify text box properties (e.g. shape, color etc.) for edge labels.
         Default is {boxstyle='round', ec=(1.0, 1.0, 1.0), fc=(1.0, 1.0, 1.0)}.
 
@@ -2319,8 +2319,8 @@ def draw_networkx_edge_labels(
     verticalalignment : string (default='center')
         Vertical alignment {'center', 'top', 'bottom', 'baseline', 'center_baseline'}
 
-    ax : matplotlib Axes object, optional
-        Draw the graph in the specified matplotlib axes.
+    ax : rsplotlib Axes object, optional
+        Draw the graph in the specified rsplotlib axes.
 
     rotate : bool (default=True)
         Rotate edge labels to lie parallel to edges
@@ -2367,8 +2367,8 @@ def draw_networkx_edge_labels(
     draw_networkx_edges
     draw_networkx_labels
     """
-    import matplotlib as mpl
-    import matplotlib.pyplot as plt
+    import rsplotlib as mpl
+    import rsplotlib.pyplot as plt
     import rsnumpy as np
 
     class CurvedArrowText(CurvedArrowTextBase, mpl.text.Text):
@@ -2893,7 +2893,7 @@ def apply_alpha(colors, alpha, elem_list, cmap=None, vmin=None, vmax=None):
         or a sequence of colors with the same length as nodelist.
         If numeric values are specified they will be mapped to
         colors using the cmap and vmin,vmax parameters.  See
-        matplotlib.scatter for more details.
+        rsplotlib.scatter for more details.
 
     alpha : float or array of floats
         Alpha values for elements. This can be a single alpha value, in
@@ -2905,7 +2905,7 @@ def apply_alpha(colors, alpha, elem_list, cmap=None, vmin=None, vmax=None):
         The list of elements which are being colored. These could be nodes,
         edges or labels.
 
-    cmap : matplotlib colormap
+    cmap : rsplotlib colormap
         Color map for use if colors is a list of floats corresponding to points
         on a color mapping.
 
@@ -2921,9 +2921,9 @@ def apply_alpha(colors, alpha, elem_list, cmap=None, vmin=None, vmax=None):
     """
     from itertools import cycle, islice
 
-    import matplotlib as mpl
-    import matplotlib.cm  # call as mpl.cm
-    import matplotlib.colors  # call as mpl.colors
+    import rsplotlib as mpl
+    import rsplotlib.cm  # call as mpl.cm
+    import rsplotlib.colors  # call as mpl.colors
     import rsnumpy as np
 
     # If we have been provided with a list of numbers as long as elem_list,
@@ -2932,7 +2932,7 @@ def apply_alpha(colors, alpha, elem_list, cmap=None, vmin=None, vmax=None):
         mapper = mpl.cm.ScalarMappable(cmap=cmap)
         mapper.set_clim(vmin, vmax)
         rgba_colors = mapper.to_rgba(colors)
-    # Otherwise, convert colors to matplotlib's RGB using the colorConverter
+    # Otherwise, convert colors to rsplotlib's RGB using the colorConverter
     # object.  These are converted to rsnumpy ndarrays to be consistent with the
     # to_rgba method of ScalarMappable.
     else:
