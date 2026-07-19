@@ -19,7 +19,7 @@ import re
 from enum import Enum, auto
 from logging import getLogger
 
-import numpy as np
+import rsnumpy as np
 import pyvisa
 
 from ..scpi_errors import SCPIError

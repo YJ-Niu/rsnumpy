@@ -14,7 +14,7 @@ HP8720B Class
 
 from logging import getLogger
 
-import numpy as np
+import rsnumpy as np
 
 import skrf
 from skrf.vi.vna import VNA

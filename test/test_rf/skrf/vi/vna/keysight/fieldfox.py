@@ -31,7 +31,7 @@ FieldFox Class
 import itertools
 from enum import Enum
 
-import numpy as np
+import rsnumpy as np
 
 import skrf
 from skrf.vi import vna

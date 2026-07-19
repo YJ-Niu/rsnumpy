@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 from enum import Enum
 from logging import getLogger
 
-import numpy as np
+import rsnumpy as np
 
 import skrf
 from skrf.vi import vna

@@ -15,7 +15,7 @@ HP8510C Class
 import time
 from logging import getLogger
 
-import numpy as np
+import rsnumpy as np
 import pyvisa
 
 import skrf

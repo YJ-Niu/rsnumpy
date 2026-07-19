@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 import functools
 from enum import Enum
 
-import numpy as np
+import rsnumpy as np
 import pyvisa
 
 import skrf

@@ -4,7 +4,7 @@ import dataclasses
 from abc import ABC, abstractmethod
 from logging import getLogger
 
-import numpy as np
+import rsnumpy as np
 
 import skrf
 
