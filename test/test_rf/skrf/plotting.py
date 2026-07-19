@@ -115,7 +115,7 @@ def plotting_available() -> bool:
 
 def axes_kwarg(func):
     """
-    This decorator checks if a :class:`matplotlib.axes.Axes` object is passed,
+    This decorator checks if a :class:`rsplotlib.axes.Axes` object is passed,
     if not the current axis will be gathered through :func:`plt.gca`.
 
     Raises
@@ -285,7 +285,7 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
         draw a rectangular border with axis ticks, around the perimeter
         of the figure. Not used if draw_labels = True.
         Default is False.
-    ax : :class:`matplotlib.pyplot.Axes` or None, optional
+    ax : :class:`rsplotlib.pyplot.Axes` or None, optional
         existing axes to draw smith chart on.
         Default is None (creates a new figure)
     ref_imm : number, optional
@@ -302,7 +302,7 @@ def smith(smithR: Number = 1, chart_type: str = 'z', draw_labels: bool = False,
 
     """
     # contour holds circles as (center_x, center_y, radius, color) tuples that
-    # are rasterised with ax.plot (matplotlib has no patch support)
+    # are rasterised with ax.plot (rsplotlib has no patch support)
     contour = []
 
     # these are hard-coded on purpose,as they should always be present
@@ -502,7 +502,7 @@ def plot_rectangular(x: NumberLike, y: NumberLike,
         controls the drawing of the legend. Default is True.
     axis : str, optional
         whether or not to autoscale the axis. Default is 'tight'
-    ax : :class:`matplotlib.axes.AxesSubplot` object or None, optional.
+    ax : :class:`rsplotlib.axes.AxesSubplot` object or None, optional.
         axes to draw on. Default is None (creates a new figure)
     \*args, \*\*kwargs : passed to pylab.plot
 
@@ -573,7 +573,7 @@ def plot_polar(theta: NumberLike, r: NumberLike,
         plot title. Default is None.
     show_legend : Boolean, optional.
         controls the drawing of the legend. Default is True.
-    ax : :class:`matplotlib.axes.AxesSubplot` object or None.
+    ax : :class:`rsplotlib.axes.AxesSubplot` object or None.
         axes to draw on. Default is None (creates a new figure).
     \*args, \*\*kwargs : passed to pylab.plot
 
@@ -653,7 +653,7 @@ def plot_complex_rectangular(
         plot title. Default is 'Complex Plane'
     show_legend : Boolean, optional.
         controls the drawing of the legend. Default is True.
-    ax : :class:`matplotlib.axes.AxesSubplot` object or None.
+    ax : :class:`rsplotlib.axes.AxesSubplot` object or None.
         axes to draw on. Default is None (creates a new figure)
     \*\*kwargs : passed to pylab.plot
 
@@ -693,7 +693,7 @@ def plot_complex_polar(z: NumberLike,
         plot title. Default is None.
     show_legend : Boolean, optional.
         controls the drawing of the legend. Default is True.
-    ax : :class:`matplotlib.axes.AxesSubplot` object or None.
+    ax : :class:`rsplotlib.axes.AxesSubplot` object or None.
         axes to draw on. Default is None (creates a new figure).
     \*\*kwargs : passed to pylab.plot
 
@@ -749,7 +749,7 @@ def plot_smith(
         controls the drawing of the legend. Default is True.
     axis_equal: Boolean, optional.
         sets axis to be equal increments. Default is 'equal'.
-    ax : :class:`matplotlib.axes.AxesSubplot` object or None.
+    ax : :class:`rsplotlib.axes.AxesSubplot` object or None.
         axes to draw on. Default is None (creates a new figure).
     force_chart : Boolean, optional.
         forces the re-drawing of smith chart. Default is False.
@@ -816,9 +816,9 @@ def subplot_params(ntwk: Network, param: str = 's', proj: str = 'db',
 
     Returns
     -------
-    f : :class:`matplotlib.pyplot.Figure`
+    f : :class:`rsplotlib.pyplot.Figure`
         rsplotlib Figure
-    ax : :class:`matplotlib.pyplot.Axes`
+    ax : :class:`rsplotlib.pyplot.Axes`
         rsplotlib Axes
 
     """
@@ -863,7 +863,7 @@ def shade_bands(edges: NumberLike, y_range: tuple | None = None,
         see rsplotlib.cm  or rsplotlib.colormaps for acceptable values.
         Default is 'prism'.
     \*\*kwargs : key word arguments
-        passed to `matplotlib.fill_between`
+        passed to `rsplotlib.fill_between`
 
     Examples
     --------
@@ -894,7 +894,7 @@ def save_all_figs(dir: str = './', format: None | list[str] = None,
         path to save figures into. Default is './'
     format : None or list of strings, optional.
         the types of formats to save figures as. The elements of this
-        list are passed to :func:`matplotlib.pyplot.savefig`. This is a list so that
+        list are passed to :func:`rsplotlib.pyplot.savefig`. This is a list so that
         you can save each figure in multiple formats. Default is None.
     replace_spaces : bool, optional
         default is True.
@@ -1267,7 +1267,7 @@ def plot_s_smith(
     else:
         generate_label = False
 
-    # draw the chart once (matplotlib has no drawn-patch introspection)
+    # draw the chart once (rsplotlib has no drawn-patch introspection)
     # only draw the smith chart background if requested
     if draw_chart:
         smith(ax=ax, smithR=r, chart_type=chart_type,
@@ -1417,12 +1417,16 @@ def _apply_style(plt, style: dict, font_scale: float = 1.0,
     if font_size:
         plt.rcParams['font.size'] = font_size
 
-    fig = plt.gcf()
+    try:
+        fig = plt.gcf()
+    except RuntimeError:
+        plt.figure()
+        fig = plt.gcf()
     ax = plt.gca()
 
     if dpi:
         fig.set_dpi(dpi)
-    if figsize and len(figsize) == 2:
+    if figsize and len(figsize) == 2 and hasattr(fig, 'set_size_inches'):
         fig.set_size_inches(figsize)
 
     fig_fc = _mplstyle_color(style.get('figure.facecolor'))
@@ -1433,7 +1437,7 @@ def _apply_style(plt, style: dict, font_scale: float = 1.0,
         ax.set_facecolor(ax_fc)
 
     # capture legend frame style so _legend() can match the axes background
-    # (matplotlib ignores legend.* rcParams). Default to a semi-transparent frame.
+    # (rsplotlib ignores legend.* rcParams). Default to a semi-transparent frame.
     _STYLE_LEGEND_KW.clear()
     if ax_fc:
         _STYLE_LEGEND_KW['facecolor'] = ax_fc
@@ -1445,7 +1449,7 @@ def _apply_style(plt, style: dict, font_scale: float = 1.0,
     framealpha = _num('legend.framealpha')
     _STYLE_LEGEND_KW['framealpha'] = 0.5 if framealpha is None else framealpha
     # shrink legend text 30% relative to rsplotlib's default 11pt base size
-    # (matplotlib ignores legend. rcParams, so set it explicitly here).
+    # (rsplotlib ignores legend. rcParams, so set it explicitly here).
     _STYLE_LEGEND_KW['fontsize'] = 11.0 * 0.7
 
     tick_kw = {}
@@ -1927,7 +1931,7 @@ def plot_violin(
     ax : rsplotlib axes object
         Axes to plot on. Default is None.
     \*\*kwargs :
-        passed to :meth:`matplotlib.pyplot.violinplot`
+        passed to :meth:`rsplotlib.pyplot.violinplot`
 
     Note
     ----
@@ -2171,7 +2175,7 @@ def plot_contour(freq: Frequency,
     title : str, optional
         Figure title. The default is ''.
     \*\*kwargs : dict
-        Other parameters passed to `matplotlib.plot()`.
+        Other parameters passed to `rsplotlib.plot()`.
 
     Returns
     -------
@@ -2233,7 +2237,7 @@ def plot_prop_complex(netw: Network, prop_name: str,
         first index of s-parameter matrix, if None will use all
     n : int, optional
         second index of the s-parameter matrix, if None will use all
-    ax : :class:`matplotlib.Axes` object, optional
+    ax : :class:`rsplotlib.Axes` object, optional
         An existing Axes object to plot on
     show_legend : Boolean
         draw legend or not
@@ -2241,7 +2245,7 @@ def plot_prop_complex(netw: Network, prop_name: str,
         the y-axis label
 
     \*args,\**kwargs : arguments, keyword arguments
-        passed to :func:`matplotlib.plot`
+        passed to :func:`rsplotlib.plot`
 
     Note
     ----
@@ -2299,7 +2303,7 @@ def plot_prop_polar(netw: Network, prop_name: str,
         first index of s-parameter matrix, if None will use all
     n : int, optional
         second index of the s-parameter matrix, if None will use all
-    ax : :class:`matplotlib.Axes` object, optional
+    ax : :class:`rsplotlib.Axes` object, optional
         An existing Axes object to plot on
     show_legend : Boolean
         draw legend or not
@@ -2307,7 +2311,7 @@ def plot_prop_polar(netw: Network, prop_name: str,
         the y-axis label
 
     \*args,\**kwargs : arguments, keyword arguments
-        passed to :func:`matplotlib.plot`
+        passed to :func:`rsplotlib.plot`
 
     Note
     ----

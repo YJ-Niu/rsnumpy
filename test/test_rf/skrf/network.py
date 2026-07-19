@@ -4888,7 +4888,7 @@ class Network:
         Example
         --------
         >>> import skrf as rf
-        >>> import matplotlib.pyplot as plt
+        >>> import rsplotlib.pyplot as plt
 
         Create a two-port network object
 
@@ -5005,7 +5005,7 @@ class Network:
         Example
         --------
         >>> import skrf as rf
-        >>> import matplotlib.pyplot as plt
+        >>> import rsplotlib.pyplot as plt
 
         Create a two-port network object
 
@@ -5114,7 +5114,7 @@ class Network:
         Example
         --------
         >>> import skrf as rf
-        >>> import matplotlib.pyplot as plt
+        >>> import rsplotlib.pyplot as plt
 
         Create a two-port network object
 
@@ -5193,7 +5193,7 @@ class Network:
         first index of s-parameter matrix, if None will use all
     n : int, optional
         second index of the s-parameter matrix, if None will use all
-    ax : :class:`matplotlib.Axes` object, optional
+    ax : :class:`rsplotlib.Axes` object, optional
         An existing Axes object to plot on
     show_legend : Boolean
         draw legend or not
@@ -5202,7 +5202,7 @@ class Network:
     logx : Boolean, optional
         Enable logarithmic x-axis, default off
     \**kwargs : arguments, keyword arguments
-        passed to :func:`matplotlib.plot`
+        passed to :func:`rsplotlib.plot`
 
     Note
     ----
@@ -5293,7 +5293,7 @@ class Network:
                     else:
                         xlabel = f'Frequency ({self.frequency.unit})'
                         # Plot the frequency already scaled to `unit` (e.g. GHz).
-                        # matplotlib does not honor the FuncFormatter that
+                        # rsplotlib does not honor the FuncFormatter that
                         # scale_frequency_ticks would set, so plotting raw Hz
                         # leaves the ticks in Hz while the label says GHz.
                         x = self.frequency.f_scaled

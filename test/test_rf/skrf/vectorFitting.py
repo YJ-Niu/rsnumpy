@@ -2332,13 +2332,13 @@ class VectorFitting:
             in :attr:`network` that is used for comparison with the fit. Must be one of the following items unless
             :attr:`network` is `None`: ['s', 'z', 'y'] for *scattering* (default), *impedance*, or *admittance*.
 
-        ax : :class:`matplotlib.Axes` object or None
-            matplotlib axes to draw on. If None, the current axes is fetched with :func:`gca()`.
+        ax : :class:`rsplotlib.Axes` object or None
+            rsplotlib axes to draw on. If None, the current axes is fetched with :func:`gca()`.
 
         Returns
         -------
-        :class:`matplotlib.Axes`
-            matplotlib axes used for drawing. Either the passed :attr:`ax` argument or the one fetch from the current
+        :class:`rsplotlib.Axes`
+            rsplotlib axes used for drawing. Either the passed :attr:`ax` argument or the one fetch from the current
             figure.
 
         Raises
@@ -2481,8 +2481,8 @@ class VectorFitting:
 
         Returns
         -------
-        :class:`matplotlib.Axes`
-            matplotlib axes used for drawing. Either the passed :attr:`ax` argument or the one fetch from the current
+        :class:`rsplotlib.Axes`
+            rsplotlib axes used for drawing. Either the passed :attr:`ax` argument or the one fetch from the current
             figure.
 
         Notes
@@ -2506,8 +2506,8 @@ class VectorFitting:
 
         Returns
         -------
-        :class:`matplotlib.Axes`
-            matplotlib axes used for drawing. Either the passed :attr:`ax` argument or the one fetch from the current
+        :class:`rsplotlib.Axes`
+            rsplotlib axes used for drawing. Either the passed :attr:`ax` argument or the one fetch from the current
             figure.
 
         Notes
@@ -2531,8 +2531,8 @@ class VectorFitting:
 
         Returns
         -------
-        :class:`matplotlib.Axes`
-            matplotlib axes used for drawing. Either the passed :attr:`ax` argument or the one fetch from the current
+        :class:`rsplotlib.Axes`
+            rsplotlib axes used for drawing. Either the passed :attr:`ax` argument or the one fetch from the current
             figure.
 
         Notes
@@ -2556,8 +2556,8 @@ class VectorFitting:
 
         Returns
         -------
-        :class:`matplotlib.Axes`
-            matplotlib axes used for drawing. Either the passed :attr:`ax` argument or the one fetch from the current
+        :class:`rsplotlib.Axes`
+            rsplotlib axes used for drawing. Either the passed :attr:`ax` argument or the one fetch from the current
             figure.
 
         Notes
@@ -2581,8 +2581,8 @@ class VectorFitting:
 
         Returns
         -------
-        :class:`matplotlib.Axes`
-            matplotlib axes used for drawing. Either the passed :attr:`ax` argument or the one fetch from the current
+        :class:`rsplotlib.Axes`
+            rsplotlib axes used for drawing. Either the passed :attr:`ax` argument or the one fetch from the current
             figure.
 
         Notes
@@ -2606,8 +2606,8 @@ class VectorFitting:
 
         Returns
         -------
-        :class:`matplotlib.Axes`
-            matplotlib axes used for drawing. Either the passed :attr:`ax` argument or the one fetch from the current
+        :class:`rsplotlib.Axes`
+            rsplotlib axes used for drawing. Either the passed :attr:`ax` argument or the one fetch from the current
             figure.
 
         Notes
@@ -2628,13 +2628,13 @@ class VectorFitting:
             List of frequencies for the response plot. If None, the sample frequencies of the fitted network in
             :attr:`network` are used. This only works if :attr:`network` is not `None`.
 
-        ax : :class:`matplotlib.Axes` object or None
-            matplotlib axes to draw on. If None, the current axes is fetched with :func:`gca()`.
+        ax : :class:`rsplotlib.Axes` object or None
+            rsplotlib axes to draw on. If None, the current axes is fetched with :func:`gca()`.
 
         Returns
         -------
-        :class:`matplotlib.Axes`
-            matplotlib axes used for drawing. Either the passed :attr:`ax` argument or the one fetch from the current
+        :class:`rsplotlib.Axes`
+            rsplotlib axes used for drawing. Either the passed :attr:`ax` argument or the one fetch from the current
             figure.
 
         Raises
@@ -2677,13 +2677,13 @@ class VectorFitting:
 
         Parameters
         ----------
-        ax : :class:`matplotlib.Axes` object or None
-            matplotlib axes to draw on. If None, the current axes is fetched with :func:`gca()`.
+        ax : :class:`rsplotlib.Axes` object or None
+            rsplotlib axes to draw on. If None, the current axes is fetched with :func:`gca()`.
 
         Returns
         -------
-        :class:`matplotlib.Axes`
-            matplotlib axes used for drawing. Either the passed :attr:`ax` argument or the one fetch from the current
+        :class:`rsplotlib.Axes`
+            rsplotlib axes used for drawing. Either the passed :attr:`ax` argument or the one fetch from the current
             figure.
         """
 
@@ -2706,13 +2706,13 @@ class VectorFitting:
 
         Parameters
         ----------
-        ax : :class:`matplotlib.Axes` object or None
-            matplotlib axes to draw on. If None, the current axes is fetched with :func:`gca()`.
+        ax : :class:`rsplotlib.Axes` object or None
+            rsplotlib axes to draw on. If None, the current axes is fetched with :func:`gca()`.
 
         Returns
         -------
-        :class:`matplotlib.Axes`
-            matplotlib axes used for drawing. Either the passed :attr:`ax` argument or the one fetch from the current
+        :class:`rsplotlib.Axes`
+            rsplotlib axes used for drawing. Either the passed :attr:`ax` argument or the one fetch from the current
             figure.
         """
 

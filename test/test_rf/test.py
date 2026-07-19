@@ -603,8 +603,8 @@ ntw.plot_s_db(m=0, n=0, lw=2, logx=True)
 ntw.plot_s_db(m=1, n=0, lw=2, logx=True)
 ssaver('./test/test_rf/test38.png')
 
-# cir.plot_graph(network_labels=True, network_fontsize=15,
-#                port_labels=True, port_fontsize=15,
-#                edge_labels=True, edge_fontsize=10)
+cir.plot_graph(network_labels=True, network_fontsize=15,
+               port_labels=True, port_fontsize=15,
+               edge_labels=True, edge_fontsize=10)
 
-# ssaver('./test/test_rf/test39.png')
+ssaver('./test/test_rf/test39.png')

@@ -724,15 +724,15 @@ class Frequency:
         """
         Label the x-axis of a plot.
 
-        Sets the labels of a plot using :func:`matplotlib.x_label` with
+        Sets the labels of a plot using :func:`rsplotlib.x_label` with
         string containing the frequency unit.
 
         Parameters
         ----------
-        ax : :class:`matplotlib.Axes` or None, optional
+        ax : :class:`rsplotlib.Axes` or None, optional
                 Axes on which to label the plot.
                 Defaults is None, for the current axe
-                returned by :func:`matplotlib.gca()`
+                returned by :func:`rsplotlib.gca()`
         """
 
         ax.set_xlabel(f'Frequency ({self.unit})')
