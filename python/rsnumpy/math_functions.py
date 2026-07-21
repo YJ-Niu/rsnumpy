@@ -179,6 +179,10 @@ def cbrt(x):
 
 def absolute(x):
     """计算绝对值。"""
+    import builtins
+    if isinstance(x, complex):
+        from .__init__ import ndarray
+        return ndarray([builtins.abs(x)])
     return _wrap(_core.abs(_ensure_raw(x)))
 
 

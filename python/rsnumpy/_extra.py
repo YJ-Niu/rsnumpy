@@ -528,6 +528,8 @@ def iterable(y):
 
 def iscomplexobj(x):
     """判断对象是否为复数类型。"""
+    if isinstance(x, complex):
+        return True
     if getattr(x, "_complex_data", None) is not None:
         return True
     return getattr(x, "_dtype", "") in ("complex128", "complex64")
@@ -642,6 +644,8 @@ def angle(z, deg=False):
     """返回复数的相位角。"""
     np = _np()
     factor = 180.0 / _math.pi if deg else 1.0
+    if isinstance(z, complex):
+        return np.array([_math.atan2(z.imag, z.real) * factor])
     if iscomplexobj(z):
         cdata = getattr(z, "_complex_data", None)
         if cdata is not None:
@@ -2606,7 +2610,6 @@ def einsum(subscripts, *operands, **kwargs):
 
     if '...' in subscripts:
         arr = _asarray(operands[0])
-        ndim = arr.ndim
         if subscripts == '...ii->...i':
             diag_dims = arr.shape[-2:]
             if diag_dims[0] != diag_dims[1]:

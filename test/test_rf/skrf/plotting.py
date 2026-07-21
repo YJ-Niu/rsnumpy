@@ -588,22 +588,14 @@ def plot_polar(theta: NumberLike, r: NumberLike,
     """
  
     if ax is None:
-        # no Axes passed
-        # if an existing (polar) plot is already present, grab and use its Axes
-        # otherwise, create a new polar plot and use that Axes
-        if not plt.get_fignums() or not plt.gcf().axes or plt.gca().name != 'polar':
+        if not plt.get_fignums() or not plt.gcf().axes or not hasattr(plt.gca(), 'name') or plt.gca().name != 'polar':
             ax = plt.figure().add_subplot(projection='polar')
         else:
             ax = plt.gca()
     else:
-        if ax.name != 'polar':
-            # The projection of an existing axes can't be changed,
-            # since specifying a projection when creating an axes determines the
-            # axes class you get, which is different for each projection type.
-            # So, passing a axe projection not polar is probably undesired
+        if not hasattr(ax, 'name') or ax.name != 'polar':
             warnings.warn(
-                f"Projection of the Axes passed as `ax` is not 'polar' but is {
-                    ax.name}." + "See rsplotlib documentation to create a polar plot or call this function without the `ax` parameter.",
+                "Projection of the Axes passed as `ax` is not 'polar'. See rsplotlib documentation to create a polar plot or call this function without the `ax` parameter.",
                 stacklevel=2)
 
     ax.plot(theta, r, *args, **kwargs)
