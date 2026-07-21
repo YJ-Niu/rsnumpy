@@ -689,3 +689,46 @@ resonator = media.line(d=random_d, unit='rad') ** media.shunt_inductor(L) ** med
 
 resonator.plot_s_db()
 ssaver('./test/test_rf/test44.png')
+
+Lactual_nH = 1e9 * np.imag(1/actual_ind.y[:, 0, 0])/2/np.pi/actual_ind.f
+
+fig, ax1 = plt.subplots(1, 1)
+ax1.plot(actual_ind.f*1e-9, Lactual_nH)
+ax1.grid()
+ax1.set_ylim(0.95, 1.1)
+ax1.set_ylabel("Inductance (nH)")
+ax1.set_xlabel("Freq. (GHz)")
+fig.tight_layout()
+ssaver('./test/test_rf/test45.png')
+
+C = 1e-6  # F
+L = 1e-9  # H
+R = 30  # Ohm
+Z0 = 50  # Ohm
+
+freq = rf.Frequency(5, 5.2, npoints=501, unit='MHz')
+media = rf.media.DefinedGammaZ0(frequency=freq, z0=Z0)  # ideal line (no loss)
+rng = np.random.default_rng()
+random_d = rng.uniform(-np.pi, np.pi)  # a random length for the sake of the example
+
+resonator = media.line(d=random_d, unit='rad') ** media.shunt_inductor(L) ** media.shunt_capacitor(C) ** media.shunt(media.resistor(R)**media.short()) ** media.open()
+
+resonator.plot_s_db()
+ssaver('./test/test_rf/test46.png')
+
+def f_res_RLC(L, C):
+    return 1/(2*np.pi*np.sqrt(L*C))
+
+def Q_RLC(R, L, C):
+    return R * C / np.sqrt(L*C)
+
+
+pprint(71, f'Theoretical Resonant Frequency: {f_res_RLC(L, C)/1e6} MHz')
+pprint(72, f'Theoretical Loaded Q: Q_L = {Q_RLC((R*Z0)/(R+Z0), L, C)}')  # Req = R//Z0
+pprint(73, f'Theoretical Unloaded Q: Q_0 = {Q_RLC(R, L, C)}')
+
+Q = rf.qfactor.Qfactor(resonator, res_type='reflection')
+
+res = Q.fit()
+pprint(74, f'Fitted Resonant Frequency: f_L = {Q.f_L/1e6} MHz')
+pprint(75, f'Fitted Loaded Q-factor: Q_L = {Q.Q_L}')

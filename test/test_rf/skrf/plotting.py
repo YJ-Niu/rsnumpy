@@ -778,6 +778,10 @@ def plot_smith(
         smith(ax=ax, smithR=smith_r, chart_type=chart_type,
               draw_vswr=draw_vswr, draw_labels=draw_labels)
 
+    # double the default line width for smith chart traces
+    if 'linewidth' not in kwargs and 'lw' not in kwargs:
+        kwargs['linewidth'] = 2
+
     plot_complex_rectangular(s, x_label=x_label, y_label=y_label,
                              title=title, show_legend=show_legend, axis=axis,
                              ax=ax, **kwargs)
@@ -1279,6 +1283,10 @@ def plot_s_smith(
             # exists, and they didn't pass a name key in the kwargs
             if generate_label:
                 kwargs['label'] = _get_label_str(netw, "S", m, n)
+
+            # double the default line width for smith chart traces
+            if 'linewidth' not in kwargs and 'lw' not in kwargs:
+                kwargs['linewidth'] = 2
 
             # plot the desired attribute vs frequency
             ax.plot(netw.s[:, m, n].real,
