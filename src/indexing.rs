@@ -13,6 +13,8 @@ enum IndexDesc {
     Fancy(Vec<usize>),
     /// 多维花式索引：扁平化下标 + 原始形状（用于 numpy 语义下的广播）。
     FancyMulti(Vec<usize>, Vec<usize>),
+    /// 完整布尔掩码：覆盖所有维度，扁平化下标。
+    FullBoolMask(Vec<usize>),
 }
 
 fn parse_single_index(item: &Bound<'_, PyAny>, dim_size: isize) -> PyResult<IndexDesc> {
@@ -80,6 +82,14 @@ fn parse_single_index(item: &Bound<'_, PyAny>, dim_size: isize) -> PyResult<Inde
     }
 
     if let Ok(arr) = item.extract::<NdArray>() {
+        return Ok(ndarray_to_index_desc(&arr, dim_size));
+    }
+
+    // Also try to extract from Python ndarray wrapper (_array attribute)
+    if let Ok(arr) = item
+        .getattr("_array")
+        .and_then(|a| a.extract::<NdArray>().map_err(|e| -> PyErr { e.into() }))
+    {
         return Ok(ndarray_to_index_desc(&arr, dim_size));
     }
 
@@ -168,6 +178,11 @@ fn slice_indices_vec(start: isize, stop: isize, step: isize) -> Vec<usize> {
 
 fn ndarray_to_index_desc(arr: &NdArray, dim_size: isize) -> IndexDesc {
     let vals: Vec<f64> = arr.data.iter().copied().collect();
+    let shape = arr.data.shape().to_vec();
+
+    // 注意：rsnumpy 内部所有数组均为 f64，无法区分 bool/整数索引。
+    // 布尔掩码索引应在 Python 层（__getitem__）提前处理，不进入 Rust 端。
+    // 故此处始终将值视为整数索引，即使值为 0.0/1.0 也不作布尔掩码处理。
     let fancy: Vec<usize> = vals
         .iter()
         .map(|&v| {
@@ -180,7 +195,7 @@ fn ndarray_to_index_desc(arr: &NdArray, dim_size: isize) -> IndexDesc {
         })
         .collect();
     if arr.data.ndim() > 1 {
-        IndexDesc::FancyMulti(fancy, arr.data.shape().to_vec())
+        IndexDesc::FancyMulti(fancy, shape)
     } else {
         IndexDesc::Fancy(fancy)
     }
@@ -188,6 +203,29 @@ fn ndarray_to_index_desc(arr: &NdArray, dim_size: isize) -> IndexDesc {
 
 fn parse_indices(key: &Bound<'_, PyAny>, shape: &[usize]) -> PyResult<Vec<IndexDesc>> {
     let key_tuple = key.cast::<PyTuple>()?;
+
+    if key_tuple.len() == 1 {
+        let item = key_tuple.get_item(0)?;
+        let arr = item.extract::<NdArray>().or_else(|_| {
+            item.getattr("_array")
+                .and_then(|a| a.extract::<NdArray>().map_err(|e| -> PyErr { e.into() }))
+        });
+        if let Ok(arr) = arr {
+            let mask_shape: Vec<usize> = arr.data.shape().to_vec();
+            if mask_shape == shape.to_vec() {
+                let vals: Vec<f64> = arr.data.iter().copied().collect();
+                if vals.iter().all(|&v| v == 0.0 || v == 1.0) {
+                    let fancy: Vec<usize> = vals
+                        .iter()
+                        .enumerate()
+                        .filter(|&(_, v)| *v == 1.0)
+                        .map(|(i, _)| i)
+                        .collect();
+                    return Ok(vec![IndexDesc::FullBoolMask(fancy)]);
+                }
+            }
+        }
+    }
 
     let indices: Vec<IndexDesc> = key_tuple
         .iter()
@@ -206,9 +244,12 @@ fn is_all_int(indices: &[IndexDesc]) -> bool {
 }
 
 fn has_fancy(indices: &[IndexDesc]) -> bool {
-    indices
-        .iter()
-        .any(|idx| matches!(idx, IndexDesc::Fancy(_) | IndexDesc::FancyMulti(_, _)))
+    indices.iter().any(|idx| {
+        matches!(
+            idx,
+            IndexDesc::Fancy(_) | IndexDesc::FancyMulti(_, _) | IndexDesc::FullBoolMask(_)
+        )
+    })
 }
 
 #[allow(dead_code)]
@@ -216,7 +257,9 @@ fn build_dim_lists(indices: &[IndexDesc]) -> Vec<Vec<usize>> {
     indices
         .iter()
         .map(|idx| match idx {
-            IndexDesc::Fancy(v) | IndexDesc::FancyMulti(v, _) => v.clone(),
+            IndexDesc::Fancy(v) | IndexDesc::FancyMulti(v, _) | IndexDesc::FullBoolMask(v) => {
+                v.clone()
+            }
             IndexDesc::Slice(start, stop, step) => slice_indices_vec(*start, *stop, *step),
             IndexDesc::Int(idx) => vec![*idx],
         })
@@ -266,23 +309,24 @@ fn slice_and_int_index(
     indices: &[IndexDesc],
 ) -> PyResult<Array<f64, IxDyn>> {
     let mut cur = a.clone();
+    // 从后往前处理：逆序时 Int 索引移除高维轴后，低维 Slice 的 dim 仍然有效。
+    // 逆序保证了当处理低维索引时，其对应轴位置 ≤ cur.ndim()。
     for (dim, idx) in indices.iter().enumerate().rev() {
         match idx {
             IndexDesc::Slice(start, stop, step) => {
-                let dim_axis = ndarray::Axis(dim);
-                if *step > 0 {
+                cur = if *step > 0 {
                     let s = Slice {
                         start: *start,
                         end: Some(*stop),
                         step: *step,
                     };
-                    cur = cur.slice_axis(dim_axis, s).into_owned().into_dyn();
+                    cur.slice_axis(ndarray::Axis(dim), s)
+                        .into_owned()
+                        .into_dyn()
                 } else {
-                    // 负步长：ndarray 的 Slice 会翻转 [start, end) 区间而非按
-                    // numpy 语义反向步进，故用显式下标 select 保证结果正确。
                     let idxs = slice_indices_vec(*start, *stop, *step);
-                    cur = cur.select(dim_axis, &idxs).into_dyn();
-                }
+                    cur.select(ndarray::Axis(dim), &idxs).into_dyn()
+                };
             }
             IndexDesc::Int(i) => {
                 let cur_ndim = cur.ndim();
@@ -328,6 +372,16 @@ fn select_from(
         return slice_and_int_index(data, filled_indices);
     }
 
+    for idx in filled_indices {
+        if let IndexDesc::FullBoolMask(v) = idx {
+            let src = data.as_standard_layout();
+            let src_flat = src.as_slice().unwrap();
+            let result: Vec<f64> = v.iter().map(|&i| src_flat[i]).collect();
+            return Array::from_shape_vec(IxDyn(&[result.len()]), result)
+                .map_err(|e| PyValueError::new_err(e.to_string()));
+        }
+    }
+
     // 每个源轴一种取值方式。存在高级索引时，整型索引按 numpy 语义并入高级组
     // （视为 0 维数组：广播不贡献输出维度，但参与连续性判定并在原位被消费）。
     enum AxisPlan {
@@ -350,6 +404,7 @@ fn select_from(
                 shape: sh.clone(),
                 flat: v.clone(),
             },
+            IndexDesc::FullBoolMask(_) => unreachable!(),
         })
         .collect();
 
@@ -451,14 +506,19 @@ fn select_from(
                     OutAxis::AdvBlock => {
                         let adv_coord = &out_coord[cursor..cursor + adv_ndim];
                         for (j, &ai) in adv_axes.iter().enumerate() {
-                            if let AxisPlan::Adv { shape: sh, flat } = &axes[ai] {
+                            if let AxisPlan::Adv {
+                                shape: sh, flat, ..
+                            } = &axes[ai]
+                            {
                                 let off = adv_ndim - sh.len();
                                 let mut fidx = 0usize;
                                 for (dd, &sd) in sh.iter().enumerate() {
                                     let c = if sd == 1 { 0 } else { adv_coord[off + dd] };
                                     fidx += c * adv_strides[j][dd];
                                 }
-                                src_idx[ai] = flat[fidx];
+                                if !flat.is_empty() && fidx < flat.len() {
+                                    src_idx[ai] = flat[fidx];
+                                }
                             }
                         }
                         cursor += adv_ndim;
@@ -610,6 +670,17 @@ fn scatter_advanced(
     values: &[f64],
     broadcast: bool,
 ) {
+    for idx in indices {
+        if let IndexDesc::FullBoolMask(v) = idx {
+            for (i, &flat_idx) in v.iter().enumerate() {
+                if flat_idx < data.len() {
+                    data[flat_idx] = if broadcast { values[0] } else { values[i] };
+                }
+            }
+            return;
+        }
+    }
+
     enum AxisPlan {
         Slice(Vec<usize>),
         Adv { shape: Vec<usize>, flat: Vec<usize> },
@@ -630,6 +701,7 @@ fn scatter_advanced(
                 shape: sh.clone(),
                 flat: v.clone(),
             },
+            IndexDesc::FullBoolMask(_) => unreachable!(),
         })
         .collect();
 
@@ -704,7 +776,10 @@ fn scatter_advanced(
 
         let mut src_idx = vec![0usize; indices.len()];
         for (j, &ai) in adv_axes.iter().enumerate() {
-            if let AxisPlan::Adv { shape: sh, flat } = &axes[ai] {
+            if let AxisPlan::Adv {
+                shape: sh, flat, ..
+            } = &axes[ai]
+            {
                 let off = adv_ndim - sh.len();
                 let mut fidx = 0usize;
                 for (dd, &sd) in sh.iter().enumerate() {
@@ -716,7 +791,7 @@ fn scatter_advanced(
                             1
                         });
                 }
-                if fidx < flat.len() {
+                if !flat.is_empty() && fidx < flat.len() {
                     src_idx[ai] = flat[fidx];
                 }
             }
@@ -754,6 +829,12 @@ fn scatter_advanced(
 }
 
 fn calculate_target_count(indices: &[IndexDesc]) -> usize {
+    for idx in indices {
+        if let IndexDesc::FullBoolMask(v) = idx {
+            return v.len();
+        }
+    }
+
     enum AxisPlan {
         Slice(Vec<usize>),
         #[allow(dead_code)]
@@ -778,6 +859,7 @@ fn calculate_target_count(indices: &[IndexDesc]) -> usize {
                 shape: sh.clone(),
                 flat: v.clone(),
             },
+            IndexDesc::FullBoolMask(_) => unreachable!(),
         })
         .collect();
 
@@ -796,6 +878,7 @@ fn calculate_target_count(indices: &[IndexDesc]) -> usize {
                 .unwrap();
         }
     }
+
     let adv_size: usize = adv_shape.iter().product();
 
     let slice_size: usize = axes

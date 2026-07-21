@@ -513,15 +513,15 @@ class ndarray:
                         new_key.append(k)
                 key = tuple(new_key)
         if isinstance(key, tuple):
-            # 将 Python ndarray 索引展平为 list
+            # 将 Python ndarray 索引展平为 list（布尔类型保留给 Rust 处理）
             key = tuple(
                 _ndarray_to_index_list(k)
-                if hasattr(k, '_array') else k
+                if hasattr(k, '_array') and k.dtype != 'bool' else k
                 for k in key
             )
         elif not isinstance(key, str):
             key = (_ndarray_to_index_list(key)
-                   if hasattr(key, '_array') else key,)
+                   if hasattr(key, '_array') and key.dtype != 'bool' else key,)
         if isinstance(key, tuple):
             # 计算目标形状：将切片/整数索引应用到 self.shape 得到赋值目标的形状
             target_shape = []
@@ -543,6 +543,20 @@ class ndarray:
                         continue
                     elif isinstance(k, list):
                         target_shape.append(len(k))
+                    elif _is_ndarray(k):
+                        if k.dtype == 'bool':
+                            flat_k = k.flatten()
+                            true_count = 0
+                            for x in flat_k:
+                                if x:
+                                    true_count += 1
+                            if k.shape == self.shape:
+                                target_shape = [true_count]
+                                break
+                            else:
+                                target_shape.append(true_count)
+                        else:
+                            target_shape.append(dim_size)
                     else:
                         target_shape.append(dim_size)
                 else:

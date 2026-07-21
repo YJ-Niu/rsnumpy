@@ -581,6 +581,8 @@ cir = Circuit(cnx)
 # the result if the same :
 pprint(70, cir.network.s[0])
 
+fig.clear()
+fig = plt.figure(figsize=(10, 6))
 freq = rf.Frequency(start=0.1, stop=10, unit='GHz', npoints=1001)
 tl_media = rf.media.DefinedGammaZ0(freq, z0=50, gamma=1j*freq.w/rf.constants.c)
 C1 = tl_media.capacitor(3.222e-12, name='C1')
@@ -659,7 +661,9 @@ ax2.set_ylabel("Q-factor")
 ax2.set_xlabel("Freq. (GHz)")
 fig.tight_layout()
 ssaver('./test/test_rf/test42.png')
+fig.clear()
 
+fig = plt.figure(figsize=(10, 10))
 # load in 2-ports short/open dummy networks
 open_nw = rf.data.open_2p
 short_nw = rf.data.short_2p
