@@ -732,3 +732,18 @@ Q = rf.qfactor.Qfactor(resonator, res_type='reflection')
 res = Q.fit()
 pprint(74, f'Fitted Resonant Frequency: f_L = {Q.f_L/1e6} MHz')
 pprint(75, f'Fitted Loaded Q-factor: Q_L = {Q.Q_L}')
+
+pprint(76, Q)
+
+Q0 = Q.Q_unloaded(res)
+pprint(77, f'Fitted Unloaded Q-factor: Q_0 = {Q0}')
+
+Q0 = Q.Q_unloaded()  # will use the latest optimized results performed with .fit()
+pprint(78, f'Fitted Unloaded Q-factor: Q_0 = {Q0}')
+pprint(79, f'Relative Error on Q_0: {(Q_RLC(R, L, C) - Q0)/Q_RLC(R, L, C)}')
+
+new_freq = rf.Frequency(5, 5.2, npoints=5001, unit='MHz')
+fitted_network = Q.fitted_network(res, frequency=new_freq)
+resonator.plot_s_mag(label='Parallel RLC ', lw=2)
+fitted_network.plot_s_mag(label='Fitted Model', lw=2, ls='--')
+ssaver('./test/test_rf/test47.png')

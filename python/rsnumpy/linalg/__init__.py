@@ -269,8 +269,8 @@ def _gauss_jordan_solve(mat, b):
                 wr[j] -= factor * wcol[j]
             for j in range(len(rr)):
                 rr[j] -= factor * rcol[j]
-    if len(rhs[0]) == 1:
-        return [row[0] for row in rhs]
+    if len(rhs[0]) == 1 and len(rhs) == n:
+        return [[row[0]] for row in rhs]
     return rhs
 
 
@@ -284,12 +284,12 @@ def _inv_nested(data):
 
 def _solve_nested(a, b):
     """对嵌套列表递归求解 Ax = b：最内两维视为矩阵，外层为批量维。"""
-    if isinstance(a, list) and a and isinstance(a[0], list) \
-            and (not a[0] or not isinstance(a[0][0], list)):
-        try:
-            return _gauss_jordan_solve(a, b)
-        except LinAlgError:
-            return _solve_pinv(a, b)
+    if isinstance(a, list) and a and isinstance(a[0], list):
+        if not a[0] or not isinstance(a[0][0], list):
+            try:
+                return _gauss_jordan_solve(a, b)
+            except LinAlgError:
+                return _solve_pinv(a, b)
     return [_solve_nested(sa, sb) for sa, sb in zip(a, b)]
 
 
@@ -405,13 +405,19 @@ class linalg_module:
                 try:
                     result[i] = _wrap(_core.linalg.solve(_ensure(a_arr[i]), _ensure(b_arr[i])))
                 except ValueError:
-                    result[i] = b_arr[i] / a_arr[i]
+                    res = _gauss_jordan_solve(a_arr[i].tolist(), b_arr[i].tolist())
+                    result[i] = ndarray(res)
             return result
         
         try:
             return _wrap(_core.linalg.solve(_ensure(a), _ensure(b)))
         except ValueError:
-            return b_arr / a_arr
+            try:
+                res = _gauss_jordan_solve(a_arr.tolist(), b_arr.tolist())
+                return ndarray(res)
+            except LinAlgError:
+                res = _solve_pinv(a_arr.tolist(), b_arr.tolist())
+                return ndarray(res)
 
     @staticmethod
     def lstsq(a, b, rcond=None):

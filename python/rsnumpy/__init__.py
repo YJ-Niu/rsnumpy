@@ -393,8 +393,8 @@ class ndarray:
         view.release()
 
     def __bool__(self):
-        if self.ndim == 0:
-            return bool(self.tolist())
+        if self.size == 1:
+            return bool(self.item())
         raise ValueError("The truth value of an array with more than one element is ambiguous.")
 
     def __invert__(self):
@@ -1008,6 +1008,27 @@ class ndarray:
                 return int(val)
             return val
         raise TypeError(f"only 0-dimensional arrays can be converted to integers, got {self.ndim}D")
+
+    def __float__(self):
+        """支持将 0 维数组转换为 Python float。"""
+        if self.ndim == 0:
+            val = self.item()
+            return float(val)
+        raise TypeError(f"only 0-dimensional arrays can be converted to scalars, got {self.ndim}D")
+
+    def __int__(self):
+        """支持将 0 维数组转换为 Python int。"""
+        if self.ndim == 0:
+            val = self.item()
+            return int(val)
+        raise TypeError(f"only 0-dimensional arrays can be converted to scalars, got {self.ndim}D")
+
+    def __complex__(self):
+        """支持将 0 维数组转换为 Python complex。"""
+        if self.ndim == 0:
+            val = self.item()
+            return complex(val)
+        raise TypeError(f"only 0-dimensional arrays can be converted to scalars, got {self.ndim}D")
 
     def take(self, indices, axis=None):
         """根据索引取元素。"""
@@ -1661,14 +1682,18 @@ def _format_complex_scalar(val):
     real = val.real
     imag = val.imag
     real_rounded = _py_round(real, 8)
-    if abs(real_rounded) < 1e-10:
+    if not _math.isfinite(real_rounded):
+        real_s = f"{real_rounded}"
+    elif abs(real_rounded) < 1e-10:
         real_s = "-0." if _math.copysign(1.0, real) < 0 else "0."
     elif real_rounded == int(real_rounded) and abs(real_rounded) < 1e16:
         real_s = f"{int(real_rounded)}."
     else:
         real_s = f"{real_rounded}"
     imag_rounded = _py_round(imag, 8)
-    if abs(imag_rounded) < 1e-10:
+    if not _math.isfinite(imag_rounded):
+        imag_s = f"{imag_rounded}"
+    elif abs(imag_rounded) < 1e-10:
         imag_s = "-0." if _math.copysign(1.0, imag) < 0 else "0."
     elif imag_rounded == int(imag_rounded) and abs(imag_rounded) < 1e16:
         imag_s = f"{int(imag_rounded)}."

@@ -281,8 +281,7 @@ class Qfactor:
         if self.fitted:
             status = f"fitted: f_L={
                 float(
-                    self.f_L /
-                    self.f_multiplier):.3f}{
+                    self.f_L / self.f_multiplier):.3f}{
                 self.f_unit}, Q_L={
                 float(
                     self.Q_L):.3f}"
@@ -951,10 +950,7 @@ class Qfactor:
                     t = 2 * (self.f[i] - FL) / FL
                     ip = PV[i]
                     E = (
-                        self.s[i]
-                        - complex(m1, m2)
-                        - complex(m8, m9) * t
-                        - complex(m3, m4) / den
+                        self.s[i] - complex(m1, m2) - complex(m8, m9) * t - complex(m3, m4) / den
                     )
                     SumNum = SumNum + ip * (E.real * E.real + E.imag * E.imag)
                     SumDen = SumDen + ip

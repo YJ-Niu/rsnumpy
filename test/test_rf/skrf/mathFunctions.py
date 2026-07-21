@@ -1423,8 +1423,7 @@ def nudge_eig(mat: np.ndarray,
     # Max eigenvalue for each frequency
     max_eig = np.amax(np.abs(eigw), axis=1)
     # Calculate mask for positions where problematic eigenvalues are
-    mask = np.logical_or(np.abs(eigw) < cond *
-                         max_eig[:, None], np.abs(eigw) < min_eig)
+    mask = np.logical_or(np.abs(eigw) < cond * max_eig[:, None], np.abs(eigw) < min_eig)
     if not mask.any():
         # Nothing to do. Return the original array.
         return mat
