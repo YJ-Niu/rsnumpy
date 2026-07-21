@@ -362,11 +362,7 @@ class Calibration:
         if 'fromcoefs' in self.family.lower():
             output = f"{self.family} Calibration: '{name}', {self.frequency}"
         else:
-            output = f"{
-                self.family} Calibration: '{name}', {
-                self.frequency}, {
-                len(
-                    self.measured)}-standards"
+            output = (f"{self.family} Calibration: '{name}', {self.frequency}, {len(self.measured)}-standards")
         return output
 
     def __repr__(self):

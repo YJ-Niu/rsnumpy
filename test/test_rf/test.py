@@ -13,6 +13,7 @@ from skrf.data import ring_slot_meas
 from skrf.plotting import save_all_figs
 from skrf import plotting
 from skrf.circuit import Circuit
+from skrf.calibration.deembedding import OpenShort
 
 
 def pprint(n, ss):
@@ -580,7 +581,6 @@ cir = Circuit(cnx)
 # the result if the same :
 pprint(70, cir.network.s[0])
 
-plt.figure()
 freq = rf.Frequency(start=0.1, stop=10, unit='GHz', npoints=1001)
 tl_media = rf.media.DefinedGammaZ0(freq, z0=50, gamma=1j*freq.w/rf.constants.c)
 C1 = tl_media.capacitor(3.222e-12, name='C1')
@@ -608,3 +608,80 @@ cir.plot_graph(network_labels=True, network_fontsize=15,
                edge_labels=True, edge_fontsize=10)
 
 ssaver('./test/test_rf/test39.png')
+
+freq = rf.Frequency(50, 200, 301, 'mhz')
+tl_media = rf.media.DefinedGammaZ0(frequency=freq, z0=50)
+gnd = Circuit.Ground(frequency=freq, name='ground')
+C1 = tl_media.capacitor(6.353e-12, name='C1')
+L1 = tl_media.inductor(402.7e-9, name='L1')
+C2 = tl_media.capacitor(61.08e-12, name='C2')
+L2 = tl_media.inductor(13.63e-9, name='L2')
+C3 = tl_media.capacitor(187.8e-12, name='C3')
+L3 = tl_media.inductor(41.89e-9, name='L3')
+C4 = tl_media.capacitor(6.353e-12, name='C4')
+L4 = tl_media.inductor(402.27e-9, name='L4')
+Port1 = Circuit.Port(frequency=freq, name='PortIn')
+Port2 = Circuit.Port(frequency=freq, name='PortOut')
+cnx = [
+    [(Port1, 0), (C1, 0)],
+    [(C1, 1), (L1, 0)],
+    [(L1, 1), (C2, 0), (C3, 0), (C4, 0)],
+    [(C2, 1), (L2, 0)],
+    [(C3, 1), (L3, 0)],
+    [(L2, 1), (L3, 1), (gnd, 0)],
+    [(C4, 1), (L4, 0)],
+    [(L4, 1), (Port2, 0)]
+]
+cir = Circuit(cnx)
+ntw = cir.network
+
+ntw.plot_s_db(m=0, n=0, lw=2, logx=True)
+ntw.plot_s_db(m=1, n=0, lw=2, logx=True)
+ssaver('./test/test_rf/test40.png')
+
+# Look at the raw inductor measurement with parasitics included
+# From S11/S22, it is clear that it is not a pure inductance.
+raw_ind = rf.data.ind
+raw_ind.plot_s_smith()
+ssaver('./test/test_rf/test41.png')
+
+Lraw_nH = 1e9 * np.imag(1/raw_ind.y[:, 0, 0])/2/np.pi/raw_ind.f
+Qraw = np.abs(np.imag(1/raw_ind.y[:, 0, 0])/np.real(1/raw_ind.y[:, 0, 0]))
+
+fig, (ax1, ax2) = plt.subplots(1, 2)
+ax1.plot(raw_ind.f*1e-9, Lraw_nH)
+ax1.grid()
+ax1.set_ylabel("Inductance (nH)")
+ax1.set_xlabel("Freq. (GHz)")
+ax2.plot(raw_ind.f*1e-9, Qraw)
+ax2.grid()
+ax2.set_ylabel("Q-factor")
+ax2.set_xlabel("Freq. (GHz)")
+fig.tight_layout()
+ssaver('./test/test_rf/test42.png')
+
+# load in 2-ports short/open dummy networks
+open_nw = rf.data.open_2p
+short_nw = rf.data.short_2p
+
+dm = OpenShort(dummy_open=open_nw, dummy_short=short_nw, name='tutorial')
+
+actual_ind = dm.deembed(raw_ind)
+actual_ind.plot_s_smith()
+ssaver('./test/test_rf/test43.png')
+
+rf.stylely()
+C = 1e-6  # F
+L = 1e-9  # H
+R = 30  # Ohm
+Z0 = 50  # Ohm
+
+freq = rf.Frequency(5, 5.2, npoints=501, unit='MHz')
+media = rf.media.DefinedGammaZ0(frequency=freq, z0=Z0)  # ideal line (no loss)
+rng = np.random.default_rng()
+random_d = rng.uniform(-np.pi, np.pi)  # a random length for the sake of the example
+
+resonator = media.line(d=random_d, unit='rad') ** media.shunt_inductor(L) ** media.shunt_capacitor(C) ** media.shunt(media.resistor(R)**media.short()) ** media.open()
+
+resonator.plot_s_db()
+ssaver('./test/test_rf/test44.png')

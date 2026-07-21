@@ -923,24 +923,24 @@ class Circuit:
 
         Dictionary is in the form::
 
-            {('ntw1_name', 'X0'): '3 (50+0j)',
-             ('ntw2_name', 'X0'): '0 (50+0j)',
-             ('ntw2_name', 'X1'): '2 (50+0j)', ... }
+            {('ntw1_name', 'X0'): '3\n(50+0j)',
+             ('ntw2_name', 'X0'): '0\n(50+0j)',
+             ('ntw2_name', 'X1'): '2\n(50+0j)', ... }
 
         which can be used in `networkx.draw_networkx_edge_labels`
         """
-        # for all intersections,
-        # get the N interconnected networks and associated ports and z0
-        # and forge the edge label dictionary containing labels between
-        # two nodes
         edge_labels = {}
         for it in self.intersections_dict.items():
             k, cnx = it
             for idx in range(len(cnx)):
                 ntw, ntw_port, ntw_z0 = cnx[idx]
-                # ntw_z0 = ntw.z0[0,ntw_port]
-                edge_labels[(ntw.name, 'X'+str(k))] = str(ntw_port) + \
-                    '\n' + str(np.round(ntw_z0, decimals=1))
+                real_part = np.round(np.real(ntw_z0), decimals=1)
+                imag_part = np.round(np.imag(ntw_z0), decimals=1)
+                if imag_part >= 0:
+                    z0_str = f"({real_part}+{imag_part}j)"
+                else:
+                    z0_str = f"({real_part}{imag_part}j)"
+                edge_labels[(ntw.name, 'X'+str(k))] = f"{ntw_port}\n{z0_str}"
 
         return edge_labels
 
@@ -1875,18 +1875,12 @@ class Circuit:
 
         # default values
         network_labels = kwargs.pop('network_labels', False)
-        network_shape = kwargs.pop('network_shape', 's')
-        network_color = kwargs.pop('network_color', 'gray')
         network_fontsize = kwargs.pop('network_fontsize', 7)
-        network_size = kwargs.pop('network_size', 300)
         inter_labels = kwargs.pop('inter_labels', False)
         inter_shape = kwargs.pop('inter_shape', 'o')
         inter_color = kwargs.pop('inter_color', 'lightblue')
         inter_size = kwargs.pop('inter_size', 300)
         port_labels = kwargs.pop('port_labels', False)
-        port_shape = kwargs.pop('port_shape', '>')
-        port_color = kwargs.pop('port_color', 'red')
-        port_size = kwargs.pop('port_size', 300)
         port_fontsize = kwargs.pop('port_fontsize', 7)
         edge_labels = kwargs.pop('edge_labels', False)
         edge_fontsize = kwargs.pop('edge_fontsize', 5)
@@ -1896,27 +1890,25 @@ class Circuit:
         # sort between network nodes and port nodes
         all_ntw_names = [ntw.name for ntw in self.networks_list()]
         port_names = [
-            ntw_name for ntw_name in all_ntw_names if 'port' in ntw_name]
+            ntw_name for ntw_name in all_ntw_names if ntw_name.lower().startswith('port')]
         ntw_names = [
-            ntw_name for ntw_name in all_ntw_names if 'port' not in ntw_name]
+            ntw_name for ntw_name in all_ntw_names if not ntw_name.lower().startswith('port')]
         # generate connecting nodes names
         int_names = ['X'+str(k) for k in range(self.connections_nb)]
 
         fig, ax = subplots(figsize=(10, 8))
 
-        pos = nx.spring_layout(G)
+        pos = nx.spring_layout(G, seed=42)
 
-        # draw Networks
-        nx.draw_networkx_nodes(G, pos, port_names, ax=ax, node_size=port_size,
-                               node_color=port_color, node_shape=port_shape)
-        nx.draw_networkx_nodes(
-            G,
-            pos,
-            ntw_names,
-            ax=ax,
-            node_size=network_size,
-            node_color=network_color,
-            node_shape=network_shape)
+        # draw Networks - use gray rectangle for non-port nodes
+        # For port nodes, use red triangles pointing to the right
+        for port_name in port_names:
+            x, y = pos[port_name]
+            ax.scatter(x, y, s=500, c='red', marker='>', alpha=1.0, zorder=3)
+
+        for ntw_name in ntw_names:
+            x, y = pos[ntw_name]
+            ax.scatter(x, y, s=500, c='gray', marker='s', alpha=1.0, zorder=3)
         # draw intersections
         nx.draw_networkx_nodes(G, pos, int_names, ax=ax, node_size=inter_size,
                                node_color=inter_color, node_shape=inter_shape)
@@ -1948,19 +1940,22 @@ class Circuit:
             nx.draw_networkx_labels(G, pos_labels, labels=port_labels,
                                     font_size=port_fontsize, ax=ax)
 
-        # draw edges
-        nx.draw_networkx_edges(G, pos, ax=ax)
+        # draw edge labels BEFORE edges so the edge label registry is populated
+        # and _add_patch can skip drawing lines for labeled edges
         if edge_labels:
-            edge_labels = self.edge_labels
+            edge_labels_dict = self.edge_labels
             nx.draw_networkx_edge_labels(
                 G,
                 pos,
-                edge_labels=edge_labels,
+                edge_labels=edge_labels_dict,
                 label_pos=0.5,
                 font_size=edge_fontsize,
                 ax=ax)
+        # draw edges (labeled edges will be skipped by _add_patch)
+        nx.draw_networkx_edges(G, pos, ax=ax)
         # remove x and y axis and labels
         ax.axis('off')
+        ax.set_aspect('equal')
         fig.tight_layout()
 
 # # Functions operating on Circuit

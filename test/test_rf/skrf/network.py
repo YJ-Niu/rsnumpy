@@ -5264,21 +5264,17 @@ class Network:
 
         for m in M:
             for n in N:
-                # set the legend label for this trace to the networks
-                # name if it exists, and they didn't pass a name key in
-                # the kwargs
-                # if gen_label:
-                #     kwargs['label'] = kwargs['label']
                 if 'label' in kwargs.keys():
-                    label_ = kwargs['label']
+                    label_ = kwargs.pop('label')
                 else:
-                    label_ = ""
+                    label_ = f'S{m+1}{n+1}'
                 if conversion in ["time_impulse", "time_step"]:
+                    current_show_legend = show_legend and (m == M[-1] and n == N[-1])
                     rfplt.plot_rectangular(x=x * 1e9,
                                            y=y[:, m, n],
                                            x_label=xlabel,
                                            y_label=y_label,
-                                           show_legend=show_legend, ax=ax, label=label_,
+                                           show_legend=current_show_legend, ax=ax, label=label_,
                                            **kwargs)
 
                 else:
@@ -5302,11 +5298,13 @@ class Network:
                         if logx:
                             ax.set_xscale('log')
 
+                    kwargs['label'] = label_
+                    current_show_legend = show_legend and (m == M[-1] and n == N[-1])
                     rfplt.plot_rectangular(x=x,
                                            y=y,
                                            x_label=xlabel,
                                            y_label=y_label,
-                                           show_legend=show_legend, ax=ax,
+                                           show_legend=current_show_legend, ax=ax,
                                            **kwargs)
 
     plot_attribute.__doc__ = _plot_attribute_doc.format(

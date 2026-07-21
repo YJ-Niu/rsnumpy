@@ -265,7 +265,6 @@ class OpenShort(Deembedding):
         caled.y = caled.y - op.y
         # remove series parasitics from the dut
         caled.z = caled.z - deembeded_short.z
-
         return caled
 
 

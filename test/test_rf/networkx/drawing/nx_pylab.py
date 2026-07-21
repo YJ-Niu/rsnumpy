@@ -245,6 +245,18 @@ class CurvedArrowTextBase:
                 angle -= 180
             elif angle < -90:
                 angle += 180
+
+            # 3. Perpendicular offset to avoid text overlapping with the line
+            tangent_len = math.sqrt(change_x**2 + change_y**2)
+            if tangent_len > 0:
+                # Perpendicular direction (rotate 90° CCW)
+                perp_x = -change_y / tangent_len
+                perp_y = change_x / tangent_len
+                # Offset relative to line length (2% of the edge length)
+                offset = tangent_len * 0.02
+                x += perp_x * offset
+                y += perp_y * offset
+
         (x, y) = self.ax.transData.inverted().transform((x, y))
         return x, y, angle
 
@@ -2368,6 +2380,7 @@ def draw_networkx_edge_labels(
     draw_networkx_labels
     """
     import rsplotlib as mpl
+    import rsplotlib.colors  # call as mpl.colors
     import rsplotlib.pyplot as plt
     import rsnumpy as np
 
