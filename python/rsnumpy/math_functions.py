@@ -164,7 +164,12 @@ def fix(x):
 # ========== 特殊函数 ==========
 def sqrt(x):
     """计算平方根。"""
-    return _wrap(_core.sqrt(_ensure_raw(x)))
+    if hasattr(x, '_array'):
+        x_np = _core.array(x)
+    else:
+        x_np = _core.array(x)
+    result_np = _core.sqrt(x_np)
+    return _nd()(result_np.tolist())
 
 
 def square(x):

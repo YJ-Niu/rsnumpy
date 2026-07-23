@@ -18,6 +18,11 @@ import math as _math
 from . import _extra as _extra_module
 
 import rsnumpy._core as _core
+
+_current_module = _sys.modules[__name__]
+_sys.modules['rsnumpy'] = _current_module
+_sys.modules['rsnumpy.__init__'] = _current_module
+_current_module.__name__ = 'rsnumpy'
 from rsnumpy._core import ndarray_iter as NdArrayIter
 # ========== 子模块导入和函数挂载 ==========
 # 这些导入放在 ndarray 类定义之后以避免循环导入
@@ -222,6 +227,8 @@ class ndarray:
             inner = _format_complex_repr_1d(cpx)
             return f"array({inner})"
         if getattr(self._array, 'is_complex', False):
+            if self.ndim == 0:
+                return _format_complex_scalar(self.tolist())
             inner = _format_complex_nested(self.tolist(), ", ")
             return f"array({inner})"
         dt = getattr(self, '_dtype', "float64")
@@ -266,6 +273,8 @@ class ndarray:
             inner = _format_complex_repr_1d(cpx)
             return inner
         if getattr(self._array, 'is_complex', False):
+            if self.ndim == 0:
+                return _format_complex_scalar(self.tolist())
             return _format_complex_nested(self.tolist(), " ")
         if getattr(self, '_dtype', "float64") in ("int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"):
             if getattr(self, '_is_empty', False):
@@ -293,7 +302,7 @@ class ndarray:
 
     def __format__(self, fmt):
         if self.ndim == 0:
-            val = self.item()
+            val = self.tolist()
             if isinstance(val, complex):
                 return format(val, fmt)
             return format(val, fmt)
@@ -877,7 +886,8 @@ class ndarray:
     @property
     def real(self):
         """数组的实部。"""
-        return _wrap_result(self._array.real, "float64")
+        result = self._array.real
+        return _wrap_result(result, "float64")
 
     @property
     def imag(self):
@@ -1206,7 +1216,8 @@ def _wrap_result(result, dtype="float64"):
     if hasattr(result, '__class__') and result.__class__.__name__ == 'ndarray':
         if getattr(result, 'is_complex', False):
             dtype = "complex128"
-        return ndarray._wrap(result, _dtype=dtype)
+        inner_array = getattr(result, '_array', result)
+        return ndarray._wrap(inner_array, _dtype=dtype)
     if isinstance(result, (list, tuple)):
         return ndarray(result, _dtype=dtype)
     if isinstance(result, float) and dtype == "int64":
@@ -1681,27 +1692,9 @@ def _format_complex_scalar(val):
     """格式化单个复数为字符串（如 1.+0.j, 2.+6.j）。"""
     real = val.real
     imag = val.imag
-    real_rounded = _py_round(real, 8)
-    if not _math.isfinite(real_rounded):
-        real_s = f"{real_rounded}"
-    elif abs(real_rounded) < 1e-10:
-        real_s = "-0." if _math.copysign(1.0, real) < 0 else "0."
-    elif real_rounded == int(real_rounded) and abs(real_rounded) < 1e16:
-        real_s = f"{int(real_rounded)}."
-    else:
-        real_s = f"{real_rounded}"
-    imag_rounded = _py_round(imag, 8)
-    if not _math.isfinite(imag_rounded):
-        imag_s = f"{imag_rounded}"
-    elif abs(imag_rounded) < 1e-10:
-        imag_s = "-0." if _math.copysign(1.0, imag) < 0 else "0."
-    elif imag_rounded == int(imag_rounded) and abs(imag_rounded) < 1e16:
-        imag_s = f"{int(imag_rounded)}."
-    else:
-        imag_s = f"{imag_rounded}"
-    if _math.copysign(1.0, imag) >= 0:
-        return f"{real_s}+{imag_s}j"
-    return f"{real_s}{imag_s}j"
+    if imag >= 0:
+        return f"({real}{imag:+}j)"
+    return f"({real}{imag}j)"
 
 
 def format_float_scalar(val):
@@ -4673,3 +4666,7 @@ add.reduce = _make_ufunc_reduce(lambda a, ax: sum(a, ax))
 multiply.reduce = _make_ufunc_reduce(lambda a, ax: _extra_module.prod(a, ax))
 add.accumulate = _make_ufunc_accumulate(lambda a, ax: cumsum(a, ax))
 multiply.accumulate = _make_ufunc_accumulate(lambda a, ax: cumprod(a, ax))
+
+_sys.modules['rsnumpy'] = _sys.modules[__name__]
+_sys.modules['rsnumpy.__init__'] = _sys.modules[__name__]
+_sys.modules[__name__].__name__ = 'rsnumpy'
