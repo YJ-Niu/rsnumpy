@@ -27,6 +27,7 @@ from . import matlib as _matlib_module
 # ========== rec / ma 子模块（在顶层完全初始化后导入以避免循环依赖） ==========
 from . import ma
 from . import rec
+from . import lib
 # 子模块
 from . import _core
 from . import fft  # noqa: E402  FFT 子模块（numpy 风格 np.fft.*）
@@ -47,7 +48,7 @@ _sys.modules['rsnumpy'] = _current_module
 _sys.modules['rsnumpy.__init__'] = _current_module
 _current_module.__name__ = 'rsnumpy'
 
-__version__ = "1.1.8"
+__version__ = "1.1.9"
 
 # 捕获内建函数别名：_extra 挂载会向本模块 globals 注入同名的 rsnumpy 函数
 # （all/any/round），会遮蔽内建函数。以下别名保证本文件内部逻辑始终使用内建实现。
@@ -4608,7 +4609,7 @@ __all__ = [
     'isnan', 'isinf', 'isfinite',
     'save', 'load', 'loadtxt', 'savetxt', 'savez', 'genfromtxt',
     'Poly', 'polyval', 'polyfit', 'polyder', 'polyint', 'polyroots',
-    'linalg', 'random', 'matlib', 'load_npz',
+    'linalg', 'random', 'matlib', 'load_npz', 'lib',
     # 标量类型层次
     'generic', 'number', 'integer', 'signedinteger', 'unsignedinteger',
     'inexact', 'floating', 'complexfloating', 'flexible', 'character',

@@ -1,6 +1,6 @@
 [package]
 name = "rsnumpy"
-version = "1.1.8"
+version = "1.1.9"
 edition = "2024"
 
 [lib]
@@ -25,7 +25,7 @@ zip = { version = "8.6.0", default-features = false, features = [
     "deflate-flate2-zlib-rs",
 ] }
 num-complex = "0.4.6"
-thiserror = "2.0.0"
+thiserror = "2.0.19"
 
 # macOS：链接系统自带的 Accelerate 框架作为 BLAS 后端（无需额外安装），
 # matmul/dot 由 ndarray 的 blas 特性自动分派到原生高性能 GEMM。

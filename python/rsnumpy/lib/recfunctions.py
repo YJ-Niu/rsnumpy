@@ -16,6 +16,8 @@ def _rich_dtype(x):
     d = getattr(x, 'dtype', None)
     if isinstance(d, np.DType):
         return d
+    if d is not None:
+        return np.dtype(d)
     return np.dtype(x)
 
 
@@ -403,17 +405,26 @@ def stack_arrays(arrays, defaults=None, usemask=True, asrecarray=False,
                  autoconvert=False):
     """将一组结构化数组按字段并集堆叠。"""
     _ = defaults, autoconvert
-    if isinstance(arrays, np.ndarray):
+    if hasattr(arrays, '_array'):
         return arrays
     arrays = list(arrays)
+    if len(arrays) == 1:
+        return arrays[0]
+    if not arrays:
+        return np.array([])
     field_order = []
     field_dt = {}
+    has_structured = False
     for arr in arrays:
         dt = _rich_dtype(arr)
-        for n in dt.names:
-            if n not in field_dt:
-                field_order.append(n)
-                field_dt[n] = dt[n]
+        if dt.names is not None:
+            has_structured = True
+            for n in dt.names:
+                if n not in field_dt:
+                    field_order.append(n)
+                    field_dt[n] = dt[n]
+    if not has_structured:
+        return np.concatenate([np.array(a) for a in arrays])
     names = field_order
     formats = [field_dt[n] for n in names]
     newdt = np._build_struct(names, formats, None, None, None, False)
