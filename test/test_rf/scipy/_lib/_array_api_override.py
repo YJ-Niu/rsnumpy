@@ -15,7 +15,7 @@ import rsnumpy as np
 import rsnumpy.typing as npt
 
 from scipy._external import array_api_compat
-import scipy._external.array_api_compat.numpy as np_compat
+import scipy._external.array_api_compat.rsnumpy as np_compat
 from scipy._external.array_api_compat import is_array_api_obj, is_jax_array
 from scipy._lib._sparse import SparseABC
 

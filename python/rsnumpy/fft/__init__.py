@@ -10,7 +10,7 @@
 
 import math as _math
 
-import rsnumpy._core as _core
+import rsnumpy.num_core as _core
 
 __all__ = [
     'fft', 'ifft', 'rfft', 'irfft',

@@ -1,6 +1,6 @@
 """rsnumpy.random - 随机数生成模块"""
 
-import rsnumpy._core as _core
+import rsnumpy.num_core as _core
 
 
 class mtrand_module:

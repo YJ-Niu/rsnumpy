@@ -7,7 +7,7 @@
 import cmath as _cmath
 import math as _math
 
-import rsnumpy._core as _core
+import rsnumpy.num_core as _core
 
 builtin_max = max
 builtin_min = min

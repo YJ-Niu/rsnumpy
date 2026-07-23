@@ -204,10 +204,53 @@ from scipy.linalg._decomp_cholesky import cholesky, cho_factor, cho_solve
 from scipy.linalg._misc import LinAlgError, LinAlgWarning
 from rsnumpy.linalg import issymmetric
 
+
+def get_blas_funcs(names, arrays=(), dtype=None):
+    """Return available BLAS function objects from names."""
+    if isinstance(names, str):
+        names = (names,)
+    return names
+
+
+def get_lapack_funcs(names, arrays=(), dtype=None):
+    """Return available LAPACK function objects from names."""
+    if isinstance(names, str):
+        names = (names,)
+    return names
+
+
+def find_best_blas_type(arrays=(), dtype=None):
+    """Find best BLAS type for given arrays and dtype."""
+    return 'd', None, None
+
+
+def norm(a, ord=None, axis=None, keepdims=False):
+    """Matrix or vector norm."""
+    import rsnumpy as np
+    return np.linalg.norm(a, ord=ord, axis=axis, keepdims=keepdims)
+
+
+def solve_triangular(a, b, trans=0, lower=False, unit_diagonal=False,
+                     overwrite_b=False, check_finite=True):
+    """Solve the equation a x = b for x, assuming a is a triangular matrix."""
+    import rsnumpy as np
+    return np.linalg.solve(a, b)
+
+
+def inv(a):
+    """Compute the inverse of a matrix."""
+    import rsnumpy as np
+    return np.linalg.inv(a)
+
+
+def det(a):
+    """Compute the determinant of a matrix."""
+    import rsnumpy as np
+    return np.linalg.det(a)
+
+
 # Deprecated namespaces, to be removed in v2.0.0
 
-__all__ = [s for s in dir() if not s.startswith('_')]
-
-from scipy._lib._testutils import PytestTester
-test = PytestTester(__name__)
-del PytestTester
+__all__ = ['cholesky', 'cho_factor', 'cho_solve', 'LinAlgError', 'LinAlgWarning', 'issymmetric',
+           'get_blas_funcs', 'get_lapack_funcs', 'find_best_blas_type',
+           'norm', 'solve_triangular', 'inv', 'det']

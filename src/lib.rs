@@ -2620,7 +2620,7 @@ fn build_array_interface<'py>(
 }
 
 #[pymodule]
-fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn num_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<NdArray>()?;
     m.add_class::<NdArrayIter>()?;
 

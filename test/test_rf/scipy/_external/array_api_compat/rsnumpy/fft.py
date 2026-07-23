@@ -2,7 +2,7 @@ import rsnumpy as np
 
 from .._internal import clone_module
 
-__all__ = clone_module("numpy.fft", globals())
+__all__ = clone_module("rsnumpy.fft", globals())
 
 from .._internal import get_xp
 from ..common import _fft

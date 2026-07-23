@@ -2,7 +2,7 @@
 
 import sys as _sys
 
-import rsnumpy._core as _core
+import rsnumpy.num_core as _core
 
 
 class LinAlgError(Exception):
@@ -635,6 +635,20 @@ class linalg_module:
     def solve_banded(lower, upper, ab, b):
         """求解带状线性方程组。"""
         return _wrap(_core.linalg.solve_banded(lower, upper, _ensure(ab), _ensure(b)))
+
+
+def issymmetric(a, tol=None):
+    """判断矩阵是否对称。"""
+    from ..__init__ import ndarray
+    a_arr = a if hasattr(a, '_array') else ndarray(a)
+    if len(a_arr.shape) != 2 or a_arr.shape[0] != a_arr.shape[1]:
+        return False
+    at = a_arr.T
+    if tol is None:
+        diff = abs(a_arr - at)
+        return diff.max() < 1e-10
+    diff = abs(a_arr - at)
+    return diff.max() <= tol
 
 
 # 将 linalg_module 的公有方法同时暴露为模块级函数，

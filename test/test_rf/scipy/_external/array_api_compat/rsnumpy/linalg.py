@@ -10,7 +10,7 @@ import rsnumpy as np
 from .._internal import clone_module, get_xp
 from ..common import _linalg
 
-__all__ = clone_module("numpy.linalg", globals())
+__all__ = clone_module("rsnumpy.linalg", globals())
 
 # These functions are in both the main and linalg namespaces
 from ._aliases import matmul, matrix_transpose, tensordot, vecdot  # noqa: F401

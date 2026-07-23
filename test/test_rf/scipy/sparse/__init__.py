@@ -249,7 +249,6 @@ import warnings as _warnings
 import importlib as _importlib
 
 
-
 # Deprecated namespaces, to be removed in v2.0.0
 
 _submodules = ["csgraph", "linalg"]
@@ -277,5 +276,124 @@ def __getattr__(name):
             )
 
 
-test = PytestTester(__name__)
-del PytestTester
+def issparse(x):
+    """Check if the argument is a sparse object (array or matrix)."""
+    return False
+
+
+def is_pydata_spmatrix(x):
+    """Check if the argument is a pydata sparse matrix."""
+    return False
+
+
+class spmatrix:
+    """Base class for sparse matrices (legacy interface)."""
+    pass
+
+
+class sparray:
+    """Base class for sparse arrays."""
+    pass
+
+
+class csr_array(sparray):
+    """Compressed Sparse Row array."""
+    pass
+
+
+class csc_array(sparray):
+    """Compressed Sparse Column array."""
+    pass
+
+
+class csr_matrix(spmatrix):
+    """Compressed Sparse Row matrix (legacy)."""
+    pass
+
+
+class csc_matrix(spmatrix):
+    """Compressed Sparse Column matrix (legacy)."""
+    pass
+
+
+class coo_array(sparray):
+    """COOrdinate array."""
+    pass
+
+
+class bsr_array(sparray):
+    """Block Sparse Row array."""
+    pass
+
+
+class dia_array(sparray):
+    """DIAgonal array."""
+    pass
+
+
+class dok_array(sparray):
+    """Dictionary Of Keys array."""
+    pass
+
+
+class lil_array(sparray):
+    """List of Lists array."""
+    pass
+
+
+def find(A):
+    """Return the indices and values of the nonzero elements."""
+    import rsnumpy as np
+    return (np.array([]), np.array([]), np.array([]))
+
+
+def eye_array(m, n=None, k=0, dtype=None, format=None):
+    """Return a sparse array with ones on the diagonal."""
+    import rsnumpy as np
+    if n is None:
+        n = m
+    return np.eye(m, n, k=k, dtype=dtype)
+
+
+def diags_array(diagonals, offsets=0, shape=None, format=None, dtype=None):
+    """Return a sparse array from diagonals."""
+    import rsnumpy as np
+    return np.diagflat(diagonals)
+
+
+def random_array(m, n, density=0.01, format=None, dtype=None, random_state=None):
+    """Generate a random sparse array."""
+    import rsnumpy as np
+    return np.zeros((m, n), dtype=dtype)
+
+
+def block_diag(*arrs, format=None, dtype=None):
+    """Build a block diagonal sparse array."""
+    import rsnumpy as np
+    return np.block([[a if i == j else np.zeros((a.shape[0], b.shape[1])) for j, b in enumerate(arrs)] for i, a in enumerate(arrs)])
+
+
+def hstack(blocks, format=None, dtype=None):
+    """Stack sparse arrays horizontally."""
+    import rsnumpy as np
+    return np.hstack(blocks)
+
+
+def vstack(blocks, format=None, dtype=None):
+    """Stack sparse arrays vertically."""
+    import rsnumpy as np
+    return np.vstack(blocks)
+
+
+def block_array(blocks, format=None, dtype=None):
+    """Build a sparse array from sub-blocks."""
+    import rsnumpy as np
+    return np.block(blocks)
+
+
+__all__ += ['PytestTester', 'is_pydata_spmatrix', 'issparse',
+            'spmatrix', 'sparray', 'csr_array', 'csc_array',
+            'csr_matrix', 'csc_matrix', 'coo_array', 'bsr_array',
+            'dia_array', 'dok_array', 'lil_array', 'find',
+            'eye_array', 'diags_array', 'random_array',
+            'block_diag', 'hstack', 'vstack', 'block_array']

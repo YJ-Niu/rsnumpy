@@ -132,8 +132,8 @@ Exceptions
 
 # Deprecated namespaces, to be removed in v2.0.0
 
-__all__ = [s for s in dir() if not s.startswith('_')]
+from ._interface import LinearOperator, aslinearoperator
 
-from scipy._lib._testutils import PytestTester
-test = PytestTester(__name__)
-del PytestTester
+
+__all__ = [s for s in dir() if not s.startswith('_')]
+__all__ += ['LinearOperator', 'aslinearoperator']

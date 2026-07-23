@@ -575,7 +575,7 @@ def dedent_lines(lines):
     return textwrap.dedent("\n".join(lines)).split("\n")
 
 
-class FunctionDoc(NumpyDocString):
+class FunctionDoc(rsnumpyDocString):
     def __init__(self, func, role="func", doc=None, config=None):
         self._f = func
         self._role = role  # e.g. "func" or "meth"
@@ -612,7 +612,7 @@ class FunctionDoc(NumpyDocString):
         return out
 
 
-class ObjDoc(NumpyDocString):
+class ObjDoc(rsnumpyDocString):
     def __init__(self, obj, doc=None, config=None):
         self._f = obj
         if config is None:
@@ -620,7 +620,7 @@ class ObjDoc(NumpyDocString):
         rsnumpyDocString.__init__(self, doc, config=config)
 
 
-class ClassDoc(NumpyDocString):
+class ClassDoc(rsnumpyDocString):
     extra_public_methods = ["__call__"]
 
     def __init__(self, cls, doc=None, modulename="", func_doc=FunctionDoc, config=None):

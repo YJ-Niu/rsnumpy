@@ -31,6 +31,6 @@ classifiers = [
 ]
 
 [tool.maturin]
-module-name = "rsnumpy._core"
+module-name = "rsnumpy.num_core"
 python-source = "python"
-include = ["python/rsnumpy/__init__.py", "python/rsnumpy/linalg/__init__.py", "python/rsnumpy/random/__init__.py", "python/rsnumpy/fft/__init__.py", "python/rsnumpy/typing/__init__.py"]
+include = ["python/rsnumpy/__init__.py", "python/rsnumpy/exceptions.py", "python/rsnumpy/_core/__init__.py", "python/rsnumpy/_core/numeric.py", "python/rsnumpy/linalg/__init__.py", "python/rsnumpy/random/__init__.py", "python/rsnumpy/fft/__init__.py", "python/rsnumpy/typing/__init__.py"]

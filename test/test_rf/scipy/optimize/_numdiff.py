@@ -541,8 +541,7 @@ def approx_derivative(fun, x0, method='3-point', rel_step=None, abs_step=None,
     if lb.shape != x0.shape or ub.shape != x0.shape:
         raise ValueError("Inconsistent shapes between bounds and `x0`.")
 
-    if as_linear_operator and not (np.all(np.isinf(lb))
-                                   and np.all(np.isinf(ub))):
+    if as_linear_operator and not (np.all(np.isinf(lb)) and np.all(np.isinf(ub))):
         raise ValueError("Bounds not supported when "
                          "`as_linear_operator` is True.")
 
@@ -590,8 +589,7 @@ def approx_derivative(fun, x0, method='3-point', rel_step=None, abs_step=None,
             # or small. In which case fall back to relative step.
             dx = ((x0 + h) - x0)
             h = np.where(dx == 0,
-                         _eps_for_method(x0.dtype, f0.dtype, method) *
-                         sign_x0 * np.maximum(1.0, np.abs(x0)),
+                         _eps_for_method(x0.dtype, f0.dtype, method) * sign_x0 * np.maximum(1.0, np.abs(x0)),
                          h)
             h = h.astype(x0.dtype)
 
@@ -732,7 +730,7 @@ def _dense_difference(fun, x0, f0, h, use_one_sided, method, workers):
         dx = list()
         df = list()
         for i, one_sided in enumerate(use_one_sided):
-            l = next(gen)
+            l_ = next(gen)
             u = next(gen)
 
             f1 = next(f_evals)
@@ -741,7 +739,7 @@ def _dense_difference(fun, x0, f0, h, use_one_sided, method, workers):
                 dx.append(u[i] - x0[i])
                 df.append(-3.0 * f0 + 4 * f1 - f2)
             else:
-                dx.append(u[i] - l[i])
+                dx.append(u[i] - l_[i])
                 df.append(f2 - f1)
         df_dx = [delf / delx for delf, delx in zip(df, dx)]
         nfev += 2 * len(df_dx)
@@ -987,8 +985,7 @@ def check_derivative(fun, jac, x0, bounds=(-np.inf, np.inf), args=(),
         abs_err = J_to_test - J_diff
         i, j, abs_err_data = find(abs_err)
         J_diff_data = np.asarray(J_diff[i, j]).ravel()
-        return np.max(np.abs(abs_err_data) /
-                      np.maximum(1, np.abs(J_diff_data)))
+        return np.max(np.abs(abs_err_data) / np.maximum(1, np.abs(J_diff_data)))
     else:
         J_diff = approx_derivative(fun, x0, bounds=bounds,
                                    args=args, kwargs=kwargs)
