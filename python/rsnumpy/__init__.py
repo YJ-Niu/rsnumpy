@@ -14,18 +14,10 @@ Examples:
 
 import datetime as _datetime
 import sys as _sys
-import math as _math
 from . import _extra as _extra_module
 
-import rsnumpy._core as _core
-
-_current_module = _sys.modules[__name__]
-_sys.modules['rsnumpy'] = _current_module
-_sys.modules['rsnumpy.__init__'] = _current_module
-_current_module.__name__ = 'rsnumpy'
-from rsnumpy._core import ndarray_iter as NdArrayIter
 # ========== 子模块导入和函数挂载 ==========
-# 这些导入放在 ndarray 类定义之后以避免循环导入
+# 这些导入放在 ndarray 类和 _ensure/_wrap_result 函数定义之后以避免循环导入
 from . import array_methods
 from . import math_functions as _math_functions_module
 from . import statistics as _statistics_module
@@ -37,13 +29,20 @@ from .linalg import linalg_module as _linalg_module
 from .random import random_module as _random_module
 from . import char as _char_module
 from . import matlib as _matlib_module
+# ========== rec / ma 子模块（在顶层完全初始化后导入以避免循环依赖） ==========
+from . import ma
+from . import rec
+# ---------- dtype 提升与浮点判定 ----------
+import rsnumpy._core as _core
+from rsnumpy._core import ndarray_iter as NdArrayIter
 from ._dtypes import (
     DType, dtype, _make_flexible, _make_subarray,
     _build_struct, _scalar_typestr_short,
 )
-# ========== rec / ma 子模块（在顶层完全初始化后导入以避免循环依赖） ==========
-from . import ma
-from . import rec
+_current_module = _sys.modules[__name__]
+_sys.modules['rsnumpy'] = _current_module
+_sys.modules['rsnumpy.__init__'] = _current_module
+_current_module.__name__ = 'rsnumpy'
 
 __version__ = "1.1.8"
 
@@ -1233,8 +1232,6 @@ def _scalar(x):
         return x.tolist()
     return x
 
-
-# ---------- dtype 提升与浮点判定 ----------
 
 _FLOAT_DTYPES = ("float16", "float32", "float64")
 
