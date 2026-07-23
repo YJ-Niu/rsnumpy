@@ -129,22 +129,11 @@ Exceptions
 
 """
 
-from ._isolve import *
-from ._dsolve import *
-from ._interface import *
-from ._eigen import *
-from ._matfuncs import *
-from ._onenormest import *
-from ._norm import *
-from ._expm_multiply import *
-from ._funm_multiply_krylov import *
-from ._special_sparse_arrays import *
 
 # Deprecated namespaces, to be removed in v2.0.0
-from . import isolve, dsolve, interface, eigen, matfuncs
+
+from ._interface import LinearOperator, aslinearoperator
+
 
 __all__ = [s for s in dir() if not s.startswith('_')]
-
-from scipy._lib._testutils import PytestTester
-test = PytestTester(__name__)
-del PytestTester
+__all__ += ['LinearOperator', 'aslinearoperator']

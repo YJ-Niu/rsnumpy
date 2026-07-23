@@ -2208,12 +2208,15 @@ where
     }
 
     // 用带零步长的广播视图直接参与 Zip，避免把广播结果 to_owned 后再逐元素复制。
+    // 先转标准布局以确保 into_shape_with_order 不会因内存布局不兼容而失败。
     let a_reshaped = a
-        .clone()
+        .as_standard_layout()
+        .to_owned()
         .into_shape_with_order(IxDyn(&a_padded))
         .map_err(|e| e.to_string())?;
     let b_reshaped = b
-        .clone()
+        .as_standard_layout()
+        .to_owned()
         .into_shape_with_order(IxDyn(&b_padded))
         .map_err(|e| e.to_string())?;
     let a_view = a_reshaped
@@ -2296,10 +2299,14 @@ fn broadcast_complex(
     let out_shape = broadcast_shape(a_re.shape(), b_re.shape())?;
     let dim = IxDyn(&out_shape);
     let fail = || "Broadcasting failed".to_string();
-    let av_re = a_re.broadcast(dim.clone()).ok_or_else(fail)?;
-    let av_im = a_im.broadcast(dim.clone()).ok_or_else(fail)?;
-    let bv_re = b_re.broadcast(dim.clone()).ok_or_else(fail)?;
-    let bv_im = b_im.broadcast(dim).ok_or_else(fail)?;
+    let a_re_std = a_re.as_standard_layout().to_owned();
+    let a_im_std = a_im.as_standard_layout().to_owned();
+    let b_re_std = b_re.as_standard_layout().to_owned();
+    let b_im_std = b_im.as_standard_layout().to_owned();
+    let av_re = a_re_std.broadcast(dim.clone()).ok_or_else(fail)?;
+    let av_im = a_im_std.broadcast(dim.clone()).ok_or_else(fail)?;
+    let bv_re = b_re_std.broadcast(dim.clone()).ok_or_else(fail)?;
+    let bv_im = b_im_std.broadcast(dim).ok_or_else(fail)?;
     let pairs: Array<(f64, f64), IxDyn> = Zip::from(av_re)
         .and(av_im)
         .and(bv_re)
@@ -2613,7 +2620,7 @@ fn build_array_interface<'py>(
 }
 
 #[pymodule]
-fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn num_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<NdArray>()?;
     m.add_class::<NdArrayIter>()?;
 

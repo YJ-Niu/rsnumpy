@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "rsnumpy"
-version = "1.1.7"
+version = "1.1.9"
 requires-python = ">=3.10"
 description = "A Rust-powered NumPy-compatible array library."
 readme = "README.md"
@@ -31,6 +31,6 @@ classifiers = [
 ]
 
 [tool.maturin]
-module-name = "rsnumpy._core"
+module-name = "rsnumpy.num_core"
 python-source = "python"
-include = ["python/rsnumpy/__init__.py", "python/rsnumpy/linalg/__init__.py", "python/rsnumpy/random/__init__.py", "python/rsnumpy/fft/__init__.py", "python/rsnumpy/typing/__init__.py"]
+include = ["python/rsnumpy/__init__.py", "python/rsnumpy/exceptions.py", "python/rsnumpy/_core/__init__.py", "python/rsnumpy/_core/numeric.py", "python/rsnumpy/linalg/__init__.py", "python/rsnumpy/random/__init__.py", "python/rsnumpy/fft/__init__.py", "python/rsnumpy/typing/__init__.py"]

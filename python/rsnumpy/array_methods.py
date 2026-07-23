@@ -4,7 +4,7 @@ ndarray 对象方法模块
 此模块包含 rsnumpy.ndarray 类的所有对象方法和属性。
 """
 
-import rsnumpy._core as _core
+import rsnumpy.num_core as _core
 from .__init__ import ndarray, _ensure
 
 
@@ -166,7 +166,9 @@ class NdArrayMethods:
     def argmin(arr, axis=None):
         """返回最小值的索引。"""
         result = _wrap_result(_core.argmin_axis(arr._array, axis))
-        if result.ndim == 0:
+        if isinstance(result, int):
+            return result
+        if hasattr(result, 'ndim') and result.ndim == 0:
             return int(result.item())
         return result
     

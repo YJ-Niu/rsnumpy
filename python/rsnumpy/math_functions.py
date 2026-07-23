@@ -1,6 +1,6 @@
 """数学函数模块 - 所有实现位于 Rust，这里仅保留薄包装。"""
 
-import rsnumpy._core as _core
+import rsnumpy.num_core as _core
 
 
 def _nd():
@@ -164,7 +164,12 @@ def fix(x):
 # ========== 特殊函数 ==========
 def sqrt(x):
     """计算平方根。"""
-    return _wrap(_core.sqrt(_ensure_raw(x)))
+    if hasattr(x, '_array'):
+        x_np = _core.array(x)
+    else:
+        x_np = _core.array(x)
+    result_np = _core.sqrt(x_np)
+    return _nd()(result_np.tolist())
 
 
 def square(x):
@@ -179,6 +184,10 @@ def cbrt(x):
 
 def absolute(x):
     """计算绝对值。"""
+    import builtins
+    if isinstance(x, complex):
+        from .__init__ import ndarray
+        return ndarray([builtins.abs(x)])
     return _wrap(_core.abs(_ensure_raw(x)))
 
 

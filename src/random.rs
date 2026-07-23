@@ -201,14 +201,145 @@ fn random_randint(low: i64, high: i64, size: Option<&Bound<'_, PyAny>>) -> PyRes
     })
 }
 
+#[pyclass(name = "RandomState")]
+struct PyRandomState {
+    rng: Mutex<::rand::rngs::StdRng>,
+}
+
+#[pymethods]
+impl PyRandomState {
+    #[new]
+    fn new(seed: Option<u64>) -> Self {
+        PyRandomState {
+            rng: Mutex::new(::rand::rngs::StdRng::seed_from_u64(
+                seed.unwrap_or_else(rand::random),
+            )),
+        }
+    }
+
+    #[pyo3(signature = (*args))]
+    fn rand(&self, _py: Python<'_>, args: &Bound<'_, PyTuple>) -> PyResult<NdArray> {
+        let shape = parse_shape_from_args(args);
+        let dist = ::rand_distr::Uniform::<f64>::new(0.0, 1.0)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        if shape.is_empty() {
+            let mut rng = self.rng.lock().unwrap();
+            Ok(make_ndarray_single(&mut rng, &shape, dist))
+        } else {
+            let base = self.rng.lock().unwrap().next_u64();
+            Ok(_py.detach(move || make_ndarray_parallel(&shape, base, dist)))
+        }
+    }
+
+    #[pyo3(signature = (*args))]
+    fn randn(&self, _py: Python<'_>, args: &Bound<'_, PyTuple>) -> PyResult<NdArray> {
+        let shape = parse_shape_from_args(args);
+        let normal = ::rand_distr::Normal::new(0.0, 1.0)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        if shape.is_empty() {
+            let mut rng = self.rng.lock().unwrap();
+            Ok(make_ndarray_single(&mut rng, &shape, normal))
+        } else {
+            let base = self.rng.lock().unwrap().next_u64();
+            Ok(_py.detach(move || make_ndarray_parallel(&shape, base, normal)))
+        }
+    }
+
+    #[pyo3(signature = (low, high=None, size=None))]
+    fn randint(
+        &self,
+        low: i64,
+        high: Option<i64>,
+        size: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<NdArray> {
+        let hi = high.unwrap_or(low);
+        let actual_low = if high.is_some() { low } else { 0 };
+        let actual_high = hi;
+        let shape = parse_size_arg(size)?;
+        let dist = ::rand_distr::Uniform::new(actual_low, actual_high)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let mut rng = self.rng.lock().unwrap();
+        if shape.is_empty() {
+            return Ok(NdArray {
+                imag: None,
+                data: Array::from_elem(IxDyn(&[]), dist.sample(&mut rng) as f64),
+            });
+        }
+        let total: usize = shape.iter().product();
+        let values: Vec<f64> = (0..total).map(|_| dist.sample(&mut rng) as f64).collect();
+        let arr = Array::from_shape_vec(IxDyn(&shape), values)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(NdArray {
+            imag: None,
+            data: arr,
+        })
+    }
+
+    #[pyo3(signature = (size=None))]
+    fn random(&self, _py: Python<'_>, size: Option<&Bound<'_, PyAny>>) -> PyResult<NdArray> {
+        let shape = parse_size_arg(size)?;
+        let dist = ::rand_distr::Uniform::<f64>::new(0.0, 1.0)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        if shape.is_empty() {
+            let mut rng = self.rng.lock().unwrap();
+            Ok(make_ndarray_single(&mut rng, &shape, dist))
+        } else {
+            let base = self.rng.lock().unwrap().next_u64();
+            Ok(_py.detach(move || make_ndarray_parallel(&shape, base, dist)))
+        }
+    }
+
+    #[pyo3(signature = (loc=0.0, scale=1.0, size=None))]
+    fn normal(
+        &self,
+        _py: Python<'_>,
+        loc: f64,
+        scale: f64,
+        size: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<NdArray> {
+        let shape = parse_size_arg(size)?;
+        let dist = ::rand_distr::Normal::new(loc, scale)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        if shape.is_empty() {
+            let mut rng = self.rng.lock().unwrap();
+            Ok(make_ndarray_single(&mut rng, &shape, dist))
+        } else {
+            let base = self.rng.lock().unwrap().next_u64();
+            Ok(_py.detach(move || make_ndarray_parallel(&shape, base, dist)))
+        }
+    }
+
+    #[pyo3(signature = (low=0.0, high=1.0, size=None))]
+    fn uniform(
+        &self,
+        _py: Python<'_>,
+        low: f64,
+        high: f64,
+        size: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<NdArray> {
+        let shape = parse_size_arg(size)?;
+        let dist = ::rand_distr::Uniform::new(low, high)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        if shape.is_empty() {
+            let mut rng = self.rng.lock().unwrap();
+            Ok(make_ndarray_single(&mut rng, &shape, dist))
+        } else {
+            let base = self.rng.lock().unwrap().next_u64();
+            Ok(_py.detach(move || make_ndarray_parallel(&shape, base, dist)))
+        }
+    }
+
+    fn seed(&self, val: u64) {
+        *self.rng.lock().unwrap() = ::rand::rngs::StdRng::seed_from_u64(val);
+    }
+}
+
 #[pyclass(name = "Generator")]
 struct PyGenerator {
     rng: Mutex<::rand::rngs::StdRng>,
 }
 
 impl PyGenerator {
-    /// 从内部 RNG 抽取一个 u64 派生出一个独立的 StdRng；
-    /// 每次调用都会推进内部状态，保证同一 Generator 的连续调用不产生重复序列。
     fn spawn(&self) -> ::rand::rngs::StdRng {
         ::rand::rngs::StdRng::seed_from_u64(self.rng.lock().unwrap().next_u64())
     }
@@ -787,6 +918,7 @@ pub fn init_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(gamma, m)?)?;
     m.add_function(wrap_pyfunction!(exponential, m)?)?;
     m.add_function(wrap_pyfunction!(get_state, m)?)?;
+    m.add_class::<PyRandomState>()?;
     m.add_class::<PyGenerator>()?;
     Ok(())
 }

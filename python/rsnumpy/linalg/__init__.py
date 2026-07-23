@@ -2,7 +2,12 @@
 
 import sys as _sys
 
-import rsnumpy._core as _core
+import rsnumpy.num_core as _core
+
+
+class LinAlgError(Exception):
+    """线性代数相关错误。"""
+    pass
 
 
 def _ensure(x):
@@ -108,15 +113,23 @@ def _dot_nested(a, na, b, nb):
     return _matmul_nested(a, na, b, nb)
 
 
+def _solve_pinv(a, b):
+    """使用伪逆求解线性方程组 x = pinv(A) @ b。"""
+    pinv_a = _pinv_general(a)
+    return _matmul_2d(pinv_a, b)
+
+
 def _gauss_jordan_inv(mat):
     """高斯-约当消元求逆（列主元），元素可为 float 或 complex，支持任意 n×n。"""
     n = len(mat)
     work = [list(row) for row in mat]
     inv = [[(1.0 if i == j else 0.0) for j in range(n)] for i in range(n)]
+    max_abs = max((abs(v) for row in work for v in row), default=0.0)
+    eps = n * max_abs * 2.220446049250313e-16 if max_abs != 0 else 1e-10
     for col in range(n):
         pivot = max(range(col, n), key=lambda r: abs(work[r][col]))
-        if abs(work[pivot][col]) == 0.0:
-            raise ValueError("Singular matrix")
+        if abs(work[pivot][col]) < eps:
+            raise LinAlgError("Singular matrix")
         if pivot != col:
             work[col], work[pivot] = work[pivot], work[col]
             inv[col], inv[pivot] = inv[pivot], inv[col]
@@ -130,7 +143,7 @@ def _gauss_jordan_inv(mat):
             if r == col:
                 continue
             factor = work[r][col]
-            if factor == 0:
+            if abs(factor) < eps:
                 continue
             wr = work[r]
             ir = inv[r]
@@ -138,6 +151,82 @@ def _gauss_jordan_inv(mat):
                 wr[j] -= factor * wcol[j]
                 ir[j] -= factor * icol[j]
     return inv
+
+
+def _pinv_general(mat):
+    """通用伪逆实现，基于特征值分解处理复数矩阵。"""
+    n = len(mat)
+    m = len(mat[0]) if mat else 0
+    
+    ata = [[sum(mat[i][k].conjugate() * mat[j][k] for k in range(m)) for j in range(n)] for i in range(n)]
+    
+    evals, evecs = _eig_general(ata)
+    
+    tol = max(n, m) * max(abs(e) for e in evals) * 1e-15
+    
+    inv_sqrt = [1.0 / e**0.5 if abs(e) > tol else 0.0 for e in evals]
+    
+    v_inv = [[evecs[j][i] * inv_sqrt[i] for i in range(n)] for j in range(n)]
+    
+    at = [[mat[j][i].conjugate() for j in range(n)] for i in range(m)]
+    
+    return _matmul_2d(v_inv, _matmul_2d(v_inv, at))
+
+
+def _eig_general(mat):
+    """通用特征值分解实现，支持复数矩阵。"""
+    n = len(mat)
+    if n == 1:
+        return [mat[0][0]], [[1.0]]
+    if n == 2:
+        a, b = mat[0][0], mat[0][1]
+        c, d = mat[1][0], mat[1][1]
+        tr = a + d
+        det = a * d - b * c
+        import cmath
+        disc = cmath.sqrt(tr * tr - 4.0 * det)
+        evals = [(tr + disc) / 2.0, (tr - disc) / 2.0]
+        evecs = [[0.0, 0.0], [0.0, 0.0]]
+        for idx, lam in enumerate(evals):
+            if abs(b) > 1e-12 or abs(lam - a) > 1e-12:
+                v0, v1 = b, lam - a
+            else:
+                v0, v1 = lam - d, c
+            norm = abs(v0)**2 + abs(v1)**2
+            if norm < 1e-24:
+                evecs[0][idx] = 1.0
+                evecs[1][idx] = 0.0
+            else:
+                norm = cmath.sqrt(norm)
+                evecs[0][idx] = v0 / norm
+                evecs[1][idx] = v1 / norm
+        return evals, evecs
+    
+    return _eig_power_iteration(mat)
+
+
+def _eig_power_iteration(mat):
+    """幂迭代法计算特征值和特征向量（仅适用于对称/厄米矩阵）。"""
+    import cmath
+    n = len(mat)
+    evals = []
+    evecs = [[0.0] * n for _ in range(n)]
+    
+    for k in range(n):
+        v = [complex(1.0 if i == k else 0.0) for i in range(n)]
+        for _ in range(100):
+            new_v = [sum(mat[i][j] * v[j] for j in range(n)) for i in range(n)]
+            norm_sq = sum(abs(x)**2 for x in new_v)
+            if norm_sq < 1e-24:
+                break
+            norm = cmath.sqrt(norm_sq)
+            v = [x / norm for x in new_v]
+        lam = sum(v[i].conjugate() * sum(mat[i][j] * v[j] for j in range(n)) for i in range(n))
+        evals.append(lam)
+        for i in range(n):
+            evecs[i][k] = v[i]
+    
+    return evals, evecs
 
 
 def _gauss_jordan_solve(mat, b):
@@ -152,10 +241,12 @@ def _gauss_jordan_solve(mat, b):
             rhs.append(row.tolist())
         else:
             rhs.append([row])
+    max_abs = max((abs(v) for row in work for v in row), default=0.0)
+    eps = n * max_abs * 2.220446049250313e-16 if max_abs != 0 else 1e-10
     for col in range(n):
         pivot = max(range(col, n), key=lambda r: abs(work[r][col]))
-        if abs(work[pivot][col]) == 0.0:
-            raise ValueError("Singular matrix")
+        if abs(work[pivot][col]) < eps:
+            raise LinAlgError("Singular matrix")
         if pivot != col:
             work[col], work[pivot] = work[pivot], work[col]
             rhs[col], rhs[pivot] = rhs[pivot], rhs[col]
@@ -178,8 +269,8 @@ def _gauss_jordan_solve(mat, b):
                 wr[j] -= factor * wcol[j]
             for j in range(len(rr)):
                 rr[j] -= factor * rcol[j]
-    if len(rhs[0]) == 1:
-        return [row[0] for row in rhs]
+    if len(rhs[0]) == 1 and len(rhs) == n:
+        return [[row[0]] for row in rhs]
     return rhs
 
 
@@ -193,14 +284,18 @@ def _inv_nested(data):
 
 def _solve_nested(a, b):
     """对嵌套列表递归求解 Ax = b：最内两维视为矩阵，外层为批量维。"""
-    if isinstance(a, list) and a and isinstance(a[0], list) \
-            and (not a[0] or not isinstance(a[0][0], list)):
-        return _gauss_jordan_solve(a, b)
+    if isinstance(a, list) and a and isinstance(a[0], list):
+        if not a[0] or not isinstance(a[0][0], list):
+            try:
+                return _gauss_jordan_solve(a, b)
+            except LinAlgError:
+                return _solve_pinv(a, b)
     return [_solve_nested(sa, sb) for sa, sb in zip(a, b)]
 
 
 class linalg_module:
     """线性代数模块 - 所有方法都直接调用 Rust 实现。"""
+    LinAlgError = LinAlgError
 
     @staticmethod
     def dot(a, b):
@@ -254,11 +349,25 @@ class linalg_module:
     @staticmethod
     def inv(a):
         """计算矩阵的逆。"""
-        from ..__init__ import ndarray
+        from ..__init__ import ndarray, empty
         a_arr = a if hasattr(a, '_array') else ndarray(a)
         shape = a_arr.shape
         if len(shape) == 2 and not _is_complex_arr(a_arr):
             return _wrap(_core.linalg.inv(_ensure(a_arr)))
+        
+        if len(shape) == 3:
+            batch_size = shape[0]
+            result = empty(shape, dtype=a_arr._dtype)
+            for i in range(batch_size):
+                try:
+                    result[i] = ndarray(_gauss_jordan_inv(a_arr[i].tolist()))
+                except LinAlgError:
+                    try:
+                        result[i] = linalg_module.pinv(a_arr[i])
+                    except (ValueError, LinAlgError):
+                        result[i] = ndarray(_pinv_general(a_arr[i].tolist()))
+            return result
+        
         return ndarray(_inv_nested(a_arr.tolist()))
 
     @staticmethod
@@ -273,7 +382,10 @@ class linalg_module:
         ord_val = ord if ord is not None else 2.0
         if ord == float('inf'):
             ord_val = None
-        return _wrap(_core.linalg.norm(_ensure(x), ord_val, axis))
+        result = _wrap(_core.linalg.norm(_ensure(x), ord_val, axis))
+        if hasattr(result, 'shape') and len(result.shape) == 0:
+            return float(result.tolist())
+        return result
 
     @staticmethod
     def solve(a, b):
@@ -293,13 +405,19 @@ class linalg_module:
                 try:
                     result[i] = _wrap(_core.linalg.solve(_ensure(a_arr[i]), _ensure(b_arr[i])))
                 except ValueError:
-                    result[i] = b_arr[i] / a_arr[i]
+                    res = _gauss_jordan_solve(a_arr[i].tolist(), b_arr[i].tolist())
+                    result[i] = ndarray(res)
             return result
         
         try:
             return _wrap(_core.linalg.solve(_ensure(a), _ensure(b)))
         except ValueError:
-            return b_arr / a_arr
+            try:
+                res = _gauss_jordan_solve(a_arr.tolist(), b_arr.tolist())
+                return ndarray(res)
+            except LinAlgError:
+                res = _solve_pinv(a_arr.tolist(), b_arr.tolist())
+                return ndarray(res)
 
     @staticmethod
     def lstsq(a, b, rcond=None):
@@ -316,10 +434,13 @@ class linalg_module:
         at = a_arr.T
         ata = linalg_module.matmul(at, a_arr)
         atb = linalg_module.matmul(at, b_arr)
-        x = linalg_module.solve(ata, atb)
+        try:
+            x = linalg_module.solve(ata, atb)
+        except LinAlgError:
+            x = linalg_module.matmul(linalg_module.pinv(ata), atb)
         rank = linalg_module.matrix_rank(a_arr)
         evals = _flatten_scalars(linalg_module.eigvals(ata).tolist())
-        svals = sorted((max(float(v), 0.0) ** 0.5 for v in evals), reverse=True)
+        svals = sorted((max(abs(v), 0.0) ** 0.5 for v in evals), reverse=True)
         s = ndarray(svals)
         a_shape = a_arr.shape
         m, n = (a_shape[0], a_shape[1]) if len(a_shape) == 2 else (0, 0)
@@ -328,7 +449,7 @@ class linalg_module:
             b_cols = 1 if b_is_1d else b_arr.shape[1]
             residuals = [0.0] * b_cols
             for idx, v in enumerate(diff):
-                residuals[idx % b_cols] += float(v) * float(v)
+                residuals[idx % b_cols] += abs(v) ** 2
             res = ndarray(residuals)
         else:
             res = ndarray([])
@@ -346,7 +467,7 @@ class linalg_module:
             return 0
         if not isinstance(rows[0], list):
             rows = [rows]
-        mat = [[float(v) for v in r] for r in rows]
+        mat = [[v for v in r] for r in rows]
         nrows = len(mat)
         ncols = len(mat[0])
         if tol is None:
@@ -431,7 +552,13 @@ class linalg_module:
     @staticmethod
     def eigvals(a):
         """计算矩阵的特征值。"""
-        return _wrap(_core.linalg.eigvals(_ensure(a)))
+        from ..__init__ import ndarray
+        a_arr = a if hasattr(a, '_array') else ndarray(a)
+        try:
+            return _wrap(_core.linalg.eigvals(_ensure(a)))
+        except ValueError:
+            evals, _ = _eig_general(a_arr.tolist())
+            return ndarray(evals)
 
     @staticmethod
     def svd(a):
@@ -465,7 +592,19 @@ class linalg_module:
     @staticmethod
     def pinv(a):
         """计算矩阵的伪逆。"""
-        return _wrap(_core.linalg.pinv(_ensure(a)))
+        from ..__init__ import ndarray
+        from .._extra import diag as _diag
+        a_arr = a if hasattr(a, '_array') else ndarray(a)
+        try:
+            return _wrap(_core.linalg.pinv(_ensure(a)))
+        except ValueError:
+            try:
+                u, s, vt = linalg_module.svd(a_arr)
+                tol = max(a_arr.shape) * max(s.tolist()) * 1e-15
+                s_inv = ndarray([1.0 / si if si > tol else 0.0 for si in s.tolist()])
+                return linalg_module.matmul(linalg_module.matmul(vt.T, _diag(s_inv)), u.T)
+            except ValueError:
+                return ndarray(_pinv_general(a_arr.tolist()))
 
     @staticmethod
     def trace(a):
@@ -496,6 +635,20 @@ class linalg_module:
     def solve_banded(lower, upper, ab, b):
         """求解带状线性方程组。"""
         return _wrap(_core.linalg.solve_banded(lower, upper, _ensure(ab), _ensure(b)))
+
+
+def issymmetric(a, tol=None):
+    """判断矩阵是否对称。"""
+    from ..__init__ import ndarray
+    a_arr = a if hasattr(a, '_array') else ndarray(a)
+    if len(a_arr.shape) != 2 or a_arr.shape[0] != a_arr.shape[1]:
+        return False
+    at = a_arr.T
+    if tol is None:
+        diff = abs(a_arr - at)
+        return diff.max() < 1e-10
+    diff = abs(a_arr - at)
+    return diff.max() <= tol
 
 
 # 将 linalg_module 的公有方法同时暴露为模块级函数，

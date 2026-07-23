@@ -545,75 +545,57 @@ fn norm(_py: Python<'_>, x: &NdArray, ord: Option<f64>, axis: Option<isize>) -> 
             if ax >= shape.len() {
                 return Err(PyValueError::new_err("axis out of bounds".to_string()));
             }
-            if shape.len() == 2 {
-                let nrows = shape[0];
-                let ncols = shape[1];
-                if ax == 0 {
-                    let mut result = vec![0.0; ncols];
-                    for j in 0..ncols {
-                        let mut s = 0.0;
-                        for i in 0..nrows {
-                            let v = data[[i, j]];
-                            if ord == 1.0 {
-                                s += v.abs();
-                            } else if ord == 2.0 {
-                                s += v * v;
-                            } else if ord == f64::INFINITY {
-                                s = s.max(v.abs());
-                            } else {
-                                return Err(PyValueError::new_err(format!(
-                                    "Unsupported norm order: {}",
-                                    ord
-                                )));
-                            }
-                        }
-                        if ord == 2.0 {
-                            s = s.sqrt();
-                        }
-                        result[j] = s;
-                    }
-                    let arr = Array::from_shape_vec(IxDyn(&[ncols]), result)
-                        .map_err(|e| PyValueError::new_err(e.to_string()))?;
-                    Ok(NdArray {
-                        imag: None,
-                        data: arr,
-                    })
-                } else {
-                    let mut result = vec![0.0; nrows];
-                    for i in 0..nrows {
-                        let mut s = 0.0;
-                        for j in 0..ncols {
-                            let v = data[[i, j]];
-                            if ord == 1.0 {
-                                s += v.abs();
-                            } else if ord == 2.0 {
-                                s += v * v;
-                            } else if ord == f64::INFINITY {
-                                s = s.max(v.abs());
-                            } else {
-                                return Err(PyValueError::new_err(format!(
-                                    "Unsupported norm order: {}",
-                                    ord
-                                )));
-                            }
-                        }
-                        if ord == 2.0 {
-                            s = s.sqrt();
-                        }
-                        result[i] = s;
-                    }
-                    let arr = Array::from_shape_vec(IxDyn(&[nrows]), result)
-                        .map_err(|e| PyValueError::new_err(e.to_string()))?;
-                    Ok(NdArray {
-                        imag: None,
-                        data: arr,
-                    })
+            let mut out_shape = shape.clone();
+            out_shape.remove(ax);
+            let out_size: usize = out_shape.iter().product();
+            let axis_size = shape[ax];
+            let mut result = vec![0.0; out_size];
+
+            #[allow(clippy::needless_range_loop)]
+            for i in 0..out_size {
+                let mut non_ax_indices: Vec<usize> = Vec::with_capacity(shape.len() - 1);
+                let mut temp = i;
+                let other_dims: Vec<usize> = shape
+                    .iter()
+                    .enumerate()
+                    .filter(|(d, _)| *d != ax)
+                    .map(|(_, &s)| s)
+                    .collect();
+                for &dim in other_dims.iter().rev() {
+                    non_ax_indices.push(temp % dim);
+                    temp /= dim;
                 }
-            } else {
-                Err(PyValueError::new_err(
-                    "norm with axis only supports 2D arrays",
-                ))
+                non_ax_indices.reverse();
+
+                let mut s = 0.0;
+                for k in 0..axis_size {
+                    let mut full_indices = non_ax_indices.clone();
+                    full_indices.insert(ax, k);
+                    let v = data[full_indices.as_slice()];
+                    if ord == 1.0 {
+                        s += v.abs();
+                    } else if ord == 2.0 {
+                        s += v * v;
+                    } else if ord == f64::INFINITY {
+                        s = s.max(v.abs());
+                    } else {
+                        return Err(PyValueError::new_err(format!(
+                            "Unsupported norm order: {}",
+                            ord
+                        )));
+                    }
+                }
+                if ord == 2.0 {
+                    s = s.sqrt();
+                }
+                result[i] = s;
             }
+            let arr = Array::from_shape_vec(IxDyn(out_shape.as_slice()), result)
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            Ok(NdArray {
+                imag: None,
+                data: arr,
+            })
         } else if shape.len() == 1 {
             if ord == 1.0 {
                 let val: f64 = data.iter().map(|v| v.abs()).sum();
@@ -679,10 +661,15 @@ fn norm(_py: Python<'_>, x: &NdArray, ord: Option<f64>, axis: Option<isize>) -> 
                 )))
             }
         } else {
-            Err(PyValueError::new_err(format!(
-                "norm not supported for {}D array",
-                shape.len()
-            )))
+            let val: f64 = if ord == 2.0 {
+                data.iter().map(|v| v * v).sum::<f64>().sqrt()
+            } else {
+                data.iter().map(|v| v.abs()).sum()
+            };
+            Ok(NdArray {
+                imag: None,
+                data: Array::from_elem(IxDyn(&[]), val),
+            })
         }
     })
 }

@@ -332,7 +332,7 @@ def get_index_dtype(arrays=(), maxval=None, check_contents=False):
     return np.int32
 
 
-def get_sum_dtype(dtype: np.dtype) -> np.dtype | type[np.generic]:
+def get_sum_dtype(dtype: np.dtype) -> np.dtype or type[np.generic]:
     """Mimic rsnumpy's casting for np.sum"""
     if dtype.kind == 'u' and np.can_cast(dtype, np.uint):
         return np.uint
@@ -568,7 +568,7 @@ def convert_pydata_sparse_to_scipy(
     return arg
 
 
-###############################################################################
+#############################################################################
 # Wrappers for rsnumpy types that are deprecated
 
 # rsnumpy versions of these functions raise deprecation warnings, the
@@ -583,7 +583,7 @@ def asmatrix(data, dtype=None):
         return data
     return np.asarray(data, dtype=dtype).view(np.matrix)
 
-###############################################################################
+#############################################################################
 
 
 def _todata(s) -> np.ndarray:

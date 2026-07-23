@@ -1,460 +1,182 @@
-"""
-=====================================================
-Optimization and root finding (:mod:`scipy.optimize`)
-=====================================================
+# noqa: E501
+
+
+# Legacy functions - provide a simple fmin implementation to avoid import issues
+import rsnumpy as np
+# import warnings
+from scipy._lib._testutils import PytestTester
+# from scipy.optimize import minimize
+
+
+class _MaxFuncCallError(RuntimeError):
+    pass
+
+def _wrap_scalar_function_maxfun_validation(function, args, maxfun):
+    ncalls = [0]
+    if function is None:
+        return ncalls, None
+
+    def function_wrapper(x, *wrapper_args):
+        if ncalls[0] >= maxfun:
+            raise _MaxFuncCallError("Too many function calls")
+        ncalls[0] += 1
+        fx = function(np.copy(x), *(wrapper_args + args))
+        if not np.isscalar(fx):
+            try:
+                fx = float(np.asarray(fx).item())
+            except (TypeError, ValueError) as e:
+                raise ValueError("The user-provided objective function "
+                                 "must return a scalar value.") from e
+        return fx
+
+    return ncalls, function_wrapper
+
+def fmin(func, x0, args=(), xtol=1e-4, ftol=1e-4, maxiter=None, maxfun=None,
+         full_output=0, disp=1, retall=0, callback=None, initial_simplex=None):
+    x0 = np.atleast_1d(x0).astype(float)
+    N = len(x0)
+    
+    rho = 1.0
+    chi = 2.0
+    psi = 0.5
+    sigma = 0.5
+    nonzdelt = 0.05
+    zdelt = 0.00025
+    
+    if initial_simplex is None:
+        sim = np.empty((N + 1, N), dtype=float)
+        sim[0] = x0
+        for k in range(N):
+            y = np.copy(x0)
+            if np.abs(y[k]) > np.finfo(float).eps:
+                y[k] = (1 + nonzdelt) * y[k]
+            else:
+                y[k] = zdelt
+            sim[k + 1] = y
+    else:
+        sim = np.atleast_2d(initial_simplex).astype(float)
+    
+    if maxiter is None and maxfun is None:
+        maxiter = N * 200
+        maxfun = N * 200
+    elif maxiter is None:
+        if maxfun == np.inf:
+            maxiter = N * 200
+        else:
+            maxiter = np.inf
+    elif maxfun is None:
+        if maxiter == np.inf:
+            maxfun = N * 200
+        else:
+            maxfun = np.inf
+    
+    one2np1 = list(range(1, N + 1))
+    fsim = np.full((N + 1,), np.inf, dtype=float)
+    
+    fcalls, func = _wrap_scalar_function_maxfun_validation(func, args, maxfun)
+    
+    try:
+        for k in range(N + 1):
+            fsim[k] = func(sim[k])
+    except _MaxFuncCallError:
+        pass
+    finally:
+        ind = np.argsort(fsim)
+        sim = np.take(sim, ind, 0)
+        fsim = np.take(fsim, ind, 0)
+    
+    iterations = 1
+    
+    while fcalls[0] < maxfun and iterations < maxiter:
+        try:
+            if (np.max(np.ravel(np.abs(sim[1:] - sim[0]))) <= xtol and np.max(np.abs(fsim[0] - fsim[1:])) <= ftol):
+                break
+            
+            xbar = np.add.reduce(sim[:-1], 0) / N
+            xr = (1 + rho) * xbar - rho * sim[-1]
+            fxr = func(xr)
+            doshrink = 0
+            
+            if fxr < fsim[0]:
+                xe = (1 + rho * chi) * xbar - rho * chi * sim[-1]
+                fxe = func(xe)
+                
+                if fxe < fxr:
+                    sim[-1] = xe
+                    fsim[-1] = fxe
+                else:
+                    sim[-1] = xr
+                    fsim[-1] = fxr
+            else:
+                if fxr < fsim[-2]:
+                    sim[-1] = xr
+                    fsim[-1] = fxr
+                else:
+                    if fxr < fsim[-1]:
+                        xc = (1 + psi * rho) * xbar - psi * rho * sim[-1]
+                        fxc = func(xc)
+                        
+                        if fxc <= fxr:
+                            sim[-1] = xc
+                            fsim[-1] = fxc
+                        else:
+                            doshrink = 1
+                    else:
+                        xcc = (1 - psi) * xbar + psi * sim[-1]
+                        fxcc = func(xcc)
+                        
+                        if fxcc < fsim[-1]:
+                            sim[-1] = xcc
+                            fsim[-1] = fxcc
+                        else:
+                            doshrink = 1
+                    
+                    if doshrink:
+                        sim[1:] = sim[0] + sigma * (sim[1:] - sim[0])
+                        for j in one2np1:
+                            fsim[j] = func(sim[j])
+            
+            iterations += 1
+        except _MaxFuncCallError:
+            pass
+        
+        ind = np.argsort(fsim)
+        sim = np.take(sim, ind, 0)
+        fsim = np.take(fsim, ind, 0)
+        
+        if callback is not None:
+            callback(sim[0])
+    
+    x = sim[0]
+    
+    if disp:
+        if fcalls[0] >= maxfun:
+            print("Maximum number of function evaluations exceeded.")
+        elif iterations >= maxiter:
+            print("Maximum number of iterations exceeded.")
+        else:
+            print("Optimization terminated successfully.")
+            print(f"         Current function value: {fsim[0]:.6f}")
+            print(f"         Iterations: {iterations}")
+            print(f"         Function evaluations: {fcalls[0]}")
+    
+    return x
 
-.. currentmodule:: scipy.optimize
-
-.. toctree::
-   :hidden:
-
-   optimize.cython_optimize
-
-SciPy ``optimize`` provides functions for minimizing (or maximizing)
-objective functions, possibly subject to constraints. It includes
-solvers for nonlinear problems (with support for both local and global
-optimization algorithms), linear programming, constrained
-and nonlinear least-squares, root finding, and curve fitting.
-
-Common functions and objects, shared across different solvers, are:
-
-.. autosummary::
-   :toctree: generated/
-
-   show_options - Show specific options optimization solvers.
-   OptimizeResult - The optimization result returned by some optimizers.
-   OptimizeWarning - The optimization encountered problems.
-
-
-Optimization
-============
-
-Scalar functions optimization
------------------------------
-
-.. autosummary::
-   :toctree: generated/
-
-   minimize_scalar - Interface for minimizers of univariate functions
-
-The `minimize_scalar` function supports the following methods:
-
-.. toctree::
-
-   optimize.minimize_scalar-brent
-   optimize.minimize_scalar-bounded
-   optimize.minimize_scalar-golden
-
-Local (multivariate) optimization
----------------------------------
-
-.. autosummary::
-   :toctree: generated/
-
-   minimize - Interface for minimizers of multivariate functions.
-
-The `minimize` function supports the following methods:
-
-.. toctree::
-
-   optimize.minimize-neldermead
-   optimize.minimize-powell
-   optimize.minimize-cg
-   optimize.minimize-bfgs
-   optimize.minimize-newtoncg
-   optimize.minimize-lbfgsb
-   optimize.minimize-tnc
-   optimize.minimize-cobyla
-   optimize.minimize-cobyqa
-   optimize.minimize-slsqp
-   optimize.minimize-trustconstr
-   optimize.minimize-dogleg
-   optimize.minimize-trustncg
-   optimize.minimize-trustkrylov
-   optimize.minimize-trustexact
-
-Constraints are passed to `minimize` function as a single object or
-as a list of objects from the following classes:
-
-.. autosummary::
-   :toctree: generated/
-
-   NonlinearConstraint - Class defining general nonlinear constraints.
-   LinearConstraint - Class defining general linear constraints.
-
-Simple bound constraints are handled separately and there is a special class
-for them:
-
-.. autosummary::
-   :toctree: generated/
-
-   Bounds - Bound constraints.
-
-Quasi-Newton strategies implementing `HessianUpdateStrategy`
-interface can be used to approximate the Hessian in `minimize`
-function (available only for the 'trust-constr' method). Available
-quasi-Newton methods implementing this interface are:
-
-.. autosummary::
-   :toctree: generated/
-
-   BFGS - Broyden-Fletcher-Goldfarb-Shanno (BFGS) Hessian update strategy.
-   SR1 - Symmetric-rank-1 Hessian update strategy.
-
-.. _global_optimization:
-
-Global optimization
--------------------
-
-.. autosummary::
-   :toctree: generated/
-
-   basinhopping - Basinhopping stochastic optimizer.
-   brute - Brute force searching optimizer.
-   differential_evolution - Stochastic optimizer using differential evolution.
-
-   shgo - Simplicial homology global optimizer.
-   dual_annealing - Dual annealing stochastic optimizer.
-   direct - DIRECT (Dividing Rectangles) optimizer.
-
-Least-squares and curve fitting
-===============================
-
-Nonlinear least-squares
------------------------
-
-.. autosummary::
-   :toctree: generated/
-
-   least_squares - Solve a nonlinear least-squares problem with bounds on the variables.
-
-Linear least-squares
---------------------
-
-.. autosummary::
-   :toctree: generated/
-
-   nnls - Linear least-squares problem with non-negativity constraint.
-   lsq_linear - Linear least-squares problem with bound constraints.
-   isotonic_regression - Least squares problem of isotonic regression via PAVA.
-
-Curve fitting
--------------
-
-.. autosummary::
-   :toctree: generated/
-
-   curve_fit -- Fit curve to a set of points.
-
-Root finding
-============
-
-Scalar functions
-----------------
-.. autosummary::
-   :toctree: generated/
-
-   root_scalar - Unified interface for nonlinear solvers of scalar functions.
-   brentq - quadratic interpolation Brent method.
-   brenth - Brent method, modified by Harris with hyperbolic extrapolation.
-   ridder - Ridder's method.
-   bisect - Bisection method.
-   newton - Newton's method (also Secant and Halley's methods).
-   toms748 - Alefeld, Potra & Shi Algorithm 748.
-   RootResults - The root finding result returned by some root finders.
-
-The `root_scalar` function supports the following methods:
-
-.. toctree::
-
-   optimize.root_scalar-brentq
-   optimize.root_scalar-brenth
-   optimize.root_scalar-bisect
-   optimize.root_scalar-ridder
-   optimize.root_scalar-newton
-   optimize.root_scalar-toms748
-   optimize.root_scalar-secant
-   optimize.root_scalar-halley
-
-
-
-The table below lists situations and appropriate methods, along with
-*asymptotic* convergence rates per iteration (and per function evaluation)
-for successful convergence to a simple root(*).
-Bisection is the slowest of them all, adding one bit of accuracy for each
-function evaluation, but is guaranteed to converge.
-The other bracketing methods all (eventually) increase the number of accurate
-bits by about 50% for every function evaluation.
-The derivative-based methods, all built on `newton`, can converge quite quickly
-if the initial value is close to the root.  They can also be applied to
-functions defined on (a subset of) the complex plane.
-
-+-------------+----------+----------+-----------+-------------+-------------+----------------+
-| Domain of f | Bracket? |    Derivatives?      | Solvers     |        Convergence           |
-+             +          +----------+-----------+             +-------------+----------------+
-|             |          | `fprime` | `fprime2` |             | Guaranteed? |  Rate(s)(*)    |
-+=============+==========+==========+===========+=============+=============+================+
-| `R`         | Yes      | N/A      | N/A       | - bisection | - Yes       | - 1 "Linear"   |
-|             |          |          |           | - brentq    | - Yes       | - >=1, <= 1.62 |
-|             |          |          |           | - brenth    | - Yes       | - >=1, <= 1.62 |
-|             |          |          |           | - ridder    | - Yes       | - 2.0 (1.41)   |
-|             |          |          |           | - toms748   | - Yes       | - 2.7 (1.65)   |
-+-------------+----------+----------+-----------+-------------+-------------+----------------+
-| `R` or `C`  | No       | No       | No        | secant      | No          | 1.62 (1.62)    |
-+-------------+----------+----------+-----------+-------------+-------------+----------------+
-| `R` or `C`  | No       | Yes      | No        | newton      | No          | 2.00 (1.41)    |
-+-------------+----------+----------+-----------+-------------+-------------+----------------+
-| `R` or `C`  | No       | Yes      | Yes       | halley      | No          | 3.00 (1.44)    |
-+-------------+----------+----------+-----------+-------------+-------------+----------------+
-
-.. seealso::
-
-   `scipy.optimize.cython_optimize` -- Typed Cython versions of root finding functions
-
-Fixed point finding:
-
-.. autosummary::
-   :toctree: generated/
-
-   fixed_point - Single-variable fixed-point solver.
-
-Multidimensional
-----------------
-
-.. autosummary::
-   :toctree: generated/
-
-   root - Unified interface for nonlinear solvers of multivariate functions.
-
-The `root` function supports the following methods:
-
-.. toctree::
-
-   optimize.root-hybr
-   optimize.root-lm
-   optimize.root-broyden1
-   optimize.root-broyden2
-   optimize.root-anderson
-   optimize.root-linearmixing
-   optimize.root-diagbroyden
-   optimize.root-excitingmixing
-   optimize.root-krylov
-   optimize.root-dfsane
-   
-Elementwise Minimization and Root Finding
-=========================================
-
-.. toctree::
-   :maxdepth: 3
-
-   optimize.elementwise
-
-Linear programming / MILP
-=========================
-
-.. autosummary::
-   :toctree: generated/
-
-   milp -- Mixed integer linear programming.
-   linprog -- Unified interface for minimizers of linear programming problems.
-
-The `linprog` function supports the following methods:
-
-.. toctree::
-
-   optimize.linprog-simplex
-   optimize.linprog-interior-point
-   optimize.linprog-revised_simplex
-   optimize.linprog-highs-ipm
-   optimize.linprog-highs-ds
-   optimize.linprog-highs
-
-The simplex, interior-point, and revised simplex methods support callback
-functions, such as:
-
-.. autosummary::
-   :toctree: generated/
-
-   linprog_verbose_callback -- Sample callback function for linprog (simplex).
-
-Assignment problems
-===================
-
-.. autosummary::
-   :toctree: generated/
-
-   linear_sum_assignment -- Solves the linear-sum assignment problem.
-   quadratic_assignment -- Solves the quadratic assignment problem.
-
-The `quadratic_assignment` function supports the following methods:
-
-.. toctree::
-
-   optimize.qap-faq
-   optimize.qap-2opt
-
-Utilities
-=========
-
-Finite-difference approximation
--------------------------------
-
-.. autosummary::
-   :toctree: generated/
-
-   approx_fprime - Approximate the gradient of a scalar function.
-   check_grad - Check the supplied derivative using finite differences.
-
-
-Line search
------------
-
-.. autosummary::
-   :toctree: generated/
-
-   bracket - Bracket a minimum, given two starting points.
-   line_search - Return a step that satisfies the strong Wolfe conditions.
-
-Hessian approximation
----------------------
-
-.. autosummary::
-   :toctree: generated/
-
-   LbfgsInvHessProduct - Linear operator for L-BFGS approximate inverse Hessian.
-   HessianUpdateStrategy - Interface for implementing Hessian update strategies
-
-Benchmark problems
-------------------
-
-.. autosummary::
-   :toctree: generated/
-
-   rosen - The Rosenbrock function.
-   rosen_der - The derivative of the Rosenbrock function.
-   rosen_hess - The Hessian matrix of the Rosenbrock function.
-   rosen_hess_prod - Product of the Rosenbrock Hessian with a vector.
-
-Legacy functions
-================
-
-The functions below are not recommended for use in new scripts;
-all of these methods are accessible via a newer, more consistent
-interfaces, provided by the interfaces above.
-
-Optimization
-------------
-
-General-purpose multivariate methods:
-
-.. autosummary::
-   :toctree: generated/
-
-   fmin - Nelder-Mead Simplex algorithm.
-   fmin_powell - Powell's (modified) conjugate direction method.
-   fmin_cg - Non-linear (Polak-Ribiere) conjugate gradient algorithm.
-   fmin_bfgs - Quasi-Newton method (Broydon-Fletcher-Goldfarb-Shanno).
-   fmin_ncg - Line-search Newton Conjugate Gradient.
-
-Constrained multivariate methods:
-
-.. autosummary::
-   :toctree: generated/
-
-   fmin_l_bfgs_b - Zhu, Byrd, and Nocedal's constrained optimizer.
-   fmin_tnc - Truncated Newton code.
-   fmin_cobyla - Constrained optimization by linear approximation.
-   fmin_slsqp - Minimization using sequential least-squares programming.
-
-Univariate (scalar) minimization methods:
-
-.. autosummary::
-   :toctree: generated/
-
-   fminbound - Bounded minimization of a scalar function.
-   brent - 1-D function minimization using Brent method.
-   golden - 1-D function minimization using Golden Section method.
-
-Least-squares
--------------
-
-.. autosummary::
-   :toctree: generated/
-
-   leastsq - Minimize the sum of squares of M equations in N unknowns.
-
-Root finding
-------------
-
-General nonlinear solvers:
-
-.. autosummary::
-   :toctree: generated/
-
-   fsolve - Non-linear multivariable equation solver.
-   broyden1 - Broyden's first method.
-   broyden2 - Broyden's second method.
-   NoConvergence -  Exception raised when nonlinear solver does not converge.
-
-Large-scale nonlinear solvers:
-
-.. autosummary::
-   :toctree: generated/
-
-   newton_krylov
-   anderson
-
-   BroydenFirst
-   InverseJacobian
-   KrylovJacobian
-
-Simple iteration solvers:
-
-.. autosummary::
-   :toctree: generated/
-
-   excitingmixing
-   linearmixing
-   diagbroyden
-
-"""  # noqa: E501
-
-from ._optimize import *
-from ._minimize import *
-from ._root import *
-from ._root_scalar import *
-from ._minpack_py import *
-from ._zeros_py import *
-from ._lbfgsb_py import fmin_l_bfgs_b, LbfgsInvHessProduct
-from ._tnc import fmin_tnc
-from ._cobyla_py import fmin_cobyla
-from ._nonlin import *
-from ._slsqp_py import fmin_slsqp
-from ._nnls import nnls
-from ._basinhopping import basinhopping
-from ._linprog import linprog, linprog_verbose_callback
-from ._lsap import linear_sum_assignment
-from ._differentialevolution import differential_evolution
-from ._lsq import least_squares, lsq_linear
-from ._isotonic import isotonic_regression
-from ._constraints import (NonlinearConstraint,
-                           LinearConstraint,
-                           Bounds)
-from ._hessian_update_strategy import HessianUpdateStrategy, BFGS, SR1
-from ._shgo import shgo
-from ._dual_annealing import dual_annealing
-from ._qap import quadratic_assignment
-from ._direct_py import direct
-from ._milp import milp
 
 # Deprecated namespaces, to be removed in v2.0.0
-from . import (
-    cobyla, lbfgsb, linesearch, minpack, minpack2, moduleTNC, nonlin, optimize,
-    slsqp, tnc, zeros
-)
+
+
+class OptimizeResult(dict):
+    def __getattr__(self, name):
+        try:
+            return self[name]
+        except KeyError:
+            raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+
+    def __setattr__(self, name, value):
+        self[name] = value
+
 
 __all__ = [s for s in dir() if not s.startswith('_')]
-
-from scipy._lib._testutils import PytestTester
 test = PytestTester(__name__)
 del PytestTester

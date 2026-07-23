@@ -1,6 +1,12 @@
 """rsnumpy.random - 随机数生成模块"""
 
-import rsnumpy._core as _core
+import rsnumpy.num_core as _core
+
+
+class mtrand_module:
+    """mtrand 模块，提供全局随机数生成器"""
+    def __init__(self):
+        self._rand = _core.random.RandomState(None)
 
 
 class random_module:
@@ -8,10 +14,15 @@ class random_module:
 
     def __init__(self):
         self._random = _core.random
+        self.mtrand = mtrand_module()
 
     @property
     def Generator(self):
         return _core.random.Generator
+
+    @property
+    def RandomState(self):
+        return _core.random.RandomState
 
     def default_rng(self, seed=None):
         """创建默认的随机数生成器（新 API）。

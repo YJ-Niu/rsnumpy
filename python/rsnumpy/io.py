@@ -1,6 +1,6 @@
 """I/O 模块 - 所有实现位于 Rust，这里仅保留薄包装。"""
 
-import rsnumpy._core as _core
+import rsnumpy.num_core as _core
 
 
 def _get_ndarray():

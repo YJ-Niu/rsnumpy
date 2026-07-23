@@ -7,7 +7,7 @@
 import cmath as _cmath
 import math as _math
 
-import rsnumpy._core as _core
+import rsnumpy.num_core as _core
 
 builtin_max = max
 builtin_min = min
@@ -528,6 +528,8 @@ def iterable(y):
 
 def iscomplexobj(x):
     """判断对象是否为复数类型。"""
+    if isinstance(x, complex):
+        return True
     if getattr(x, "_complex_data", None) is not None:
         return True
     return getattr(x, "_dtype", "") in ("complex128", "complex64")
@@ -642,6 +644,8 @@ def angle(z, deg=False):
     """返回复数的相位角。"""
     np = _np()
     factor = 180.0 / _math.pi if deg else 1.0
+    if isinstance(z, complex):
+        return np.array([_math.atan2(z.imag, z.real) * factor])
     if iscomplexobj(z):
         cdata = getattr(z, "_complex_data", None)
         if cdata is not None:
@@ -1381,18 +1385,59 @@ def vander(x, N=None, increasing=False):
 
 def unwrap(p, discont=None, axis=-1, period=6.283185307179586):
     """相位解卷绕。"""
-    _ = axis
     np = _np()
-    data = _flat(p)
+    arr = _asarray(p)
+    shape = arr.shape
+    ndim = len(shape)
+    
+    if axis < 0:
+        axis = ndim + axis
+    
     if discont is None:
         discont = period / 2.0
-    out = list(data)
-    for i in range(1, len(out)):
-        delta = out[i] - out[i - 1]
-        steps = builtin_round(delta / period)
-        if abs(delta - steps * period) > discont or abs(delta) > discont:
-            out[i] -= steps * period
-    return np.array(out)
+    
+    if ndim == 0:
+        return arr
+    
+    data = arr.tolist()
+    
+    def unwrap_1d(seq):
+        out = list(seq)
+        for i in range(1, len(out)):
+            delta = out[i] - out[i - 1]
+            steps = builtin_round(delta / period)
+            if abs(delta - steps * period) > discont or abs(delta) > discont:
+                out[i] -= steps * period
+        return out
+    
+    if ndim == 1:
+        result = unwrap_1d(data)
+    elif ndim == 2:
+        if axis == 0:
+            result = [unwrap_1d([data[i][j] for i in range(shape[0])]) for j in range(shape[1])]
+            result = [[result[j][i] for j in range(shape[1])] for i in range(shape[0])]
+        else:
+            result = [unwrap_1d(row) for row in data]
+    elif ndim == 3:
+        if axis == 0:
+            result = [[[data[i][j][k] for i in range(shape[0])] for j in range(shape[1])] for k in range(shape[2])]
+            result = [[unwrap_1d(result[k][j]) for j in range(shape[1])] for k in range(shape[2])]
+            result = [[[result[k][j][i] for k in range(shape[2])] for j in range(shape[1])] for i in range(shape[0])]
+        elif axis == 1:
+            result = [[unwrap_1d(data[i][j]) for j in range(shape[1])] for i in range(shape[0])]
+        else:
+            result = [[unwrap_1d(row) for row in data[i]] for i in range(shape[0])]
+    else:
+        data = _flat(arr)
+        out = list(data)
+        for i in range(1, len(out)):
+            delta = out[i] - out[i - 1]
+            steps = builtin_round(delta / period)
+            if abs(delta - steps * period) > discont or abs(delta) > discont:
+                out[i] -= steps * period
+        result = out
+    
+    return np.array(result)
 
 
 # ========== 归约：all / any / round（顶层函数）==========
@@ -2509,6 +2554,110 @@ def einsum(subscripts, *operands, **kwargs):
             for j in range(m):
                 result[i, j] = arr[i, j, j]
         return result
+
+    if subscripts == 'kii->ki':
+        arr = _asarray(operands[0])
+        n, m, _ = arr.shape
+        result = np.zeros((n, m), dtype=arr.dtype)
+        for i in range(n):
+            for j in range(m):
+                result[i, j] = arr[i, j, j]
+        
+        class _KiiKiView:
+            def __init__(self, arr, result):
+                self._arr = arr
+                self._result = result
+                self.shape = result.shape
+                self.dtype = result.dtype
+            
+            def __array__(self):
+                return self._result
+            
+            def __getitem__(self, key):
+                return self._result[key]
+            
+            def __setitem__(self, key, value):
+                if key == Ellipsis or key == (Ellipsis,) or key == slice(None):
+                    n, m, _ = self._arr.shape
+                    try:
+                        val_array = np.array(value)
+                        val_shape = val_array.shape
+                        
+                        if val_shape == (n, m):
+                            for i in range(n):
+                                for j in range(m):
+                                    self._arr[i, j, j] = val_array[i, j]
+                        elif val_shape == (m,):
+                            for i in range(n):
+                                for j in range(m):
+                                    self._arr[i, j, j] = val_array[j]
+                        elif val_shape == (n,):
+                            for i in range(n):
+                                for j in range(m):
+                                    self._arr[i, j, j] = val_array[i]
+                        else:
+                            for i in range(n):
+                                for j in range(m):
+                                    self._arr[i, j, j] = value
+                    except (TypeError, IndexError):
+                        for i in range(n):
+                            for j in range(m):
+                                self._arr[i, j, j] = value
+                else:
+                    raise NotImplementedError('Complex slice assignment not supported')
+        
+        return _KiiKiView(arr, result)
+
+    if '...' in subscripts:
+        arr = _asarray(operands[0])
+        if subscripts == '...ii->...i':
+            diag_dims = arr.shape[-2:]
+            if diag_dims[0] != diag_dims[1]:
+                raise ValueError('Last two dimensions must be equal for ...ii->...i')
+            result_shape = arr.shape[:-2] + (diag_dims[0],)
+            result = np.zeros(result_shape, dtype=arr.dtype)
+            for i in range(diag_dims[0]):
+                result[..., i] = arr[..., i, i]
+            
+            class _EllipsisDiagView:
+                def __init__(self, arr, result):
+                    self._arr = arr
+                    self._result = result
+                    self.shape = result.shape
+                    self.dtype = result.dtype
+                
+                def __array__(self):
+                    return self._result
+                
+                def __getitem__(self, key):
+                    return self._result[key]
+                
+                def __setitem__(self, key, value):
+                    if key == Ellipsis or key == (Ellipsis,) or key == slice(None):
+                        n = arr.shape[-1]
+                        try:
+                            val_array = np.array(value)
+                            val_shape = val_array.shape
+                            
+                            if val_shape == result_shape:
+                                for i in range(n):
+                                    self._arr[..., i, i] = val_array[..., i]
+                            elif val_shape == (n,):
+                                for i in range(n):
+                                    self._arr[..., i, i] = val_array[i]
+                            elif len(val_shape) == len(result_shape) - 1:
+                                for i in range(n):
+                                    self._arr[..., i, i] = val_array[...]
+                            else:
+                                for i in range(n):
+                                    self._arr[..., i, i] = value
+                        except (TypeError, IndexError):
+                            for i in range(n):
+                                self._arr[..., i, i] = value
+                    else:
+                        raise NotImplementedError('Complex slice assignment not supported')
+            
+            return _EllipsisDiagView(arr, result)
     
     if '->' in subscripts:
         ins, out = subscripts.split('->')

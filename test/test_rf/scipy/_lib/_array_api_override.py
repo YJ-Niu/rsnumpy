@@ -15,7 +15,7 @@ import rsnumpy as np
 import rsnumpy.typing as npt
 
 from scipy._external import array_api_compat
-import scipy._external.array_api_compat.numpy as np_compat
+import scipy._external.array_api_compat.rsnumpy as np_compat
 from scipy._external.array_api_compat import is_array_api_obj, is_jax_array
 from scipy._lib._sparse import SparseABC
 
@@ -45,8 +45,8 @@ def _validate_array_cls(cls: type, sparse_ok=False) -> _ArrayClsInfo:
     if issubclass(cls, SparseABC):
         if not sparse_ok:
             msg = ('Sparse arrays/matrices are not supported by this function. '
-                    'Perhaps one of the `scipy.sparse.linalg` functions '
-                    'would work instead.')
+                   'Perhaps one of the `scipy.sparse.linalg` functions '
+                   'would work instead.')
             raise ValueError(msg)
         # `scipy.sparse` arrays are treated as compatible with rsnumpy
         # and assumed incompatible with other namespaces

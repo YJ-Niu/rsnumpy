@@ -2,7 +2,7 @@
 
 import builtins as _builtins
 
-import rsnumpy._core as _core
+import rsnumpy.num_core as _core
 
 
 def _nd():
@@ -16,7 +16,10 @@ def _is_ndarray(obj):
 
 def _wrap(result):
     if hasattr(result, 'ndim') and result.ndim == 0:
-        return result.tolist()
+        val = result.tolist()
+        if isinstance(val, float) and val.is_integer():
+            return int(val)
+        return val
     return _nd()(result)
 
 
@@ -113,8 +116,7 @@ def sum(a, axis=None, dtype=None, out=None, keepdims=False, initial=None, where=
     """计算数组元素之和。"""
     _ = dtype, out, keepdims, initial, where
     raw_result = _core.sum(_ensure_raw(a), axis)
-    arr_dtype = getattr(a, '_dtype', 'float64') if hasattr(a, '_dtype') else 'float64'
-    return _nd()(raw_result, _dtype=arr_dtype)
+    return _wrap(raw_result)
 
 
 def mean(a, axis=None, dtype=None, out=None, keepdims=False, where=True):
