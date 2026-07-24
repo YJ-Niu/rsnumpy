@@ -400,9 +400,70 @@ def searchsorted(a, v, side='left', sorter=None):
     """查找元素在有序数组中的插入位置。"""
     _ = sorter
     arr = a if hasattr(a, '_array') else _wrap(a)
-    if hasattr(v, '_array') and len(v.shape) == 0:
-        v = float(v.item())
-    return _core.searchsorted(_ensure_raw(arr), v, side)
+    
+    a_shape = arr.shape
+    a_ndim = len(a_shape)
+    
+    if hasattr(v, '_array'):
+        v_arr = v
+        v_is_scalar = len(v_arr.shape) == 0
+    else:
+        try:
+            v_arr = _nd()(v)
+            v_is_scalar = len(v_arr.shape) == 0
+        except:
+            v_arr = None
+            v_is_scalar = True
+    
+    if a_ndim == 1 or a_ndim == 0:
+        if v_is_scalar:
+            v_val = float(v.item()) if hasattr(v, 'item') else float(v)
+            return _core.searchsorted(_ensure_raw(arr), v_val, side)
+        
+        result = []
+        for val in v_arr.tolist():
+            if isinstance(val, (list, tuple)):
+                result.append([_core.searchsorted(_ensure_raw(arr), float(x), side) for x in val])
+            else:
+                result.append(_core.searchsorted(_ensure_raw(arr), float(val), side))
+        
+        return _nd()(result, _dtype='int64')
+    
+    else:
+        axis = -1
+        outer_shape = a_shape[:axis]
+        outer_size = 1
+        for s in outer_shape:
+            outer_size *= s
+        
+        flat_a = arr.tolist()
+        if not isinstance(flat_a[0], (list, tuple)):
+            flat_a = [flat_a]
+        
+        if v_is_scalar:
+            v_val = float(v.item()) if hasattr(v, 'item') else float(v)
+            result = []
+            for row in flat_a:
+                row_arr = _nd()(row)
+                idx = _core.searchsorted(_ensure_raw(row_arr), v_val, side)
+                result.append(idx)
+            return _nd()(result, _dtype='int64').reshape(outer_shape)
+        
+        v_flat = v_arr.tolist()
+        if not isinstance(v_flat[0], (list, tuple)):
+            v_flat = [v_flat]
+        
+        result = []
+        for i, row in enumerate(flat_a):
+            row_arr = _nd()(row)
+            v_row = v_flat[i % len(v_flat)]
+            row_result = []
+            for val in v_row:
+                idx = _core.searchsorted(_ensure_raw(row_arr), float(val), side)
+                row_result.append(idx)
+            result.append(row_result)
+        
+        return _nd()(result, _dtype='int64')
 
 
 def extract(condition, a):

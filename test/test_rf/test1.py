@@ -19,8 +19,8 @@ MSL200_raw = rf.Network('./test/test_rf/skrf/data/MSL200.s2p')
 MSL100 = MSL100_raw['1-5000mhz']
 MSL200 = MSL200_raw['1-5000mhz']
 
-# plt.figure()
-# plt.title('Measured data')
-# MSL100.plot_s_db()
-# MSL200.plot_s_db()
-# ssaver('./test/test_rf/test_data/test1.png')
+plt.figure()
+plt.title('Measured data')
+MSL100.plot_s_db()
+MSL200.plot_s_db()
+ssaver('./test/test_rf/test_data/test1.png')
