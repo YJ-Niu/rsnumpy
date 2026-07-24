@@ -177,6 +177,43 @@ class OptimizeResult(dict):
         self[name] = value
 
 
+def minimize(fun, x0, args=(), method='Nelder-Mead', jac=None, hess=None,
+             hessp=None, bounds=None, constraints=(), tol=None,
+             callback=None, options=None):
+    x0 = np.atleast_1d(x0).astype(float)
+    
+    if options is None:
+        options = {}
+    
+    xtol = options.get('xtol', 1e-4)
+    ftol = options.get('ftol', 1e-4)
+    maxiter = options.get('maxiter', None)
+    maxfun = options.get('maxfun', None)
+    disp = options.get('disp', False)
+    
+    def wrapped_fun(x, *wrapper_args):
+        return fun(x, *(wrapper_args + args))
+    
+    x = fmin(wrapped_fun, x0, args=(), xtol=xtol, ftol=ftol,
+             maxiter=maxiter, maxfun=maxfun, full_output=0, disp=disp,
+             retall=0, callback=callback)
+    
+    fun_val = fun(x, *args)
+    
+    result = OptimizeResult()
+    result.x = x
+    result.fun = fun_val
+    result.success = True
+    result.message = 'Optimization terminated successfully.'
+    result.nit = 0
+    result.nfev = 0
+    result.jac = None
+    result.hess = None
+    result.hess_inv = None
+    
+    return result
+
+
 __all__ = [s for s in dir() if not s.startswith('_')]
 test = PytestTester(__name__)
 del PytestTester

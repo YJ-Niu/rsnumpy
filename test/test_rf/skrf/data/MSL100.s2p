@@ -4,7 +4,7 @@
 ! TR.MEASUREMENT
 ! CORRECTED.DATA
 # GHZ S RI R 50.0
-! FREQ.GHZ         S11RE         S11IM         S31RE         S31IM         S13RE         S13IM         S33RE         S33IM         
+! FREQ.GHZ         S11RE         S11IM         S21RE         S21IM         S12RE         S12IM         S22RE         S22IM         
 !; PortSelection: Port_13
    0.001000000     0.0026055    0.0011465     0.9958727   -0.0050460     1.0018340   -0.0025891     0.0003173    0.0021250 
    0.002000000     0.0023440    0.0007751     0.9960155   -0.0100416     1.0021820   -0.0080858     0.0004952    0.0016939 

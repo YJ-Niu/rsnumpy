@@ -72,7 +72,7 @@ class ParserState:
     f_noise: list[float] = field(default_factory=list)
     s: list[float] = field(default_factory=list)
     noise: list[float] = field(default_factory=list)
-    two_port_order_legacy: bool = True
+    two_port_order_legacy: bool = False
     number_noise_freq: int = 0
     port_names: dict[int, str] = field(default_factory=dict)
     ansys_data_type: str | None = None

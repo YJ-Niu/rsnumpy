@@ -178,51 +178,94 @@ def _make_scipy_interpolate():
 
     interpolate = types.ModuleType("scipy.interpolate")
 
+    def _do_extrapolate(fill_value):
+        return isinstance(fill_value, str) and fill_value == 'extrapolate'
+
     class interp1d:
-        def __init__(self, x, y, kind='linear', **kwargs):
+        def __init__(self, x, y, kind='linear', axis=-1, copy=True, 
+                     bounds_error=None, fill_value=_np.nan, assume_sorted=False):
             self.x = x if hasattr(x, 'tolist') else _np.array(x)
             self.y = y if hasattr(y, 'tolist') else _np.array(y)
             self.kind = kind
+            self.bounds_error = bounds_error
+            self.fill_value = fill_value
+            self._extrapolate = _do_extrapolate(fill_value)
 
-        def __call__(self, x_new):
+            if not assume_sorted:
+                ind = _np.argsort(self.x)
+                self.x = self.x[ind]
+                self.y = _np.take(self.y, ind, axis=axis)
+
+            self.axis = axis % self.y.ndim if self.y.ndim > 0 else 0
+            self._y = self.y
+            if self.y.ndim > 1 and self.axis != 0:
+                axes = list(range(self.y.ndim))
+                axes[0], axes[self.axis] = axes[self.axis], axes[0]
+                self._y = self.y.transpose(axes)
+
+        def _check_bounds(self, x_new):
+            below_bounds = x_new < self.x[0]
+            above_bounds = x_new > self.x[-1]
+            return below_bounds, above_bounds
+
+        def _call_linear(self, x_new):
+            x_new_indices = _np.searchsorted(self.x, x_new)
+            x_new_indices = x_new_indices.clip(1, len(self.x)-1).astype(int)
+            
+            lo = x_new_indices - 1
+            hi = x_new_indices
+
+            x_lo = self.x[lo]
+            x_hi = self.x[hi]
+            y_lo = self._y[lo]
+            y_hi = self._y[hi]
+
+            t = (x_new - x_lo) / (x_hi - x_lo)
+            if self._y.ndim > 1:
+                t = t.reshape([len(t)] + [1] * (self._y.ndim - 1))
+            y_new = (1 - t) * y_lo + t * y_hi
+            return y_new
+
+        def _evaluate(self, x_new):
             x_new = x_new if hasattr(x_new, 'tolist') else _np.array(x_new)
-
-            x = self.x
-            y = self.y
-
+            
             if x_new.ndim == 0:
                 x_new_val = float(x_new.item())
-                if x_new_val <= x[0]:
-                    return y[0]
-                if x_new_val >= x[-1]:
-                    return y[-1]
+                if x_new_val <= self.x[0]:
+                    if self._extrapolate:
+                        return self.y[0]
+                    return self.fill_value
+                if x_new_val >= self.x[-1]:
+                    if self._extrapolate:
+                        return self.y[-1]
+                    return self.fill_value
+                
+                idx = _np.searchsorted(self.x, x_new_val)
+                idx = max(1, min(idx, len(self.x)-1))
+                lo, hi = idx - 1, idx
+                t = (x_new_val - self.x[lo]) / (self.x[hi] - self.x[lo])
+                y_new = (1 - t) * self.y[lo] + t * self.y[hi]
+                if self.y.ndim > 1:
+                    return y_new.squeeze()
+                return y_new
 
-                for i in range(len(x) - 1):
-                    if x[i] <= x_new_val <= x[i+1]:
-                        t = (x_new_val - x[i]) / (x[i+1] - x[i])
-                        return y[i] * (1 - t) + y[i+1] * t
+            y_new = self._call_linear(x_new)
 
-                return y[-1]
-            else:
-                if y.ndim > 1:
-                    result_shape = list(x_new.shape) + list(y.shape[1:])
-                    result = _np.empty(result_shape, dtype=y.dtype)
-                else:
-                    result = _np.empty_like(x_new)
+            if not self._extrapolate:
+                below_bounds, above_bounds = self._check_bounds(x_new)
+                if y_new.size > 0:
+                    y_new[below_bounds] = self.fill_value
+                    y_new[above_bounds] = self.fill_value
 
-                for i in range(len(x_new)):
-                    xi = float(x_new[i].item())
-                    if xi <= x[0]:
-                        result[i] = y[0]
-                    elif xi >= x[-1]:
-                        result[i] = y[-1]
-                    else:
-                        for j in range(len(x) - 1):
-                            if x[j] <= xi <= x[j+1]:
-                                t = (xi - x[j]) / (x[j+1] - x[j])
-                                result[i] = y[j] * (1 - t) + y[j+1] * t
-                                break
-                return result
+            if self.y.ndim > 1 and self.axis != 0:
+                axes = list(range(y_new.ndim))
+                axes[0], axes[self.axis] = axes[self.axis], axes[0]
+                y_new = y_new.transpose(axes)
+
+            return y_new
+
+        def __call__(self, x_new):
+            return self._evaluate(x_new)
 
     interpolate.interp1d = interp1d
     return interpolate

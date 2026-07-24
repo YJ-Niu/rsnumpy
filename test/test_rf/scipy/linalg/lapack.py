@@ -895,21 +895,95 @@ HAS_LP64 = not bool(CONFIG['Build Dependencies']['blas']['cython blas ilp64'])
 HAS_ILP64 = CONFIG['Build Dependencies']['lapack']['has ilp64']
 del CONFIG
 
-_flapack = None
-if HAS_LP64:
-    from scipy.linalg import _flapack
+class _MockLAPACK:
+    def __init__(self):
+        self._potrf = self._make_potrf()
+        self._getrf = self._make_getrf()
+        self._getri = self._make_getri()
+        self._lange = self._make_lange()
 
+    def _make_potrf(self):
+        def potrf(a, lower=False):
+            try:
+                if lower:
+                    result = np.linalg.cholesky(a)
+                else:
+                    result = np.linalg.cholesky(a.T).T
+                return result, 0
+            except np.linalg.LinAlgError:
+                return a, -1
+        potrf.module_name = 'flapack'
+        potrf.typecode = 'd'
+        potrf.dtype = np.dtype('float64')
+        potrf.int_dtype = np.dtype(np.intc)
+        potrf.prefix = 'd'
+        return potrf
+
+    def _make_getrf(self):
+        def getrf(a):
+            try:
+                lu, piv = np.linalg.lu_factor(a)
+                return lu, piv, 0
+            except np.linalg.LinAlgError:
+                return a, np.arange(a.shape[0]), -1
+        getrf.module_name = 'flapack'
+        getrf.typecode = 'd'
+        getrf.dtype = np.dtype('float64')
+        getrf.int_dtype = np.dtype(np.intc)
+        getrf.prefix = 'd'
+        return getrf
+
+    def _make_getri(self):
+        def getri(lu, piv):
+            try:
+                result = np.linalg.lu_solve((lu, piv), np.eye(lu.shape[0]))
+                return result, 0
+            except np.linalg.LinAlgError:
+                return lu, -1
+        getri.module_name = 'flapack'
+        getri.typecode = 'd'
+        getri.dtype = np.dtype('float64')
+        getri.int_dtype = np.dtype(np.intc)
+        getri.prefix = 'd'
+        return getri
+
+    def _make_lange(self):
+        def lange(norm_type, a):
+            if norm_type == 'f' or norm_type == 'F':
+                return np.sqrt(np.sum(a ** 2))
+            elif norm_type == '1':
+                return np.max(np.sum(np.abs(a), axis=0))
+            elif norm_type == 'i' or norm_type == 'I':
+                return np.max(np.sum(np.abs(a), axis=1))
+            elif norm_type == 'm' or norm_type == 'M':
+                return np.max(np.abs(a))
+            return np.linalg.norm(a)
+        lange.module_name = 'flapack'
+        lange.typecode = 'd'
+        lange.dtype = np.dtype('float64')
+        lange.int_dtype = np.dtype(np.intc)
+        lange.prefix = 'd'
+        return lange
+
+    def __getattr__(self, name):
+        if name.startswith('d'):
+            base_name = name[1:]
+            if base_name == 'potrf':
+                return self._potrf
+            elif base_name == 'getrf':
+                return self._getrf
+            elif base_name == 'getri':
+                return self._getri
+            elif base_name == 'lange':
+                return self._lange
+        raise AttributeError(f"_MockLAPACK has no attribute '{name}'")
+
+
+_flapack = _MockLAPACK()
 _flapack_64 = None
-if HAS_ILP64:
-    from scipy.linalg import _flapack_64
 
-if not (HAS_LP64 or HAS_ILP64):
-    raise RuntimeError("SciPy needs either LP64 or ILP64 LAPACK.")
-
-if HAS_LP64:
-    from scipy.linalg._flapack import *  # noqa: E402, F403
-else:
-    from scipy.linalg._flapack_64 import *  # noqa: E402, F403
+HAS_LP64 = True
+HAS_ILP64 = False
 
 
 __all__ = ['get_lapack_funcs']
@@ -935,15 +1009,6 @@ def backtickrepl(m):
     else:
         return f"with bounds ``{m.group('b')}``\n"
 
-
-for routine in [ssyevr, dsyevr, cheevr, zheevr,  # pyrefly:ignore[unknown-name]
-                ssyevx, dsyevx, cheevx, zheevx,  # pyrefly:ignore[unknown-name]
-                ssygvd, dsygvd, chegvd, zhegvd]:  # pyrefly:ignore[unknown-name]
-    if routine.__doc__:
-        routine.__doc__ = p1.sub(backtickrepl, routine.__doc__)
-        routine.__doc__ = p2.sub('Default ``\\1``\n', routine.__doc__)
-    else:
-        continue
 
 del regex_compile, p1, p2, backtickrepl
 

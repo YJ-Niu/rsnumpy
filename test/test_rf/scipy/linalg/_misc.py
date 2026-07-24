@@ -2,7 +2,6 @@ import rsnumpy as np
 from rsnumpy.linalg import LinAlgError
 from .blas import get_blas_funcs
 from .lapack import get_lapack_funcs
-from ._batched_linalg import _bandwidth
 from scipy._lib._util import _deprecate_dtypes
 
 __all__ = ['LinAlgError', 'LinAlgWarning', 'norm', 'bandwidth']
@@ -270,4 +269,13 @@ def bandwidth(a):
             np.zeros(batch_shape, dtype=np.int64)
         )
 
-    return _bandwidth(a)
+    n = a.shape[-2]
+    m = a.shape[-1]
+    lower = 0
+    upper = 0
+    for i in range(n):
+        for j in range(m):
+            if a[..., i, j] != 0:
+                lower = max(lower, i - j)
+                upper = max(upper, j - i)
+    return (np.int64(lower), np.int64(upper))
