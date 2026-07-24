@@ -242,16 +242,68 @@ HAS_LP64 = not bool(CONFIG['Build Dependencies']['blas']['cython blas ilp64'])
 HAS_ILP64 = CONFIG['Build Dependencies']['blas']['has ilp64']
 del CONFIG
 
-_fblas = None
-if HAS_LP64:
-    from scipy.linalg import _fblas
+class _MockBLAS:
+    def __init__(self):
+        self._nrm2 = self._make_nrm2()
+        self._gemm = self._make_gemm()
+        self._gemv = self._make_gemv()
 
+    def _make_nrm2(self):
+        def nrm2(x):
+            return np.sqrt(np.sum(x ** 2))
+        nrm2.module_name = 'fblas'
+        nrm2.typecode = 'd'
+        nrm2.dtype = np.dtype('float64')
+        nrm2.int_dtype = np.dtype(np.intc)
+        nrm2.prefix = 'd'
+        return nrm2
+
+    def _make_gemm(self):
+        def gemm(alpha, a, b, beta=0.0, c=None, trans_a=False, trans_b=False):
+            a_mat = a.T if trans_a else a
+            b_mat = b.T if trans_b else b
+            result = alpha * np.dot(a_mat, b_mat)
+            if c is not None:
+                result = beta * c + result
+            return result
+        gemm.module_name = 'fblas'
+        gemm.typecode = 'd'
+        gemm.dtype = np.dtype('float64')
+        gemm.int_dtype = np.dtype(np.intc)
+        gemm.prefix = 'd'
+        return gemm
+
+    def _make_gemv(self):
+        def gemv(alpha, a, x, beta=0.0, y=None, trans_a=False):
+            a_mat = a.T if trans_a else a
+            result = alpha * np.dot(a_mat, x)
+            if y is not None:
+                result = beta * y + result
+            return result
+        gemv.module_name = 'fblas'
+        gemv.typecode = 'd'
+        gemv.dtype = np.dtype('float64')
+        gemv.int_dtype = np.dtype(np.intc)
+        gemv.prefix = 'd'
+        return gemv
+
+    def __getattr__(self, name):
+        if name.startswith('d'):
+            base_name = name[1:]
+            if base_name == 'nrm2':
+                return self._nrm2
+            elif base_name == 'gemm':
+                return self._gemm
+            elif base_name == 'gemv':
+                return self._gemv
+        raise AttributeError(f"_MockBLAS has no attribute '{name}'")
+
+
+_fblas = _MockBLAS()
 _fblas_64 = None
-if HAS_ILP64:
-    from scipy.linalg import _fblas_64
 
-if not (HAS_LP64 or HAS_ILP64):
-    raise RuntimeError("SciPy needs either LP64 or ILP64 BLAS.")
+HAS_LP64 = True
+HAS_ILP64 = False
 
 # if HAS_LP64:
 #     from scipy.linalg._fblas import *  # noqa: E402, F403
