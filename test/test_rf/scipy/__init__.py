@@ -191,17 +191,25 @@ def _make_scipy_interpolate():
             self.fill_value = fill_value
             self._extrapolate = _do_extrapolate(fill_value)
 
-            if not assume_sorted:
-                ind = _np.argsort(self.x)
-                self.x = self.x[ind]
-                self.y = _np.take(self.y, ind, axis=axis)
-
             self.axis = axis % self.y.ndim if self.y.ndim > 0 else 0
             self._y = self.y
             if self.y.ndim > 1 and self.axis != 0:
                 axes = list(range(self.y.ndim))
                 axes[0], axes[self.axis] = axes[self.axis], axes[0]
                 self._y = self.y.transpose(axes)
+
+            if not assume_sorted:
+                ind = _np.argsort(self.x)
+                self.x = self.x[ind]
+                # Use indexing instead of _np.take to preserve complex dtype
+                self._y = self._y[ind]
+                # Rebuild self.y from sorted _y
+                if self.y.ndim > 1 and self.axis != 0:
+                    axes = list(range(self._y.ndim))
+                    axes[0], axes[self.axis] = axes[self.axis], axes[0]
+                    self.y = self._y.transpose(axes)
+                else:
+                    self.y = self._y
 
         def _check_bounds(self, x_new):
             below_bounds = x_new < self.x[0]

@@ -62,18 +62,18 @@ pprint(7, f_match)
 
 # rf.stylely(figsize=(20, 16), dpi=144)
 ring_slot.plot_s_db()
-# ssaver('./test/test_rf/test1.png')
+ssaver('./test/test_rf/test1.png')
 
 
 # rf.stylely(figsize=(20, 16), dpi=144)
 ring_slot.plot_s_deg(m=0, n=1)
-# ssaver('./test/test_rf/test2.png')
+ssaver('./test/test_rf/test2.png')
 
 
 # rf.stylely(figsize=(20, 16), dpi=144)
 ring_slot.plot_s_smith(lw=2)
 plt.title('Big ole Smith Chart')
-# ssaver('./test/test_rf/test3.png')
+ssaver('./test/test_rf/test3.png')
 
 
 print(rf.io.read_all('./test/test_rf/skrf/data/', contains='ro'))
@@ -87,11 +87,11 @@ ro_ns.std_s.plot_s_mag(label='S11')
 plt.ylabel('Standard Deviation')
 plt.title('Standard Deviation of RO')
 plt.legend()
-# ssaver('./test/test_rf/ro_std_s.png')
+ssaver('./test/test_rf/ro_std_s.png')
 
 
 ro_ns.plot_uncertainty_bounds_s_db(label='S11')
-# ssaver('./test/test_rf/test4.png')
+ssaver('./test/test_rf/test4.png')
 
 
 freq = Frequency(75, 110, 101, 'GHz')
@@ -113,7 +113,7 @@ ntwk = Network(frequency=freq, s=s, name='random values 2-port')
 pprint(13, ntwk)
 
 ntwk.plot_s_db()
-# ssaver('./test/test_rf/test5.png')
+ssaver('./test/test_rf/test5.png')
 
 
 # let's assume we have separate arrays for the frequency and s-parameters
@@ -177,7 +177,7 @@ pprint(25, ring_slot.s11['80-90ghz'])
 
 rf.stylely()
 ring_slot.plot_s_smith()
-# ssaver('./test/test_rf/test6.png')
+ssaver('./test/test_rf/test6.png')
 
 
 plt.title('Ring Slot $S_{21}$')
@@ -186,7 +186,7 @@ rf.stylely()
 ring_slot.s11.plot_s_db(label='Full Band Response')
 ring_slot.s11['82-90ghz'].plot_s_db(lw=3, label='Band of Interest')
 plt.legend()
-# ssaver('./test/test_rf/test7.png')
+ssaver('./test/test_rf/test7.png')
 
 short - delayshort
 short + delayshort
@@ -195,11 +195,11 @@ pprint(26, short / delayshort)
 
 difference = (short - delayshort)
 difference.plot_s_mag(label='Mag of difference')
-# ssaver('./test/test_rf/test8.png')
+ssaver('./test/test_rf/test8.png')
 
 
 (delayshort/short).plot_s_deg(label='Detrended Phase')
-# ssaver('./test/test_rf/test9.png')
+ssaver('./test/test_rf/test9.png')
 
 
 hopen = (short*-1)
@@ -252,7 +252,7 @@ pprint(41, dict_o_ntwks_files)
 pprint(42, ring_slot.z[:3, ...])
 
 ring_slot.plot_z_im(m=1, n=0)
-# ssaver('./test/test_rf/test10.png')
+ssaver('./test/test_rf/test10.png')
 
 
 line = rf.data.wr2p2_line  # 2-port
@@ -292,20 +292,20 @@ line.z0 = [10, 20]
 pprint(49, rf.network.connect(tee, 1, line, 0))
 
 ring_slot.plot_s_smith()
-# ssaver("./test/test_rf/test11.png")
+ssaver("./test/test_rf/test11.png")
 
 
 rf.stylely()  # nicer looking. Can be configured with different styles
 ring_slot.plot_s_smith()
-# ssaver("./test/test_rf/test12.png")
+ssaver("./test/test_rf/test12.png")
 
 
 ring_slot.plot_s_smith(draw_labels=True)
-# ssaver("./test/test_rf/test13.png")
+ssaver("./test/test_rf/test13.png")
 
 
 ring_slot.plot_s_smith(chart_type='y')
-# ssaver("./test/test_rf/test14.png")
+ssaver("./test/test_rf/test14.png")
 
 
 # prepare markers
@@ -355,7 +355,7 @@ the_table = ax.table(cellText=cell_text,
 the_table.auto_set_font_size(False)
 the_table.set_fontsize(6)
 # the_table.scale(1.5, 1.5)
-# ssaver("./test/test_rf/test15.png")
+ssaver("./test/test_rf/test15.png")
 
 
 # prepare figure
@@ -367,33 +367,35 @@ fig, ax = plt.subplots(1, 1, figsize=(8, 8))
 rf.plotting.smith(ax=ax, draw_labels=True, ref_imm=1.0, chart_type='z')
 
 ring_slot.plot_s_smith(ax=ax, draw_chart=False)
-# ssaver("./test/test_rf/test16.png")
+ssaver("./test/test_rf/test16.png")
 
 
-ring_slot.plot_s_complex()
+ax = plt.gca()
+rf.plotting.smith(ax=ax, draw_labels=True, ref_imm=1.0, chart_type='z')
+ring_slot.plot_s_complex(ax=ax)
 
 rf.stylely()
 plt.axis('equal')  # otherwise circles won't be circles
-# ssaver("./test/test_rf/test17.png")
+ssaver("./test/test_rf/test17.png")
 
 
 rf.stylely()
 ring_slot.plot_s_db()
-# ssaver("./test/test_rf/test18.png")
+ssaver("./test/test_rf/test18.png")
 
 
 rf.stylely()
 ring_slot.plot_s_db(m=0, n=0, label='Theory')
 ring_slot_meas.plot_s_db(m=0, n=0, label='Measurement')
-# ssaver("./test/test_rf/test19.png")
+ssaver("./test/test_rf/test19.png")
 
 
 ring_slot.plot_s_deg()
-# ssaver("./test/test_rf/test20.png")
+ssaver("./test/test_rf/test20.png")
 
 
 ring_slot.plot_s_deg_unwrap()
-# ssaver("./test/test_rf/test21.png")
+ssaver("./test/test_rf/test21.png")
 
 
 gd = abs(ring_slot.s21.group_delay) * 1e9  # in ns
@@ -401,30 +403,30 @@ gd = abs(ring_slot.s21.group_delay) * 1e9  # in ns
 ring_slot.plot(gd)
 plt.ylabel('Group Delay (ns)')
 plt.title('Group Delay of Ring Slot S21')
-# ssaver("./test/test_rf/test22.png")
+ssaver("./test/test_rf/test22.png")
 
 
 ring_slot.plot_z_im()
-# ssaver('./test/test_rf/test23.png')
+ssaver('./test/test_rf/test23.png')
 
 
 ring_slot.plot_y_im()
-# ssaver('./test/test_rf/test24.png')
+ssaver('./test/test_rf/test24.png')
 
 
 ring_slot.plot_s_db(m=0, n=0, label='Simulation')
-# ssaver('./test/test_rf/test25.png')
+ssaver('./test/test_rf/test25.png')
 
 
 ring_slot.frequency.unit = 'mhz'
 ring_slot.plot_s_db(0, 0)
-# ssaver('./test/test_rf/test26.png')
+ssaver('./test/test_rf/test26.png')
 
 
 ring_slot.frequency.unit = 'ghz'
 ring_slot.plot_s_db(m=0, n=0, linewidth=3, linestyle='--', label='Simulation')
 ring_slot_meas.plot_s_db(m=0, n=0, marker='<', markevery=10, label='Measured')
-# ssaver('./test/test_rf/test27.png')
+ssaver('./test/test_rf/test27.png')
 
 
 mpl_style = "seaborn-ticks"
@@ -439,7 +441,7 @@ with style.context(mpl_style):
     plt.title('Smith Chart With Legend Room')
     plt.axis([-1.1, 2.1, -1.1, 1.1])
     plt.legend(loc=5)
-# ssaver('./test/test_rf/test28.png')
+ssaver('./test/test_rf/test28.png')
 
 
 save_all_figs('./test/test_rf', format=['png'])
@@ -450,7 +452,7 @@ with plt.style.context('grayscale'):
     plotting.add_markers_to_lines()
     plt.legend()  # have to re-generate legend
 
-    # ssaver('./test/test_rf/test29.png')
+    ssaver('./test/test_rf/test29.png')
 
 pprint(50, rf.io.read_all(rf.data.pwd, contains='ro'))
 
@@ -462,40 +464,40 @@ pprint(52, ro_ns[0])
 
 rf.stylely()
 ro_ns.plot_s_db()
-# ssaver('./test/test_rf/test30.png')
+ssaver('./test/test_rf/test30.png')
 
 
 pprint(53, ro_ns.mean_s)
 ro_ns.mean_s.plot_s_db(label='ro')
-# ssaver('./test/test_rf/test31.png')
+ssaver('./test/test_rf/test31.png')
 
 
 ro_ns.std_s.plot_s_re(y_label='Standard Deviations')
-# ssaver('./test/test_rf/test32.png')
+ssaver('./test/test_rf/test32.png')
 
 
 ro_ns.mean_s_deg.plot_s_re()
-# ssaver('./test/test_rf/test33.png')
+ssaver('./test/test_rf/test33.png')
 
 plt.close()
 
 ro_ns.plot_uncertainty_bounds_s_db()
-# ssaver('./test/test_rf/test34.png')
+ssaver('./test/test_rf/test34.png')
 
 
 ro_ns.plot_uncertainty_bounds_s_deg()
-# ssaver('./test/test_rf/test35.png')
+ssaver('./test/test_rf/test35.png')
 
 
 rf.stylely()
 ro_ns_interp = ro_ns.interpolate_frequency(rf.Frequency(500, 600, 15, "GHz"))
 ro_ns_interp.plot_violin("s_db")
-# ssaver('./test/test_rf/test36.png')
+ssaver('./test/test_rf/test36.png')
 
 
 rf.stylely()
 ro_ns_interp.plot_violin("s_deg")
-# ssaver('./test/test_rf/test37.png')
+ssaver('./test/test_rf/test37.png')
 
 
 pprint(58, ro_ns.write_touchstone(dir='./test/test_rf/test_data'))
