@@ -5263,7 +5263,12 @@ class Network:
                 if 'label' in call_kwargs.keys():
                     label_ = call_kwargs.pop('label')
                 else:
-                    label_ = f'S{m+1}{n+1}'
+                    # 使用 Network 的 name 和 S 参数组合作为图例名称
+                    net_name = getattr(self, 'name', None)
+                    if net_name is not None and net_name:
+                        label_ = f'{net_name}, S{m+1}{n+1}'
+                    else:
+                        label_ = f'S{m+1}{n+1}'
                 call_kwargs['label'] = label_
                 if conversion in ["time_impulse", "time_step"]:
                     current_show_legend = show_legend and (m == M[-1] and n == N[-1])

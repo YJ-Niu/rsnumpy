@@ -18,6 +18,7 @@ build/
 .venv/
 venv/
 uv.lock
+user_rules.md
 
 # IDE
 .vscode/
@@ -54,6 +55,3 @@ runtest_matplotlib.py
 .venv
 .env
 .env.local
-.trae/
-.trae/rules/git-commit-message.md
-git-commit-message.md

@@ -101,22 +101,38 @@ fn irfft_1d(a: &[FftComplex<f64>], n: Option<usize>) -> Vec<f64> {
 
 fn complex_vec_to_ndarray(result: Vec<FftComplex<f64>>) -> NdArray {
     let result_len = result.len();
-    let mut flat_data: Vec<f64> = Vec::with_capacity(result_len * 2);
+    let mut re_data: Vec<f64> = Vec::with_capacity(result_len);
+    let mut im_data: Vec<f64> = Vec::with_capacity(result_len);
     for c in result {
-        flat_data.push(c.re);
-        flat_data.push(c.im);
+        re_data.push(c.re);
+        im_data.push(c.im);
     }
-    NdArray {
-        imag: None,
-        data: Array::from_shape_vec(IxDyn(&[result_len, 2]), flat_data).unwrap(),
-    }
+    let re = Array::from_shape_vec(IxDyn(&[result_len]), re_data).unwrap();
+    let im = Array::from_shape_vec(IxDyn(&[result_len]), im_data).unwrap();
+    NdArray::from_complex(re, im)
 }
 
 #[pyfunction]
 pub fn py_fft_ndarray(_py: Python<'_>, a: &NdArray) -> PyResult<NdArray> {
     _py.detach(move || {
-        let vec: Vec<f64> = a.data.iter().copied().collect();
-        let result = fft_1d(&vec);
+        let result = if a.has_imag() {
+            let re_vec: Vec<f64> = a.data.iter().copied().collect();
+            let im_vec: Vec<f64> = a.imag.as_ref().unwrap().iter().copied().collect();
+            let complex_input: Vec<FftComplex<f64>> = re_vec
+                .iter()
+                .zip(im_vec.iter())
+                .map(|(&r, &i)| FftComplex::new(r, i))
+                .collect();
+            let mut buffer = complex_input;
+            FFT_PLANNER.with(|planner| {
+                let fft = planner.borrow_mut().plan_fft_forward(buffer.len());
+                fft.process(&mut buffer);
+            });
+            buffer
+        } else {
+            let vec: Vec<f64> = a.data.iter().copied().collect();
+            fft_1d(&vec)
+        };
         Ok(complex_vec_to_ndarray(result))
     })
 }
@@ -124,13 +140,18 @@ pub fn py_fft_ndarray(_py: Python<'_>, a: &NdArray) -> PyResult<NdArray> {
 #[pyfunction]
 pub fn py_ifft_ndarray(_py: Python<'_>, a: &NdArray) -> PyResult<NdArray> {
     _py.detach(move || {
-        let flat_data: Vec<f64> = a.data.iter().copied().collect();
-        let mut complex_vec = Vec::with_capacity(flat_data.len() / 2);
-        for chunk in flat_data.chunks(2) {
-            if chunk.len() == 2 {
-                complex_vec.push(FftComplex::new(chunk[0], chunk[1]));
-            }
-        }
+        let complex_vec: Vec<FftComplex<f64>> = if a.has_imag() {
+            let re_vec: Vec<f64> = a.data.iter().copied().collect();
+            let im_vec: Vec<f64> = a.imag.as_ref().unwrap().iter().copied().collect();
+            re_vec
+                .iter()
+                .zip(im_vec.iter())
+                .map(|(&r, &i)| FftComplex::new(r, i))
+                .collect()
+        } else {
+            let vec: Vec<f64> = a.data.iter().copied().collect();
+            vec.iter().map(|&v| FftComplex::new(v, 0.0)).collect()
+        };
         let result = ifft_1d(&complex_vec);
         Ok(complex_vec_to_ndarray(result))
     })
@@ -139,8 +160,27 @@ pub fn py_ifft_ndarray(_py: Python<'_>, a: &NdArray) -> PyResult<NdArray> {
 #[pyfunction]
 pub fn py_rfft_ndarray(_py: Python<'_>, a: &NdArray) -> PyResult<NdArray> {
     _py.detach(move || {
-        let vec: Vec<f64> = a.data.iter().copied().collect();
-        let result = rfft_1d(&vec);
+        let result = if a.has_imag() {
+            let re_vec: Vec<f64> = a.data.iter().copied().collect();
+            let im_vec: Vec<f64> = a.imag.as_ref().unwrap().iter().copied().collect();
+            let complex_input: Vec<FftComplex<f64>> = re_vec
+                .iter()
+                .zip(im_vec.iter())
+                .map(|(&r, &i)| FftComplex::new(r, i))
+                .collect();
+            let n = complex_input.len();
+            let mut buffer = complex_input;
+            FFT_PLANNER.with(|planner| {
+                let fft = planner.borrow_mut().plan_fft_forward(n);
+                fft.process(&mut buffer);
+            });
+            let output_len = n / 2 + 1;
+            buffer.truncate(output_len);
+            buffer
+        } else {
+            let vec: Vec<f64> = a.data.iter().copied().collect();
+            rfft_1d(&vec)
+        };
         Ok(complex_vec_to_ndarray(result))
     })
 }
@@ -148,13 +188,18 @@ pub fn py_rfft_ndarray(_py: Python<'_>, a: &NdArray) -> PyResult<NdArray> {
 #[pyfunction]
 pub fn py_irfft_ndarray(_py: Python<'_>, a: &NdArray, n: Option<usize>) -> PyResult<NdArray> {
     _py.detach(move || {
-        let flat_data: Vec<f64> = a.data.iter().copied().collect();
-        let mut complex_vec = Vec::with_capacity(flat_data.len() / 2);
-        for chunk in flat_data.chunks(2) {
-            if chunk.len() == 2 {
-                complex_vec.push(FftComplex::new(chunk[0], chunk[1]));
-            }
-        }
+        let complex_vec: Vec<FftComplex<f64>> = if a.has_imag() {
+            let re_vec: Vec<f64> = a.data.iter().copied().collect();
+            let im_vec: Vec<f64> = a.imag.as_ref().unwrap().iter().copied().collect();
+            re_vec
+                .iter()
+                .zip(im_vec.iter())
+                .map(|(&r, &i)| FftComplex::new(r, i))
+                .collect()
+        } else {
+            let vec: Vec<f64> = a.data.iter().copied().collect();
+            vec.iter().map(|&v| FftComplex::new(v, 0.0)).collect()
+        };
         let result = irfft_1d(&complex_vec, n);
         Ok(NdArray {
             imag: None,

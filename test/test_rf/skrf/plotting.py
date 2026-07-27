@@ -88,6 +88,12 @@ SI_CONVERSION = {key: 10**((8-i)*3) for i, key in enumerate(SI_PREFIXES_ASCII)}
 # rsplotlib ignores legend.* rcParams and returns no legend handle to restyle
 _STYLE_LEGEND_KW: dict = {}
 
+# Style parameters captured by stylely() and applied to newly created axes
+# This allows stylely() to affect subplots created after the style is set
+_STYLE_AXIS_KW: dict = {}
+_STYLE_GRID_KW: dict = {}
+_STYLE_FIGURE_KW: dict = {}
+
 
 def _legend(target, *args, **kwargs):
     """Call ``target.legend`` applying stylely's recorded frame style as defaults.
@@ -510,6 +516,16 @@ def plot_rectangular(x: NumberLike, y: NumberLike,
     if ax is None:
         ax = plt.gca()
 
+    # Apply style parameters captured by stylely() to the axes
+    if 'facecolor' in _STYLE_AXIS_KW:
+        ax.set_facecolor(_STYLE_AXIS_KW['facecolor'])
+    if 'tick_params' in _STYLE_AXIS_KW:
+        ax.tick_params(**_STYLE_AXIS_KW['tick_params'])
+    if _STYLE_GRID_KW.get('on', False):
+        grid_c = _STYLE_GRID_KW.get('c')
+        grid_ls = _STYLE_GRID_KW.get('ls')
+        ax.grid(True, c=grid_c, ls=grid_ls)
+
     my_plot = ax.plot(x, y, *args, **kwargs)
 
     if x_label is not None:
@@ -529,26 +545,6 @@ def plot_rectangular(x: NumberLike, y: NumberLike,
     if axis is not None:
         ax.autoscale(True, 'x', True)
         ax.autoscale(True, 'y', True)
-        
-        y_min_val = np.min(y)
-        y_max_val = np.max(y)
-        if hasattr(y_min_val, 'tolist'):
-            y_min_val = y_min_val.tolist()
-        if hasattr(y_max_val, 'tolist'):
-            y_max_val = y_max_val.tolist()
-        
-        if isinstance(y_min_val, (list, tuple, np.ndarray)):
-            y_min_val = float(y_min_val[0])
-        if isinstance(y_max_val, (list, tuple, np.ndarray)):
-            y_max_val = float(y_max_val[0])
-        
-        current_ylim = ax.get_ylim()
-        new_ylim_min = min(current_ylim[0], y_min_val)
-        new_ylim_max = max(current_ylim[1], y_max_val)
-        
-        y_range = new_ylim_max - new_ylim_min
-        padding = y_range * 0.1
-        ax.set_ylim(new_ylim_min - padding, new_ylim_max + padding)
 
     if plt.isinteractive():
         plt.draw()
@@ -1461,6 +1457,25 @@ def _apply_style(plt, style: dict, font_scale: float = 1.0,
         grid_c = _mplstyle_color(style.get('grid.color'))
         grid_ls = style.get('grid.linestyle')
 
+    # Save style parameters to global variables for later-applied axes
+    _STYLE_AXIS_KW.clear()
+    if ax_fc:
+        _STYLE_AXIS_KW['facecolor'] = ax_fc
+    if tick_kw:
+        _STYLE_AXIS_KW['tick_params'] = tick_kw
+    
+    _STYLE_GRID_KW.clear()
+    if grid_on:
+        _STYLE_GRID_KW['on'] = True
+        if grid_c:
+            _STYLE_GRID_KW['c'] = grid_c
+        if grid_ls:
+            _STYLE_GRID_KW['ls'] = grid_ls
+    
+    _STYLE_FIGURE_KW.clear()
+    if fig_fc:
+        _STYLE_FIGURE_KW['facecolor'] = fig_fc
+
     # Apply style to all axes in the figure
     for ax in fig.axes():
         if ax_fc:
@@ -1935,9 +1950,9 @@ def plot_violin(
 
     # default widths to 3/4 distance between frequencies
     if not widths and len(freq) > 1:
-        widths = (freq[1]-freq[0])*0.75
+        widths = (freq[1]-freq[0])*0.4
     elif not widths:
-        widths = 0.5
+        widths = 0.45
 
     data = np.array([getattr(p, attribute)[:, m, n] for p in self.ntwk_set])
 
