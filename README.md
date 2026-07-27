@@ -279,7 +279,30 @@ r_spectrum = np.fft.rfft(x)
 recovered_r = np.fft.irfft(r_spectrum, n=4)
 ```
 
-#### 5.8 多项式
+#### 5.8 零拷贝缓冲协议
+
+rsnumpy 支持 PEP 3118 缓冲协议，允许下游库（如 rsplotlib）零拷贝读取数组数据：
+
+```python
+import rsnumpy as np
+
+# float64 数组支持 memoryview 零拷贝
+a = np.array([1.0, 2.0, 3.0, 4.0])
+mv = memoryview(a)
+print(mv.format)   # 'd' (f64)
+print(mv.shape)    # (4,)
+print(mv.readonly) # True
+
+# numpy 也能通过缓冲协议零拷贝读取
+import numpy as np
+arr = np.asarray(a)  # 零拷贝，dtype=float64
+
+# int/bool 等非 float64 dtype 通过 __array_interface__ bytes 回退（保证 dtype 精度）
+ia = np.array([1, 2, 3], dtype='int64')
+arr_int = np.asarray(ia)  # dtype=int64，通过 bytes 副本
+```
+
+#### 5.9 多项式
 
 ```python
 import rsnumpy as np
@@ -300,7 +323,7 @@ y = np.array([1, 2, 5, 10, 17])  # y = x^2 + 1
 coef = np.polynomial.polyfit(x, y, 2)
 ```
 
-#### 5.9 文件 I/O
+#### 5.10 文件 I/O
 
 ```python
 import rsnumpy as np
@@ -331,7 +354,7 @@ print(loaded['c'].tolist())       # [1, 2, 3]
 arr = np.frombuffer(bytes_data)
 ```
 
-#### 5.10 判断函数与常量
+#### 5.11 判断函数与常量
 
 ```python
 import rsnumpy as np
@@ -347,7 +370,7 @@ print(np.isinf(a))
 print(np.isfinite(a))
 ```
 
-#### 5.11 日期时间与网格
+#### 5.12 日期时间与网格
 
 ```python
 import rsnumpy as np
@@ -796,7 +819,30 @@ r_spectrum = np.fft.rfft(x)
 recovered_r = np.fft.irfft(r_spectrum, n=4)
 ```
 
-#### 5.8 Polynomials
+#### 5.8 Zero-Copy Buffer Protocol
+
+rsnumpy supports the PEP 3118 buffer protocol, allowing downstream libraries like rsplotlib to read array data without copying:
+
+```python
+import rsnumpy as np
+
+# float64 arrays support zero-copy memoryview
+a = np.array([1.0, 2.0, 3.0, 4.0])
+mv = memoryview(a)
+print(mv.format)   # 'd' (f64)
+print(mv.shape)    # (4,)
+print(mv.readonly) # True
+
+# numpy can also read via buffer protocol (zero-copy)
+import numpy as np
+arr = np.asarray(a)  # zero-copy, dtype=float64
+
+# Non-float64 dtypes (int/bool) fall back to __array_interface__ bytes (dtype fidelity)
+ia = np.array([1, 2, 3], dtype='int64')
+arr_int = np.asarray(ia)  # dtype=int64, via bytes copy
+```
+
+#### 5.9 Polynomials
 
 ```python
 import rsnumpy as np
@@ -817,7 +863,7 @@ y = np.array([1, 2, 5, 10, 17])  # y = x^2 + 1
 coef = np.polynomial.polyfit(x, y, 2)
 ```
 
-#### 5.9 File I/O
+#### 5.10 File I/O
 
 ```python
 import rsnumpy as np
@@ -848,7 +894,7 @@ print(loaded['c'].tolist())       # [1, 2, 3]
 arr = np.frombuffer(bytes_data)
 ```
 
-#### 5.10 Constants & predicates
+#### 5.11 Constants & predicates
 
 ```python
 import rsnumpy as np
@@ -864,7 +910,7 @@ print(np.isinf(a))
 print(np.isfinite(a))
 ```
 
-#### 5.11 Datetime & meshgrid
+#### 5.12 Datetime & meshgrid
 
 ```python
 import rsnumpy as np
@@ -1013,6 +1059,7 @@ rsnumpy's performance comes from a few low-level design choices:
 - **BLAS backend**: on macOS, `matmul`/`dot` dispatch to the system Accelerate framework through ndarray's `blas` feature; other platforms fall back to the multi-threaded pure-Rust `matrixmultiply` kernel.
 - **Contiguous memory & in-place scans**: `cumsum`/`cumprod` do an in-place prefix scan over a single C-order buffer, parallelized over contiguous blocks, minimizing allocation and copies.
 - **Lean dependencies**: unused codec features (e.g. in `zip`) are disabled, and combined with `lto = "fat"` and symbol stripping the extension stays around 5 MB.
+- **Zero-copy buffer protocol**: `rsnumpy.ndarray` implements PEP 3118 (`__buffer__`/`__release_buffer__` in Python 3.12+) and PEP 3118 (`__getbuffer__`/`__releasebuffer__` in Rust), allowing downstream libraries like rsplotlib to read float64 array data without copying. For non-float64 dtypes, `__array_interface__` with bytes fallback ensures dtype fidelity.
 
 ### 9. CI/CD
 

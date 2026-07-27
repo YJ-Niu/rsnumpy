@@ -20,6 +20,7 @@ rsnumpy 是一个使用 **Rust + PyO3** 开发的高性能 Python 数值计算�
 
 - 所有调试、分析、验证、测试代码及生成的结果必须放在 `/Users/user/Desktop/rust_project/rsnumpy/debug/` 目录中
 - 禁止在项目根目录或其他位置创建零散的测试文件
+- 调试时，添加一些debug信息，如打印数组形状、dtype、内存布局等，也要判断数据是否正确加载
 
 ### 2. 代码修改范围
 
