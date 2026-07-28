@@ -43,6 +43,7 @@ skrf_copy/
 test_rf_1/
 push*.sh
 main*.py
+debug.md
 debug*.py
 check*.py
 test2*.py

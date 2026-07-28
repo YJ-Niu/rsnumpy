@@ -5,10 +5,11 @@ A high-performance NumPy-compatible array library powered by Rust, with zero-cop
 ## Key Features
 
 - **NumPy-Compatible API**: Drop-in replacement for most NumPy use cases. Low migration cost.
-- **Rust-Powered Performance**: Core computation runs in Rust. Element-wise operations (`sin`/`exp`) up to **5.4x** faster than NumPy. `sort` up to **32x** faster.
+- **Rust-Powered Performance**: Core computation runs in Rust. Element-wise operations (`sin`/`exp`) up to **5.4x** faster than NumPy. `sort` up to **32x** faster. 2×2 batch matrix inversion parallelized with rayon.
 - **Zero-Copy Buffer Protocol**: Implements PEP 3118 (`__buffer__`/`__release_buffer__`), allowing rsplotlib and other libraries to read float64 array data **without copying**.
-- **GIL-Free Parallelism**: Computation-heavy operators (`sort`, `cumsum`, `matmul`, element-wise ops) release the GIL for true multi-threaded parallelism.
+- **GIL-Free Parallelism**: Computation-heavy operators (`sort`, `cumsum`, `matmul`, `inv`, element-wise ops) release the GIL for true multi-threaded parallelism.
 - **BLAS Acceleration**: `matmul`/`dot` dispatch to system BLAS (Accelerate on macOS), matching NumPy performance.
+- **S-Parameter Fast Paths**: 2-port network renormalization (scalar impedance) up to **700x** faster, S-parameter inversion up to **8x** faster.
 - **Complete Feature Set**: Arrays, math functions, statistics, linear algebra, FFT, random numbers, polynomials, file I/O (`.npy`, `.npz`, text), datetime64, structured arrays, masked arrays.
 - **Cross-Platform**: Linux (x86_64/aarch64), macOS (Apple Silicon/Intel), Windows (x64).
 
@@ -18,7 +19,7 @@ A high-performance NumPy-compatible array library powered by Rust, with zero-cop
 pip install rsnumpy
 ```
 
-Prebuilt wheels available for Python 3.9-3.14 across Linux, macOS, and Windows.
+Prebuilt wheels available for Python 3.10-3.14 across Linux, macOS, and Windows.
 
 ## Quick Start
 
@@ -77,17 +78,18 @@ Measured on macOS (Apple Silicon), comparing to NumPy:
 | `add`/`mul`/`div`    | **1.6x–1.7x** faster       |
 | `matmul` (1024×1024) | **1.0x** (Accelerate BLAS) |
 
-## Version v1.2.0
+## Version v1.2.1
 
 ### Improvements
 
-- **Zero-Copy Buffer Protocol**: Implemented PEP 3118 (`__buffer__`/`__release_buffer__` in Python 3.12+) for float64 arrays, enabling rsplotlib to read data without copying.
-- **Code Cleanup**: Removed redundant test files and deprecated code.
-- **Bug Fixes**: Fixed `recfunctions` logic and complex number handling.
-- **Refactoring**: Renamed core modules and adjusted import order to avoid circular imports.
+- **Matrix Inversion Acceleration**: 2×2 batch matrix inversion parallelized with rayon in Rust, supporting complex types. Python `linalg.inv` batch branch dispatches to parallel Rust.
+- **S-Parameter Fast Paths**: 2-port network `renormalize_s` scalar impedance fast path avoids double matrix inversion (~700x faster). Closed-form S-parameter inversion (~8x faster).
+- **Impedance Renormalization**: Refactored 2-port impedance renormalization to support per-frequency independent impedance parameters.
+- **Bug Fixes**: Fixed S-parameter matrix dtype inference, suppressed CPW conductor loss low-frequency RuntimeWarning.
 
 ### Previous Versions
 
+- v1.2.0: Zero-copy buffer protocol (PEP 3118), code cleanup, `recfunctions` fix, module restructuring.
 - v1.1.6: GIL release for compute-heavy operators, cost-tiered parallel thresholds, `cumsum`/`cumprod` in-place scan optimization, macOS Accelerate BLAS backend.
 - v1.1.5: String/void dtype support, masked arrays, structured arrays.
 - v1.1.0: Added ~140 NumPy-compatible functions, aligned with NumPy 2.5.1.

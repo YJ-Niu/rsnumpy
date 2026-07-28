@@ -514,9 +514,10 @@ A: 当前版本仅支持 CPU。
 
 rsnumpy 的性能来自以下几项底层设计：
 
-- **主动释放 GIL**：计算密集算子（逐元素、归约、排序、`cumsum`、`matmul` 等）在进入 Rust 前通过 `py.detach` 释放 GIL，使纯计算与其它 Python 线程真正并行。
+- **主动释放 GIL**：计算密集算子（逐元素、归约、排序、`cumsum`、`matmul`、`inv` 等）在进入 Rust 前通过 `py.detach` 释放 GIL，使纯计算与其它 Python 线程真正并行。
 - **成本分级并行阈值**：按算子的每元素成本设置不同的并行启用门槛——超越函数（`sin`/`exp` 等）阈值最低，访存密集型（`add`/`mul`/`div`）阈值最高——避免小数组因线程调度反而变慢。
 - **BLAS 后端**：macOS 上 `matmul`/`dot` 经 ndarray 的 `blas` 特性分派到系统 Accelerate 框架；其它平台回退到多线程的纯 Rust `matrixmultiply` 内核。
+- **2×2 矩阵求逆并行**：`linalg.inv` 的 2×2 批量分支在 Rust 层用 rayon 并行加速，支持复数类型，避免 Python 层逐个矩阵求逆。
 - **连续内存与就地扫描**：`cumsum`/`cumprod` 等在单份 C 序缓冲上就地前缀扫描并按连续块并行，减少分配与拷贝。
 - **精简依赖**：关闭 `zip` 等依赖中未使用的编解码器特性，配合 `lto = "fat"` 与符号裁剪，将扩展体积控制在约 5 MB。
 
@@ -1054,9 +1055,10 @@ Measured on macOS (Apple Silicon), using NumPy as the baseline. Each operator re
 
 rsnumpy's performance comes from a few low-level design choices:
 
-- **Releasing the GIL**: compute-heavy operators (element-wise, reductions, sort, `cumsum`, `matmul`, ...) release the GIL via `py.detach` before entering Rust, so pure computation runs truly in parallel with other Python threads.
+- **Releasing the GIL**: compute-heavy operators (element-wise, reductions, sort, `cumsum`, `matmul`, `inv`, ...) release the GIL via `py.detach` before entering Rust, so pure computation runs truly in parallel with other Python threads.
 - **Cost-tiered parallel thresholds**: the size at which parallelism kicks in varies by per-element cost — lowest for transcendental functions (`sin`/`exp`), highest for memory-bound ops (`add`/`mul`/`div`) — avoiding slowdowns from thread scheduling on small arrays.
 - **BLAS backend**: on macOS, `matmul`/`dot` dispatch to the system Accelerate framework through ndarray's `blas` feature; other platforms fall back to the multi-threaded pure-Rust `matrixmultiply` kernel.
+- **2×2 matrix inversion parallel**: `linalg.inv`'s 2×2 batch branch uses rayon parallelism in Rust, supporting complex types, avoiding per-matrix inversion in Python.
 - **Contiguous memory & in-place scans**: `cumsum`/`cumprod` do an in-place prefix scan over a single C-order buffer, parallelized over contiguous blocks, minimizing allocation and copies.
 - **Lean dependencies**: unused codec features (e.g. in `zip`) are disabled, and combined with `lto = "fat"` and symbol stripping the extension stays around 5 MB.
 - **Zero-copy buffer protocol**: `rsnumpy.ndarray` implements PEP 3118 (`__buffer__`/`__release_buffer__` in Python 3.12+) and PEP 3118 (`__getbuffer__`/`__releasebuffer__` in Rust), allowing downstream libraries like rsplotlib to read float64 array data without copying. For non-float64 dtypes, `__array_interface__` with bytes fallback ensures dtype fidelity.
