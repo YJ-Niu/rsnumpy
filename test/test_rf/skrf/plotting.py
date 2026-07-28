@@ -770,9 +770,9 @@ def plot_complex_polar(z: NumberLike,
     """
     theta = np.angle(z)
     r = np.abs(z)
-    plot_polar(theta=theta, r=r, x_label=x_label, y_label=y_label,
-               title=title, show_legend=show_legend, axis_equal=axis_equal,
-               ax=ax, **kwargs)
+    return plot_polar(theta=theta, r=r, x_label=x_label, y_label=y_label,
+                      title=title, show_legend=show_legend, axis_equal=axis_equal,
+                      ax=ax, **kwargs)
 
 
 def plot_smith(
@@ -2444,10 +2444,12 @@ def plot_prop_polar(netw: Network, prop_name: str,
                     netw, prop_name[0].upper(), m, n)
 
             # plot the desired attribute vs frequency
-            plot_complex_polar(
+            ax = plot_complex_polar(
                 z=getattr(netw, prop_name)[:, m, n],
                 show_legend=show_legend, ax=ax,
                 **kwargs)
+
+    return ax
 
 
 def _get_scalar(val):
