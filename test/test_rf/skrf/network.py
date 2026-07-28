@@ -5308,6 +5308,26 @@ class Network:
                                            show_legend=current_show_legend, ax=ax,
                                            **call_kwargs)
 
+                    # 频率轴与 Y 轴：对大数字使用科学计数法，避免标签过长挤压网格线。
+                    # 仅对频率轴生效（非时间轴）。
+                    # 使用 FuncFormatter 让 rsplotlib 在渲染时按需格式化每个刻度，
+                    # 不替换刻度位置，避免覆盖 autoscale 计算的 nice ticks。
+                    if "time" not in conversion and conversion not in ["time_impulse", "time_step"]:
+                        from rsplotlib import ticker as _ticker
+
+                        def _fmt_tick(v: float) -> str:
+                            av = abs(v)
+                            if av >= 1e5 or (0.0 < av < 1e-3):
+                                return f'{v:.1e}'
+                            if abs(v - round(v)) < 1e-9:
+                                return f'{round(v):.0f}'
+                            return f'{v:g}'
+
+                        _fmt_x = _ticker.FuncFormatter(_fmt_tick)
+                        ax.xaxis.set_major_formatter(_fmt_x)
+                        _fmt_y = _ticker.FuncFormatter(_fmt_tick)
+                        ax.yaxis.set_major_formatter(_fmt_y)
+
     plot_attribute.__doc__ = _plot_attribute_doc.format(
         attribute="conversion",
         conversion="attribute",

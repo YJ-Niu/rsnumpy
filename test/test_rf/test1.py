@@ -118,36 +118,36 @@ d_dut.plot_s_deg(1, 0)
 l_model.plot_s_deg(1, 0)
 ssaver('./test/test_rf/test_data/test4.png')
 
-# # compute residuals
-# res = dm.deembed(TL100)
-# res.name = 'residuals'
-# res.s += 1e-15  # avoid numeric singularities
+# compute residuals
+res = dm.deembed(TL100)
+res.name = 'residuals'
+res.s += 1e-15  # avoid numeric singularities
 
-# # extrapolate to dc for time step
-# TL100_dc = TL100.extrapolate_to_dc(kind='linear')
-# TL200_dc = TL200.extrapolate_to_dc(kind='linear')
-# fix1_dc = fix1.extrapolate_to_dc(kind='cubic')
-# fix2_dc = fix2.extrapolate_to_dc(kind='cubic')
-# d_dut_dc = d_dut.extrapolate_to_dc(kind='cubic')
+# extrapolate to dc for time step
+TL100_dc = TL100.extrapolate_to_dc(kind='linear')
+TL200_dc = TL200.extrapolate_to_dc(kind='linear')
+fix1_dc = fix1.extrapolate_to_dc(kind='cubic')
+fix2_dc = fix2.extrapolate_to_dc(kind='cubic')
+d_dut_dc = d_dut.extrapolate_to_dc(kind='cubic')
 
-# # plot them all
-# # time domain
-# plt.figure(figsize=(8, 4))
-# plt.suptitle('Time domain reflexion step response (DC extrapolation)')
-# TL100_dc.plot_z_time_step(0, 0)
-# TL200_dc.plot_z_time_step(0, 0)
-# fix1_dc.plot_z_time_step(0, 0)
-# fix2_dc.plot_z_time_step(0, 0)
-# d_dut_dc.plot_z_time_step(0, 0)
-# plt.xlim(-2, 4)
+# plot them all
+# time domain
+plt.figure(figsize=(8, 4))
+plt.suptitle('Time domain reflexion step response (DC extrapolation)')
+TL100_dc.plot_z_time_step(0, 0)
+TL200_dc.plot_z_time_step(0, 0)
+fix1_dc.plot_z_time_step(0, 0)
+fix2_dc.plot_z_time_step(0, 0)
+d_dut_dc.plot_z_time_step(0, 0)
+plt.xlim(-2, 4)
 
-# # residuals frequency domain
-# plt.figure(figsize=(8, 4))
-# plt.subplot(1, 2, 1)
-# res.plot_s_db(1, 0)
-# plt.subplot(1, 2, 2)
-# res.plot_s_deg(1, 0)
-# ssaver('./test/test_rf/test_data/test5.png')
+# residuals frequency domain
+plt.figure(figsize=(8, 4))
+plt.subplot(1, 2, 1)
+res.plot_s_db(1, 0)
+plt.subplot(1, 2, 2)
+res.plot_s_deg(1, 0)
+ssaver('./test/test_rf/test_data/test5.png')
 
 start_time = time.time()
 print(f"Time cost: {start_time - end_time} seconds")

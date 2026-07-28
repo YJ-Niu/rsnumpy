@@ -214,7 +214,17 @@ def scale_frequency_ticks(ax: Axes, funit: str):
         scale = SI_CONVERSION[prefix]
     else:
         raise ValueError(f"invalid funit {funit}")
-    ticks_x = ticker.FuncFormatter(lambda x, pos: f'{x * scale:g}')
+
+    # 大数字 (>=1e5) 和极小数字 (<1e-3) 使用科学计数法，避免标签过长挤压网格线。
+    # 注意：rsplotlib 的 FuncFormatter 只传一个参数 (x,)，不传 pos，故此处用单参数签名。
+    def _fmt_freq(x: float) -> str:
+        v = x * scale
+        av = abs(v)
+        if av >= 1e5 or (0.0 < av < 1e-3):
+            return f'{v:.1e}'
+        return f'{v:g}'
+
+    ticks_x = ticker.FuncFormatter(_fmt_freq)
     ax.xaxis.set_major_formatter(ticks_x)
 
 
