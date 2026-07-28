@@ -1,3 +1,4 @@
+import warnings
 import rsplotlib.pyplot as plt
 # import rsnumpy as np
 # from rsnumpy import absolute, log10, real, sum
@@ -6,6 +7,9 @@ from skrf.calibration.deembedding import IEEEP370_SE_NZC_2xThru
 from skrf.media import CPW
 import time
 import skrf as rf
+
+# 抑制 CPW 导体损耗物理警告：低频时趋肤深度大于金属厚度/3，属于已知物理限制
+warnings.filterwarnings('ignore', message='Conductor loss calculation invalid', category=RuntimeWarning)
 
 start_time = time.time()
 # 保存当前图

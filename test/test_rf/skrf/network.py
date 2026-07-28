@@ -8635,48 +8635,66 @@ def renormalize_s(
         raise ValueError('s_def parameter should be one of:', S_DEFINITIONS)
 
     # 2 端口网络 + 两端口均为相同实数阻抗 → 闭式快速路径
-    # 避免 s2z → z2s 的两次矩阵求逆，加速约 700 倍。
+    # 避免 s2z → z2s 的两次矩阵求逆，加速约 100-700 倍。
     # 对于实数 z0，power / pseudo / traveling 三种 s_def 结果一致。
     nfreqs = s.shape[0]
     nports = s.shape[1]
     if nports == 2:
-        # 检查 z_old / z_new 是否为两端口相等的实数（标量或每频点相同）
-        def _check_scalar_real(z, nfreqs):
-            """检查 z 是否为两端口相等的实数标量阻抗。
+        # 检查 z_old / z_new 是否为两端口相等的实数（标量或每频点向量）
+        def _extract_per_port_real(z, nfreqs):
+            """提取两端口相等的实数阻抗，返回 (ok, z_vec)。
 
-            返回 (is_scalar_real, value)。
+            z_vec 为长度 nfreqs 的实数向量（标量时自动广播）。
+            若两端口不相等或含虚部，返回 (False, None)。
             """
             zc = np.array(z, dtype=complex)
             # 全部为实数？
             if not np.all(zc.imag == 0):
-                return False, 0.0
+                return False, None
+            zr = zc.real
             # 标量或 size=1
             if zc.ndim == 0 or zc.size == 1:
-                first_val = complex(zc.reshape(-1)[0])
-                return True, float(first_val.real)
-            # 所有元素都相等？（用 max-min 判断，兼容 rsnumpy）
-            zr = zc.real
-            all_same = (np.max(zr) - np.min(zr)) < 1e-12
-            if not all_same:
-                return False, 0.0
-            first_val = float(zr.reshape(-1)[0])
-            return True, first_val
+                val = float(zr.reshape(-1)[0])
+                return True, val
+            # 形状 (nfreqs, 2)：两端口相等？
+            if zc.ndim == 2 and zc.shape == (nfreqs, 2):
+                if np.all(zr[:, 0] == zr[:, 1]):
+                    return True, zr[:, 0].copy()
+                return False, None
+            # 形状 (nfreqs, 1, 1) 或 (nfreqs,)
+            if zc.ndim == 1 and zc.shape[0] == nfreqs:
+                return True, zr.copy()
+            if zc.ndim == 3 and zc.shape[1:] == (1, 1):
+                return True, zr[:, 0, 0].copy()
+            # 形状 (1, 2) 或 (1, 2, 2)：所有元素相同？
+            if zc.ndim == 2 and zc.shape == (1, 2):
+                if zr[0, 0] == zr[0, 1]:
+                    return True, float(zr[0, 0])
+                return False, None
+            if zc.ndim == 3 and zc.shape[1:] == (2, 2):
+                if np.all(zr[:, 0, 0] == zr[:, 1, 1]):
+                    all_same = (np.max(zr) - np.min(zr)) < 1e-12
+                    if all_same:
+                        return True, float(zr.reshape(-1)[0])
+                    return True, zr[:, 0, 0].copy()
+                return False, None
+            return False, None
 
-        zo_ok, zo_val = _check_scalar_real(z_old, nfreqs)
-        zn_ok, zn_val = _check_scalar_real(z_new, nfreqs)
+        zo_ok, zo_vec = _extract_per_port_real(z_old, nfreqs)
+        zn_ok, zn_vec = _extract_per_port_real(z_new, nfreqs)
 
         if zo_ok and zn_ok:
-            return _renormalize_s_2port_scalar(s, zo_val, zn_val)
+            return _renormalize_s_2port_real(s, zo_vec, zn_vec)
 
     # that's a heck of a one-liner!
     return z2s(s2z(s, z0=z_old, s_def=s_def_old), z0=z_new, s_def=s_def)
 
 
-def _renormalize_s_2port_scalar(s, z_old, z_new):
-    """2 端口网络标量实数阻抗下的 renormalize 闭式公式。
+def _renormalize_s_2port_real(s, z_old, z_new):
+    """2 端口网络实数阻抗下的 renormalize 闭式公式。
 
+    z_old / z_new 可以是标量或长度为 nfreqs 的实数向量。
     先转 Z 参数再转回 S 参数，全部元素级运算，避免矩阵求逆。
-    适用于两端口 z_old / z_new 均为相同实数标量的常见情形。
     """
     s11 = s[:, 0, 0]
     s12 = s[:, 0, 1]

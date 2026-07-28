@@ -1067,8 +1067,13 @@ class Media(ABC):
 
         s11 = np.zeros(self.frequency.npoints, dtype=complex)
         s21 = np.exp(-1*theta)
-        result.s = \
-            np.array([[s11, s21], [s21, s11]]).transpose().reshape(-1, 2, 2)
+        # 显式指定 dtype=complex，避免 rsnumpy np.array 从嵌套 ndarray 推断 dtype 错误
+        s_mat = np.zeros((self.frequency.npoints, 2, 2), dtype=complex)
+        s_mat[:, 0, 0] = s11
+        s_mat[:, 0, 1] = s21
+        s_mat[:, 1, 0] = s21
+        s_mat[:, 1, 1] = s11
+        result.s = s_mat
 
         # renormalize (or embed) into z0_port if required
         if self.z0_port is not None:
