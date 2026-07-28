@@ -128,6 +128,11 @@ def cumulative_trapezoid(y, x=None, dx=1.0, axis=-1, initial=None):
     if y.shape[axis] == 0:
         raise ValueError("At least one point is required along `axis`.")
 
+    # 将负 axis 转为正 axis，避免后续操作出错
+    nd = len(y.shape)
+    if axis < 0:
+        axis += nd
+
     if x is None:
         d = dx
     else:
@@ -135,10 +140,10 @@ def cumulative_trapezoid(y, x=None, dx=1.0, axis=-1, initial=None):
         if x.ndim == 1:
             d = np.diff(x)
             # 重塑为正确的形状
-            shape = [1] * y.ndim
+            shape = [1] * nd
             shape[axis] = -1
             d = d.reshape(tuple(shape))
-        elif len(x.shape) != len(y.shape):
+        elif len(x.shape) != nd:
             raise ValueError("If given, shape of x must be 1-D or the "
                              "same as y.")
         else:
@@ -148,7 +153,6 @@ def cumulative_trapezoid(y, x=None, dx=1.0, axis=-1, initial=None):
             raise ValueError("If given, length of x along axis must be the "
                              "same as y.")
 
-    nd = len(y.shape)
     slice1 = tuple(slice(None) if i != axis else slice(1, None) for i in range(nd))
     slice2 = tuple(slice(None) if i != axis else slice(None, -1) for i in range(nd))
     res = np.cumsum(d * (y[slice1] + y[slice2]) / 2.0, axis=axis)
@@ -159,8 +163,10 @@ def cumulative_trapezoid(y, x=None, dx=1.0, axis=-1, initial=None):
 
         shape = list(res.shape)
         shape[axis] = 1
-        res = np.concatenate((np.full(tuple(shape), initial, dtype=res.dtype), res),
-                             axis=axis)
+        # 在 axis 前面插入 initial=0 的切片
+        zeros_shape = tuple(shape)
+        zeros_arr = np.full(zeros_shape, initial, dtype=res.dtype)
+        res = np.concatenate((zeros_arr, res), axis=axis)
 
     return res
 

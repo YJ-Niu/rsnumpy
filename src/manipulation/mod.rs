@@ -61,26 +61,50 @@ fn stack(arrays: &Bound<'_, PyAny>, axis: usize) -> PyResult<NdArray> {
             return Err(PyValueError::new_err("All arrays must have the same shape"));
         }
     }
-    // 一次性收集所有 expanded view，避免逐个 concatenate（O(n²) → O(n)）
-    let expanded_views: Vec<_> = ndarrays
-        .iter()
-        .map(|arr| {
-            let mut s = orig_shape.clone();
-            s.insert(axis, 1);
-            arr.data
-                .clone()
-                .into_shape_with_order(IxDyn(&s))
-                .unwrap()
-                .into_dyn()
+    // 检测是否存在复数数组
+    let has_imag = ndarrays.iter().any(|arr| arr.imag.is_some());
+
+    // 辅助闭包：对给定分量数组执行 expand + concatenate
+    let stack_component = |comps: Vec<Array<f64, IxDyn>>| -> PyResult<Array<f64, IxDyn>> {
+        let expanded_views: Vec<_> = comps
+            .iter()
+            .map(|arr| {
+                let mut s = orig_shape.clone();
+                s.insert(axis, 1);
+                arr.clone()
+                    .into_shape_with_order(IxDyn(&s))
+                    .unwrap()
+                    .into_dyn()
+            })
+            .collect();
+        let views: Vec<_> = expanded_views.iter().map(|a| a.view()).collect();
+        let result = ndarray::concatenate(Axis(axis), &views)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(result.into_dyn())
+    };
+
+    let re_comps: Vec<_> = ndarrays.iter().map(|a| a.data.clone()).collect();
+    let result_re = stack_component(re_comps)?;
+    if has_imag {
+        let im_comps: Vec<_> = ndarrays
+            .iter()
+            .map(|a| {
+                a.imag
+                    .clone()
+                    .unwrap_or_else(|| Array::zeros(a.data.raw_dim()))
+            })
+            .collect();
+        let result_im = stack_component(im_comps)?;
+        Ok(NdArray {
+            imag: Some(result_im),
+            data: result_re,
         })
-        .collect();
-    let views: Vec<_> = expanded_views.iter().map(|a| a.view()).collect();
-    let result = ndarray::concatenate(Axis(axis), &views)
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray {
-        imag: None,
-        data: result.into_dyn(),
-    })
+    } else {
+        Ok(NdArray {
+            imag: None,
+            data: result_re,
+        })
+    }
 }
 
 #[pyfunction]

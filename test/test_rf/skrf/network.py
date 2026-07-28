@@ -3368,17 +3368,48 @@ class Network:
             fstep = self.frequency.f[1] - self.frequency.f[0]
             points = len(self) + int(round(self.frequency.f[0]/fstep))
         if dc_sparam is None:
-            # Interpolate DC point alone first using linear interpolation, because
-            # interp1d can't extrapolate with other methods.
+            # 根据 kind 决定多项式阶数：使用多点多项式拟合做外推，
+            # 比原先固定 2 点线性外推更准确，尤其对低频相位敏感的仿真数据。
             # TODO: Option to enforce passivity
-            x = result.s[:2]
-            f = result.frequency.f[:2]
+            if isinstance(kind, int):
+                order = kind
+            elif kind == 'cubic':
+                order = 3
+            elif kind == 'quadratic':
+                order = 2
+            elif kind in ('linear', 'slinear'):
+                order = 1
+            elif kind in ('zero', 'nearest', 'previous', 'next'):
+                order = 0
+            else:
+                # 'rational' 或其他：回退到线性
+                order = 1
+            # 使用 order+2 个点做多项式拟合（过约束，更稳定）；
+            # 至少 order+1 个点，最多不超过可用频点数。
+            n_pts = min(max(order + 2, order + 1), len(self))
+            x = result.s[:n_pts]
+            f = result.frequency.f[:n_pts]
             rad = np.unwrap(np.angle(x), axis=0)
             mag = np.abs(x)
-            interp_rad = scipy.interpolate.interp1d(
-                f, rad, axis=0, fill_value='extrapolate')
-            interp_mag = scipy.interpolate.interp1d(
-                f, mag, axis=0, fill_value='extrapolate')
+            deg = min(n_pts - 1, order)
+
+            def _poly_extrap(y_arr, xq):
+                """对 y_arr (n_pts, ...) 沿 axis=0 做多项式外推到 xq。"""
+                shape = y_arr.shape[1:]
+                y_flat = y_arr.reshape(n_pts, -1)
+                n_col = y_flat.shape[1]
+                out = np.zeros(n_col)
+                for i in range(n_col):
+                    coeffs = np.polyfit(f, y_flat[:, i], deg)
+                    out[i] = np.polyval(coeffs, xq)
+                return out.reshape(shape)
+
+            def interp_rad(xq):
+                return _poly_extrap(rad, xq)
+
+            def interp_mag(xq):
+                return _poly_extrap(mag, xq)
+
             dc_sparam = interp_mag(0) * np.exp(1j * interp_rad(0))
             # Extrapolate other points and insert
             fstep = self.frequency.f[-1]/(points-1)

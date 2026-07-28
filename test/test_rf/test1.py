@@ -206,7 +206,7 @@ loss_conn_db = 20 * log10(absolute(MSL100.s[:, 1, 0])) - Loss_mea
 alpha = 1.6*np.log(10)/20 * np.sqrt(f/1e9)
 beta = 2*np.pi*f/c0
 gamma = alpha + 1j*beta
-mf = rf.media.DefinedGammaZ0(m.frequency, z0_port=50, z0=53.5, gamma=gamma)
+mf = rf.media.DefinedGammaZ0(m.frequency, z0_port=50, z0=55.0, gamma=gamma)
 left = mf.line(delay*1e9, 'ns')
 right = left.flipped()
 check = left ** right
@@ -246,6 +246,14 @@ DUT_dc.plot_z_time_step(1, 1)
 plt.xlim(-2, 4)
 plt.tight_layout()
 ssaver('./test/test_rf/test_data/test9.png')
+
+plt.figure()
+plt.title('Measured vs modelled data')
+MSL100.plot_s_db()
+mod.name = 'Model'
+mod.plot_s_db(0, 0, color='k')
+mod.plot_s_db(1, 0, color='k')
+ssaver('./test/test_rf/test_data/test10.png')
 
 start_time = time.time()
 print(f"Time cost: {start_time - end_time} seconds")
