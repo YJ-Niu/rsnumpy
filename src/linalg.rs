@@ -2,6 +2,7 @@ use ndarray::linalg::Dot;
 use ndarray::{Array, Ix2, IxDyn};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use rayon::prelude::*;
 
 use crate::NdArray;
 
@@ -233,6 +234,12 @@ fn matmul(_py: Python<'_>, a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
 #[pyfunction]
 fn inv(a: &NdArray) -> PyResult<NdArray> {
     let shape = a.data.shape().to_vec();
+
+    // 3D 批量 (B, 2, 2) 快速路径：rayon 并行 + 复数支持
+    if shape.len() == 3 && shape[1] == 2 && shape[2] == 2 {
+        return inv_batch_2x2(a);
+    }
+
     if shape.len() != 2 || shape[0] != shape[1] {
         return Err(PyValueError::new_err("inv requires a square matrix"));
     }
@@ -297,6 +304,92 @@ fn inv(a: &NdArray) -> PyResult<NdArray> {
         _ => Err(PyValueError::new_err(
             "inv only supports 2x2 and 3x3 matrices",
         )),
+    }
+}
+
+/// 批量 2x2 矩阵求逆，支持实数和复数，rayon 并行
+fn inv_batch_2x2(a: &NdArray) -> PyResult<NdArray> {
+    let batch = a.data.shape()[0];
+    let a_re = &a.data;
+
+    if a.has_imag() {
+        let a_im = a.imag.as_ref().unwrap();
+
+        // 每个矩阵返回 [r00_re, r00_im, r01_re, r01_im, r10_re, r10_im, r11_re, r11_im]
+        let results: Vec<[f64; 8]> = (0..batch)
+            .into_par_iter()
+            .map(|b| {
+                let a00r = a_re[[b, 0, 0]];
+                let a00i = a_im[[b, 0, 0]];
+                let a01r = a_re[[b, 0, 1]];
+                let a01i = a_im[[b, 0, 1]];
+                let a10r = a_re[[b, 1, 0]];
+                let a10i = a_im[[b, 1, 0]];
+                let a11r = a_re[[b, 1, 1]];
+                let a11i = a_im[[b, 1, 1]];
+
+                // det = a00*a11 - a01*a10 (复数乘法)
+                let det_r = a00r * a11r - a00i * a11i - a01r * a10r + a01i * a10i;
+                let det_i = a00r * a11i + a00i * a11r - a01r * a10i - a01i * a10r;
+
+                // inv_det = conj(det) / |det|^2
+                let det_sq = det_r * det_r + det_i * det_i;
+                let inv_det_r = det_r / det_sq;
+                let inv_det_i = -det_i / det_sq;
+
+                // inv = inv_det * [[a11, -a01], [-a10, a00]]
+                let r00r = a11r * inv_det_r - a11i * inv_det_i;
+                let r00i = a11r * inv_det_i + a11i * inv_det_r;
+                let r01r = -(a01r * inv_det_r - a01i * inv_det_i);
+                let r01i = -(a01r * inv_det_i + a01i * inv_det_r);
+                let r10r = -(a10r * inv_det_r - a10i * inv_det_i);
+                let r10i = -(a10r * inv_det_i + a10i * inv_det_r);
+                let r11r = a00r * inv_det_r - a00i * inv_det_i;
+                let r11i = a00r * inv_det_i + a00i * inv_det_r;
+
+                [r00r, r00i, r01r, r01i, r10r, r10i, r11r, r11i]
+            })
+            .collect();
+
+        let mut re_vec = Vec::with_capacity(batch * 4);
+        let mut im_vec = Vec::with_capacity(batch * 4);
+        for r in &results {
+            re_vec.extend_from_slice(&[r[0], r[2], r[4], r[6]]);
+            im_vec.extend_from_slice(&[r[1], r[3], r[5], r[7]]);
+        }
+
+        let re_arr = Array::from_shape_vec((batch, 2, 2), re_vec)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let im_arr = Array::from_shape_vec((batch, 2, 2), im_vec)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+
+        Ok(NdArray {
+            imag: Some(im_arr.into_dyn()),
+            data: re_arr.into_dyn(),
+        })
+    } else {
+        // 实数批量 2x2 求逆
+        let results: Vec<[f64; 4]> = (0..batch)
+            .into_par_iter()
+            .map(|b| {
+                let a00 = a_re[[b, 0, 0]];
+                let a01 = a_re[[b, 0, 1]];
+                let a10 = a_re[[b, 1, 0]];
+                let a11 = a_re[[b, 1, 1]];
+                let det = a00 * a11 - a01 * a10;
+                let inv_det = 1.0 / det;
+                [a11 * inv_det, -a01 * inv_det, -a10 * inv_det, a00 * inv_det]
+            })
+            .collect();
+
+        let re_vec: Vec<f64> = results.iter().flat_map(|r| r.iter().copied()).collect();
+        let re_arr = Array::from_shape_vec((batch, 2, 2), re_vec)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+
+        Ok(NdArray {
+            imag: None,
+            data: re_arr.into_dyn(),
+        })
     }
 }
 

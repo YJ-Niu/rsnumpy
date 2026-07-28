@@ -354,8 +354,17 @@ class linalg_module:
         shape = a_arr.shape
         if len(shape) == 2 and not _is_complex_arr(a_arr):
             return _wrap(_core.linalg.inv(_ensure(a_arr)))
-        
+
         if len(shape) == 3:
+            # (B, 2, 2) 批量求逆：直接调用 Rust 层 rayon 并行实现
+            if shape[1] == 2 and shape[2] == 2:
+                try:
+                    result = _core.linalg.inv(_ensure(a_arr))
+                    dtype = 'complex128' if _is_complex_arr(a_arr) else 'float64'
+                    return ndarray._wrap(result, _dtype=dtype)
+                except (ValueError, TypeError):
+                    pass  # 回退到通用路径
+            # 通用批量路径：Python 循环逐矩阵求逆
             batch_size = shape[0]
             result = empty(shape, dtype=a_arr._dtype)
             for i in range(batch_size):
@@ -367,7 +376,7 @@ class linalg_module:
                     except (ValueError, LinAlgError):
                         result[i] = ndarray(_pinv_general(a_arr[i].tolist()))
             return result
-        
+
         return ndarray(_inv_nested(a_arr.tolist()))
 
     @staticmethod

@@ -48,7 +48,7 @@ _sys.modules['rsnumpy'] = _current_module
 _sys.modules['rsnumpy.__init__'] = _current_module
 _current_module.__name__ = 'rsnumpy'
 
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 
 # 捕获内建函数别名：_extra 挂载会向本模块 globals 注入同名的 rsnumpy 函数
 # （all/any/round），会遮蔽内建函数。以下别名保证本文件内部逻辑始终使用内建实现。
@@ -150,7 +150,10 @@ class ndarray:
             self._complex_data = getattr(data, '_complex_data', None)
         elif hasattr(data, '__class__') and data.__class__.__name__ == 'ndarray':
             self._array = data
-            self._dtype = _dtype
+            if getattr(data, 'is_complex', False):
+                self._dtype = "complex128"
+            else:
+                self._dtype = _dtype
             self._fields = _fields
             self._raw_data = _raw_data
         else:

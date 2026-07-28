@@ -3,21 +3,46 @@ use crate::*;
 #[pyfunction]
 fn concatenate(arrays: &Bound<'_, PyAny>, axis: usize) -> PyResult<NdArray> {
     let list = arrays.cast::<PyList>()?;
-    let mut ndarrays: Vec<Array<f64, IxDyn>> = Vec::with_capacity(list.len());
+    let mut re_arrays: Vec<Array<f64, IxDyn>> = Vec::with_capacity(list.len());
+    let mut im_arrays: Vec<Option<Array<f64, IxDyn>>> = Vec::with_capacity(list.len());
+    let mut has_imag = false;
     for item in list.iter() {
         let nd = item.extract::<NdArray>()?;
-        ndarrays.push(nd.data);
+        re_arrays.push(nd.data);
+        let has_im = nd.imag.is_some();
+        im_arrays.push(nd.imag);
+        if has_im {
+            has_imag = true;
+        }
     }
-    if ndarrays.is_empty() {
+    if re_arrays.is_empty() {
         return Err(PyValueError::new_err("Need at least one array"));
     }
-    let views: Vec<_> = ndarrays.iter().map(|a| a.view()).collect();
-    let result = ndarray::concatenate(Axis(axis), &views)
+    let re_views: Vec<_> = re_arrays.iter().map(|a| a.view()).collect();
+    let result_re = ndarray::concatenate(Axis(axis), &re_views)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray {
-        imag: None,
-        data: result.into_dyn(),
-    })
+    if has_imag {
+        let mut imag_sized: Vec<Array<f64, IxDyn>> = Vec::with_capacity(im_arrays.len());
+        for (i, im_opt) in im_arrays.iter().enumerate() {
+            if let Some(im) = im_opt {
+                imag_sized.push(im.clone());
+            } else {
+                imag_sized.push(Array::zeros(re_arrays[i].raw_dim()));
+            }
+        }
+        let im_views: Vec<_> = imag_sized.iter().map(|a| a.view()).collect();
+        let result_im = ndarray::concatenate(Axis(axis), &im_views)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(NdArray {
+            imag: Some(result_im.into_dyn()),
+            data: result_re.into_dyn(),
+        })
+    } else {
+        Ok(NdArray {
+            imag: None,
+            data: result_re.into_dyn(),
+        })
+    }
 }
 
 #[pyfunction]
@@ -535,33 +560,51 @@ fn roll(a: &NdArray, shift: isize, axis: Option<isize>) -> PyResult<NdArray> {
         None => 0,
     };
     if ndim == 0 {
-        return Ok(NdArray {
-            imag: None,
-            data: a.data.clone(),
-        });
+        return Ok(a.clone());
     }
     let shape = a.data.shape().to_vec();
     let axis_size = shape[ax] as isize;
     let shift = shift.rem_euclid(axis_size);
-    let data_vec: Vec<f64> = a.data.iter().copied().collect();
     let pre_size: usize = shape.iter().take(ax).product();
     let post_size: usize = shape.iter().skip(ax + 1).product();
     let block_size = axis_size as usize * post_size;
-    let mut result = Vec::with_capacity(data_vec.len());
+
+    let data_vec: Vec<f64> = a.data.iter().copied().collect();
+    let mut result_re = Vec::with_capacity(data_vec.len());
     for outer in 0..pre_size {
         for k in 0..axis_size as usize {
             let src = ((k as isize - shift).rem_euclid(axis_size)) as usize;
             for inner in 0..post_size {
-                result.push(data_vec[outer * block_size + src * post_size + inner]);
+                result_re.push(data_vec[outer * block_size + src * post_size + inner]);
             }
         }
     }
-    let arr = Array::from_shape_vec(IxDyn(&shape), result)
+    let arr_re = Array::from_shape_vec(IxDyn(&shape), result_re)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray {
-        imag: None,
-        data: arr,
-    })
+
+    if let Some(im) = &a.imag {
+        let im_vec: Vec<f64> = im.iter().copied().collect();
+        let mut result_im = Vec::with_capacity(im_vec.len());
+        for outer in 0..pre_size {
+            for k in 0..axis_size as usize {
+                let src = ((k as isize - shift).rem_euclid(axis_size)) as usize;
+                for inner in 0..post_size {
+                    result_im.push(im_vec[outer * block_size + src * post_size + inner]);
+                }
+            }
+        }
+        let arr_im = Array::from_shape_vec(IxDyn(&shape), result_im)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(NdArray {
+            imag: Some(arr_im),
+            data: arr_re,
+        })
+    } else {
+        Ok(NdArray {
+            imag: None,
+            data: arr_re,
+        })
+    }
 }
 
 #[pyfunction]
@@ -621,47 +664,59 @@ fn flip(a: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
     let ndim = shape.len();
     let data_vec: Vec<f64> = a.data.iter().copied().collect();
 
-    match axis {
-        None => {
-            let mut result = vec![0.0; data_vec.len()];
-            for (i, &v) in data_vec.iter().rev().enumerate() {
-                result[i] = v;
-            }
-            let arr = Array::from_shape_vec(IxDyn(&shape), result)
-                .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            Ok(NdArray {
-                imag: None,
-                data: arr,
-            })
-        }
-        Some(ax) => {
-            let ax = if ax < 0 {
-                (ndim as isize + ax) as usize
-            } else {
-                ax as usize
-            };
-            if ax >= ndim {
-                return Err(PyValueError::new_err(format!("axis {} out of bounds", ax)));
-            }
-            let axis_size = shape[ax];
-            let pre: usize = shape.iter().take(ax).product();
-            let post: usize = shape.iter().skip(ax + 1).product();
-            let mut result = vec![0.0; data_vec.len()];
-
-            for p in 0..pre {
-                for i in 0..axis_size {
-                    let src = p * axis_size * post + i * post;
-                    let dst = p * axis_size * post + (axis_size - 1 - i) * post;
-                    result[dst..dst + post].copy_from_slice(&data_vec[src..src + post]);
+    let flip_data = |data: &[f64]| -> Vec<f64> {
+        match axis {
+            None => {
+                let mut result = vec![0.0; data.len()];
+                for (i, &v) in data.iter().rev().enumerate() {
+                    result[i] = v;
                 }
+                result
             }
-            let arr = Array::from_shape_vec(IxDyn(&shape), result)
-                .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            Ok(NdArray {
-                imag: None,
-                data: arr,
-            })
+            Some(ax) => {
+                let ax = if ax < 0 {
+                    (ndim as isize + ax) as usize
+                } else {
+                    ax as usize
+                };
+                if ax >= ndim {
+                    return data.to_vec();
+                }
+                let axis_size = shape[ax];
+                let pre: usize = shape.iter().take(ax).product();
+                let post: usize = shape.iter().skip(ax + 1).product();
+                let mut result = vec![0.0; data.len()];
+
+                for p in 0..pre {
+                    for i in 0..axis_size {
+                        let src = p * axis_size * post + i * post;
+                        let dst = p * axis_size * post + (axis_size - 1 - i) * post;
+                        result[dst..dst + post].copy_from_slice(&data[src..src + post]);
+                    }
+                }
+                result
+            }
         }
+    };
+
+    let result_re = flip_data(&data_vec);
+    let arr_re = Array::from_shape_vec(IxDyn(&shape), result_re)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+
+    if let Some(im) = &a.imag {
+        let im_vec: Vec<f64> = im.iter().copied().collect();
+        let result_im = flip_data(&im_vec);
+        let arr_im = Array::from_shape_vec(IxDyn(&shape), result_im)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(NdArray {
+            imag: Some(arr_im),
+            data: arr_re,
+        })
+    } else {
+        Ok(NdArray {
+            imag: None,
+            data: arr_re,
+        })
     }
 }
 

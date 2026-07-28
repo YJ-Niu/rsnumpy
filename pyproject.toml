@@ -4,10 +4,10 @@ build-backend = "maturin"
 
 [project]
 name = "rsnumpy"
-version = "1.2.0"
+version = "1.2.1"
 requires-python = ">=3.10"
 description = "A Rust-powered NumPy-compatible array library."
-readme = "README.md"
+readme = "PYPI.md"
 license = { file = "LICENSE" }
 authors = [
     { name = "YJ-Niu" },
@@ -16,6 +16,7 @@ classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",

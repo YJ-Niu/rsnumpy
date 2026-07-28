@@ -279,7 +279,30 @@ r_spectrum = np.fft.rfft(x)
 recovered_r = np.fft.irfft(r_spectrum, n=4)
 ```
 
-#### 5.8 多项式
+#### 5.8 零拷贝缓冲协议
+
+rsnumpy 支持 PEP 3118 缓冲协议，允许下游库（如 rsplotlib）零拷贝读取数组数据：
+
+```python
+import rsnumpy as np
+
+# float64 数组支持 memoryview 零拷贝
+a = np.array([1.0, 2.0, 3.0, 4.0])
+mv = memoryview(a)
+print(mv.format)   # 'd' (f64)
+print(mv.shape)    # (4,)
+print(mv.readonly) # True
+
+# numpy 也能通过缓冲协议零拷贝读取
+import numpy as np
+arr = np.asarray(a)  # 零拷贝，dtype=float64
+
+# int/bool 等非 float64 dtype 通过 __array_interface__ bytes 回退（保证 dtype 精度）
+ia = np.array([1, 2, 3], dtype='int64')
+arr_int = np.asarray(ia)  # dtype=int64，通过 bytes 副本
+```
+
+#### 5.9 多项式
 
 ```python
 import rsnumpy as np
@@ -300,7 +323,7 @@ y = np.array([1, 2, 5, 10, 17])  # y = x^2 + 1
 coef = np.polynomial.polyfit(x, y, 2)
 ```
 
-#### 5.9 文件 I/O
+#### 5.10 文件 I/O
 
 ```python
 import rsnumpy as np
@@ -331,7 +354,7 @@ print(loaded['c'].tolist())       # [1, 2, 3]
 arr = np.frombuffer(bytes_data)
 ```
 
-#### 5.10 判断函数与常量
+#### 5.11 判断函数与常量
 
 ```python
 import rsnumpy as np
@@ -347,7 +370,7 @@ print(np.isinf(a))
 print(np.isfinite(a))
 ```
 
-#### 5.11 日期时间与网格
+#### 5.12 日期时间与网格
 
 ```python
 import rsnumpy as np
@@ -491,9 +514,10 @@ A: 当前版本仅支持 CPU。
 
 rsnumpy 的性能来自以下几项底层设计：
 
-- **主动释放 GIL**：计算密集算子（逐元素、归约、排序、`cumsum`、`matmul` 等）在进入 Rust 前通过 `py.detach` 释放 GIL，使纯计算与其它 Python 线程真正并行。
+- **主动释放 GIL**：计算密集算子（逐元素、归约、排序、`cumsum`、`matmul`、`inv` 等）在进入 Rust 前通过 `py.detach` 释放 GIL，使纯计算与其它 Python 线程真正并行。
 - **成本分级并行阈值**：按算子的每元素成本设置不同的并行启用门槛——超越函数（`sin`/`exp` 等）阈值最低，访存密集型（`add`/`mul`/`div`）阈值最高——避免小数组因线程调度反而变慢。
 - **BLAS 后端**：macOS 上 `matmul`/`dot` 经 ndarray 的 `blas` 特性分派到系统 Accelerate 框架；其它平台回退到多线程的纯 Rust `matrixmultiply` 内核。
+- **2×2 矩阵求逆并行**：`linalg.inv` 的 2×2 批量分支在 Rust 层用 rayon 并行加速，支持复数类型，避免 Python 层逐个矩阵求逆。
 - **连续内存与就地扫描**：`cumsum`/`cumprod` 等在单份 C 序缓冲上就地前缀扫描并按连续块并行，减少分配与拷贝。
 - **精简依赖**：关闭 `zip` 等依赖中未使用的编解码器特性，配合 `lto = "fat"` 与符号裁剪，将扩展体积控制在约 5 MB。
 
@@ -796,7 +820,30 @@ r_spectrum = np.fft.rfft(x)
 recovered_r = np.fft.irfft(r_spectrum, n=4)
 ```
 
-#### 5.8 Polynomials
+#### 5.8 Zero-Copy Buffer Protocol
+
+rsnumpy supports the PEP 3118 buffer protocol, allowing downstream libraries like rsplotlib to read array data without copying:
+
+```python
+import rsnumpy as np
+
+# float64 arrays support zero-copy memoryview
+a = np.array([1.0, 2.0, 3.0, 4.0])
+mv = memoryview(a)
+print(mv.format)   # 'd' (f64)
+print(mv.shape)    # (4,)
+print(mv.readonly) # True
+
+# numpy can also read via buffer protocol (zero-copy)
+import numpy as np
+arr = np.asarray(a)  # zero-copy, dtype=float64
+
+# Non-float64 dtypes (int/bool) fall back to __array_interface__ bytes (dtype fidelity)
+ia = np.array([1, 2, 3], dtype='int64')
+arr_int = np.asarray(ia)  # dtype=int64, via bytes copy
+```
+
+#### 5.9 Polynomials
 
 ```python
 import rsnumpy as np
@@ -817,7 +864,7 @@ y = np.array([1, 2, 5, 10, 17])  # y = x^2 + 1
 coef = np.polynomial.polyfit(x, y, 2)
 ```
 
-#### 5.9 File I/O
+#### 5.10 File I/O
 
 ```python
 import rsnumpy as np
@@ -848,7 +895,7 @@ print(loaded['c'].tolist())       # [1, 2, 3]
 arr = np.frombuffer(bytes_data)
 ```
 
-#### 5.10 Constants & predicates
+#### 5.11 Constants & predicates
 
 ```python
 import rsnumpy as np
@@ -864,7 +911,7 @@ print(np.isinf(a))
 print(np.isfinite(a))
 ```
 
-#### 5.11 Datetime & meshgrid
+#### 5.12 Datetime & meshgrid
 
 ```python
 import rsnumpy as np
@@ -1008,11 +1055,13 @@ Measured on macOS (Apple Silicon), using NumPy as the baseline. Each operator re
 
 rsnumpy's performance comes from a few low-level design choices:
 
-- **Releasing the GIL**: compute-heavy operators (element-wise, reductions, sort, `cumsum`, `matmul`, ...) release the GIL via `py.detach` before entering Rust, so pure computation runs truly in parallel with other Python threads.
+- **Releasing the GIL**: compute-heavy operators (element-wise, reductions, sort, `cumsum`, `matmul`, `inv`, ...) release the GIL via `py.detach` before entering Rust, so pure computation runs truly in parallel with other Python threads.
 - **Cost-tiered parallel thresholds**: the size at which parallelism kicks in varies by per-element cost — lowest for transcendental functions (`sin`/`exp`), highest for memory-bound ops (`add`/`mul`/`div`) — avoiding slowdowns from thread scheduling on small arrays.
 - **BLAS backend**: on macOS, `matmul`/`dot` dispatch to the system Accelerate framework through ndarray's `blas` feature; other platforms fall back to the multi-threaded pure-Rust `matrixmultiply` kernel.
+- **2×2 matrix inversion parallel**: `linalg.inv`'s 2×2 batch branch uses rayon parallelism in Rust, supporting complex types, avoiding per-matrix inversion in Python.
 - **Contiguous memory & in-place scans**: `cumsum`/`cumprod` do an in-place prefix scan over a single C-order buffer, parallelized over contiguous blocks, minimizing allocation and copies.
 - **Lean dependencies**: unused codec features (e.g. in `zip`) are disabled, and combined with `lto = "fat"` and symbol stripping the extension stays around 5 MB.
+- **Zero-copy buffer protocol**: `rsnumpy.ndarray` implements PEP 3118 (`__buffer__`/`__release_buffer__` in Python 3.12+) and PEP 3118 (`__getbuffer__`/`__releasebuffer__` in Rust), allowing downstream libraries like rsplotlib to read float64 array data without copying. For non-float64 dtypes, `__array_interface__` with bytes fallback ensures dtype fidelity.
 
 ### 9. CI/CD
 

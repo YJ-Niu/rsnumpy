@@ -1,6 +1,6 @@
 [package]
 name = "rsnumpy"
-version = "1.2.0"
+version = "1.2.1"
 edition = "2024"
 
 [lib]
@@ -35,7 +35,7 @@ ndarray = { version = "0.17.2", features = ["blas"] }
 blas-src = { version = "0.14.0", features = ["accelerate"] }
 
 [profile.release]
-opt-level = 2
+opt-level = 3
 lto = "thin"
 codegen-units = 16
 strip = "symbols"
