@@ -746,8 +746,6 @@ class Frequency:
         calls `labelXAxis`.
         """
 
-        from .plotting import scale_frequency_ticks
-
         try:
             if len(np.shape(y)) > 2:
                 # perhaps the dimensions are empty, try to squeeze it down
@@ -767,9 +765,7 @@ class Frequency:
         except (TypeError):
             y = y * np.ones(len(self))
 
-        # plt.plot(self.f_scaled, y, *args, **kwargs)
-        ax.plot(self.f, y, *args, **kwargs)
-        scale_frequency_ticks(ax, self.unit)
+        ax.plot(self.f_scaled, y, *args, **kwargs)
         ax.autoscale(axis='x', tight=True)
         self.labelXAxis()
 

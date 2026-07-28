@@ -228,6 +228,79 @@ def scale_frequency_ticks(ax: Axes, funit: str):
     ax.xaxis.set_major_formatter(ticks_x)
 
 
+def _compute_x_values(frequency):
+    """
+    根据频率单位显式计算用于绘图的 X 轴数值。
+
+    rsplotlib 不识别 FuncFormatter 之外的 tick 位置，因此传入的 X 数据
+    必须是已按 unit 缩放后的数值（GHz/MHz/kHz/Hz 形式），保证 X 轴刻度
+    数值与 ``Frequency (unit)`` 标签一致。
+
+    Parameters
+    ----------
+    frequency : :class:`~skrf.frequency.Frequency`
+        频率对象
+
+    Returns
+    -------
+    x_values : rsnumpy.ndarray
+        已按 unit 缩放后的频率数组
+    """
+    unit = frequency.unit.lower() if frequency.unit else 'hz'
+    # 显式判断单位，对 raw Hz 值按 unit 进行缩放
+    if unit == 'hz':
+        scale = 1.0
+    elif unit == 'khz':
+        scale = 1e-3
+    elif unit == 'mhz':
+        scale = 1e-6
+    elif unit == 'ghz':
+        scale = 1e-9
+    elif unit == 'thz':
+        scale = 1e-12
+    else:
+        scale = 1.0
+    return frequency.f * scale
+
+
+def _set_x_axis_with_unit(ax: Axes, frequency):
+    """
+    显式设置 X 轴的 label、formatter 和刻度，确保刻度数值与单位标签一致。
+
+    当 X 数据已经按 unit 缩放（如 500-750 表示 500-750 GHz），
+    此函数只设置标签与刻度格式，不再对 X 值做二次缩放，
+    避免 ``scale_frequency_ticks`` 把已经缩放好的值再次乘以 multiplier。
+
+    Parameters
+    ----------
+    ax : :class:`rsplotlib.axes.Axes`
+        目标坐标轴
+    frequency : :class:`~skrf.frequency.Frequency`
+        频率对象
+    """
+    unit = frequency.unit if frequency.unit else 'Hz'
+    x_values = _compute_x_values(frequency)
+    ax.set_xlabel(f'Frequency ({unit})')
+
+    # X 数据已经是按 unit 缩放后的数值，只设置刻度格式化器，不二次缩放
+    from rsplotlib import ticker
+
+    def _fmt_tick(v: float) -> str:
+        av = abs(v)
+        if av >= 1e5 or (0.0 < av < 1e-3):
+            return f'{v:.1e}'
+        if abs(v - round(v)) < 1e-9:
+            return f'{round(v):.0f}'
+        return f'{v:g}'
+
+    _fmt_x = ticker.FuncFormatter(_fmt_tick)
+    ax.xaxis.set_major_formatter(_fmt_x)
+
+    # 显式设置 X 轴范围，避免 fill_between/errorbar 改变范围后刻度错位
+    if len(x_values) > 0:
+        ax.set_xlim(float(x_values[0]), float(x_values[-1]))
+
+
 def _clip_circle_to_disk(cx, cy, radius, disk_r, n=361):
     """Return polyline segments of a circle clipped to a centered disk.
 
@@ -1694,6 +1767,10 @@ def plot_uncertainty_bounds_component(
     else:
         N = [n]
 
+    # 显式按单位计算 X 轴数值（GHz/MHz/kHz/Hz），保证刻度与标签一致
+    x_values = _compute_x_values(self[0].frequency)
+    x_unit = self[0].frequency.unit
+
     for m in M:
         for n in N:
 
@@ -1731,24 +1808,24 @@ def plot_uncertainty_bounds_component(
                         plot_kwargs['label'] = f"S{m+1}{n+1}"
                 if 'linewidth' not in plot_kwargs:
                     plot_kwargs['linewidth'] = 2
-                
+
                 # 先绘制线条
                 ntwk_mean.plot_s_re(ax=ax, m=m, n=n, **plot_kwargs)
-                
+
                 # 获取线条颜色
                 if color_error is None:
                     color_error = 'blue'
-                
-                # 再绘制填充区域
+
+                # 再绘制填充区域，使用已按 unit 缩放后的 X 数据
                 ax.fill_between(
-                    ntwk_mean.frequency.f_scaled,
+                    x_values,
                     lower_bound.real,
                     upper_bound.real,
                     alpha=0.1,
                     color=color_error,
                     **kwargs_error)
-                # ax.plot(ntwk_mean.frequency.f_scaled, ntwk_mean.s[:,m,n],*args,**kwargs)
-                
+                # ax.plot(x_values, ntwk_mean.s[:,m,n],*args,**kwargs)
+
             elif type == 'bar':
                 plot_kwargs = kwargs.copy()
                 if 'label' not in plot_kwargs:
@@ -1760,7 +1837,7 @@ def plot_uncertainty_bounds_component(
                 ntwk_mean.plot_s_re(ax=ax, m=m, n=n, **plot_kwargs, label=plot_kwargs['label'])
                 if color_error is None:
                     color_error = ax.get_lines()[-1].get_color()
-                ax.errorbar(ntwk_mean.frequency.f_scaled[::markevery_error],
+                ax.errorbar(x_values[::markevery_error],
                             ntwk_mean.s_re[:, m, n].squeeze()[
                     ::markevery_error],
                     yerr=ntwk_std.s_mag[:, m, n].squeeze()[
@@ -1772,7 +1849,8 @@ def plot_uncertainty_bounds_component(
 
             # use only the function of the attribute
             ax.set_ylabel(self[0].Y_LABEL_DICT.get(plot_attribute[2:], ''))
-            scale_frequency_ticks(ax, ntwk_mean.frequency.unit)
+            # 显式设置 X 轴 label、formatter 和范围，确保刻度值与单位一致
+            _set_x_axis_with_unit(ax, ntwk_mean.frequency)
             ax.axis('tight')
 
 
@@ -1848,6 +1926,9 @@ def plot_minmax_bounds_component(
     ntwk_mean = self.__getattribute__('mean_'+attribute)
     ntwk_std = self.__getattribute__('std_'+attribute)
 
+    # 显式按单位计算 X 轴数值（GHz/MHz/kHz/Hz），保证刻度与标签一致
+    x_values = _compute_x_values(self[0].frequency)
+
     lower_bound = self.__getattribute__(
         'min_'+attribute).s_re[:, m, n].squeeze()
     upper_bound = self.__getattribute__(
@@ -1873,19 +1954,19 @@ def plot_minmax_bounds_component(
         if color_error is None:
             color_error = ax.get_lines()[-1].get_color()
         ax.fill_between(
-            ntwk_mean.frequency.f,
+            x_values,
             lower_bound,
             upper_bound,
             alpha=alpha,
             color=color_error,
             **kwargs_error)
-        # ax.plot(ntwk_mean.frequency.f_scaled,ntwk_mean.s[:,m,n],*args,**kwargs)
+        # ax.plot(x_values,ntwk_mean.s[:,m,n],*args,**kwargs)
     elif type == 'bar':
         raise (NotImplementedError)
         ntwk_mean.plot_s_re(ax=ax, m=m, n=n, **kwargs)
         if color_error is None:
             color_error = ax.get_lines()[-1].get_color()
-        ax.errorbar(ntwk_mean.frequency.f[::markevery_error],
+        ax.errorbar(x_values[::markevery_error],
                     ntwk_mean.s_re[:, m, n].squeeze()[::markevery_error],
                     yerr=ntwk_std.s_mag[:, m, n].squeeze()[::markevery_error],
                     color=color_error, **kwargs_error)
@@ -1895,7 +1976,8 @@ def plot_minmax_bounds_component(
 
     # use only the function of the attribute
     ax.set_ylabel(self[0].Y_LABEL_DICT.get(attribute[2:], ''))
-    scale_frequency_ticks(ax, ntwk_mean.frequency.unit)
+    # 显式设置 X 轴 label、formatter 和范围，确保刻度值与单位一致
+    _set_x_axis_with_unit(ax, ntwk_mean.frequency)
     ax.axis('tight')
 
 
@@ -1956,7 +2038,8 @@ def plot_violin(
     similar.  Uncertainty for wrapped phase blows up at +-pi.
     """
 
-    freq = self.ntwk_set[0].frequency.f_scaled
+    # 显式按单位计算 X 轴数值（GHz/MHz/kHz/Hz），保证刻度与标签一致
+    freq = _compute_x_values(self.ntwk_set[0].frequency)
 
     # default widths to 3/4 distance between frequencies
     if not widths and len(freq) > 1:
@@ -1969,10 +2052,10 @@ def plot_violin(
     _plot_violin_fallback(
         ax, data, freq, widths, showmeans, showextrema, showmedians, quantiles, points, bw_method, **kwargs)
 
-    ax.set_xlabel(f'Frequency ({self.ntwk_set[0].frequency.unit})')
+    # 显式设置 X 轴 label、formatter 和范围，确保刻度值与单位一致
+    _set_x_axis_with_unit(ax, self.ntwk_set[0].frequency)
     # use only the function of the attribute
     ax.set_ylabel(self[0].Y_LABEL_DICT.get(attribute[2:], ''))
-    scale_frequency_ticks(ax, self.ntwk_set[0].frequency.unit)
     ax.axis('tight')
 
 

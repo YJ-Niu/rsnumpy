@@ -219,7 +219,47 @@ fn insert_rs(
     values: Vec<f64>,
     axis: Option<isize>,
 ) -> PyResult<NdArray> {
-    let ndim = a.data.ndim();
+    // 处理复数数组：values 为 [real0, imag0, real1, imag1, ...]
+    if a.has_imag() {
+        // 将 values 分离为实部和虚部
+        let mut re_values = Vec::new();
+        let mut im_values = Vec::new();
+        for i in (0..values.len()).step_by(2) {
+            re_values.push(values[i]);
+            let im_val = if i + 1 < values.len() {
+                values[i + 1]
+            } else {
+                0.0
+            };
+            im_values.push(im_val);
+        }
+
+        // 对实部和虚部分别调用 insert_rs_internal
+        let re_result = insert_rs_internal(&a.data, &indices, &re_values, axis)?;
+        let im_array = a.imag.as_ref().unwrap();
+        let im_result = insert_rs_internal(im_array, &indices, &im_values, axis)?;
+
+        return Ok(NdArray {
+            imag: Some(im_result),
+            data: re_result,
+        });
+    }
+
+    // 实数数组：直接处理
+    let result = insert_rs_internal(&a.data, &indices, &values, axis)?;
+    Ok(NdArray {
+        imag: None,
+        data: result,
+    })
+}
+
+fn insert_rs_internal(
+    a: &Array<f64, IxDyn>,
+    indices: &[isize],
+    values: &[f64],
+    axis: Option<isize>,
+) -> PyResult<Array<f64, IxDyn>> {
+    let ndim = a.ndim();
     let ax = axis.map(|x| {
         if x < 0 {
             (ndim as isize + x) as usize
@@ -228,12 +268,12 @@ fn insert_rs(
         }
     });
 
-    let flat_data: Vec<f64> = a.data.iter().copied().collect();
+    let flat_data: Vec<f64> = a.iter().copied().collect();
 
     if ax.is_none() {
         let mut result = flat_data.clone();
         let mut offset = 0;
-        let mut sorted_indices: Vec<isize> = indices.clone();
+        let mut sorted_indices: Vec<isize> = indices.to_vec();
         sorted_indices.sort_unstable();
 
         for &idx in &sorted_indices {
@@ -252,14 +292,11 @@ fn insert_rs(
 
         let arr = Array::from_shape_vec(IxDyn(&[result.len()]), result)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        return Ok(NdArray {
-            imag: None,
-            data: arr,
-        });
+        return Ok(arr);
     }
 
     let ax = ax.unwrap();
-    let shape = a.data.shape().to_vec();
+    let shape = a.shape().to_vec();
     let axis_size = shape[ax];
     let pre_size: usize = shape.iter().take(ax).product();
     let post_size: usize = shape.iter().skip(ax + 1).product();
@@ -307,10 +344,7 @@ fn insert_rs(
     new_shape[ax] = new_axis_size;
     let arr = Array::from_shape_vec(IxDyn(&new_shape), result)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray {
-        imag: None,
-        data: arr,
-    })
+    Ok(arr)
 }
 
 #[pyfunction]

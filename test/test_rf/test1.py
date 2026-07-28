@@ -140,14 +140,14 @@ fix1_dc.plot_z_time_step(0, 0)
 fix2_dc.plot_z_time_step(0, 0)
 d_dut_dc.plot_z_time_step(0, 0)
 plt.xlim(-2, 4)
-
+ssaver('./test/test_rf/test_data/test5.png')
 # residuals frequency domain
 plt.figure(figsize=(8, 4))
 plt.subplot(1, 2, 1)
 res.plot_s_db(1, 0)
 plt.subplot(1, 2, 2)
 res.plot_s_deg(1, 0)
-ssaver('./test/test_rf/test_data/test5.png')
+ssaver('./test/test_rf/test_data/test6.png')
 
 start_time = time.time()
 print(f"Time cost: {start_time - end_time} seconds")

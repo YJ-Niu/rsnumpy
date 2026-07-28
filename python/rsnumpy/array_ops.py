@@ -47,9 +47,31 @@ def ravel(a, order='C'):
 
 
 def moveaxis(a, source, destination):
-    """移动数组的轴（简化实现）。"""
+    """将数组的轴从 source 移动到 destination。"""
     arr = a if hasattr(a, '_array') else _wrap(a)
-    return arr
+    nd = _nd()
+    ndim = arr.ndim
+    # 标准化 source 和 destination
+    if isinstance(source, int):
+        source = [source]
+    if isinstance(destination, int):
+        destination = [destination]
+    source = [s % ndim for s in source]
+    destination = [d % ndim for d in destination]
+    # 如果已经是正确位置，直接返回
+    if source == destination:
+        return arr
+    # 通过 swapaxes 实现移动
+    result = arr
+    for s, d in zip(source, destination):
+        # 将轴 s 逐步移动到 d
+        if s < d:
+            for i in range(s, d):
+                result = swapaxes(result, i, i + 1)
+        elif s > d:
+            for i in range(s, d, -1):
+                result = swapaxes(result, i, i - 1)
+    return result
 
 
 def rollaxis(a, axis, start=0):
@@ -343,7 +365,7 @@ def insert(arr, obj, values, axis=None):
 
     if isinstance(obj, int):
         obj = [obj]
-    
+
     if not hasattr(values, '_array'):
         if isinstance(values, (list, tuple)):
             values_nd = _nd()(values)
@@ -351,8 +373,42 @@ def insert(arr, obj, values, axis=None):
             values_nd = _nd()([values])
     else:
         values_nd = values
-    
+
     values_flat = values_nd.ravel().tolist()
+
+    # 检查数据中是否包含复数（即使 dtype 声明为 float64）
+    def _contains_complex(data):
+        """递归检查数据中是否包含复数"""
+        if isinstance(data, complex):
+            return True
+        if isinstance(data, (list, tuple)):
+            return any(_contains_complex(x) for x in data)
+        return False
+
+    # 处理复数数据：展平为 [real, imag, real, imag, ...]
+    if dtype == 'complex128' or _contains_complex(values_flat):
+        # 展平复数为 [real, imag, real, imag, ...]
+        flat_real_imag = []
+        for item in values_flat:
+            if isinstance(item, complex):
+                flat_real_imag.extend([item.real, item.imag])
+            elif isinstance(item, (list, tuple)):
+                # 递归展平嵌套列表
+                def _flatten_complex_nested(lst):
+                    result = []
+                    for x in lst:
+                        if isinstance(x, complex):
+                            result.extend([x.real, x.imag])
+                        elif isinstance(x, (list, tuple)):
+                            result.extend(_flatten_complex_nested(x))
+                        else:
+                            result.extend([float(x), 0.0])
+                    return result
+                flat_real_imag.extend(_flatten_complex_nested(item))
+            else:
+                flat_real_imag.extend([float(item), 0.0])
+        values_flat = flat_real_imag
+
     result = _core.insert_rs(arr._array, obj, values_flat, axis)
     return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
 

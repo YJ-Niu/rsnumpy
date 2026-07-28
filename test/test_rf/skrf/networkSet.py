@@ -197,9 +197,9 @@ class NetworkSet:
 
         # create list of network properties, which we use to dynamically
         # create a statistical properties of this set
-        network_property_list = [k+'_'+l
+        network_property_list = [k+'_'+l_
                                  for k in PRIMARY_PROPERTIES
-                                 for l in COMPONENT_FUNC_DICT.keys()] + \
+                                 for l_ in COMPONENT_FUNC_DICT.keys()] + \
             ['passivity', 's']
 
         # dynamically generate properties. this is slick.
@@ -530,11 +530,9 @@ class NetworkSet:
             self.plot_uncertainty_bounds_component(
                 network_property_name, *args, **kwargs)
 
-        setattr(self.__class__, 'plot_uncertainty_bounds_' +
-                network_property_name, plot_func)
+        setattr(self.__class__, 'plot_uncertainty_bounds_' + network_property_name, plot_func)
 
-        setattr(self.__class__, 'plot_ub_' +
-                network_property_name, plot_func)
+        setattr(self.__class__, 'plot_ub_' + network_property_name, plot_func)
 
     def __add_a_plot_minmax(self, network_property_name: str):
         """
@@ -556,11 +554,9 @@ class NetworkSet:
             self.plot_minmax_bounds_component(
                 network_property_name, *args, **kwargs)
 
-        setattr(self.__class__, 'plot_minmax_bounds_' +
-                network_property_name, plot_func)
+        setattr(self.__class__, 'plot_minmax_bounds_' + network_property_name, plot_func)
 
-        setattr(self.__class__, 'plot_mm_' +
-                network_property_name, plot_func)
+        setattr(self.__class__, 'plot_mm_' + network_property_name, plot_func)
 
     def to_dict(self) -> dict:
         """
@@ -1178,8 +1174,7 @@ class NetworkSet:
 
         # are all the dict keys the same?
         params_keys = self.ntwk_set[0].params.keys()
-        if not all(ntwk.params.keys() ==
-                   params_keys for ntwk in self.ntwk_set):
+        if not all(ntwk.params.keys() == params_keys for ntwk in self.ntwk_set):
             return False
 
         # then we are all good

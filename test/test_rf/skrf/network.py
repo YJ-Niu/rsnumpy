@@ -5290,11 +5290,10 @@ class Network:
 
                     else:
                         xlabel = f'Frequency ({self.frequency.unit})'
-                        # Plot the frequency already scaled to `unit` (e.g. GHz).
-                        # rsplotlib does not honor the FuncFormatter that
-                        # scale_frequency_ticks would set, so plotting raw Hz
-                        # leaves the ticks in Hz while the label says GHz.
-                        x = self.frequency.f_scaled
+                        # 显式按单位判断并对 X 值进行计算（GHz/MHz/kHz/Hz），
+                        # 再用计算后的值作为 X 轴数据，保证刻度数值与单位标签一致
+                        from .plotting import _compute_x_values
+                        x = _compute_x_values(self.frequency)
                         y = self.attribute(attribute, conversion)[:, m, n]
 
                         if logx:
