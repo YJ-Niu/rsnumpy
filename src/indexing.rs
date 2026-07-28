@@ -609,6 +609,34 @@ fn scatter(data: &mut [f64], dim_lists: &[Vec<usize>], strides: &[usize], values
     }
 }
 
+/// 按 C 顺序（行优先）展平 ndarray，确保非 C 连续数组也能正确排序。
+/// 直接用 `arr.iter()` 会按内存顺序迭代，对转置视图或列切片会产生错误的顺序。
+fn flatten_c_order(arr: &Array<f64, IxDyn>) -> Vec<f64> {
+    let shape: Vec<usize> = arr.shape().to_vec();
+    let total = arr.len();
+    if arr.is_standard_layout() {
+        // C 连续数组，直接按内存顺序拷贝
+        if let Some(s) = arr.as_slice_memory_order() {
+            return s.to_vec();
+        }
+    }
+    // 非 C 连续，按 C 顺序逐元素索引
+    let strides = compute_strides(&shape);
+    let mut result = Vec::with_capacity(total);
+    for lin in 0..total {
+        let mut rem = lin;
+        let mut idx: Vec<usize> = Vec::with_capacity(shape.len());
+        for &st in &strides {
+            let coord = rem / st;
+            rem %= st;
+            idx.push(coord);
+        }
+        let val = arr[IxDyn(&idx)];
+        result.push(val);
+    }
+    result
+}
+
 #[pyfunction]
 pub fn setitem_multi(
     a: &Bound<'_, NdArray>,
@@ -626,8 +654,11 @@ pub fn setitem_multi(
     }
 
     let val_nd = crate::coerce_value_to_nd(value)?;
-    let re: Vec<f64> = val_nd.data.iter().copied().collect();
-    let im: Option<Vec<f64>> = val_nd.imag.as_ref().map(|im| im.iter().copied().collect());
+    // 按 C 顺序（行优先）展平值数组，确保与 scatter_advanced 的值索引一致。
+    // 不能直接用 data.iter()，因为非 C 连续数组（如转置视图、列切片）的
+    // iter() 顺序是内存顺序而非 C 顺序。
+    let re: Vec<f64> = flatten_c_order(&val_nd.data);
+    let im: Option<Vec<f64>> = val_nd.imag.as_ref().map(flatten_c_order);
 
     let target_count = calculate_target_count(&filled_indices);
     let broadcast = re.len() == 1;
@@ -639,8 +670,6 @@ pub fn setitem_multi(
         )));
     }
 
-    let strides = compute_strides(&shape);
-
     let mut a_borrow = a.borrow_mut();
 
     if im.is_some() && a_borrow.imag.is_none() {
@@ -648,15 +677,27 @@ pub fn setitem_multi(
         a_borrow.imag = Some(zeros);
     }
 
+    // 使用数据的实际内存步长（按元素数，非字节），而非总是用 C 顺序计算的 strides。
+    // 原因：copy()/clone() 会保留原数组布局，若原数组为 F 连续（如 fix1._s[0]），
+    // 用 C 顺序 strides 会写入错误位置。as_slice_memory_order_mut 返回内存顺序切片，
+    // 必须配合实际 strides 使用。
+    // 注意：ndarray 的 `strides()` 返回的已经是元素步长（非字节），不要再除以 elem_size。
+    let write_strides: Vec<usize> = a_borrow
+        .data
+        .strides()
+        .iter()
+        .map(|&s| s as usize)
+        .collect();
+
     {
         let data = a_borrow.data.as_slice_memory_order_mut().unwrap();
-        scatter_advanced(data, &filled_indices, &strides, &re, broadcast);
+        scatter_advanced(data, &filled_indices, &write_strides, &re, broadcast);
     }
     if let Some(imag_arr) = a_borrow.imag.as_mut() {
         let idata = imag_arr.as_slice_memory_order_mut().unwrap();
         match &im {
-            Some(iv) => scatter_advanced(idata, &filled_indices, &strides, iv, broadcast),
-            None => scatter_advanced(idata, &filled_indices, &strides, &[0.0], true),
+            Some(iv) => scatter_advanced(idata, &filled_indices, &write_strides, iv, broadcast),
+            None => scatter_advanced(idata, &filled_indices, &write_strides, &[0.0], true),
         }
     }
 
@@ -712,92 +753,15 @@ fn scatter_advanced(
         .map(|(i, _)| i)
         .collect();
 
-    let mut adv_shape: Vec<usize> = vec![];
-    for &ai in &adv_axes {
-        if let AxisPlan::Adv { shape: sh, .. } = &axes[ai] {
-            adv_shape = broadcast_shapes(&adv_shape, sh).unwrap();
-        }
-    }
-    let adv_size: usize = adv_shape.iter().product();
-
-    let slice_axes: Vec<usize> = axes
-        .iter()
-        .enumerate()
-        .filter(|(_, a)| matches!(a, AxisPlan::Slice(_)))
-        .map(|(i, _)| i)
-        .collect();
-
-    let slice_dim_lists: Vec<Vec<usize>> = axes
-        .iter()
-        .filter(|a| matches!(a, AxisPlan::Slice(_)))
-        .map(|a| {
-            if let AxisPlan::Slice(v) = a {
-                v.clone()
-            } else {
-                vec![]
-            }
-        })
-        .collect();
-
-    let _adv_flat: Vec<Vec<usize>> = adv_axes
-        .iter()
-        .map(|&ai| {
-            if let AxisPlan::Adv { flat, .. } = &axes[ai] {
-                flat.clone()
-            } else {
-                vec![]
-            }
-        })
-        .collect();
-
-    let adv_strides: Vec<usize> = {
-        let mut s = vec![1; adv_shape.len()];
-        if adv_shape.len() > 1 {
-            for i in (0..adv_shape.len() - 1).rev() {
-                s[i] = s[i + 1] * adv_shape[i + 1];
-            }
-        }
-        s
-    };
-
-    let adv_ndim = adv_shape.len();
-
-    let total: usize = slice_dim_lists.iter().map(|d| d.len()).product::<usize>() * adv_size;
-
-    for lin in 0..total {
-        let adv_lin = lin % adv_size;
-        let slice_lin = lin / adv_size;
-        let mut out_coord = vec![0usize; adv_ndim];
-        let mut rem = adv_lin;
-        for k in (0..adv_ndim).rev() {
-            out_coord[k] = rem / adv_strides[k];
-            rem %= adv_strides[k];
-        }
-
-        let mut src_idx = vec![0usize; indices.len()];
-        for (j, &ai) in adv_axes.iter().enumerate() {
-            if let AxisPlan::Adv {
-                shape: sh, flat, ..
-            } = &axes[ai]
-            {
-                let off = adv_ndim - sh.len();
-                let mut fidx = 0usize;
-                for (dd, &sd) in sh.iter().enumerate() {
-                    let c = if sd == 1 { 0 } else { out_coord[off + dd] };
-                    fidx += c
-                        * (if j < adv_strides.len() {
-                            adv_strides[j]
-                        } else {
-                            1
-                        });
-                }
-                if !flat.is_empty() && fidx < flat.len() {
-                    src_idx[ai] = flat[fidx];
-                }
-            }
-        }
-
-        let mut slice_rem = slice_lin;
+    if adv_axes.is_empty() {
+        let slice_dim_lists: Vec<Vec<usize>> = axes
+            .iter()
+            .filter_map(|a| match a {
+                AxisPlan::Slice(v) => Some(v.clone()),
+                _ => None,
+            })
+            .collect();
+        let total: usize = slice_dim_lists.iter().map(|d| d.len()).product();
         let slice_strides: Vec<usize> = {
             let mut s = vec![1; slice_dim_lists.len()];
             if slice_dim_lists.len() > 1 {
@@ -807,13 +771,133 @@ fn scatter_advanced(
             }
             s
         };
-        for (k, &si) in slice_axes.iter().enumerate() {
-            let coord = slice_rem / slice_strides[k];
-            slice_rem %= slice_strides[k];
-            if let AxisPlan::Slice(v) = &axes[si]
-                && coord < v.len()
-            {
-                src_idx[si] = v[coord];
+        let slice_axes: Vec<usize> = axes
+            .iter()
+            .enumerate()
+            .filter(|(_, a)| matches!(a, AxisPlan::Slice(_)))
+            .map(|(i, _)| i)
+            .collect();
+        for lin in 0..total {
+            let mut rem = lin;
+            let mut src_idx = vec![0usize; indices.len()];
+            for (k, &si) in slice_axes.iter().enumerate() {
+                let coord = rem / slice_strides[k];
+                rem %= slice_strides[k];
+                if let AxisPlan::Slice(v) = &axes[si] {
+                    src_idx[si] = v[coord];
+                }
+            }
+            let mut flat_idx = 0;
+            for (d, &si) in src_idx.iter().enumerate() {
+                flat_idx += si * strides[d];
+            }
+            if flat_idx < data.len() {
+                data[flat_idx] = if broadcast { values[0] } else { values[lin] };
+            }
+        }
+        return;
+    }
+
+    let mut adv_shape: Vec<usize> = vec![];
+    for &ai in &adv_axes {
+        if let AxisPlan::Adv { shape: sh, .. } = &axes[ai] {
+            adv_shape = broadcast_shapes(&adv_shape, sh).unwrap();
+        }
+    }
+    let adv_ndim = adv_shape.len();
+
+    let contiguous = adv_axes.windows(2).all(|w| w[1] == w[0] + 1);
+
+    enum OutAxis {
+        Slice(usize),
+        AdvBlock,
+    }
+    let mut out_axes: Vec<OutAxis> = Vec::new();
+    if contiguous {
+        let first_adv = *adv_axes.first().unwrap();
+        for (d, a) in axes.iter().enumerate() {
+            match a {
+                AxisPlan::Slice(_) => out_axes.push(OutAxis::Slice(d)),
+                AxisPlan::Adv { .. } => {
+                    if d == first_adv {
+                        out_axes.push(OutAxis::AdvBlock);
+                    }
+                }
+            }
+        }
+    } else {
+        out_axes.push(OutAxis::AdvBlock);
+        for (d, a) in axes.iter().enumerate() {
+            if let AxisPlan::Slice(_) = a {
+                out_axes.push(OutAxis::Slice(d));
+            }
+        }
+    }
+
+    let mut out_shape: Vec<usize> = Vec::new();
+    for oa in &out_axes {
+        match oa {
+            OutAxis::Slice(d) => {
+                if let AxisPlan::Slice(idxs) = &axes[*d] {
+                    out_shape.push(idxs.len());
+                }
+            }
+            OutAxis::AdvBlock => out_shape.extend_from_slice(&adv_shape),
+        }
+    }
+
+    let out_strides = compute_strides(&out_shape);
+    let total: usize = out_shape.iter().product();
+
+    let adv_strides: Vec<Vec<usize>> = adv_axes
+        .iter()
+        .map(|&ai| {
+            if let AxisPlan::Adv { shape: sh, .. } = &axes[ai] {
+                compute_strides(sh)
+            } else {
+                unreachable!()
+            }
+        })
+        .collect();
+
+    for lin in 0..total {
+        let mut rem = lin;
+        let mut out_coord = vec![0usize; out_shape.len()];
+        for (k, oc) in out_coord.iter_mut().enumerate() {
+            *oc = rem / out_strides[k];
+            rem %= out_strides[k];
+        }
+
+        let mut src_idx = vec![0usize; indices.len()];
+        let mut cursor = 0usize;
+        for oa in &out_axes {
+            match oa {
+                OutAxis::Slice(d) => {
+                    if let AxisPlan::Slice(idxs) = &axes[*d] {
+                        src_idx[*d] = idxs[out_coord[cursor]];
+                    }
+                    cursor += 1;
+                }
+                OutAxis::AdvBlock => {
+                    let adv_coord = &out_coord[cursor..cursor + adv_ndim];
+                    for (j, &ai) in adv_axes.iter().enumerate() {
+                        if let AxisPlan::Adv {
+                            shape: sh, flat, ..
+                        } = &axes[ai]
+                        {
+                            let off = adv_ndim - sh.len();
+                            let mut fidx = 0usize;
+                            for (dd, &sd) in sh.iter().enumerate() {
+                                let c = if sd == 1 { 0 } else { adv_coord[off + dd] };
+                                fidx += c * adv_strides[j][dd];
+                            }
+                            if !flat.is_empty() && fidx < flat.len() {
+                                src_idx[ai] = flat[fidx];
+                            }
+                        }
+                    }
+                    cursor += adv_ndim;
+                }
             }
         }
 

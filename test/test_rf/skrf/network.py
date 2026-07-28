@@ -7397,17 +7397,16 @@ def s2t(s: np.ndarray) -> np.ndarray:
     xh = int(x/2)
     # S_II,I^-1
     sinv = np.linalg.inv(s[:, yh:y, 0:xh])
-    # np.linalg.inv test for singularity (matrix not invertible)
-    for k in range(len(s)):
-        w = sinv[k].dot(s[k, yh:y, xh:x])
-        # T_I,I = S_I,II - S_I,I . S_II,I^-1 . S_II,II
-        t[k, 0:yh, 0:xh] = s[k, 0:yh, xh:x] - s[k, 0:yh, 0:xh].dot(w)
-        # T_I,II = S_I,I . S_II,I^-1
-        t[k, 0:yh, xh:x] = s[k, 0:yh, 0:xh].dot(sinv[k])
-        # T_II,I = -S_II,I^-1 . S_II,II
-        t[k, yh:y, 0:xh] = -w
-        # T_II,II = S_II,I^-1
-        t[k, yh:y, xh:x] = sinv[k]
+    # 使用批量矩阵乘法替代 Python 循环，避免 rsnumpy 逐元素索引开销
+    w = sinv @ s[:, yh:y, xh:x]
+    # T_I,I = S_I,II - S_I,I . S_II,I^-1 . S_II,II
+    t[:, 0:yh, 0:xh] = s[:, 0:yh, xh:x] - s[:, 0:yh, 0:xh] @ w
+    # T_I,II = S_I,I . S_II,I^-1
+    t[:, 0:yh, xh:x] = s[:, 0:yh, 0:xh] @ sinv
+    # T_II,I = -S_II,I^-1 . S_II,II
+    t[:, yh:y, 0:xh] = -w
+    # T_II,II = S_II,I^-1
+    t[:, yh:y, xh:x] = sinv
     return t
 
 
@@ -8175,17 +8174,16 @@ def t2s(t: np.ndarray) -> np.ndarray:
     xh = int(x/2)
     # T_II,II^-1
     tinv = np.linalg.inv(t[:, yh:y, xh:x])
-    # np.linalg.inv test for singularity (matrix not invertible)
-    for k in range(len(s)):
-        # S_I,I = T_I,II . T_II,II^-1
-        s[k, 0:yh, 0:xh] = t[k, 0:yh, xh:x].dot(tinv[k])
-        # S_I,II = T_I,I - T_I,I,II . T_II,II^-1 . T_II,I
-        s[k, 0:yh, xh:x] = t[k, 0:yh, 0:xh] - \
-            t[k, 0:yh, xh:x].dot(tinv[k].dot(t[k, yh:y, 0:xh]))
-        # S_II,I = T_II,II^-1
-        s[k, yh:y, 0:xh] = tinv[k]
-        # S_II,II = -T_II,II^-1 . T_II,I
-        s[k, yh:y, xh:x] = -tinv[k].dot(t[k, yh:y, 0:xh])
+    # 使用批量矩阵乘法替代 Python 循环，避免 rsnumpy 逐元素索引开销
+    # S_I,I = T_I,II . T_II,II^-1
+    s[:, 0:yh, 0:xh] = t[:, 0:yh, xh:x] @ tinv
+    # S_I,II = T_I,I - T_I,II . T_II,II^-1 . T_II,I
+    s[:, 0:yh, xh:x] = t[:, 0:yh, 0:xh] - \
+        t[:, 0:yh, xh:x] @ tinv @ t[:, yh:y, 0:xh]
+    # S_II,I = T_II,II^-1
+    s[:, yh:y, 0:xh] = tinv
+    # S_II,II = -T_II,II^-1 . T_II,I
+    s[:, yh:y, xh:x] = -tinv @ t[:, yh:y, 0:xh]
     return s
 
 

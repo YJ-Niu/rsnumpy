@@ -1413,12 +1413,57 @@ impl NdArray {
 
     #[pyo3(signature = (axis=None))]
     fn cumsum(&self, py: Python<'_>, axis: Option<isize>) -> PyResult<NdArray> {
-        cumulative(py, &self.data, axis, 0.0, |acc, x| acc + x)
+        let re = cumulative(py, &self.data, axis, 0.0, |acc, x| acc + x)?;
+        if let Some(im) = &self.imag {
+            let im_arr = cumulative(py, im, axis, 0.0, |acc, x| acc + x)?;
+            Ok(NdArray {
+                imag: Some(im_arr.data),
+                data: re.data,
+            })
+        } else {
+            Ok(re)
+        }
     }
 
     #[pyo3(signature = (axis=None))]
     fn cumprod(&self, py: Python<'_>, axis: Option<isize>) -> PyResult<NdArray> {
-        cumulative(py, &self.data, axis, 1.0, |acc, x| acc * x)
+        if let Some(im) = &self.imag {
+            let _ = (py, axis);
+            // 复数累积乘积：实部和虚部分别计算
+            let re_data = &self.data;
+            let im_data = im;
+
+            // 简化处理：展平后逐元素累积
+            let n = re_data.len();
+            let mut re_vals: Vec<f64> = re_data.iter().copied().collect();
+            let mut im_vals: Vec<f64> = im_data.iter().copied().collect();
+
+            let mut cum_re = 1.0;
+            let mut cum_im = 0.0;
+            for i in 0..n {
+                let r = re_vals[i];
+                let img = im_vals[i];
+                // (cum_re + cum_im * i) * (r + img * i)
+                let new_re = cum_re * r - cum_im * img;
+                let new_im = cum_re * img + cum_im * r;
+                cum_re = new_re;
+                cum_im = new_im;
+                re_vals[i] = cum_re;
+                im_vals[i] = cum_im;
+            }
+
+            let shape = re_data.shape().to_vec();
+            let re_arr = Array::from_shape_vec(IxDyn(&shape), re_vals)
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            let im_arr = Array::from_shape_vec(IxDyn(&shape), im_vals)
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            Ok(NdArray {
+                imag: Some(im_arr),
+                data: re_arr,
+            })
+        } else {
+            cumulative(py, &self.data, axis, 1.0, |acc, x| acc * x)
+        }
     }
 
     #[pyo3(signature = (offset=0, axis1=0, axis2=1))]
@@ -1471,7 +1516,8 @@ impl NdArray {
     }
 
     #[pyo3(signature = (*args))]
-    fn item(&self, args: &Bound<'_, PyTuple>) -> PyResult<f64> {
+    fn item<'py>(&self, args: &Bound<'py, PyTuple>) -> PyResult<Bound<'py, PyAny>> {
+        let py = args.py();
         let n = args.len();
         if n == 0 {
             if self.data.len() != 1 {
@@ -1479,7 +1525,9 @@ impl NdArray {
                     "item requires exactly one element array when no indices given",
                 ));
             }
-            return Ok(*self.data.iter().next().unwrap_or(&0.0));
+            let re = *self.data.iter().next().unwrap_or(&0.0);
+            let im = self.imag.as_ref().and_then(|im| im.iter().next().copied());
+            return Ok(scalar_to_py(py, re, im));
         }
         let shape = self.data.shape();
         let mut coords = vec![0usize; shape.len()];
@@ -1492,7 +1540,9 @@ impl NdArray {
             }
             coords[i] = actual as usize;
         }
-        Ok(self.data[IxDyn(&coords)])
+        let re = self.data[IxDyn(&coords)];
+        let im = self.imag.as_ref().map(|im| im[IxDyn(&coords)]);
+        Ok(scalar_to_py(py, re, im))
     }
 
     fn take(&self, indices: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
@@ -1576,14 +1626,31 @@ impl NdArray {
                 }
             })
             .collect();
-        let val_vec: Vec<f64> = values.data.iter().copied().collect();
+        let val_re_vec: Vec<f64> = values.data.iter().copied().collect();
         let data_slice = self
             .data
             .as_slice_mut()
             .ok_or_else(|| PyValueError::new_err("put requires contiguous array"))?;
         for (i, &idx) in idx_vals.iter().enumerate() {
             if idx < flat_len {
-                data_slice[idx] = val_vec[i % val_vec.len()];
+                data_slice[idx] = val_re_vec[i % val_re_vec.len()];
+            }
+        }
+        // 处理虚部
+        if let Some(val_im) = &values.imag {
+            if self.imag.is_none() {
+                self.imag = Some(Array::zeros(self.data.raw_dim()));
+            }
+            if let Some(self_im) = self.imag.as_mut() {
+                let val_im_vec: Vec<f64> = val_im.iter().copied().collect();
+                let im_slice = self_im
+                    .as_slice_mut()
+                    .ok_or_else(|| PyValueError::new_err("put requires contiguous array"))?;
+                for (i, &idx) in idx_vals.iter().enumerate() {
+                    if idx < flat_len {
+                        im_slice[idx] = val_im_vec[i % val_im_vec.len()];
+                    }
+                }
             }
         }
         Ok(())

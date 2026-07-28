@@ -38,6 +38,7 @@ rsnumpy 是一个使用 **Rust + PyO3** 开发的高性能 Python 数值计算�
 
 - **禁止**安装 `numpy` 或其他第三方 Python 数值库（如 `scipy` 的核心功能）
 - 项目自身即为 numpy 兼容库，应完善自身实现而非引入 numpy
+- 如何需要使用numpy来测试或验证功能与rsnumpy进行对比，验证完后，及时删除或注释掉相关代码，确保rsnumpy里没有引用的numpy代码
 - `test/test_rf/` 目录下的 networkx/scipy 用于测试兼容层，可按需更新
 
 ### 5. 代码风格

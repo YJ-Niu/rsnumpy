@@ -48,6 +48,7 @@ check*.py
 test2*.py
 map*.jpeg
 bench_extra.py
+debug/
 *.png
 runtest_matplotlib.py
 

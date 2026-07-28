@@ -1,12 +1,13 @@
 import rsplotlib.pyplot as plt
-import rsnumpy as np
-from rsnumpy import absolute, log10, real, sum
-from scipy.optimize import minimize
+# import rsnumpy as np
+# from rsnumpy import absolute, log10, real, sum
+# from scipy.optimize import minimize
 from skrf.calibration.deembedding import IEEEP370_SE_NZC_2xThru
-from skrf.media import CPW
-
+# from skrf.media import CPW
+import time
 import skrf as rf
 
+start_time = time.time()
 # 保存当前图
 def ssaver(name):
     plt.savefig(name)
@@ -84,3 +85,6 @@ plt.subplot(2, 2, 4)
 fix1.plot_s_deg(1, 0)
 fix2.plot_s_deg(1, 0)
 ssaver('./test/test_rf/test_data/test3.png')
+
+end_time = time.time()
+print(f"Time cost: {end_time - start_time} seconds")
