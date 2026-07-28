@@ -33,6 +33,10 @@ def _wrap(raw, _dtype="float64"):
 
 def _flat(a):
     """返回任意嵌套 tolist 的一维扁平列表。"""
+    # 处理 Poly 对象：提取系数
+    np = _np()
+    if hasattr(a, '__class__') and a.__class__.__name__ == 'Poly':
+        a = a.coef if hasattr(a, 'coef') else np.array(list(a))
     out = []
     stack = [_asarray(a).tolist()]
     while stack:

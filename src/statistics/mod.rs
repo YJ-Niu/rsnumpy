@@ -463,8 +463,7 @@ fn histogram<'py>(
 
 #[pyfunction]
 fn gradient(f: &NdArray) -> PyResult<NdArray> {
-    let values: Vec<f64> = f.data.iter().copied().collect();
-    let n = values.len();
+    let n = f.data.len();
     if n == 0 {
         return Err(PyValueError::new_err("Empty array"));
     }
@@ -474,13 +473,39 @@ fn gradient(f: &NdArray) -> PyResult<NdArray> {
             data: Array::from_elem(IxDyn(&[]), 0.0),
         });
     }
-    let mut grad = Vec::with_capacity(n);
-    grad.push(values[1] - values[0]);
+
+    // 计算实部的梯度
+    let re_values: Vec<f64> = f.data.iter().copied().collect();
+    let mut re_grad = Vec::with_capacity(n);
+    re_grad.push(re_values[1] - re_values[0]);
     for i in 1..n - 1 {
-        grad.push((values[i + 1] - values[i - 1]) / 2.0);
+        re_grad.push((re_values[i + 1] - re_values[i - 1]) / 2.0);
     }
-    grad.push(values[n - 1] - values[n - 2]);
-    let arr = Array::from_shape_vec(IxDyn(&[n]), grad)
+    re_grad.push(re_values[n - 1] - re_values[n - 2]);
+
+    // 如果是复数数组，计算虚部的梯度
+    if let Some(ref im_array) = f.imag {
+        let im_values: Vec<f64> = im_array.iter().copied().collect();
+        let mut im_grad = Vec::with_capacity(n);
+        im_grad.push(im_values[1] - im_values[0]);
+        for i in 1..n - 1 {
+            im_grad.push((im_values[i + 1] - im_values[i - 1]) / 2.0);
+        }
+        im_grad.push(im_values[n - 1] - im_values[n - 2]);
+
+        let re_arr = Array::from_shape_vec(IxDyn(&[n]), re_grad)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let im_arr = Array::from_shape_vec(IxDyn(&[n]), im_grad)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+
+        return Ok(NdArray {
+            imag: Some(im_arr),
+            data: re_arr,
+        });
+    }
+
+    // 实数数组
+    let arr = Array::from_shape_vec(IxDyn(&[n]), re_grad)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(NdArray {
         imag: None,

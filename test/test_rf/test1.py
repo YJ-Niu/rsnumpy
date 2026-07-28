@@ -227,5 +227,25 @@ plt.ylabel('Insertion Loss (dB)')
 plt.legend()
 ssaver('./test/test_rf/test_data/test8.png')
 
+mod = left ** DUT ** right
+mod.name = 'Model'
+
+MSL100_dc = MSL100.extrapolate_to_dc(kind='cubic')
+DUT_dc = mod.extrapolate_to_dc(kind='cubic')
+
+plt.figure()
+plt.suptitle('Left-right and right-left TDR')
+plt.subplot(2, 1, 1)
+MSL100_dc.plot_z_time_step(0, 0)
+DUT_dc.plot_z_time_step(0, 0)
+plt.xlim(-2, 4)
+
+plt.subplot(2, 1, 2)
+MSL100_dc.plot_z_time_step(1, 1)
+DUT_dc.plot_z_time_step(1, 1)
+plt.xlim(-2, 4)
+plt.tight_layout()
+ssaver('./test/test_rf/test_data/test9.png')
+
 start_time = time.time()
 print(f"Time cost: {start_time - end_time} seconds")
