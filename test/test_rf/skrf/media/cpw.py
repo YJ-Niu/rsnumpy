@@ -526,8 +526,7 @@ class CPW(Media):
             a = w / 2.
             b = a + s
             ac = (pi + log(n * a)) / a + (pi + log(n * b)) / b
-            a_conductor = r_s * sqrt(ep_reff) * ac / (4. * Z0 * kk1 * kpk1 *
-                                                      (1. - k1 * k1))
+            a_conductor = r_s * sqrt(ep_reff) * ac / (4. * Z0 * kk1 * kpk1 * (1. - k1 * k1))
         else:
             a_conductor = zeros(f.shape)
 

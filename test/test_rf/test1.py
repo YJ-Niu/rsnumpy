@@ -3,7 +3,7 @@ import rsplotlib.pyplot as plt
 # from rsnumpy import absolute, log10, real, sum
 # from scipy.optimize import minimize
 from skrf.calibration.deembedding import IEEEP370_SE_NZC_2xThru
-# from skrf.media import CPW
+from skrf.media import CPW
 import time
 import skrf as rf
 
@@ -88,3 +88,62 @@ ssaver('./test/test_rf/test_data/test3.png')
 
 end_time = time.time()
 print(f"Time cost: {end_time - start_time} seconds")
+
+ep_r = 4.421
+tanD = 0.0167
+
+cpw = CPW(frequency=d_dut.frequency, w=1.7e-3, s=0.5e-3, t=50e-6, h=1.55e-3,
+          ep_r=ep_r, tand=tanD, rho=1.7e-8, z0_port=50., has_metal_backside=True)
+l_model = cpw.line(d=100.0e-3, unit='m')
+l_model.name = 'model'
+
+# plot them all
+plt.figure(figsize=(10, 10))
+plt.suptitle('Comparison deembedded measurement and simulation')
+plt.subplot(2, 2, 1)
+d_dut.plot_s_db(0, 0)
+l_model.plot_s_db(0, 0,)
+plt.subplot(2, 2, 2)
+d_dut.plot_s_deg(0, 0)
+l_model.plot_s_deg(0, 0)
+plt.subplot(2, 2, 3)
+d_dut.plot_s_db(1, 0)
+l_model.plot_s_db(1, 0)
+plt.subplot(2, 2, 4)
+d_dut.plot_s_deg(1, 0)
+l_model.plot_s_deg(1, 0)
+ssaver('./test/test_rf/test_data/test4.png')
+
+# # compute residuals
+# res = dm.deembed(TL100)
+# res.name = 'residuals'
+# res.s += 1e-15  # avoid numeric singularities
+
+# # extrapolate to dc for time step
+# TL100_dc = TL100.extrapolate_to_dc(kind='linear')
+# TL200_dc = TL200.extrapolate_to_dc(kind='linear')
+# fix1_dc = fix1.extrapolate_to_dc(kind='cubic')
+# fix2_dc = fix2.extrapolate_to_dc(kind='cubic')
+# d_dut_dc = d_dut.extrapolate_to_dc(kind='cubic')
+
+# # plot them all
+# # time domain
+# plt.figure(figsize=(8, 4))
+# plt.suptitle('Time domain reflexion step response (DC extrapolation)')
+# TL100_dc.plot_z_time_step(0, 0)
+# TL200_dc.plot_z_time_step(0, 0)
+# fix1_dc.plot_z_time_step(0, 0)
+# fix2_dc.plot_z_time_step(0, 0)
+# d_dut_dc.plot_z_time_step(0, 0)
+# plt.xlim(-2, 4)
+
+# # residuals frequency domain
+# plt.figure(figsize=(8, 4))
+# plt.subplot(1, 2, 1)
+# res.plot_s_db(1, 0)
+# plt.subplot(1, 2, 2)
+# res.plot_s_deg(1, 0)
+# ssaver('./test/test_rf/test_data/test5.png')
+
+start_time = time.time()
+print(f"Time cost: {start_time - end_time} seconds")
