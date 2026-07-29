@@ -12,12 +12,20 @@
 //! - RwLock 读多写少（设置线程数是低频操作），性能没问题
 
 use pyo3::Bound;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
+
+/// 获取逻辑 CPU 核心数（优先使用标准库，失败时回退到 1）
+fn num_cpus_get() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
+}
 
 /// 全局 rayon 线程池（通过 RwLock 包装，支持动态重建）
 static GLOBAL_POOL: RwLock<Option<Arc<ThreadPool>>> = RwLock::new(None);
@@ -31,9 +39,9 @@ fn default_num_threads() -> usize {
         && let Ok(threads) = threads_str.parse::<usize>()
         && threads > 0
     {
-        return threads.min(num_cpus::get());
+        return threads.min(num_cpus_get());
     }
-    num_cpus::get()
+    num_cpus_get()
 }
 
 /// 确保全局线程池已初始化（如未初始化则用 default_num_threads 构建）
@@ -63,7 +71,7 @@ fn ensure_pool() -> Arc<ThreadPool> {
 
 /// 重建全局线程池（set_num_threads / parallel_context 内部使用）
 fn rebuild_pool(num_threads: usize) -> Arc<ThreadPool> {
-    let n = num_threads.max(1).min(num_cpus::get());
+    let n = num_threads.max(1).min(num_cpus_get());
     let pool = ThreadPoolBuilder::new()
         .num_threads(n)
         .thread_name(|i| format!("rsnumpy-wk-{}", i))
@@ -107,7 +115,7 @@ pub fn set_num_threads(num_threads: usize) -> PyResult<()> {
     let actual = if num_threads == 0 {
         default_num_threads()
     } else {
-        num_threads.max(1).min(num_cpus::get())
+        num_threads.max(1).min(num_cpus_get())
     };
     rebuild_pool(actual);
     Ok(())
@@ -128,7 +136,7 @@ pub fn get_num_threads() -> usize {
 /// 获取 CPU 核心数（Python 接口）
 #[pyfunction]
 pub fn get_num_cpus() -> usize {
-    num_cpus::get()
+    num_cpus_get()
 }
 
 /// 获取并行阈值（Python 接口）
@@ -138,10 +146,53 @@ pub fn get_num_cpus() -> usize {
 #[pyfunction]
 pub fn get_parallel_thresholds(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     let dict = PyDict::new(py);
-    dict.set_item("cheap", crate::PAR_THRESHOLD_CHEAP)?;
-    dict.set_item("medium", crate::PAR_THRESHOLD_MEDIUM)?;
-    dict.set_item("expensive", crate::PAR_THRESHOLD)?;
+    dict.set_item("cheap", crate::par_threshold_cheap())?;
+    dict.set_item("medium", crate::par_threshold_medium())?;
+    dict.set_item("expensive", crate::par_threshold())?;
     Ok(dict)
+}
+
+/// 设置并行阈值（Python 接口）
+///
+/// 【参数】
+/// - `cheap`: 访存密集型阈值（加/减/乘/除等），默认 262144
+/// - `medium`: 中等代价阈值（sqrt/reciprocal 等），默认 49152
+/// - `expensive`: 计算密集型阈值（sin/exp/log 等），默认 32768
+///
+/// 【使用示例】
+/// ```python
+/// import rsnumpy as np
+/// # 降低阈值，让更小的数组也走并行
+/// np.set_parallel_thresholds(expensive=1024, medium=2048, cheap=8192)
+/// # 恢复默认值
+/// np.set_parallel_thresholds(expensive=32768, medium=49152, cheap=262144)
+/// ```
+#[pyfunction]
+#[pyo3(signature = (cheap=None, medium=None, expensive=None))]
+pub fn set_parallel_thresholds(
+    cheap: Option<usize>,
+    medium: Option<usize>,
+    expensive: Option<usize>,
+) -> PyResult<()> {
+    if let Some(v) = cheap {
+        if v < 1 {
+            return Err(PyValueError::new_err("cheap 阈值必须 >= 1"));
+        }
+        crate::PAR_THRESHOLD_CHEAP.store(v, Ordering::Relaxed);
+    }
+    if let Some(v) = medium {
+        if v < 1 {
+            return Err(PyValueError::new_err("medium 阈值必须 >= 1"));
+        }
+        crate::PAR_THRESHOLD_MEDIUM.store(v, Ordering::Relaxed);
+    }
+    if let Some(v) = expensive {
+        if v < 1 {
+            return Err(PyValueError::new_err("expensive 阈值必须 >= 1"));
+        }
+        crate::PAR_THRESHOLD.store(v, Ordering::Relaxed);
+    }
+    Ok(())
 }
 
 /// 并行上下文管理器（Python 接口）
@@ -177,7 +228,7 @@ impl ParallelContext {
         let actual = if num_threads == 0 {
             default_num_threads()
         } else {
-            num_threads.max(1).min(num_cpus::get())
+            num_threads.max(1).min(num_cpus_get())
         };
         let _new_pool = rebuild_pool(actual);
         ParallelContext {
@@ -212,6 +263,7 @@ pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_num_threads, m)?)?;
     m.add_function(wrap_pyfunction!(get_num_cpus, m)?)?;
     m.add_function(wrap_pyfunction!(get_parallel_thresholds, m)?)?;
+    m.add_function(wrap_pyfunction!(set_parallel_thresholds, m)?)?;
     m.add_class::<ParallelContext>()?;
     Ok(())
 }

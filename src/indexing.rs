@@ -482,7 +482,7 @@ fn select_from(
         })
         .collect();
 
-    let result: Vec<f64> = if total >= crate::PAR_THRESHOLD_MEDIUM {
+    let result: Vec<f64> = if total >= crate::par_threshold_medium() {
         crate::threadpool::with_pool(|| {
             (0..total)
                 .into_par_iter()
