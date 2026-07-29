@@ -4,7 +4,7 @@
 不重复实现底层数值循环。热点函数可在后续通过 Rust 层进一步优化。
 """
 
-import builtins as _builtins
+# import builtins as _builtins
 import cmath as _cmath
 import math as _math
 
@@ -790,7 +790,7 @@ def unstack(x, axis=0):
 
 def take_along_axis(arr, indices, axis):
     """沿轴按索引取值。"""
-    np = _np()
+    # np = _np()
     a = _asarray(arr)
     idx = _asarray(indices)
     if axis is None:
@@ -853,7 +853,11 @@ def putmask(a, mask, values):
 
 
 def pad(array, pad_width, mode="constant", **kwargs):
-    """填充数组边缘，支持 constant/edge/reflect/wrap。"""
+    """填充数组边缘，支持 constant/edge/reflect/wrap。
+
+    安全防护：对 pad_width 施加上限，防止恶意输入导致内存耗尽（DoS）。
+    每个维度的填充量不得超过该维度原长度的 4 倍 + 1024，或绝对上限 1 亿。
+    """
     np = _np()
     arr = _asarray(array)
     cval = kwargs.get("constant_values", 0)
@@ -864,6 +868,20 @@ def pad(array, pad_width, mode="constant", **kwargs):
         pw = [tuple(pad_width)] * ndim
     else:
         pw = [tuple(p) for p in pad_width]
+
+    # DoS 防护：校验 pad_width 上限
+    _MAX_PAD_ABS = 100_000_000  # 绝对上限：1 亿
+    for axis, (before, after) in enumerate(pw):
+        axis_len = arr.shape[axis] if axis < len(arr.shape) else 1
+        relative_cap = axis_len * 4 + 1024
+        cap = min(relative_cap, _MAX_PAD_ABS)
+        total = before + after
+        if total > cap:
+            raise ValueError(
+                f"pad_width 过大（轴 {axis}: before={before}, after={after}, "
+                f"合计={total}），超过上限 {cap}。"
+                f"该轴长度为 {axis_len}，允许的最大填充量为 {cap}。"
+            )
 
     def pad_1d(seq, before, after):
         if mode == "constant":
@@ -2988,8 +3006,7 @@ class _EMath:
         n = len(xv) if xv is not None else len(pv)
         # 列表推导代替 for 循环
         out = [complex(float(x) if x_scalar else xv[i]) ** (float(p) if p_scalar else pv[i])
-               if ((float(x) if x_scalar else xv[i]) < 0 and
-                   (float(p) if p_scalar else pv[i]) != int(float(p) if p_scalar else pv[i]))
+               if ((float(x) if x_scalar else xv[i]) < 0 and (float(p) if p_scalar else pv[i]) != int(float(p) if p_scalar else pv[i]))
                else (float(x) if x_scalar else xv[i]) ** (float(p) if p_scalar else pv[i])
                for i in range(n)]
         if builtin_any(isinstance(o, complex) for o in out):
@@ -3076,7 +3093,7 @@ def threadsafe_copy(a):
     【返回】
     ndarray: 输入数组的独立副本，可安全在多线程间共享
     """
-    np = _np()
+    # np = _np()
     arr = _asarray(a)
     return arr.copy()
 
@@ -3120,7 +3137,7 @@ def threadsafe_view(a):
     ThreadsafeArrayWrapper: 带锁的数组包装器
     """
     import threading
-    np = _np()
+    # np = _np()
     arr = _asarray(a)
     return _ThreadsafeArrayWrapper(arr, threading.Lock())
 
@@ -3173,7 +3190,6 @@ class _ThreadsafeArrayWrapper:
             value: 新数组值
         """
         with self._lock:
-            np = _np()
             self._array[:] = _asarray(value)
 
     def __repr__(self):
@@ -3219,7 +3235,7 @@ def check_object_dtype(arr):
     2. 大整数（<2^53）→ 使用 int64
     3. 混合类型 → 使用结构化数组
     """
-    np = _np()
+    # np = _np()
     arr = _asarray(arr)
 
     if arr.dtype == 'object':
@@ -3254,7 +3270,6 @@ def suggest_dtype_for_data(data):
     【返回】
     str: 推荐的 dtype 字符串
     """
-    np = _np()
 
     if not isinstance(data, (list, tuple)):
         data = list(data)
@@ -3275,7 +3290,7 @@ def suggest_dtype_for_data(data):
             if min_val >= -2**53 and max_val < 2**53:
                 return 'int64'
             else:
-                print(f"⚠️ 整数范围超出 ±2^53，将使用 float64（可能损失精度）")
+                print("⚠️ 整数范围超出 ±2^53，将使用 float64（可能损失精度）")
                 return 'float64'
         elif t == float:
             return 'float64'
@@ -3291,6 +3306,834 @@ def suggest_dtype_for_data(data):
     print("无法使用向量化 dtype，将使用 object dtype（性能低）")
     print("建议：重新设计数据结构，使用结构化数组")
     return 'object'
+
+
+def memory_usage(arr, _deep=False):
+    """返回数组占用的内存字节数。
+
+    用于内存分析和泄漏检测，可配合 Python 标准库 tracemalloc 使用。
+
+    参数：
+        arr: rsnumpy 数组或可转换为数组的对象
+        _deep: 是否递归计算嵌套对象的内存（对 object/string dtype 有意义）
+
+    返回：
+        int: 占用的字节数
+
+    使用示例：
+        >>> import rsnumpy as np
+        >>> import sys
+        >>> a = np.zeros((1000, 1000))
+        >>> np.memory_usage(a)
+        8000000
+        >>> sys.getsizeof(a)  # 调用 __sizeof__
+        8000000
+    """
+    import sys as _sys
+
+    if _deep:
+        return _sys.getsizeof(arr)
+    # 浅层：只看底层数据大小
+    if hasattr(arr, 'nbytes'):
+        return arr.nbytes
+    # 降级：尝试转换为数组
+    a = _asarray(arr)
+    return a.nbytes
+
+
+def chunked_apply(func, arr, chunk_size, axis=0, **kwargs):
+    """对数组沿指定轴进行分块计算，避免一次性加载全部数据导致 OOM。
+
+    适用场景：
+        - 处理超大数组，内存不足以容纳全量数据
+        - 对数据计算密集的操作进行流式处理
+        - 需要处理无法一次性加载的文件数据
+
+    参数：
+        func: 应用于每个分块的函数（应接受数组作为第一个参数）
+        arr: 输入数组（rsnumpy.ndarray 或可转换的对象）
+        chunk_size: 每个分块的大小（沿 axis 方向）
+        axis: 分块的轴，默认为 0
+        **kwargs: 传递给 func 的额外关键字参数
+
+    返回：
+        rsnumpy.ndarray: 分块计算后的结果
+
+    使用示例：
+        >>> import rsnumpy as np
+        >>> a = np.arange(1_000_000)
+        >>> # 分块计算，每块 10000 个元素
+        >>> result = np.chunked_apply(np.sqrt, a, chunk_size=10000)
+        >>> len(result)
+        1000000
+
+    注意：
+        - func 必须接受数组作为第一个参数
+        - 对于返回标量的函数，需自行处理结果聚合
+        - 分块大小会影响性能，建议根据内存情况调整
+    """
+    np = _np()
+    arr = _asarray(arr)
+    ndim = arr.ndim
+    axis = axis % ndim
+
+    # 获取分块轴的长度
+    axis_len = arr.shape[axis]
+    if chunk_size <= 0:
+        raise ValueError(f"chunk_size 必须为正整数，得到 {chunk_size}")
+
+    chunks = []
+    for start in builtin_range(0, axis_len, chunk_size):
+        end = builtin_min(start + chunk_size, axis_len)
+        # 创建切片
+        slices = [slice(None)] * ndim
+        slices[axis] = slice(start, end)
+        chunk = arr[tuple(slices)]
+        # 应用函数
+        result = func(chunk, **kwargs)
+        chunks.append(result)
+
+    # 拼接结果
+    if not chunks:
+        return np.array([])
+
+    # 如果所有结果都是数组且可拼接
+    if builtin_all(hasattr(c, '_array') for c in chunks):
+        return np.concatenate(chunks, axis=axis)
+    # 如果是标量列表
+    return np.array(chunks)
+
+
+def mmap_array(filename, dtype='float64', shape=None, offset=0):
+    """从二进制文件读取数组数据，支持大文件分块加载。
+
+    这是一个基础的内存映射工具，用于处理磁盘上的大数据文件。
+    与真正的 mmap 不同，本函数会将数据读取到内存中，但支持指定
+    offset 和 shape 来选择性读取，避免全量加载。
+
+    参数：
+        filename: 二进制文件路径
+        dtype: 数据类型（如 'float64', 'int32' 等），必须与文件中的实际类型匹配
+        shape: 目标数组的形状。如果为 None，则读取一维数组
+        offset: 文件偏移量（字节），默认为 0
+
+    返回：
+        rsnumpy.ndarray: 从文件读取的数组
+
+    使用示例：
+        >>> import rsnumpy as np
+        >>> # 读取整个文件
+        >>> a = np.mmap_array('data.bin', dtype='float64')
+        >>> # 读取文件的一部分（跳过前 1000 字节）
+        >>> a = np.mmap_array('data.bin', dtype='float64', offset=1000)
+        >>> # 指定形状
+        >>> a = np.mmap_array('data.bin', dtype='float64', shape=(100, 100))
+
+    注意：
+        - 本函数仅支持连续内存布局的文件
+        - 对于超大文件，建议配合 chunked_apply 使用
+        - 文件数据的字节序会影响读取结果
+    """
+    import os
+    import struct
+
+    np = _np()
+
+    if not os.path.exists(filename):
+        raise FileNotFoundError(f"文件不存在: {filename}")
+
+    # dtype 到字节大小的映射
+    _dtype_sizes = {
+        'float64': 8, 'float32': 4, 'float16': 2,
+        'int8': 1, 'int16': 2, 'int32': 4, 'int64': 8,
+        'uint8': 1, 'uint16': 2, 'uint32': 4, 'uint64': 8,
+        'bool': 1,
+    }
+    if dtype not in _dtype_sizes:
+        raise ValueError(f"不支持的 dtype: {dtype}。支持的类型: {list(_dtype_sizes.keys())}")
+
+    byte_size = _dtype_sizes[dtype]
+    file_size = os.path.getsize(filename)
+
+    if offset < 0:
+        raise ValueError(f"offset 必须为非负数，得到 {offset}")
+    if offset >= file_size:
+        raise ValueError(f"offset ({offset}) 超出文件大小 ({file_size})")
+
+    remaining = file_size - offset
+
+    if shape is None:
+        # 读取一维数组
+        count = remaining // byte_size
+        if count == 0:
+            return np.array([], dtype=dtype)
+        with open(filename, 'rb') as f:
+            f.seek(offset)
+            raw_data = f.read(count * byte_size)
+
+        if dtype.startswith('int') or dtype.startswith('uint'):
+            sizes = {'int8': 'b', 'int16': 'h', 'int32': 'i', 'int64': 'q',
+                     'uint8': 'B', 'uint16': 'H', 'uint32': 'I', 'uint64': 'Q'}
+            fmt_char = sizes[dtype]
+            values = list(struct.unpack(f'<{count}{fmt_char}', raw_data))
+        elif dtype == 'bool':
+            values = [b != 0 for b in raw_data]
+        else:
+            values = list(struct.unpack(f'<{count}d', raw_data))
+        return np.array(values, dtype=dtype)
+    else:
+        # 读取指定形状的数组
+        total_elements = 1
+        for s in shape:
+            total_elements *= s
+        needed_bytes = total_elements * byte_size
+        if offset + needed_bytes > file_size:
+            raise ValueError(
+                f"文件不足以容纳指定形状 {shape}（需要 {needed_bytes} 字节，"
+                f"可用 {remaining} 字节）"
+            )
+        with open(filename, 'rb') as f:
+            f.seek(offset)
+            raw_data = f.read(needed_bytes)
+
+        if dtype.startswith('int') or dtype.startswith('uint'):
+            sizes = {'int8': 'b', 'int16': 'h', 'int32': 'i', 'int64': 'q',
+                     'uint8': 'B', 'uint16': 'H', 'uint32': 'I', 'uint64': 'Q'}
+            fmt_char = sizes[dtype]
+            values = list(struct.unpack(f'<{total_elements}{fmt_char}', raw_data))
+        elif dtype == 'bool':
+            values = [b != 0 for b in raw_data[:total_elements]]
+        else:
+            values = list(struct.unpack(f'<{total_elements}d', raw_data))
+
+        return np.array(values, dtype=dtype).reshape(shape)
+
+
+class LazyArray:
+    """惰性数组：支持链式方法调用，只在需要时才计算。
+
+    适用场景：
+        - 构建复杂的转换管道，避免中间结果的内存开销
+        - 延迟计算到最后一刻，优化执行顺序
+
+    参数：
+        data: 初始数组（rsnumpy.ndarray 或可转换对象）
+
+    使用示例：
+        >>> import rsnumpy as np
+        >>> a = np.arange(1000.0)
+        >>> # 链式调用，不立即计算
+        >>> lazy = np.LazyArray(a)
+        >>> result = lazy.sqrt()  # 惰性
+        >>> result = result.multiply(2).add(1)  # 继续惰性
+        >>> final = result.compute()  # 在此处计算
+        >>> len(final)
+        1000
+
+    注意：
+        - 惰性数组仅记录操作，不实际计算
+        - 在访问具体数据（如切片、len）时会自动计算
+        - 适合纯函数操作，不适合需要副作用的操作
+    """
+
+    def __init__(self, data):
+        self._operations = []  # 存储 (func, args, kwargs) 元组
+        self._computed = None
+        if hasattr(data, '_array'):
+            self._base = data.copy()
+        else:
+            self._base = _asarray(data).copy()
+
+    def _apply_op(self, func, *args, **kwargs):
+        """添加一个惰性操作"""
+        self._operations.append((func, args, kwargs))
+        self._computed = None  # 重置缓存
+        return self
+
+    def compute(self):
+        """执行所有惰性操作，返回最终数组"""
+        if self._computed is not None:
+            return self._computed
+        result = self._base.copy()
+        for func, args, kwargs in self._operations:
+            result = func(result, *args, **kwargs)
+        self._computed = result
+        return result
+
+    # --- 数学运算 ---
+    def sqrt(self):
+        _np_mod = _np()
+        return self._apply_op(lambda x: _np_mod.sqrt(x))
+
+    def square(self):
+        return self._apply_op(lambda x: x * x)
+
+    def multiply(self, other):
+        return self._apply_op(lambda x, o: x * o, other)
+
+    def add(self, other):
+        return self._apply_op(lambda x, o: x + o, other)
+
+    def subtract(self, other):
+        return self._apply_op(lambda x, o: x - o, other)
+
+    def divide(self, other):
+        return self._apply_op(lambda x, o: x / o, other)
+
+    def exp(self):
+        _np_mod = _np()
+        return self._apply_op(lambda x: _np_mod.exp(x))
+
+    def log(self):
+        _np_mod = _np()
+        return self._apply_op(lambda x: _np_mod.log(x))
+
+    def abs(self):
+        _np_mod = _np()
+        return self._apply_op(lambda x: _np_mod.absolute(x))
+
+    def negative(self):
+        return self._apply_op(lambda x: -x)
+
+    # --- 聚合运算 ---
+    def sum(self, axis=None):
+        _np_mod = _np()
+        return self._apply_op(lambda x, ax: _np_mod.sum(x, axis=ax), ax=axis).compute()
+
+    def mean(self, axis=None):
+        _np_mod = _np()
+        return self._apply_op(lambda x, ax: _np_mod.mean(x, axis=ax), ax=axis).compute()
+
+    def max(self, axis=None):
+        _np_mod = _np()
+        return self._apply_op(lambda x, ax: _np_mod.max(x, axis=ax), ax=axis).compute()
+
+    def min(self, axis=None):
+        _np_mod = _np()
+        return self._apply_op(lambda x, ax: _np_mod.min(x, axis=ax), ax=axis).compute()
+
+    # --- 数组属性 ---
+    @property
+    def shape(self):
+        return self._base.shape
+
+    @property
+    def dtype(self):
+        return self._base.dtype
+
+    @property
+    def ndim(self):
+        return self._base.ndim
+
+    @property
+    def size(self):
+        return self._base.size
+
+    def __len__(self):
+        return len(self._base)
+
+    def __getitem__(self, key):
+        return self.compute()[key]
+
+    def __repr__(self):
+        ops = len(self._operations)
+        return f"LazyArray(shape={self.shape}, operations={ops}, computed={self._computed is not None})"
+
+    def __str__(self):
+        return str(self.compute())
+
+
+# ========== 变长元素支持 ==========
+
+class VarStringArray:
+    """变长字符串数组。
+
+    用于存储长度不一的字符串，提供比 object dtype 更高效的实现。
+    使用 Python 字符串列表作为底层存储，但提供类似 ndarray 的接口。
+
+    【与普通 object 数组的区别】
+    - 内存更紧凑：共享字符串引用，减少对象开销
+    - 操作更安全：支持字符串专用方法（拼接、查找等）
+    - 类型稳定：始终为字符串，不会混入其他类型
+
+    【使用示例】
+    >>> arr = VarStringArray(['hello', 'world', 'foo'])
+    >>> arr[0]
+    'hello'
+    >>> arr + '!'  # 批量拼接
+    VarStringArray(['hello!', 'world!', 'foo!'])
+    """
+
+    def __init__(self, data, dtype=None):
+        """初始化变长字符串数组。
+
+        参数：
+            data: 可迭代对象，包含字符串数据
+            dtype: 可选，指定 dtype（仅支持 'U' 或 'O'）
+        """
+        self._data = [str(item) for item in data]
+        self._dtype = dtype or 'O'
+        self._length = len(self._data)
+
+    @property
+    def shape(self):
+        """数组形状。"""
+        return (self._length,)
+
+    @property
+    def dtype(self):
+        """数据类型。"""
+        return self._dtype
+
+    @property
+    def size(self):
+        """元素总数。"""
+        return self._length
+
+    def __len__(self):
+        return self._length
+
+    def __getitem__(self, key):
+        """获取元素。"""
+        if isinstance(key, slice):
+            return VarStringArray(self._data[key])
+        return self._data[key]
+
+    def __setitem__(self, key, value):
+        """设置元素。"""
+        if isinstance(key, slice):
+            self._data[key] = [str(v) for v in value]
+        else:
+            self._data[key] = str(value)
+
+    def __add__(self, other):
+        """字符串拼接。"""
+        if isinstance(other, str):
+            return VarStringArray([s + other for s in self._data])
+        elif isinstance(other, VarStringArray):
+            return VarStringArray([s + t for s, t in zip(self._data, other._data)])
+        return NotImplemented
+
+    def __radd__(self, other):
+        """右拼接。"""
+        if isinstance(other, str):
+            return VarStringArray([other + s for s in self._data])
+        return NotImplemented
+
+    def __contains__(self, item):
+        """检查是否包含指定字符串。"""
+        return item in self._data
+
+    def index(self, value, start=0, end=None):
+        """查找字符串位置。"""
+        if end is None:
+            end = self._length
+        return self._data.index(str(value), start, end)
+
+    def count(self, value):
+        """统计字符串出现次数。"""
+        return self._data.count(str(value))
+
+    def find(self, sub, start=0, end=None):
+        """在每个字符串中搜索子串。"""
+        if end is None:
+            end = self._length
+        return [s.find(sub, start, end) for s in self._data]
+
+    def replace(self, old, new):
+        """批量替换子串。"""
+        return VarStringArray([s.replace(old, new) for s in self._data])
+
+    def startswith(self, prefix):
+        """检查是否以指定前缀开头。"""
+        return [s.startswith(prefix) for s in self._data]
+
+    def endswith(self, suffix):
+        """检查是否以指定后缀结尾。"""
+        return [s.endswith(suffix) for s in self._data]
+
+    def upper(self):
+        """转换为大写。"""
+        return VarStringArray([s.upper() for s in self._data])
+
+    def lower(self):
+        """转换为小写。"""
+        return VarStringArray([s.lower() for s in self._data])
+
+    def strip(self, chars=None):
+        """去除空白字符。"""
+        return VarStringArray([s.strip(chars) for s in self._data])
+
+    def to_list(self):
+        """转换为 Python 列表。"""
+        return list(self._data)
+
+    def to_ndarray(self):
+        """转换为 rsnumpy ndarray（object dtype）。"""
+        np = _np()
+        return np.array(self._data, dtype=object)
+
+    def __repr__(self):
+        if self._length <= 10:
+            items = ', '.join(repr(s) for s in self._data)
+        else:
+            items = ', '.join(repr(s) for s in self._data[:5])
+            items += f', ..., {repr(self._data[-1])}'
+        return f"VarStringArray([{items}], length={self._length})"
+
+    def __str__(self):
+        return self.__repr__()
+
+    def __eq__(self, other):
+        if isinstance(other, VarStringArray):
+            return self._data == other._data
+        return NotImplemented
+
+
+class BigIntArray:
+    """大整数数组。
+
+    用于存储超出 f64 精度范围的整数（> 2^53 或 < -2^53）。
+    使用 Python 原生整数作为底层存储，提供任意精度。
+
+    【精度说明】
+    - f64 只能精确表示 2^53 以内的整数
+    - 超出范围的整数会被近似，导致精度丢失
+    - BigIntArray 使用 Python int，支持任意大小整数
+
+    【使用示例】
+    >>> arr = BigIntArray([2**60, 2**70, 2**80])
+    >>> arr[0]
+    1152921504606846976
+    >>> arr + 1
+    BigIntArray([1152921504606846977, 11805916207174113034256, 1208925819614629174706176])
+    """
+
+    _F64_MAX = 2**53
+    _F64_MIN = -(2**53)
+
+    def __init__(self, data, safe=True):
+        """初始化大整数数组。
+
+        参数：
+            data: 可迭代对象，包含整数数据
+            safe: 是否进行精度检查（默认 True）
+
+        【精度检查】
+        如果 safe=True，会检查输入是否超出 f64 精度范围。
+        如果超出，会发出警告但不会阻止创建。
+        """
+        self._data = [int(item) for item in data]
+        self._length = len(self._data)
+
+        if safe:
+            self._check_precision()
+
+    def _check_precision(self):
+        """检查是否有整数超出 f64 精度范围。"""
+        overflow_count = 0
+        for v in self._data:
+            if abs(v) > self._F64_MAX:
+                overflow_count += 1
+
+        if overflow_count > 0:
+            import warnings
+            warnings.warn(
+                f"有 {overflow_count} 个整数超出 f64 精度范围 (±2^53)，"
+                f"这些值在普通 f64 数组中会丢失精度。"
+                f"建议使用 BigIntArray 进行精确计算。"
+            )
+
+    @property
+    def shape(self):
+        """数组形状。"""
+        return (self._length,)
+
+    @property
+    def dtype(self):
+        """数据类型。"""
+        return 'object'  # Python int 作为对象存储
+
+    @property
+    def size(self):
+        """元素总数。"""
+        return self._length
+
+    @property
+    def min_value(self):
+        """最小值。"""
+        return min(self._data) if self._data else None
+
+    @property
+    def max_value(self):
+        """最大值。"""
+        return max(self._data) if self._data else None
+
+    def __len__(self):
+        return self._length
+
+    def __getitem__(self, key):
+        """获取元素。"""
+        if isinstance(key, slice):
+            return BigIntArray(self._data[key], safe=False)
+        return self._data[key]
+
+    def __setitem__(self, key, value):
+        """设置元素。"""
+        if isinstance(key, slice):
+            self._data[key] = [int(v) for v in value]
+        else:
+            self._data[key] = int(value)
+
+    def __add__(self, other):
+        """加法运算。"""
+        if isinstance(other, BigIntArray):
+            return BigIntArray(
+                [a + b for a, b in zip(self._data, other._data)],
+                safe=False
+            )
+        elif isinstance(other, (int, float)):
+            return BigIntArray(
+                [a + int(other) for a in self._data],
+                safe=False
+            )
+        return NotImplemented
+
+    def __radd__(self, other):
+        """右加法。"""
+        if isinstance(other, (int, float)):
+            return self.__add__(other)
+        return NotImplemented
+
+    def __sub__(self, other):
+        """减法运算。"""
+        if isinstance(other, BigIntArray):
+            return BigIntArray(
+                [a - b for a, b in zip(self._data, other._data)],
+                safe=False
+            )
+        elif isinstance(other, (int, float)):
+            return BigIntArray(
+                [a - int(other) for a in self._data],
+                safe=False
+            )
+        return NotImplemented
+
+    def __mul__(self, other):
+        """乘法运算。"""
+        if isinstance(other, BigIntArray):
+            return BigIntArray(
+                [a * b for a, b in zip(self._data, other._data)],
+                safe=False
+            )
+        elif isinstance(other, (int, float)):
+            return BigIntArray(
+                [a * int(other) for a in self._data],
+                safe=False
+            )
+        return NotImplemented
+
+    def __floordiv__(self, other):
+        """整除运算。"""
+        if isinstance(other, BigIntArray):
+            return BigIntArray(
+                [a // b for a, b in zip(self._data, other._data) if b != 0],
+                safe=False
+            )
+        elif isinstance(other, int):
+            if other == 0:
+                raise ZeroDivisionError("整数除法除以零")
+            return BigIntArray(
+                [a // other for a in self._data],
+                safe=False
+            )
+        return NotImplemented
+
+    def sum(self):
+        """求和。"""
+        return sum(self._data)
+
+    def mean(self):
+        """平均值（返回 float，可能有精度丢失）。"""
+        if self._length == 0:
+            return 0.0
+        return sum(self._data) / self._length
+
+    def to_list(self):
+        """转换为 Python 列表。"""
+        return list(self._data)
+
+    def to_ndarray(self):
+        """转换为 rsnumpy ndarray（object dtype）。"""
+        np = _np()
+        return np.array(self._data, dtype=object)
+
+    def to_float64(self):
+        """转换为 f64 数组（可能丢失精度）。"""
+        import warnings
+        overflow_count = sum(1 for v in self._data if abs(v) > self._F64_MAX)
+        if overflow_count > 0:
+            warnings.warn(
+                f"有 {overflow_count} 个整数转换为 f64 时会丢失精度"
+            )
+        np = _np()
+        return np.array([float(v) for v in self._data])
+
+    def __repr__(self):
+        if self._length <= 5:
+            items = ', '.join(str(v) for v in self._data)
+        else:
+            items = ', '.join(str(v) for v in self._data[:3])
+            items += f', ..., {self._data[-1]}'
+        return f"BigIntArray([{items}], length={self._length})"
+
+    def __str__(self):
+        return self.__repr__()
+
+    def __eq__(self, other):
+        if isinstance(other, BigIntArray):
+            return self._data == other._data
+        return NotImplemented
+
+
+def var_string_array(data, dtype=None):
+    """创建变长字符串数组。
+
+    比 object dtype 数组更高效的字符串存储方式。
+    适合存储长度差异较大的字符串集合。
+
+    参数：
+        data: 可迭代对象，包含字符串数据
+        dtype: 可选，指定 dtype
+
+    返回：
+        VarStringArray 实例
+
+    使用示例：
+    >>> arr = var_string_array(['hello', 'world', 'foo', 'bar'])
+    >>> arr[0]
+    'hello'
+    >>> arr + '!'
+    VarStringArray(['hello!', 'world!', 'foo!', 'bar!'])
+    """
+    return VarStringArray(data, dtype=dtype)
+
+
+def bigint_array(data, safe=True):
+    """创建大整数数组。
+
+    用于存储超出 f64 精度范围（> 2^53）的整数。
+    使用 Python 原生整数，支持任意精度。
+
+    参数：
+        data: 可迭代对象，包含整数数据
+        safe: 是否进行精度检查（默认 True）
+
+    返回：
+        BigIntArray 实例
+
+    使用示例：
+    >>> arr = bigint_array([2**60, 2**70, 2**80])
+    >>> arr[0]
+    1152921504606846976
+    >>> arr.sum()
+    """
+    return BigIntArray(data, safe=safe)
+
+
+def detect_integer_overflow(data):
+    """检测整数数组中超出 f64 精度范围的值。
+
+    参数：
+        data: 可迭代对象，包含整数数据
+
+    返回：
+        tuple: (overflow_indices, overflow_values)
+            - overflow_indices: 超出精度的索引列表
+            - overflow_values: 超出精度的值列表
+
+    使用示例：
+    >>> indices, values = detect_integer_overflow([1, 2**60, 3, 2**70])
+    >>> len(indices)
+    2
+    """
+    f64_max = 2**53
+    overflow_indices = []
+    overflow_values = []
+
+    for i, v in enumerate(data):
+        if isinstance(v, (int, float)) and abs(v) > f64_max:
+            overflow_indices.append(i)
+            overflow_values.append(int(v))
+
+    return overflow_indices, overflow_values
+
+
+def smart_int_array(data, fallback='bigint'):
+    """智能整数数组创建。
+
+    自动检测数据范围，选择最合适的存储方式：
+    - 如果所有整数在 f64 精度范围内，返回普通 ndarray
+    - 如果有超出范围的整数，根据 fallback 参数处理
+
+    参数：
+        data: 可迭代对象，包含整数数据
+        fallback: 超出精度时的处理方式
+            - 'bigint': 返回 BigIntArray（推荐）
+            - 'object': 返回 object dtype ndarray
+            - 'warn': 返回 f64 ndarray 并发出警告
+            - 'error': 抛出 OverflowError
+
+    返回：
+        ndarray 或 BigIntArray
+
+    使用示例：
+    >>> arr = smart_int_array([1, 2, 3])
+    >>> type(arr).__name__
+    'ndarray'
+    >>> arr = smart_int_array([1, 2**60, 3])
+    >>> type(arr).__name__
+    'BigIntArray'
+    """
+    import warnings
+
+    data_list = list(data)
+    overflow_indices, overflow_values = detect_integer_overflow(data_list)
+
+    np = _np()
+
+    if not overflow_indices:
+        return np.array(data_list, dtype=np.float64)
+
+    if fallback == 'bigint':
+        warnings.warn(
+            f"检测到 {len(overflow_indices)} 个整数超出 f64 精度范围，"
+            f"自动返回 BigIntArray 以保持精度。"
+        )
+        return BigIntArray(data_list, safe=False)
+
+    elif fallback == 'object':
+        warnings.warn(
+            f"检测到 {len(overflow_indices)} 个整数超出 f64 精度范围，"
+            f"返回 object dtype 数组。"
+        )
+        return np.array(data_list, dtype=object)
+
+    elif fallback == 'warn':
+        warnings.warn(
+            f"检测到 {len(overflow_indices)} 个整数超出 f64 精度范围，"
+            f"转换为 f64 会丢失精度。"
+        )
+        return np.array([float(v) for v in data_list])
+
+    elif fallback == 'error':
+        raise OverflowError(
+            f"有 {len(overflow_indices)} 个整数超出 f64 精度范围："
+            f"索引 {overflow_indices[:5]}，值 {overflow_values[:5]}"
+        )
+
+    else:
+        raise ValueError(f"未知的 fallback 选项: {fallback}")
 
 
 __all__ = [
@@ -3342,4 +4185,9 @@ __all__ = [
     "emath", "get_include", "show_config", "show_runtime", "info",
     "threadsafe_copy", "threadsafe_view",
     "check_object_dtype", "suggest_dtype_for_data",
+    "memory_usage",
+    "chunked_apply", "mmap_array", "LazyArray",
+    "VarStringArray", "BigIntArray",
+    "var_string_array", "bigint_array",
+    "detect_integer_overflow", "smart_int_array",
 ]

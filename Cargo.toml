@@ -1,6 +1,6 @@
 [package]
 name = "rsnumpy"
-version = "1.2.2"
+version = "1.2.3"
 edition = "2024"
 
 [lib]
@@ -37,9 +37,10 @@ blas-src = { version = "0.14.0", features = ["accelerate"] }
 
 [profile.release]
 opt-level = 3
-lto = "thin"
-codegen-units = 16
+lto = "fat"
+codegen-units = 1
 strip = "symbols"
+panic = "abort"
 
 [profile.dev]
 opt-level = 0

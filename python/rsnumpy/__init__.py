@@ -36,6 +36,7 @@ from . import exceptions
 import datetime as _datetime
 import sys as _sys
 from . import _extra as _extra_module
+from ._extra import chunked_apply, mmap_array, LazyArray
 # ---------- dtype 提升与浮点判定 ----------
 import rsnumpy.num_core as np
 from rsnumpy.num_core import ndarray_iter as NdArrayIter
@@ -44,6 +45,7 @@ from rsnumpy.num_core import (
     get_num_threads,
     get_num_cpus,
     get_parallel_thresholds,
+    set_parallel_thresholds,
     parallel_context,
 )
 from ._dtypes import (
@@ -55,7 +57,7 @@ _sys.modules['rsnumpy'] = _current_module
 _sys.modules['rsnumpy.__init__'] = _current_module
 _current_module.__name__ = 'rsnumpy'
 
-__version__ = "1.2.2"
+__version__ = "1.2.3"
 
 # 捕获内建函数别名：_extra 挂载会向本模块 globals 注入同名的 rsnumpy 函数
 # （all/any/round），会遮蔽内建函数。以下别名保证本文件内部逻辑始终使用内建实现。
@@ -148,7 +150,10 @@ class ndarray:
         imag: 数组的虚部。
     """
 
-    def __init__(self, data, _dtype="float64", _fields=None, _raw_data=None):
+    def __init__(self, data=None, _dtype="float64", _fields=None, _raw_data=None):
+        # pickle 反序列化时先 __new__（不传参），再 __setstate__；此时 data=None，跳过初始化
+        if data is None:
+            return
         if _is_ndarray(data):
             self._array = data._array
             self._dtype = data._dtype
@@ -1193,17 +1198,94 @@ class ndarray:
             return _view_dtype(self, dtype)
         return ndarray(self._array, _dtype=getattr(self, '_dtype', 'float64'))
 
+    def __sizeof__(self):
+        """返回数组占用的内存字节数（含 Python 对象头）。
+
+        供 sys.getsizeof() 使用，便于内存使用分析和泄漏检测。
+        """
+        # 基础对象开销 + 底层 Rust 数组数据 + 原始数据（如果有）
+        base = object.__sizeof__(self)
+        data_bytes = self.nbytes
+        raw_bytes = 0
+        _raw = getattr(self, '_raw_data', None)
+        if _raw is not None:
+            import sys
+            # 粗略估计原始数据列表的内存占用
+            raw_bytes = sum(sys.getsizeof(item) for item in _raw[:100])
+            if len(_raw) > 100:
+                raw_bytes = raw_bytes * (len(_raw) / 100)
+        return int(base + data_bytes + raw_bytes)
+
     def __reduce__(self):
         """支持 pickle 序列化。"""
         return (
             self.__class__,
-            (
-                self.tolist(),
-                getattr(self, '_dtype', 'float64'),
-                getattr(self, '_fields', None),
-                getattr(self, '_raw_data', None),
-            ),
+            (),
+            self.__getstate__(),
         )
+
+    def __getstate__(self):
+        """返回可序列化的状态元组。"""
+        return (
+            self.tolist(),
+            getattr(self, '_dtype', 'float64'),
+            getattr(self, '_fields', None),
+            getattr(self, '_raw_data', None),
+        )
+
+    # pickle 反序列化时允许的合法 dtype 名称
+    _PICKLE_VALID_DTYPES = frozenset({
+        'float64', 'float32', 'float16',
+        'int8', 'int16', 'int32', 'int64',
+        'uint8', 'uint16', 'uint32', 'uint64',
+        'bool', 'complex64', 'complex128',
+        'object', 'datetime64', 'timedelta64',
+        'string_', 'void', 'bytes_',
+    })
+
+    def __setstate__(self, state):
+        """从 pickle 状态恢复对象，带安全校验。
+
+        防止恶意 pickle 数据导致类型混淆或内存耗尽。
+        """
+        if not isinstance(state, tuple) or len(state) != 4:
+            raise ValueError(
+                f"pickle 状态无效：期望 4 元素元组，得到 {type(state).__name__}"
+                f"（长度 {len(state) if hasattr(state, '__len__') else '?'}）"
+            )
+        data, _dtype, _fields, _raw_data = state
+
+        # 校验 data：必须是列表/元组，且元素数不超过上限
+        if not isinstance(data, (list, tuple)):
+            raise ValueError(
+                f"pickle 数据无效：data 必须是 list/tuple，得到 {type(data).__name__}"
+            )
+        _MAX_PICKLE_ELEMENTS = 2**31  # 21 亿元素上限
+        if len(data) > _MAX_PICKLE_ELEMENTS:
+            raise ValueError(
+                f"pickle 数据过大：{len(data)} 个元素，超过上限 {_MAX_PICKLE_ELEMENTS}"
+            )
+
+        # 校验 _dtype：必须是已知 dtype 字符串
+        if not isinstance(_dtype, str) or _dtype not in self._PICKLE_VALID_DTYPES:
+            raise ValueError(
+                f"pickle dtype 无效：{_dtype!r} 不在合法 dtype 集合中"
+            )
+
+        # 校验 _fields：None 或列表/元组
+        if _fields is not None and not isinstance(_fields, (list, tuple)):
+            raise ValueError(
+                f"pickle _fields 无效：必须是 None 或 list/tuple，得到 {type(_fields).__name__}"
+            )
+
+        # 校验 _raw_data：None 或列表/元组
+        if _raw_data is not None and not isinstance(_raw_data, (list, tuple)):
+            raise ValueError(
+                f"pickle _raw_data 无效：必须是 None 或 list/tuple，得到 {type(_raw_data).__name__}"
+            )
+
+        # 通过校验后，调用正常构造逻辑
+        self.__init__(data, _dtype, _fields, _raw_data)
 
 
 class recarray(ndarray):
@@ -3087,22 +3169,40 @@ class timedelta64:
     def __eq__(self, other):
         if isinstance(other, timedelta64):
             return self._days == other._days
+        if isinstance(other, (int, float)):
+            return self._days == float(other)
         return NotImplemented
 
     def __hash__(self):
         return hash(self._days)
 
     def __lt__(self, other):
-        return self._days < float(other)
+        if isinstance(other, timedelta64):
+            return self._days < other._days
+        if isinstance(other, (int, float)):
+            return self._days < float(other)
+        return NotImplemented
 
     def __le__(self, other):
-        return self._days <= float(other)
+        if isinstance(other, timedelta64):
+            return self._days <= other._days
+        if isinstance(other, (int, float)):
+            return self._days <= float(other)
+        return NotImplemented
 
     def __gt__(self, other):
-        return self._days > float(other)
+        if isinstance(other, timedelta64):
+            return self._days > other._days
+        if isinstance(other, (int, float)):
+            return self._days > float(other)
+        return NotImplemented
 
     def __ge__(self, other):
-        return self._days >= float(other)
+        if isinstance(other, timedelta64):
+            return self._days >= other._days
+        if isinstance(other, (int, float)):
+            return self._days >= float(other)
+        return NotImplemented
 
     def __repr__(self):
         v = self._value_in_unit()
@@ -3159,16 +3259,24 @@ class datetime64:
         return hash(self._days)
 
     def __lt__(self, other):
-        return self._days < float(other)
+        if isinstance(other, datetime64):
+            return self._days < other._days
+        return NotImplemented
 
     def __le__(self, other):
-        return self._days <= float(other)
+        if isinstance(other, datetime64):
+            return self._days <= other._days
+        return NotImplemented
 
     def __gt__(self, other):
-        return self._days > float(other)
+        if isinstance(other, datetime64):
+            return self._days > other._days
+        return NotImplemented
 
     def __ge__(self, other):
-        return self._days >= float(other)
+        if isinstance(other, datetime64):
+            return self._days >= other._days
+        return NotImplemented
 
     def __repr__(self):
         dt = self.to_datetime()
@@ -4799,10 +4907,11 @@ __all__ = [
     'half', 'single', 'double', 'longdouble', 'csingle', 'cdouble', 'clongdouble',
     'True_', 'False_', 'little_endian', 'ScalarType', 'sctypeDict', 'typecodes',
     'issubdtype', 'finfo', 'iinfo', 'ndindex', 'ndenumerate', 'index_exp',
-    'dtype', 'DType', 'rec', 'ma', 'recarray',
+    'dtype', 'DType', 'rec', 'ma', 'recarray', 'memory_usage',
+    'chunked_apply', 'mmap_array',
     # 线程控制接口
     'set_num_threads', 'get_num_threads', 'get_num_cpus',
-    'get_parallel_thresholds', 'parallel_context',
+    'get_parallel_thresholds', 'set_parallel_thresholds', 'parallel_context',
 ]
 
 

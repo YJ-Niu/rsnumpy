@@ -6,6 +6,7 @@ pub(crate) use pyo3::types::{
 };
 pub(crate) use rayon::prelude::*;
 use std::fmt::Write;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 // macOS：强制链接 Accelerate BLAS 后端（否则符号会被优化掉）。
 #[cfg(target_os = "macos")]
@@ -2273,16 +2274,28 @@ impl NdArray {
 
 /// 计算密集（transcendental：sin/exp/log…）逐元素并行阈值：
 /// 每元素工作量大，较小规模并行即可回本。
-pub(crate) const PAR_THRESHOLD: usize = 32_768;
+/// 使用 AtomicUsize 以支持运行时通过 set_parallel_thresholds 动态调整。
+pub(crate) static PAR_THRESHOLD: AtomicUsize = AtomicUsize::new(32_768);
 
 /// 访存密集（add/sub/mul/div、比较、sqrt 等）逐元素并行阈值：
 /// 每元素工作量极小，瓶颈在内存带宽；小/中等规模并行的线程调度开销反而拖慢，
 /// 需到较大规模（多核带宽叠加）才划算。经基准定位（32k~500k 区间串行更快）而抬高。
-pub(crate) const PAR_THRESHOLD_CHEAP: usize = 262_144;
+pub(crate) static PAR_THRESHOLD_CHEAP: AtomicUsize = AtomicUsize::new(262_144);
 
 /// 中等代价逐元素并行阈值（sqrt/reciprocal 等：比纯加乘重、比 transcendental 轻）。
 /// 基准显示其并行回本点约在 5 万元素，介于 CHEAP 与 PAR_THRESHOLD 之间。
-pub(crate) const PAR_THRESHOLD_MEDIUM: usize = 49_152;
+pub(crate) static PAR_THRESHOLD_MEDIUM: AtomicUsize = AtomicUsize::new(49_152);
+
+/// 快速读取并行阈值（Relaxed 语义足够：阈值不需要跨线程精确同步）
+pub(crate) fn par_threshold() -> usize {
+    PAR_THRESHOLD.load(Ordering::Relaxed)
+}
+pub(crate) fn par_threshold_cheap() -> usize {
+    PAR_THRESHOLD_CHEAP.load(Ordering::Relaxed)
+}
+pub(crate) fn par_threshold_medium() -> usize {
+    PAR_THRESHOLD_MEDIUM.load(Ordering::Relaxed)
+}
 
 fn binary_op<F>(a: &NdArray, b: &Bound<'_, PyAny>, op: F) -> PyResult<NdArray>
 where
@@ -2293,7 +2306,7 @@ where
         let data = &a.data;
         // 纯计算，主动释放 GIL 让其它 Python 线程可并行推进。
         let out = py.detach(|| {
-            if data.len() >= PAR_THRESHOLD_CHEAP {
+            if data.len() >= par_threshold_cheap() {
                 crate::threadpool::with_pool(|| Zip::from(data).par_map_collect(|&x| op(x, scalar)))
             } else {
                 data.mapv(|x| op(x, scalar))
@@ -2359,7 +2372,7 @@ where
         // 形状一致：用 ndarray::Zip 逐元素计算并直接产出结果数组，
         // 省去把两个输入分别物化成 Vec 的额外分配。
         let z = Zip::from(a).and(b);
-        return Ok(if a.len() >= PAR_THRESHOLD_CHEAP {
+        return Ok(if a.len() >= par_threshold_cheap() {
             crate::threadpool::with_pool(|| z.par_map_collect(|&x, &y| op(x, y)))
         } else {
             z.map_collect(|&x, &y| op(x, y))
@@ -2370,7 +2383,7 @@ where
     // 跳过 reshape/clone/broadcast-view 全套机制（结果形状即另一操作数形状）。
     if a.ndim() == 0 {
         let s = *a.first().unwrap();
-        return Ok(if b.len() >= PAR_THRESHOLD_CHEAP {
+        return Ok(if b.len() >= par_threshold_cheap() {
             crate::threadpool::with_pool(|| Zip::from(b).par_map_collect(|&y| op(s, y)))
         } else {
             b.mapv(|y| op(s, y))
@@ -2378,7 +2391,7 @@ where
     }
     if b.ndim() == 0 {
         let s = *b.first().unwrap();
-        return Ok(if a.len() >= PAR_THRESHOLD_CHEAP {
+        return Ok(if a.len() >= par_threshold_cheap() {
             crate::threadpool::with_pool(|| Zip::from(a).par_map_collect(|&x| op(x, s)))
         } else {
             a.mapv(|x| op(x, s))
@@ -2423,7 +2436,7 @@ where
 
     let out_len: usize = out_shape.iter().product();
     let z = Zip::from(a_view).and(b_view);
-    Ok(if out_len >= PAR_THRESHOLD_CHEAP {
+    Ok(if out_len >= par_threshold_cheap() {
         crate::threadpool::with_pool(|| z.par_map_collect(|&x, &y| op(x, y)))
     } else {
         z.map_collect(|&x, &y| op(x, y))

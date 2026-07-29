@@ -113,7 +113,7 @@ macro_rules! define_math_func {
     ($name:ident, $op:expr) => {
         #[pyfunction]
         fn $name(py: Python<'_>, x: &NdArray) -> PyResult<NdArray> {
-            Ok(unary_math_op(py, x, PAR_THRESHOLD, $op))
+            Ok(unary_math_op(py, x, par_threshold(), $op))
         }
     };
 }
@@ -126,7 +126,7 @@ macro_rules! define_math_func_c {
             if x.has_imag() {
                 return Ok(unary_complex_op(py, x, $cop));
             }
-            Ok(unary_math_op(py, x, PAR_THRESHOLD, $rop))
+            Ok(unary_math_op(py, x, par_threshold(), $rop))
         }
     };
 }
@@ -137,7 +137,7 @@ macro_rules! define_cheap_math_func {
     ($name:ident, $op:expr) => {
         #[pyfunction]
         fn $name(py: Python<'_>, x: &NdArray) -> PyResult<NdArray> {
-            Ok(unary_math_op(py, x, PAR_THRESHOLD_CHEAP, $op))
+            Ok(unary_math_op(py, x, par_threshold_cheap(), $op))
         }
     };
 }
@@ -154,7 +154,7 @@ fn sqrt(py: Python<'_>, x: &NdArray) -> PyResult<NdArray> {
     if x.has_imag() {
         return Ok(unary_complex_op(py, x, c_sqrt));
     }
-    Ok(unary_math_op(py, x, PAR_THRESHOLD_MEDIUM, |v| v.sqrt()))
+    Ok(unary_math_op(py, x, par_threshold_medium(), |v| v.sqrt()))
 }
 
 define_math_func_c!(exp, |v| v.exp(), c_exp);
@@ -173,7 +173,7 @@ fn abs(py: Python<'_>, x: &NdArray) -> PyResult<NdArray> {
     if x.has_imag() {
         return Ok(unary_complex_to_real_op(py, x, |r, i| r.hypot(i)));
     }
-    Ok(unary_math_op(py, x, PAR_THRESHOLD_CHEAP, |v| v.abs()))
+    Ok(unary_math_op(py, x, par_threshold_cheap(), |v| v.abs()))
 }
 
 define_math_func_c!(cosh, |v| v.cosh(), c_cosh);
@@ -225,12 +225,12 @@ fn cross(a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
 
 #[pyfunction]
 fn floor(py: Python<'_>, x: &NdArray) -> NdArray {
-    unary_math_op(py, x, PAR_THRESHOLD_CHEAP, |v| v.floor())
+    unary_math_op(py, x, par_threshold_cheap(), |v| v.floor())
 }
 
 #[pyfunction]
 fn ceil(py: Python<'_>, x: &NdArray) -> NdArray {
-    unary_math_op(py, x, PAR_THRESHOLD_CHEAP, |v| v.ceil())
+    unary_math_op(py, x, par_threshold_cheap(), |v| v.ceil())
 }
 
 #[pyfunction]
@@ -274,12 +274,12 @@ fn arctan2(y: &NdArray, x: &NdArray) -> PyResult<NdArray> {
 
 #[pyfunction]
 fn deg2rad(py: Python<'_>, x: &NdArray) -> NdArray {
-    unary_math_op(py, x, PAR_THRESHOLD_CHEAP, |v| v.to_radians())
+    unary_math_op(py, x, par_threshold_cheap(), |v| v.to_radians())
 }
 
 #[pyfunction]
 fn rad2deg(py: Python<'_>, x: &NdArray) -> NdArray {
-    unary_math_op(py, x, PAR_THRESHOLD_CHEAP, |v| v.to_degrees())
+    unary_math_op(py, x, par_threshold_cheap(), |v| v.to_degrees())
 }
 
 #[pyfunction]
@@ -491,7 +491,7 @@ fn bessel_i0(v: f64) -> f64 {
 fn i0(py: Python<'_>, x: &NdArray) -> NdArray {
     let data = &x.data;
     let out = py.detach(|| {
-        if data.len() >= PAR_THRESHOLD {
+        if data.len() >= par_threshold() {
             crate::threadpool::with_pool(|| Zip::from(data).par_map_collect(|&v| bessel_i0(v)))
         } else {
             data.mapv(bessel_i0)
@@ -541,7 +541,7 @@ fn interp(
     let hi = right.unwrap_or(fpv[fpv.len() - 1]);
     let data = &x.data;
     let out = py.detach(|| {
-        if data.len() >= PAR_THRESHOLD {
+        if data.len() >= par_threshold() {
             crate::threadpool::with_pool(|| {
                 Zip::from(data).par_map_collect(|&xi| interp_one(xi, &xpv, &fpv, lo, hi))
             })

@@ -683,7 +683,7 @@ fn digitize(x: &NdArray, bins: &NdArray) -> PyResult<NdArray> {
     bin_edges.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     // 二分查找 + 并行计算：O(n*log m)，原先线性 O(n*m)
     let len = x_vals.len();
-    let result: Vec<f64> = if len >= crate::PAR_THRESHOLD {
+    let result: Vec<f64> = if len >= crate::par_threshold() {
         crate::threadpool::with_pool(|| {
             x_vals
                 .par_iter()
@@ -1131,7 +1131,7 @@ fn nansum(x: &NdArray, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray>
     };
 
     // 并行优化：当外层循环足够大时使用并行
-    let out = if outer * inner >= PAR_THRESHOLD_CHEAP / 4 {
+    let out = if outer * inner >= par_threshold_cheap() / 4 {
         // 并行路径（通过 with_pool 绑定到用户配置的 rayon 池）
         let out_vec: Vec<f64> = crate::threadpool::with_pool(|| {
             (0..outer * inner)

@@ -53,7 +53,7 @@ fn where_<'py>(
             let x_vec: Vec<f64> = xv.data.iter().copied().collect();
             let y_vec: Vec<f64> = yv.data.iter().copied().collect();
             let n = cond_vec.len();
-            let result: Vec<f64> = if n >= crate::PAR_THRESHOLD_CHEAP {
+            let result: Vec<f64> = if n >= crate::par_threshold_cheap() {
                 crate::threadpool::with_pool(|| {
                     cond_vec
                         .into_par_iter()

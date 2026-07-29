@@ -12,6 +12,7 @@
 //! - RwLock 读多写少（设置线程数是低频操作），性能没问题
 
 use pyo3::Bound;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use rayon::{ThreadPool, ThreadPoolBuilder};
@@ -138,10 +139,53 @@ pub fn get_num_cpus() -> usize {
 #[pyfunction]
 pub fn get_parallel_thresholds(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     let dict = PyDict::new(py);
-    dict.set_item("cheap", crate::PAR_THRESHOLD_CHEAP)?;
-    dict.set_item("medium", crate::PAR_THRESHOLD_MEDIUM)?;
-    dict.set_item("expensive", crate::PAR_THRESHOLD)?;
+    dict.set_item("cheap", crate::par_threshold_cheap())?;
+    dict.set_item("medium", crate::par_threshold_medium())?;
+    dict.set_item("expensive", crate::par_threshold())?;
     Ok(dict)
+}
+
+/// 设置并行阈值（Python 接口）
+///
+/// 【参数】
+/// - `cheap`: 访存密集型阈值（加/减/乘/除等），默认 262144
+/// - `medium`: 中等代价阈值（sqrt/reciprocal 等），默认 49152
+/// - `expensive`: 计算密集型阈值（sin/exp/log 等），默认 32768
+///
+/// 【使用示例】
+/// ```python
+/// import rsnumpy as np
+/// # 降低阈值，让更小的数组也走并行
+/// np.set_parallel_thresholds(expensive=1024, medium=2048, cheap=8192)
+/// # 恢复默认值
+/// np.set_parallel_thresholds(expensive=32768, medium=49152, cheap=262144)
+/// ```
+#[pyfunction]
+#[pyo3(signature = (cheap=None, medium=None, expensive=None))]
+pub fn set_parallel_thresholds(
+    cheap: Option<usize>,
+    medium: Option<usize>,
+    expensive: Option<usize>,
+) -> PyResult<()> {
+    if let Some(v) = cheap {
+        if v < 1 {
+            return Err(PyValueError::new_err("cheap 阈值必须 >= 1"));
+        }
+        crate::PAR_THRESHOLD_CHEAP.store(v, Ordering::Relaxed);
+    }
+    if let Some(v) = medium {
+        if v < 1 {
+            return Err(PyValueError::new_err("medium 阈值必须 >= 1"));
+        }
+        crate::PAR_THRESHOLD_MEDIUM.store(v, Ordering::Relaxed);
+    }
+    if let Some(v) = expensive {
+        if v < 1 {
+            return Err(PyValueError::new_err("expensive 阈值必须 >= 1"));
+        }
+        crate::PAR_THRESHOLD.store(v, Ordering::Relaxed);
+    }
+    Ok(())
 }
 
 /// 并行上下文管理器（Python 接口）
@@ -212,6 +256,7 @@ pub fn register_module(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_num_threads, m)?)?;
     m.add_function(wrap_pyfunction!(get_num_cpus, m)?)?;
     m.add_function(wrap_pyfunction!(get_parallel_thresholds, m)?)?;
+    m.add_function(wrap_pyfunction!(set_parallel_thresholds, m)?)?;
     m.add_class::<ParallelContext>()?;
     Ok(())
 }
