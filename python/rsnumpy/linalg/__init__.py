@@ -69,7 +69,7 @@ def _is_complex_arr(a):
 
 def _matmul_2d(mat_a, mat_b):
     """朴素二维矩阵乘 A(m×n)·B(n×p)，元素可为 float 或 complex。"""
-    n = len(mat_b)
+    # n = len(mat_b)
     p = len(mat_b[0]) if mat_b and isinstance(mat_b[0], list) else 0
     if not mat_a or p == 0:
         return []
@@ -243,6 +243,7 @@ def _gauss_jordan_solve(mat, b):
     n = len(mat)
     work = [list(row) for row in mat]
     # 列表推导 + 闭包提取行转换逻辑
+
     def _conv_row(row):
         if isinstance(row, (list, tuple)):
             return list(row)
@@ -300,12 +301,93 @@ def _solve_nested(a, b):
 
 
 class linalg_module:
-    """线性代数模块 - 所有方法都直接调用 Rust 实现。"""
+    """线性代数模块 - 提供矩阵运算、求解、分解等功能。
+
+    【核心功能】
+    - dot/matmul: 矩阵乘法
+    - inv/pinv: 矩阵求逆和伪逆
+    - solve/lstsq: 线性方程组求解和最小二乘
+    - det/norm: 行列式和范数
+    - eig/eigvals: 特征值分解
+    - svd: 奇异值分解
+
+    【性能特点】
+    - 核心运算由Rust实现，性能接近原生NumPy
+    - 支持复数矩阵运算
+    - 支持批量矩阵操作（3D及以上）
+
+    【线程安全提示】
+    ⚠️ 本模块的函数在多线程环境下需要注意：
+    1. 读取操作是线程安全的
+    2. 写入操作需要外部加锁
+    3. 推荐使用copy()创建独立副本再共享
+
+    【使用示例】
+    >>> import rsnumpy as np
+    >>> # 矩阵乘法
+    >>> A = np.array([[1, 2], [3, 4]])
+    >>> B = np.array([[5, 6], [7, 8]])
+    >>> np.linalg.matmul(A, B)
+    array([[19., 22.],
+           [43., 50.]])
+
+    >>> # 矩阵求逆
+    >>> A_inv = np.linalg.inv(A)
+    >>> A @ A_inv  # 应该接近单位矩阵
+    array([[1., 0.],
+           [0., 1.]])
+
+    >>> # 解线性方程组
+    >>> b = np.array([1, 2])
+    >>> x = np.linalg.solve(A, b)
+    >>> A @ x  # 应该等于b
+    array([1., 2.])
+    """
+
     LinAlgError = LinAlgError
 
     @staticmethod
     def dot(a, b):
-        """计算两个数组的点积。"""
+        """计算两个数组的点积（内积）。
+
+        【使用示例】
+        >>> import rsnumpy as np
+        >>> # 向量内积
+        >>> v1 = np.array([1, 2, 3])
+        >>> v2 = np.array([4, 5, 6])
+        >>> np.linalg.dot(v1, v2)  # 1*4 + 2*5 + 3*6 = 32
+        32.0
+
+        >>> # 矩阵乘法
+        >>> A = np.array([[1, 2], [3, 4]])
+        >>> B = np.array([[5, 6], [7, 8]])
+        >>> np.linalg.dot(A, B)  # 等价于 A @ B
+        array([[19., 22.],
+               [43., 50.]])
+
+        >>> # 高维点积
+        >>> T = np.random.rand(2, 3, 4)
+        >>> V = np.random.rand(4)
+        >>> result = np.linalg.dot(T, V)  # shape: (2, 3)
+
+        【参数说明】
+        a, b: array_like
+            输入数组，可以是向量、矩阵或高维张量
+            - 一维：计算内积
+            - 二维：计算矩阵乘法
+            - 更高维：按规则进行张量收缩
+
+        【返回值】
+        标量或数组：
+        - 两个向量：返回标量（内积）
+        - 矩阵：返回矩阵
+        - 高维：返回张量
+
+        【注意事项】
+        - 与matmul的区别：dot对高维数组的处理规则更灵活
+        - 复数数组：支持复数运算
+        - 性能：对于简单矩阵乘法，推荐使用matmul
+        """
         from ..__init__ import ndarray
         a_arr = a if hasattr(a, '_array') else ndarray(a)
         b_arr = b if hasattr(b, '_array') else ndarray(b)
@@ -338,7 +420,48 @@ class linalg_module:
 
     @staticmethod
     def matmul(a, b):
-        """计算两个数组的矩阵乘积。"""
+        """计算两个数组的矩阵乘积。
+
+        【使用示例】
+        >>> import rsnumpy as np
+        >>> # 基本矩阵乘法
+        >>> A = np.array([[1, 2], [3, 4]])
+        >>> B = np.array([[5, 6], [7, 8]])
+        >>> np.linalg.matmul(A, B)
+        array([[19., 22.],
+               [43., 50.]])
+
+        >>> # 批量矩阵乘法
+        >>> batch_A = np.random.rand(5, 3, 4)  # 5个 3x4 矩阵
+        >>> batch_B = np.random.rand(5, 4, 6)  # 5个 4x6 矩阵
+        >>> result = np.linalg.matmul(batch_A, batch_B)
+        >>> result.shape  # (5, 3, 6)
+        (5, 3, 6)
+
+        >>> # 广播矩阵乘法
+        >>> A = np.random.rand(3, 4)  # 单个矩阵
+        >>> batch_B = np.random.rand(5, 4, 6)  # 5个矩阵
+        >>> result = np.linalg.matmul(A, batch_B)
+        >>> result.shape  # (5, 3, 6)
+        (5, 3, 6)
+
+        【参数说明】
+        a, b: array_like
+            输入数组，必须满足矩阵乘法的形状要求：
+            - 最后两个维度必须满足矩阵乘法规则
+            - 前面的维度进行广播
+
+        【与dot的区别】
+        - matmul不支持标量相乘
+        - matmul的广播规则更严格
+        - 批量操作时matmul语义更清晰
+        - 推荐用于矩阵乘法场景
+
+        【性能提示】
+        - 本函数由Rust实现，性能接近原生BLAS
+        - 大型矩阵会自动使用多线程（如支持）
+        - 批量操作比Python循环快很多
+        """
         from ..__init__ import ndarray
         a_arr = a if hasattr(a, '_array') else ndarray(a)
         b_arr = b if hasattr(b, '_array') else ndarray(b)
@@ -354,7 +477,48 @@ class linalg_module:
 
     @staticmethod
     def inv(a):
-        """计算矩阵的逆。"""
+        """计算矩阵的逆。
+
+        【使用示例】
+        >>> import rsnumpy as np
+        >>> # 单个矩阵求逆
+        >>> A = np.array([[1, 2], [3, 4]])
+        >>> A_inv = np.linalg.inv(A)
+        >>> A @ A_inv  # 应该接近单位矩阵
+        array([[1., 0.],
+               [0., 1.]])
+
+        >>> # 批量求逆
+        >>> batch = np.random.rand(3, 4, 4)  # 3个 4x4 矩阵
+        >>> batch_inv = np.linalg.inv(batch)
+        >>> batch_inv.shape
+        (3, 4, 4)
+
+        >>> # 复数矩阵求逆
+        >>> C = np.array([[2+1j, 1-1j], [1+1j, 3+2j]])
+        >>> C_inv = np.linalg.inv(C)
+
+        【参数说明】
+        a: array_like
+            方阵或方阵堆栈（shape为(..., N, N)）
+            矩阵必须可逆（非奇异）
+
+        【返回值】
+        数组，形状与输入相同，为逆矩阵
+
+        【异常】
+        LinAlgError: 矩阵奇异（不可逆）
+
+        【性能提示】
+        - 单个矩阵：由Rust BLAS实现，高性能
+        - 批量矩阵：使用rayon并行，充分利用多核
+        - 大矩阵建议使用pinv（伪逆）更稳定
+
+        【注意事项】
+        - 输入必须是方阵
+        - 对于病态矩阵，可能数值不稳定
+        - 建议先用det()检查是否接近奇异
+        """
         from ..__init__ import ndarray, empty
         a_arr = a if hasattr(a, '_array') else ndarray(a)
         shape = a_arr.shape

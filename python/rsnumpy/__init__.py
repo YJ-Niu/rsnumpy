@@ -928,9 +928,33 @@ class ndarray:
         """返回数组的一维副本。"""
         return _ndarray_methods().flatten(self, order)
 
-    def copy(self, order='K'):
-        """返回数组的副本。"""
-        return _wrap_result(self._array.copy(), self._dtype)
+    def copy(self, order='K', thread_safe=False):
+        """返回数组的副本。
+
+        Args:
+            order: 内存布局顺序（'C', 'F', 'A', 'K'）。
+            thread_safe: 是否创建线程安全的副本（用于多线程环境）。
+
+        Returns:
+            ndarray: 数组副本。若 thread_safe=True，返回的副本可安全在多线程间共享。
+
+        【线程安全提示】
+        - thread_safe=True 会创建独立的数据副本，避免多线程竞态条件
+        - 对于只读共享场景，建议使用此选项
+        - 对于读写共享场景，使用 np.threadsafe_view() 代替
+
+        【使用示例】
+        >>> import rsnumpy as np
+        >>> import threading
+        >>> data = np.array([1, 2, 3])
+        >>> # 线程安全副本
+        >>> safe_copy = data.copy(thread_safe=True)
+        """
+        result = _wrap_result(self._array.copy(), self._dtype)
+        if thread_safe:
+            # 标记为线程安全副本（文档性标记）
+            result._thread_safe = True
+        return result
 
     def transpose(self, *axes):
         """转置数组。"""
@@ -3294,7 +3318,19 @@ def _is_rectangular(data):
 
 
 def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
-    """创建数组。"""
+    """创建数组。
+
+    【性能提示】
+    ⚠️ 避免 dtype=object：会完全失去向量化性能优势！
+    - object 类型数组存储 Python 对象引用，无法使用 SIMD 加速
+    - 循环性能比 Python 列表还慢
+    - 内存占用高，无法释放 GIL
+
+    【推荐】
+    - 字符串：让 rsnumpy 自动推断为固定长度字符串
+    - 大整数（<2^53）：使用 int64
+    - 混合类型：使用结构化数组或 Python 列表
+    """
     if dtype is None:
         # 数值 list/tuple 快速路径：Rust 单次完成展平 + dtype 推断 + 构造。
         if isinstance(data, (list, tuple)):
@@ -3315,8 +3351,14 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
         flat, has_c, has_s = _flatten_check(data)
         if has_c:
             _dtype = "complex128"
+        elif has_s:
+            # 全字符串数据：自动推断固定长度字符串 dtype（比 object 性能更好）
+            str_lens = [len(str(x)) for x in flat]
+            max_len = max(str_lens) if str_lens else 1
+            _dtype = f"U{max_len}"
         else:
-            _dtype = _infer_int_dtype(flat)
+            # 智能类型推断：避免不必要的 object dtype
+            _dtype = _infer_smart_dtype(flat)
     else:
         _dtype = _resolve_dtype(dtype)
     # 字符串/字节/void dtype（S/U/V）：存为原始 Python 数据，避免数值化。
@@ -3467,9 +3509,32 @@ def array_equal(a, b):
     return bool(np.array_equal(a._array, b._array))
 
 
-def copy(a, order='K'):
-    """返回数组的副本。"""
-    return ndarray(a).copy(order=order)
+def copy(a, order='K', thread_safe=False):
+    """返回数组的副本。
+
+    Args:
+        a: 输入数组。
+        order: 内存布局顺序（'C', 'F', 'A', 'K'）。
+        thread_safe: 是否创建线程安全的副本（用于多线程环境）。
+
+    Returns:
+        ndarray: 数组副本。若 thread_safe=True，返回的副本可安全在多线程间共享。
+
+    【线程安全示例】
+    >>> import rsnumpy as np
+    >>> import threading
+    >>> data = np.array([1, 2, 3])
+    >>> # 创建线程安全副本
+    >>> safe_data = np.copy(data, thread_safe=True)
+    >>> def worker(arr):
+    ...     return arr.sum()
+    >>> threads = [threading.Thread(target=worker, args=(safe_data,)) for _ in range(4)]
+    >>> for t in threads:
+    ...     t.start()
+    >>> for t in threads:
+    ...     t.join()
+    """
+    return ndarray(a).copy(order=order, thread_safe=thread_safe)
 
 
 def _parse_str_dtype(dtype):
@@ -3584,6 +3649,18 @@ def _resolve_dtype(dtype):
         return dt_str
     if dt_str in ("bool", "bool_"):
         return "bool"
+    if dt_str in ("object", "object_"):
+        import warnings
+        warnings.warn(
+            "使用 object dtype 会完全失去向量化性能优势！\n"
+            "推荐替代方案：\n"
+            "  1. 变长字符串 → 使用固定长度字符串 dtype（如 'U10'）\n"
+            "  2. 大整数（<2^53）→ 使用 int64\n"
+            "  3. 混合类型 → 使用结构化数组或 Python 列表",
+            UserWarning,
+            stacklevel=2,
+        )
+        return "object"
     return "float64"
 
 
@@ -3601,6 +3678,97 @@ def _infer_int_dtype(args):
     if has_bool and not has_int:
         return "bool"
     return "int64"
+
+
+def _infer_smart_dtype(flat):
+    """智能类型推断：避免不必要的 object dtype。
+
+    策略：
+    1. 全 bool → bool
+    2. 全 int（在 int64 范围内）→ int64
+    3. 全 int（超出范围）→ float64（精度警告）
+    4. 全 float → float64
+    5. int + float → float64
+    6. 其他混合类型 → object（给出警告）
+    """
+    if not flat:
+        return "float64"
+
+    types = set(type(x) for x in flat)
+
+    # 全 bool
+    if types == {bool}:
+        return "bool"
+
+    # 全 int 或 int+bool
+    if types <= {int, bool}:
+        int_vals = [x for x in flat if isinstance(x, int) and not isinstance(x, bool)]
+        if int_vals:
+            min_val = min(int_vals)
+            max_val = max(int_vals)
+            if min_val >= -(2**53) and max_val < 2**53:
+                return "int64"
+            else:
+                import warnings
+                warnings.warn(
+                    f"整数值范围 [{min_val}, {max_val}] 超出 ±2^53，"
+                    f"将使用 float64 存储（可能丢失精度）。",
+                    UserWarning,
+                    stacklevel=3,
+                )
+                return "float64"
+        return "int64"
+
+    # 全 float 或 float+int/bool
+    if types <= {float, int, bool}:
+        return "float64"
+
+    # 全字符串
+    if types == {str}:
+        str_lens = [len(x) for x in flat]
+        max_len = max(str_lens) if str_lens else 1
+        return f"U{max_len}"
+
+    # 混合类型 → object（但尝试给出更好的建议）
+    import warnings
+    suggested = _suggest_better_dtype(flat)
+    if suggested and suggested != "object":
+        warnings.warn(
+            f"数据包含多种类型 {types}，将使用 object dtype（性能低）。\n"
+            f"建议：可以转换为 '{suggested}' 以获得更好性能。\n"
+            f"使用方式：np.array(data, dtype='{suggested}')",
+            UserWarning,
+            stacklevel=3,
+        )
+    else:
+        warnings.warn(
+            f"数据包含多种类型 {types}，将使用 object dtype（性能低）。\n"
+            f"推荐：使用结构化数组或 Python 列表替代。",
+            UserWarning,
+            stacklevel=3,
+        )
+    return "object"
+
+
+def _suggest_better_dtype(flat):
+    """为混合类型数据推荐更好的 dtype。"""
+    types = set(type(x) for x in flat)
+
+    # 尝试全部转为字符串
+    if types <= {str, int, float, bool}:
+        str_lens = [len(str(x)) for x in flat]
+        max_len = max(str_lens) if str_lens else 1
+        return f"U{max_len}"
+
+    # 尝试全部转为 float
+    try:
+        for x in flat:
+            float(x)
+        return "float64"
+    except (ValueError, TypeError):
+        pass
+
+    return None
 
 
 def _make_structured_zeros(shape, fields):

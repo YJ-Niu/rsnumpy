@@ -64,7 +64,33 @@ def _round_up(offset, align):
 
 
 class DType:
-    """元素数据类型，兼容 numpy.dtype 的属性与 str/repr。"""
+    """元素数据类型，兼容 numpy.dtype 的属性与 str/repr。
+
+    【关于 object dtype】
+    ⚠️ 性能警告：object dtype 会完全失去向量化的速度优势！
+
+    当 dtype='object' 时，数组存储的是 Python 对象的引用，而不是数值数据。
+    这会导致以下性能问题：
+    - 无法利用 SIMD 指令加速
+    - 每次 Python 循环都会产生类型检查和函数调用开销
+    - 内存占用更高（存储对象引用 + Python 对象本身）
+    - 多线程性能下降（GIL 无法释放）
+
+    【推荐替代方案】
+    1. 变长字符串：使用固定长度字符串 dtype（如 'U10'）
+    2. 大整数：如果范围在 ±2^53 内，使用 int64
+    3. 混合类型：重新设计数据结构，使用结构化数组
+    4. Python 对象：考虑使用列表或字典，而不是数组
+
+    【使用示例】
+    >>> import rsnumpy as np
+    >>> # 不推荐：使用 object dtype（性能低）
+    >>> arr = np.array([1, 'text', 3.14], dtype=object)  # 性能陷阱
+    >>>
+    >>> # 推荐：使用固定类型数组
+    >>> int_arr = np.array([1, 2, 3])  # int64，高性能
+    >>> str_arr = np.array(['a', 'b', 'c'])  # 自动推断为字符串
+    """
 
     __slots__ = ('_kind', '_itemsize', '_byteorder', '_alignment', '_typename',
                  '_names', '_fields', '_aligned', '_subdtype', '_titles')
@@ -508,6 +534,7 @@ def _parse_dict_dtype(d, align):
         titles = d.get('titles', None)
         aligned = align or bool(d.get('aligned', False))
         return _build_struct(names, formats, offsets, itemsize, titles, aligned)
+    
     # 字典推导：一次提取 (name, typ, offset, title) 四元组
     def _parse_dict_item(name, spec):
         typ = spec[0]

@@ -1,10 +1,10 @@
-import numpy as np
+import rsnumpy as np
 import time
 import math
 from io import StringIO
-from numpy import array, argmin, sqrt, sum
-from numpy.lib.recfunctions import repack_fields
-from numpy.lib import recfunctions as rfn
+from rsnumpy import array, argmin, sqrt, sum
+from rsnumpy.lib.recfunctions import repack_fields
+from rsnumpy.lib import recfunctions as rfn
 
 start_time = time.time()
 
@@ -15,82 +15,82 @@ def mark_print():
 # 使用标量类型
 dt = np.dtype([('age', np.int8)])
 a = np.array([(10,), (20,), (30,)], dtype=dt)
-print(111, a['age'])
+print(1, a['age'])
 
 student = np.dtype([('name', 'S20'), ('age', 'i1'), ('marks', 'f4')])
-print(student)
+print(2, student)
 
 a = np.array([('abc', 21, 50), ('xyz', 18, 75)], dtype=student)
-print(a)
+print(3, a)
 
 a = np.arange(15).reshape(3, 5)
-print(a)
+print(4, a)
 # print(b)
 # print(np.array_equal(a, b))  # True
 # print(a.shape == b.shape)    # True
 # print(a.dtype == b.dtype)    # True
-print(a.dtype)
+print(5, a.dtype)
 # print(b.dtype)
 
  
 a = np.arange(24)
-print(a.ndim)             # a 现只有一个维度
+print(6, a.ndim)             # a 现只有一个维度
 # 现在调整其大小
 b = a.reshape(2, 4, 3)  # b 现在拥有三个维度
-print(b.ndim)
+print(7, b.ndim)
 a = np.array([[1, 2, 3], [4, 5, 6]])
-print(a.shape)
+print(8, a.shape)
 
 a = np.array([[1, 2, 3], [4, 5, 6]])
 a.shape = (3, 2)
-print(a)
+print(9, a)
 
 a = np.array([[1, 2, 3], [4, 5, 6]])
 b = a.reshape(3, 2)
-print(b)
+print(10, b)
 
 # 数组的 dtype 为 int8（一个字节）
 x = np.array([1, 2, 3, 4, 5], dtype=np.int8)
-print(x.itemsize)
+print(11, x.itemsize)
  
 # 数组的 dtype 现在为 float64（八个字节）
 y = np.array([1, 2, 3, 4, 5], dtype=np.float64)
-print(y.itemsize)
+print(12, y.itemsize)
 
 x = np.array([1, 2, 3, 4, 5])
-print(x.flags)
+print(13, x.flags)
 
 x3 = np.empty([2, 3], dtype=int)
-print(x3)
+print(14, x3)
 print()
 
 x2 = np.zeros([2, 3], dtype=int)
-print(x2)
+print(15, x2)
 print()
 
 x3 = np.zeros(shape=(2, 3), dtype=float, order='C')
-print(x3)
+print(16, x3)
 
 print("+++++++++++++++++\n")
 # 默认为浮点数
 x = np.zeros(5)
-print(x)
+print(17, x)
  
 # 设置类型为整数
 y = np.zeros((5,), dtype=int)
-print(y)
+print(18, y)
 
 print("+++++++++++++++++\n")
 # 自定义类型
 z = np.zeros((2, 2), dtype=[('x', 'i4'), ('y', 'i4')])
-print(z)
+print(19, z)
 
 x = np.ones(5)
-print(x)
+print(20, x)
  
 # 自定义类型
 x = np.ones([2, 2], dtype=int)
-print(x)
+print(21, x)
 
 print("3. +++++++++++++++++\n")
 # 创建一个 3x3 的二维数组
@@ -98,7 +98,7 @@ arr = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
  
 # 创建一个与 arr 形状相同的，所有元素都为 0 的数组
 zeros_arr = np.zeros_like(arr)
-print(zeros_arr)
+print(22, zeros_arr)
 
 print("4. +++++++++++++++++\n")
 # 创建一个 3x3 的二维数组
@@ -106,17 +106,16 @@ arr = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
  
 # 创建一个与 arr 形状相同的，所有元素都为 1 的数组
 ones_arr = np.ones_like(arr)
-
-print(ones_arr)
+print(23, ones_arr)
 
 print("5. +++++++++++++++++\n")
 x = [1, 2, 3]
 a = np.asarray(x)
-print(a, "\n==>\n", "[1  2  3]")
+print(24, a, "\n==>\n", "[1  2  3]")
 
 x = (1, 2, 3)
 a = np.asarray(x)
-print(a, "\n==>\n", "[1  2  3]")
+print(25, a, "\n==>\n", "[1  2  3]")
 
 x = [(1, 2, 3), (4, 5)]
 # a = np.asarray(x)
@@ -124,11 +123,11 @@ print(a, "\n==>\n", "[[1  2  3]\n[4  5]]")
 
 x = [1, 2, 3]
 a = np.asarray(x, dtype=float)
-print(a, "\n==>\n", "[1.  2.  3.]")
+print(26, a, "\n==>\n", "[1.  2.  3.]")
 
 s = b'Hello World'
 a = np.frombuffer(s, dtype='S1')
-print(a)
+print(27, a)
 
 # 使用 range 函数创建列表对象
 list1 = list(range(5))
@@ -136,137 +135,137 @@ it = iter(list1)
  
 # 使用迭代器创建 ndarray
 x = np.fromiter(it, dtype=float)
-print(x)
+print(28, x)
 
 x = np.arange(5)
-print(x)
+print(29, x)
 # 设置了 dtype
 x = np.arange(5, dtype=float)
-print(x)
+print(30, x)
 
 
 x = np.arange(10, 20, 2)
-print(x)
+print(31, x)
 
 a = np.linspace(1, 10, 10)
-print(a)
+print(32, a)
 
 a = np.linspace(1, 1, 10)
-print(a)
+print(33, a)
 
 a = np.linspace(10, 20, 5, endpoint=False)
-print(a)
+print(34, a)
 
 a = np.linspace(1, 10, 10, retstep=True)
-print(11, a)
+print(35, a)
 
 # 拓展例子
 b = np.linspace(1, 10, 10).reshape([10, 1])
-print(b)
+print(36, b)
 
 a = np.logspace(1.0, 2.0, num=10)
-print(a)
+print(37, a)
 
 a = np.logspace(0, 9, 10, base=2)
-print(a)
+print(38, a)
 
 a = np.arange(10)
 s = slice(2, 7, 2)   # 从索引 2 开始到索引 7 停止，间隔为2
-print(a[s])
+print(39, a[s])
 
 a = np.arange(10)  # [0 1 2 3 4 5 6 7 8 9]
 b = a[5]
-print(b)
+print(40, b)
 
 a = np.arange(10)
-print(a[2:])
+print(41, a[2:])
 
 a = np.arange(10)  # [0 1 2 3 4 5 6 7 8 9]
-print(a[2:5])
+print(42, a[2:5])
 
 a = np.array([[1, 2, 3], [3, 4, 5], [4, 5, 6]])
-print(a)
+print(43, a)
 # 从某个索引处开始切割
 print('从数组索引 a[1:] 处开始切割')
-print(a[1:])
+print(44, a[1:])
 
 print("+++++++++++++++++\n")
 a = np.array([[1, 2, 3], [3, 4, 5], [4, 5, 6]])
-print(a[..., 1])   # 第2列元素
-print(a[1, ...])   # 第2行元素
-print(a[..., 1:])  # 第2列及剩下的所有元素
+print(45, a[..., 1])   # 第2列元素
+print(46, a[1, ...])   # 第2行元素
+print(47, a[..., 1:])  # 第2列及剩下的所有元素
 print("+++++++++++++++++\n")
 x = np.array([[1, 2], [3, 4], [5, 6]])
 y = x[[0, 1, 2], [0, 1, 0]]
-print(y)
+print(48, y)
 
 x = np.array([[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11]])
 print('我们的数组是：')
-print(x)
+print(49, x)
 print("\n")
 rows = np.array([[0, 0], [3, 3]])
 cols = np.array([[0, 2], [0, 2]])
 y = x[rows, cols]
 print('这个数组的四个角元素是：')
-print(y)
+print(50, y)
 
 a = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
 b = a[1:3, 1:3]
-print("b:", b)
+print(51, b)
 
 c = a[1:3, [1, 2]]
-print("c:", c)
+print(52, c)
 
 d = a[..., 1:]
-print("d:", d)
+print(53, d)
 
-x = np.array([[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11]])
+x = np.array([[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 10, 11]])
 print('我们的数组是：')
-print(x)
+print(54, x)
 print("\n")
-# 现在我们会打印出大于 5 的元素
+# 大于 5 的元素
 print("大于 5 的元素是：")
-print(x[x > 5])
+print(55, x[x > 5])
 
 a = np.array([np.nan, 1, 2, np.nan, 3, 4, 5])
-print(a[~np.isnan(a)])
+print(56, a[~np.isnan(a)])
 
 a = np.array([1, 2+6j, 5, 3.5+5j])
-print(a[np.iscomplex(a)])
+print(57, a[np.iscomplex(a)])
 
 x = np.arange(9)
-print(x)
+print(58, x)
 # 一维数组读取指定下标对应的元素
 print("-------读取下标对应的元素-------")
 x2 = x[[0, 6]]  # 使用花式索引
-print(x2)
+print(59, x2)
 
-print(x2[0])
-print(x2[1])
+print(60, x2[0])
+print(61, x2[1])
 
 x = np.arange(32).reshape((8, 4))
-print(x)
+print(62, x)
 # 二维数组读取指定下标对应的行
 print("-------读取下标对应的行-------")
-print(x[[4, 2, 1, 7]])
+print(63, x[[4, 2, 1, 7]])
 
 x = np.arange(32).reshape((8, 4))
-print(x[[-4, -2, -1, -7]])
+print(64, x[[-4, -2, -1, -7]])
 
 x = np.arange(32).reshape((8, 4))
-print(x[np.ix_([1, 5, 7, 2], [0, 3, 1, 2])])
+print(65, x[np.ix_([1, 5, 7, 2], [0, 3, 1, 2])])
 
 a = np.array([1, 2, 3, 4])
 b = np.array([10, 20, 30, 40])
 c = a * b
-print(c)
+print(66, c)
 
 a = np.array([[0, 0, 0],
               [10, 10, 10],
               [20, 20, 20],
               [30, 30, 30]])
 b = np.array([0, 1, 2])
-print(a + b)
+print(67, a + b)
 
 a = np.array([[0, 0, 0],
               [10, 10, 10],
@@ -274,23 +273,21 @@ a = np.array([[0, 0, 0],
               [30, 30, 30]])
 b = np.array([1, 2, 3])
 bb = np.tile(b, (4, 1))  # 重复 b 的各个维度
-print(a + bb)
+print(68, a + bb)
 
 a = np.arange(6).reshape(2, 3)
 print('原始数组是：')
-print(a)
+print(69, a)
 print('\n')
 print('迭代输出元素：')
 for x in np.nditer(a):
-    print(x, end=", ")
+    print(70, x, end=", ")
 print('\n')
 
 
 c = np.array([1.3, 2.4, 3.5])
 for x in np.nditer(c):
-    print(x, end=", ")
-print('\n')
-print('\n')
+    print(71, x, end=", ")
 print('\n')
 
 # a = np.arange(6).reshape(2, 3)
@@ -306,36 +303,36 @@ print('\n')
 a = np.arange(0, 60, 5)
 a = a.reshape(3, 4)
 print('原始数组是：')
-print(a)
+print(72, a)
 print('\n')
 print('原始数组的转置是：')
 b = a.T
-print(b)
+print(73, b)
 print('\n')
 print('以 C 风格顺序排序：')
 c = b.copy(order='C')
-print(c)
+print(74, c)
 for x in np.nditer(c):
     print(x, end=", ")
 print('\n')
 print('以 F 风格顺序排序：')
 c = b.copy(order='F')
-print(c)
+print(75, c)
 for x in np.nditer(c, order='F'):
-    print(x, end=", ")
+    print(76, x, end=", ")
 print()
 a = np.arange(6).reshape(2, 3)
 print('原始数组是：')
-print(a)
+print(77, a)
 print('\n')
 print(a.T)
 print('迭代输出元素：')
 for x in np.nditer(a.T):
-    print(x, end=", ")
+    print(78, x, end=", ")
 print('\n')
  
 for x in np.nditer(a.T.copy(order='F')):
-    print(x, end=", ")
+    print(79, x, end=", ")
 print('\n')
 
 print("+++++++++++++++++\n")
@@ -346,34 +343,33 @@ print(a)
 print('\n')
 print('以 C 风格顺序排序：')
 for x in np.nditer(a, order='C'):
-    print(x, end=", ")
+    print(80, x, end=", ")
 print('\n')
 print('以 F 风格顺序排序：')
 for x in np.nditer(a, order='F'):
-    print(x, end=", ")
+    print(81, x, end=", ")
 print('\n')
 print("+++++++++++++++++\n")
 
 a = np.arange(0, 60, 5)
 a = a.reshape(3, 4)
 print('原始数组是：')
-print(a)
+print(82, a)
 print('\n')
 for x in np.nditer(a, op_flags=['readwrite']):
     x[...] = 2*x
 print('修改后的数组是：')
 print(a)
-print('\n')
 
 print("+++++++++++++++++\n")
 a = np.arange(0, 60, 5)
 a = a.reshape(3, 4)
 print('原始数组是：')
-print(a)
+print(83, a)
 print('\n')
 print('修改后的数组是：')
 for x in np.nditer(a, flags=['multi_index'], order='F'):
-    print(x, end=", ")
+    print(84, x, end=", ")
 
 print('')
 
@@ -381,51 +377,51 @@ print("+++++++++++++++++\n")
 a = np.arange(0, 60, 5)
 a = a.reshape(3, 4)
 print('第一个数组为：')
-print(a)
+print(85, a)
 print('\n')
 print('第二个数组为：')
 b = np.array([1, 2, 3, 4], dtype=int)
-print(b)
+print(86, b)
 print('\n')
 print('修改后的数组为：')
 for x, y in np.nditer([a, b]):
-    print("%d:%d" % (x, y), end=", ")
+    print(87, "%d:%d" % (x, y), end=", ")
 print('')
 print("+++++++++++++++++\n")
 a = np.arange(8)
 print('原始数组：')
-print(a)
+print(88, a)
 print('\n')
  
 b = a.reshape(4, 2)
 print('修改后的数组：')
-print(b)
+print(89, b)
 
 a = np.arange(9).reshape(3, 3)
 print('原始数组：')
 for row in a:
-    print(row)
+    print(90, row)
  
 # 对数组中每个元素都进行处理，可以使用flat属性，该属性是一个数组元素迭代器：
 print('迭代后的数组：')
 for element in a.flat:
-    print(element)
+    print(91, element)
 
 print('')
 print("+++++++++++++++++\n")
 a = np.arange(8).reshape(2, 4)
  
 print('原数组：')
-print(a)
+print(92, a)
 print('\n')
 # 默认按行
  
 print('展开的数组：')
-print(a.flatten())
+print(93, a.flatten())
 print('\n')
  
 print('以 F 风格顺序展开的数组：')
-print(a.flatten(order='F'))
+print(94, a.flatten(order='F'))
 print('\n')
 
 print('')
@@ -433,25 +429,25 @@ print("+++++++++++++++++\n")
 a = np.arange(8).reshape(2, 4)
  
 print('原数组：')
-print(a)
+print(95, a)
 print('\n')
  
 print('调用 ravel 函数之后：')
-print(a.ravel())
+print(96, a.ravel())
 print('\n')
  
 print('以 F 风格顺序调用 ravel 函数之后：')
-print(a.ravel(order='F'))
+print(97, a.ravel(order='F'))
 print('\n')
 
 a = np.arange(12).reshape(3, 4)
  
 print('原数组：')
-print(a)
+print(98, a)
 print('\n')
  
 print('对换数组：')
-print(a.T)
+print(99, a.T)
 
 
 print("+++++++++++++++++\n")
@@ -460,10 +456,10 @@ print("+++++++++++++++++\n")
 a = np.arange(8).reshape(2, 2, 2)
  
 print('原数组：')
-print(a)
+print(100, a)
 print('获取数组中一个值：')
-print(np.where(a == 6))
-print(a[1, 1, 0])  # 为 6
+print(101, np.where(a == 6))
+print(102, a[1, 1, 0])  # 为 6
 print('\n')
  
  
@@ -471,10 +467,10 @@ print('\n')
  
 print('调用 rollaxis 函数：')
 b = np.rollaxis(a, 2, 0)
-print(b)
+print(103, b)
 # 查看元素 a[1,1,0]，即 6 的坐标，变成 [0, 1, 1]
 # 最后一个 0 移动到最前面
-print(np.where(b == 6))
+print(104, np.where(b == 6))
 print('\n')
  
 # 将轴 2 滚动到轴 1：（宽度到高度）
@@ -484,58 +480,58 @@ c = np.rollaxis(a, 2, 1)
 print(c)
 # 查看元素 a[1,1,0]，即 6 的坐标，变成 [1, 0, 1]
 # 最后的 0 和 它前面的 1 对换位置
-print(np.where(c == 6))
+print(105, np.where(c == 6))
 print('\n')
 
 a = np.arange(8)
 print('原始数组：')
-print(a)
+print(106, a)
 print('\n')
  
 b = a.reshape(4, 2)
 print('修改后的数组：')
-print(b)
+print(107, b)
 
 a = np.arange(9).reshape(3, 3)
 print('原始数组：')
 for row in a:
-    print(row)
+    print(108, row)
  
 # 对数组中每个元素都进行处理，可以使用flat属性，该属性是一个数组元素迭代器：
 print('迭代后的数组：')
 for element in a.flat:
-    print(element)
+    print(109, element)
 a = np.arange(8).reshape(2, 4)
  
 print('原数组：')
-print(a)
+print(110, a)
 print('\n')
 # 默认按行
  
 print('展开的数组：')
-print(a.flatten())
+print(111, a.flatten())
 print('\n')
  
 print('以 F 风格顺序展开的数组：')
-print(a.flatten(order='F'))
+print(112, a.flatten(order='F'))
 
 a = np.arange(8).reshape(2, 4)
  
 print('原数组：')
-print(a)
+print(113, a)
 print('\n')
  
 print('调用 ravel 函数之后：')
-print(a.ravel())
+print(114, a.ravel())
 print('\n')
  
 print('以 F 风格顺序调用 ravel 函数之后：')
-print(a.ravel(order='F'))
+print(115, a.ravel(order='F'))
 
 a = np.arange(12).reshape(3, 4)
  
 print('原数组：')
-print(a)
+print(116, a)
 print('\n')
  
 print('对换数组：')
@@ -543,20 +539,20 @@ print(np.transpose(a))
 a = np.arange(12).reshape(3, 4)
  
 print('原数组：')
-print(a)
+print(117, a)
 print('\n')
  
 print('转置数组：')
-print(a.T)
+print(118, a.T)
 
 # 创建了三维的 ndarray
 a = np.arange(8).reshape(2, 2, 2)
  
 print('原数组：')
-print(a)
+print(119, a)
 print('获取数组中一个值：')
-print(np.where(a == 6))
-print(a[1, 1, 0])  # 为 6
+print(120, np.where(a == 6))
+print(121, a[1, 1, 0])  # 为 6
 print('\n')
  
  
@@ -564,32 +560,32 @@ print('\n')
  
 print('调用 rollaxis 函数：')
 b = np.rollaxis(a, 2, 0)
-print(b)
+print(122, b)
 # 查看元素 a[1,1,0]，即 6 的坐标，变成 [0, 1, 1]
 # 最后一个 0 移动到最前面
-print(np.where(b == 6))
+print(123, np.where(b == 6))
 print('\n')
  
 # 将轴 2 滚动到轴 1：（宽度到高度）
  
 print('调用 rollaxis 函数：')
 c = np.rollaxis(a, 2, 1)
-print(c)
+print(124, c)
 # 查看元素 a[1,1,0]，即 6 的坐标，变成 [1, 0, 1]
 # 最后的 0 和 它前面的 1 对换位置
-print(np.where(c == 6))
+print(125, np.where(c == 6))
 print('\n')
 
 # 创建了三维的 ndarray
 a = np.arange(8).reshape(2, 2, 2)
  
 print('原数组：')
-print(a)
+print(126, a)
 print('\n')
 # 现在交换轴 0（深度方向）到轴 2（宽度方向）
  
 print('调用 swapaxes 函数后的数组：')
-print(np.swapaxes(a, 2, 0))
+print(127, np.swapaxes(a, 2, 0))
 
 print('')
 print("++++++++++++++++++++++++++++++++++++++++++++\n")
@@ -605,30 +601,30 @@ print('对 y 广播 x：')
 r, c = b.iters
  
 # Python3.x 为 next(context) ，Python2.x 为 context.next()
-print(next(r), next(c))
-print(next(r), next(c))
+print(128, next(r), next(c))
+print(129, next(r), next(c))
 print('\n')
 # shape 属性返回广播对象的形状
  
 print('广播对象的形状：')
-print(b.shape)
+print(130, b.shape)
 print('\n')
 # 手动使用 broadcast 将 x 与 y 相加
 b = np.broadcast(x, y)
 c = np.empty(b.shape)
  
 print('手动使用 broadcast 将 x 与 y 相加：')
-print(c.shape)
+print(131, c.shape)
 print('\n')
 c.flat = [u + v for (u, v) in b]
  
 print('调用 flat 函数：')
-print(c)
+print(132, c)
 print('\n')
 # 获得了和 NumPy 内建的广播支持相同的结果
  
 print('x 与 y 的和：')
-print(x + y)
+print(133, x + y)
 
 
 print('')
@@ -636,61 +632,61 @@ print("+++++++++++++++++++++++++++++++++\n")
 a = np.arange(4).reshape(1, 4)
  
 print('原数组：')
-print(a)
+print(134, a)
 print('\n')
  
 print('调用 broadcast_to 函数之后：')
-print(np.broadcast_to(a, (4, 4)))
+print(135, np.broadcast_to(a, (4, 4)))
 
 print('\n')
 print("+++++++++++++++++++++++++++++++++\n")
 x = np.array(([1, 2], [3, 4]))
  
 print('数组 x：')
-print(x)
+print(136, x)
 print('\n')
 y = np.expand_dims(x, axis=0)
  
 print('数组 y：')
-print(y)
+print(137, y)
 print('\n')
  
 print('数组 x 和 y 的形状：')
-print(x.shape, y.shape)
+print(138, x.shape, y.shape)
 print('\n')
 # 在位置 1 插入轴
 y = np.expand_dims(x, axis=1)
  
 print('在位置 1 插入轴之后的数组 y：')
-print(y)
+print(139, y)
 print('\n')
  
 print('x.ndim 和 y.ndim：')
-print(x.ndim, y.ndim)
+print(140, x.ndim, y.ndim)
 print('\n')
  
 print('x.shape 和 y.shape：')
-print(x.shape, y.shape)
+print(141, x.shape, y.shape)
 mark_print()
 x = np.arange(9).reshape(1, 3, 3)
  
 print('数组 x：')
-print(x)
+print(142, x)
 print('\n')
 y = np.squeeze(x)
  
 print('数组 y：')
-print(y)
+print(143, y)
 print('\n')
  
 print('数组 x 和 y 的形状：')
-print(x.shape, y.shape)
+print(144, x.shape, y.shape)
 
 mark_print()
 a = np.array([[1, 2], [3, 4]])
  
 print('第一个数组：')
-print(a)
+print(145, a)
 print('\n')
 b = np.array([[5, 6], [7, 8]])
  
@@ -704,12 +700,12 @@ print(np.concatenate((a, b)))
 print('\n')
  
 print('沿轴 1 连接两个数组：')
-print(np.concatenate((a, b), axis=1))
+print(147, np.concatenate((a, b), axis=1))
 mark_print()
 a = np.array([[1, 2], [3, 4]])
  
 print('第一个数组：')
-print(a)
+print(148, a)
 print('\n')
 b = np.array([[5, 6], [7, 8]])
  
@@ -718,17 +714,17 @@ print(b)
 print('\n')
  
 print('沿轴 0 堆叠两个数组：')
-print(np.stack((a, b), axis=0))
+print(149, np.stack((a, b), axis=0))
 print('\n')
  
 print('沿轴 1 堆叠两个数组：')
-print(np.stack((a, b), axis=1))
+print(150, np.stack((a, b), axis=1))
 
 mark_print()
 a = np.array([[1, 2], [3, 4]])
  
 print('第一个数组：')
-print(a)
+print(151, a)
 print('\n')
 b = np.array([[5, 6], [7, 8]])
  
@@ -745,7 +741,7 @@ mark_print()
 a = np.array([[1, 2], [3, 4]])
  
 print('第一个数组：')
-print(a)
+print(152, a)
 print('\n')
 b = np.array([[5, 6], [7, 8]])
  
@@ -761,7 +757,7 @@ mark_print()
 a = np.arange(9)
  
 print('第一个数组：')
-print(a)
+print(153, a)
 print('\n')
  
 print('将数组分为三个大小相等的子数组：')
@@ -776,21 +772,21 @@ print(b)
 mark_print()
 a = np.arange(16).reshape(4, 4)
 print('第一个数组：')
-print(a)
+print(154, a)
 print('\n')
 print('默认分割（0轴）：')
 b = np.split(a, 2)
-print(b)
+print(155, b)
 print('\n')
 
 print('沿水平方向分割：')
 c = np.split(a, 2, axis=1)
-print(c)
+print(156, c)
 print('\n')
 
 print('沿水平方向分割：')
 d = np.hsplit(a, 2)
-print(d)
+print(157, d)
 
 mark_print()
 harr = np.floor(10 * np.random.random((2, 6)))
@@ -804,7 +800,7 @@ mark_print()
 a = np.arange(16).reshape(4, 4)
  
 print('第一个数组：')
-print(a)
+print(158, a)
 print('\n')
  
 print('竖直分割：')
@@ -815,11 +811,11 @@ mark_print()
 a = np.array([[1, 2, 3], [4, 5, 6]])
  
 print('第一个数组：')
-print(a)
+print(159, a)
 print('\n')
  
 print('第一个数组的形状：')
-print(a.shape)
+print(160, a.shape)
 print('\n')
 b = np.resize(a, (3, 2))
  
@@ -840,57 +836,57 @@ mark_print()
 a = np.array([[1, 2, 3], [4, 5, 6]])
  
 print('第一个数组：')
-print(a)
+print(161, a)
 print('\n')
  
 print('向数组添加元素：')
-print(np.append(a, [7, 8, 9]))
+print(162, np.append(a, [7, 8, 9]))
 print('\n')
  
 print('沿轴 0 添加元素：')
-print(np.append(a, [[7, 8, 9]], axis=0))
+print(163, np.append(a, [[7, 8, 9]], axis=0))
 print('\n')
  
 print('沿轴 1 添加元素：')
-print(np.append(a, [[5, 5, 5], [7, 8, 9]], axis=1))
+print(164, np.append(a, [[5, 5, 5], [7, 8, 9]], axis=1))
 
 mark_print()
 a = np.array([[1, 2], [3, 4], [5, 6]])
  
 print('第一个数组：')
-print(a)
+print(165, a)
 print('\n')
  
 print('未传递 Axis 参数。 在删除之前输入数组会被展开。')
-print(np.insert(a, 3, [11, 12]))
+print(166, np.insert(a, 3, [11, 12]))
 print('\n')
 print('传递了 Axis 参数。 会广播值数组来配输入数组。')
  
 print('沿轴 0 广播：')
-print(np.insert(a, 1, [11], axis=0))
+print(167, np.insert(a, 1, [11], axis=0))
 print('\n')
  
 print('沿轴 1 广播：')
-print(np.insert(a, 1, 11, axis=1))
+print(168, np.insert(a, 1, 11, axis=1))
 
 mark_print()
 a = np.arange(12).reshape(3, 4)
  
 print('第一个数组：')
-print(a)
+print(169, a)
 print('\n')
  
 print('未传递 Axis 参数。 在插入之前输入数组会被展开。')
-print(np.delete(a, 5))
+print(170, np.delete(a, 5))
 print('\n')
  
 print('删除第二列：')
-print(np.delete(a, 1, axis=1))
+print(171, np.delete(a, 1, axis=1))
 print('\n')
  
 print('包含从数组中删除的替代值的切片：')
 a = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-print(np.delete(a, np.s_[::2]))
+print(172, np.delete(a, np.s_[::2]))
 
 mark_print()
 # 取第0~3行，列方向每隔一列
@@ -899,18 +895,18 @@ print(idx)
 # 输出： (slice(0, 3, None), slice(None, None, 2))
 
 arr_2d = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12], [13, 14, 15, 16]])
-print(arr_2d[idx])
+print(173, arr_2d[idx])
 
 mark_print()
 a = np.array([5, 2, 6, 2, 7, 5, 6, 8, 2, 9])
  
 print('第一个数组：')
-print(a)
+print(174, a)
 print('\n')
  
 print('第一个数组的去重值：')
 u = np.unique(a)
-print(u)
+print(175, u)
 print('\n')
  
 print('去重数组的索引数组：')
@@ -1670,9 +1666,6 @@ print()
 np.savetxt('./test/out.txt', a, fmt="%d", delimiter=",")  # 改为保存为整数，以逗号分隔
 b = np.loadtxt('./test/out.txt', delimiter=",")  # load 时也要指定为逗号分隔
 print(b)
-
-print(np.__version__)
-print('\n')
 
 def run_test():
     print("\n------------------------")
