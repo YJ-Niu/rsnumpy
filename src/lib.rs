@@ -1357,14 +1357,19 @@ impl NdArray {
 
     // ========== 新增缺失方法 ==========
 
-    #[pyo3(signature = (axis=None))]
-    fn prod(&self, axis: Option<isize>) -> PyResult<NdArray> {
+    #[pyo3(signature = (axis=None, keepdims=false))]
+    fn prod(&self, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray> {
         match axis {
             None => {
                 let val = self.data.iter().cloned().fold(1.0_f64, |a, b| a * b);
+                let shape = if keepdims {
+                    vec![1usize; self.data.ndim()]
+                } else {
+                    vec![]
+                };
                 Ok(NdArray {
                     imag: None,
-                    data: Array::from_elem(IxDyn(&[]), val),
+                    data: Array::from_elem(IxDyn(&shape), val),
                 })
             }
             Some(ax) => {
@@ -1395,12 +1400,18 @@ impl NdArray {
                         prod
                     })
                     .collect();
-                let new_shape: Vec<usize> = shape
-                    .iter()
-                    .enumerate()
-                    .filter(|(i, _)| *i != ax)
-                    .map(|(_, &s)| s)
-                    .collect();
+                let new_shape: Vec<usize> = if keepdims {
+                    let mut s = shape.clone();
+                    s[ax] = 1;
+                    s
+                } else {
+                    shape
+                        .iter()
+                        .enumerate()
+                        .filter(|(i, _)| *i != ax)
+                        .map(|(_, &s)| s)
+                        .collect()
+                };
                 let arr = Array::from_shape_vec(IxDyn(&new_shape), results)
                     .map_err(|e| PyValueError::new_err(e.to_string()))?;
                 Ok(NdArray {
@@ -1693,14 +1704,19 @@ impl NdArray {
         dispatch_binop_r(self, other, CBinOp::Div)
     }
 
-    #[pyo3(signature = (axis=None))]
-    fn sum(&self, axis: Option<isize>) -> PyResult<NdArray> {
+    #[pyo3(signature = (axis=None, keepdims=false))]
+    fn sum(&self, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray> {
         match axis {
             None => {
                 let val = self.data.sum();
+                let shape = if keepdims {
+                    vec![1usize; self.data.ndim()]
+                } else {
+                    vec![]
+                };
                 Ok(NdArray {
                     imag: None,
-                    data: Array::from_elem(IxDyn(&[]), val),
+                    data: Array::from_elem(IxDyn(&shape), val),
                 })
             }
             Some(ax) => {
@@ -1711,22 +1727,37 @@ impl NdArray {
                     ax as usize
                 };
                 let result = self.data.sum_axis(Axis(ax));
+                let shape = if keepdims {
+                    let mut s = self.data.shape().to_vec();
+                    s[ax] = 1;
+                    s
+                } else {
+                    result.shape().to_vec()
+                };
+                let arr = result
+                    .into_shape_with_order(IxDyn(&shape))
+                    .map_err(|e| PyValueError::new_err(e.to_string()))?;
                 Ok(NdArray {
                     imag: None,
-                    data: result.into_dyn(),
+                    data: arr,
                 })
             }
         }
     }
 
-    #[pyo3(signature = (axis=None))]
-    fn mean(&self, axis: Option<isize>) -> PyResult<NdArray> {
+    #[pyo3(signature = (axis=None, keepdims=false))]
+    fn mean(&self, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray> {
         match axis {
             None => {
                 let val = self.data.mean().unwrap_or(0.0);
+                let shape = if keepdims {
+                    vec![1usize; self.data.ndim()]
+                } else {
+                    vec![]
+                };
                 Ok(NdArray {
                     imag: None,
-                    data: Array::from_elem(IxDyn(&[]), val),
+                    data: Array::from_elem(IxDyn(&shape), val),
                 })
             }
             Some(ax) => {
@@ -1738,25 +1769,48 @@ impl NdArray {
                 };
                 let result = self.data.mean_axis(Axis(ax));
                 match result {
-                    Some(arr) => Ok(NdArray {
-                        imag: None,
-                        data: arr.into_dyn(),
-                    }),
+                    Some(mean_arr) => {
+                        let shape = if keepdims {
+                            let mut s = self.data.shape().to_vec();
+                            s[ax] = 1;
+                            s
+                        } else {
+                            mean_arr.shape().to_vec()
+                        };
+                        let arr = mean_arr
+                            .into_shape_with_order(IxDyn(&shape))
+                            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+                        Ok(NdArray {
+                            imag: None,
+                            data: arr,
+                        })
+                    }
                     None => Err(PyValueError::new_err("Invalid axis")),
                 }
             }
         }
     }
 
-    #[pyo3(signature = (axis=None))]
-    fn std(&self, axis: Option<isize>) -> PyResult<NdArray> {
+    #[pyo3(signature = (axis=None, ddof=0, keepdims=false))]
+    fn std(&self, axis: Option<isize>, ddof: usize, keepdims: bool) -> PyResult<NdArray> {
         match axis {
             None => {
                 let m = self.data.mean().unwrap_or(0.0);
-                let var = self.data.mapv(|x| (x - m).powi(2)).mean().unwrap_or(0.0);
+                let n = self.data.len();
+                let denom = if n > ddof {
+                    (n - ddof) as f64
+                } else {
+                    f64::NAN
+                };
+                let var = self.data.mapv(|x| (x - m).powi(2)).sum() / denom;
+                let shape = if keepdims {
+                    vec![1usize; self.data.ndim()]
+                } else {
+                    vec![]
+                };
                 Ok(NdArray {
                     imag: None,
-                    data: Array::from_elem(IxDyn(&[]), var.sqrt()),
+                    data: Array::from_elem(IxDyn(&shape), var.sqrt()),
                 })
             }
             Some(ax) => {
@@ -1775,7 +1829,11 @@ impl NdArray {
                         let post_size: usize = shape.iter().skip(ax + 1).product();
                         let data_vec: Vec<f64> = self.data.iter().copied().collect();
 
-                        // 并行计算每个切片的方差
+                        let denom = if axis_size > ddof {
+                            (axis_size - ddof) as f64
+                        } else {
+                            f64::NAN
+                        };
                         let n_slices = pre_size * post_size;
                         let results: Vec<f64> = (0..n_slices)
                             .into_par_iter()
@@ -1789,24 +1847,30 @@ impl NdArray {
                                     let diff = data_vec[base + k * post_size] - mean;
                                     sum_sq += diff * diff;
                                 }
-                                (sum_sq / axis_size as f64).sqrt()
+                                (sum_sq / denom).sqrt()
                             })
                             .collect();
 
-                        let new_shape: Vec<usize> = shape
-                            .iter()
-                            .enumerate()
-                            .filter(|(i, _)| *i != ax)
-                            .map(|(_, &s)| s)
-                            .collect();
+                        let out_shape = if keepdims {
+                            let mut s = shape.clone();
+                            s[ax] = 1;
+                            s
+                        } else {
+                            shape
+                                .iter()
+                                .enumerate()
+                                .filter(|(i, _)| *i != ax)
+                                .map(|(_, &s)| s)
+                                .collect()
+                        };
 
-                        if new_shape.is_empty() {
+                        if out_shape.is_empty() {
                             Ok(NdArray {
                                 imag: None,
                                 data: Array::from_elem(IxDyn(&[]), results[0]),
                             })
                         } else {
-                            let arr = Array::from_shape_vec(IxDyn(&new_shape), results)
+                            let arr = Array::from_shape_vec(IxDyn(&out_shape), results)
                                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
                             Ok(NdArray {
                                 imag: None,
@@ -1820,15 +1884,26 @@ impl NdArray {
         }
     }
 
-    #[pyo3(signature = (axis=None))]
-    fn var(&self, axis: Option<isize>) -> PyResult<NdArray> {
+    #[pyo3(signature = (axis=None, ddof=0, keepdims=false))]
+    fn var(&self, axis: Option<isize>, ddof: usize, keepdims: bool) -> PyResult<NdArray> {
         match axis {
             None => {
                 let m = self.data.mean().unwrap_or(0.0);
-                let var = self.data.mapv(|x| (x - m).powi(2)).mean().unwrap_or(0.0);
+                let n = self.data.len();
+                let denom = if n > ddof {
+                    (n - ddof) as f64
+                } else {
+                    f64::NAN
+                };
+                let var = self.data.mapv(|x| (x - m).powi(2)).sum() / denom;
+                let shape = if keepdims {
+                    vec![1usize; self.data.ndim()]
+                } else {
+                    vec![]
+                };
                 Ok(NdArray {
                     imag: None,
-                    data: Array::from_elem(IxDyn(&[]), var),
+                    data: Array::from_elem(IxDyn(&shape), var),
                 })
             }
             Some(ax) => {
@@ -1847,7 +1922,11 @@ impl NdArray {
                         let post_size: usize = shape.iter().skip(ax + 1).product();
                         let data_vec: Vec<f64> = self.data.iter().copied().collect();
 
-                        // 并行计算每个切片的方差
+                        let denom = if axis_size > ddof {
+                            (axis_size - ddof) as f64
+                        } else {
+                            f64::NAN
+                        };
                         let n_slices = pre_size * post_size;
                         let results: Vec<f64> = (0..n_slices)
                             .into_par_iter()
@@ -1861,24 +1940,30 @@ impl NdArray {
                                     let diff = data_vec[base + k * post_size] - mean;
                                     sum_sq += diff * diff;
                                 }
-                                sum_sq / axis_size as f64
+                                sum_sq / denom
                             })
                             .collect();
 
-                        let new_shape: Vec<usize> = shape
-                            .iter()
-                            .enumerate()
-                            .filter(|(i, _)| *i != ax)
-                            .map(|(_, &s)| s)
-                            .collect();
+                        let out_shape = if keepdims {
+                            let mut s = shape.clone();
+                            s[ax] = 1;
+                            s
+                        } else {
+                            shape
+                                .iter()
+                                .enumerate()
+                                .filter(|(i, _)| *i != ax)
+                                .map(|(_, &s)| s)
+                                .collect()
+                        };
 
-                        if new_shape.is_empty() {
+                        if out_shape.is_empty() {
                             Ok(NdArray {
                                 imag: None,
                                 data: Array::from_elem(IxDyn(&[]), results[0]),
                             })
                         } else {
-                            let arr = Array::from_shape_vec(IxDyn(&new_shape), results)
+                            let arr = Array::from_shape_vec(IxDyn(&out_shape), results)
                                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
                             Ok(NdArray {
                                 imag: None,
@@ -1892,14 +1977,19 @@ impl NdArray {
         }
     }
 
-    #[pyo3(signature = (axis=None))]
-    fn min(&self, axis: Option<isize>) -> PyResult<NdArray> {
+    #[pyo3(signature = (axis=None, keepdims=false))]
+    fn min(&self, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray> {
         match axis {
             None => {
                 let val = self.data.iter().cloned().fold(f64::INFINITY, f64::min);
+                let shape = if keepdims {
+                    vec![1usize; self.data.ndim()]
+                } else {
+                    vec![]
+                };
                 Ok(NdArray {
                     imag: None,
-                    data: Array::from_elem(IxDyn(&[]), val),
+                    data: Array::from_elem(IxDyn(&shape), val),
                 })
             }
             Some(ax) => {
@@ -1916,22 +2006,37 @@ impl NdArray {
                         if v < a { v } else { a }
                     })
                     .into_dyn();
+                let shape = if keepdims {
+                    let mut s = self.data.shape().to_vec();
+                    s[ax] = 1;
+                    s
+                } else {
+                    result.shape().to_vec()
+                };
+                let arr = result
+                    .into_shape_with_order(IxDyn(&shape))
+                    .map_err(|e| PyValueError::new_err(e.to_string()))?;
                 Ok(NdArray {
                     imag: None,
-                    data: result,
+                    data: arr,
                 })
             }
         }
     }
 
-    #[pyo3(signature = (axis=None))]
-    fn max(&self, axis: Option<isize>) -> PyResult<NdArray> {
+    #[pyo3(signature = (axis=None, keepdims=false))]
+    fn max(&self, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray> {
         match axis {
             None => {
                 let val = self.data.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+                let shape = if keepdims {
+                    vec![1usize; self.data.ndim()]
+                } else {
+                    vec![]
+                };
                 Ok(NdArray {
                     imag: None,
-                    data: Array::from_elem(IxDyn(&[]), val),
+                    data: Array::from_elem(IxDyn(&shape), val),
                 })
             }
             Some(ax) => {
@@ -1948,9 +2053,19 @@ impl NdArray {
                         if v > a { v } else { a }
                     })
                     .into_dyn();
+                let shape = if keepdims {
+                    let mut s = self.data.shape().to_vec();
+                    s[ax] = 1;
+                    s
+                } else {
+                    result.shape().to_vec()
+                };
+                let arr = result
+                    .into_shape_with_order(IxDyn(&shape))
+                    .map_err(|e| PyValueError::new_err(e.to_string()))?;
                 Ok(NdArray {
                     imag: None,
-                    data: result,
+                    data: arr,
                 })
             }
         }

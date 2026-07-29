@@ -294,14 +294,13 @@ def _reduce_last_along(c, axis):
 
 def prod(a, axis=None, dtype=None, out=None, keepdims=False, initial=None, where=True):
     """计算元素乘积。"""
-    _ = dtype, out, keepdims, initial, where
-    np = _np()
+    _ = dtype, out, where
     arr = _asarray(a)
-    if arr.size == 0:
-        return 1.0 if axis is None else np.full(_shape_drop(arr.shape, axis), 1.0)
-    if axis is None:
-        return _as_scalar(np.take(arr.ravel().cumprod(), [arr.size - 1]))
-    return _reduce_last_along(arr.cumprod(axis), axis)
+    result = _core.prod(arr._array, axis, keepdims)
+    if initial is not None:
+        np = _np()
+        result = np.multiply(result, initial)
+    return _wrap(result)
 
 
 def _shape_drop(shape, axis):

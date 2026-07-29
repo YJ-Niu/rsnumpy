@@ -66,10 +66,12 @@ class NdArrayMethods:
         dtype = getattr(arr, '_dtype', "float64")
         fields = getattr(arr, '_fields', None)
         raw = getattr(arr, '_raw_data', None)
+        if len(axes) == 1 and isinstance(axes[0], (tuple, list)):
+            axes = axes[0]
         if len(axes) == 0:
             result = arr._array.T
         else:
-            result = _core.transpose(arr._array)
+            result = _core.transpose_axes(arr._array, list(axes))
         return ndarray._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw)
     
     @staticmethod
@@ -87,58 +89,65 @@ class NdArrayMethods:
         return _wrap_result(arr._array.squeeze())
     
     @staticmethod
-    def max(arr, axis=None):
+    def max(arr, axis=None, out=None, keepdims=False):
         """返回数组的最大值。"""
-        result = arr._array.max(axis)
-        if axis is None and hasattr(result, 'tolist'):
+        _ = out
+        result = arr._array.max(axis, keepdims)
+        if axis is None and not keepdims and hasattr(result, 'tolist'):
             return result.tolist()
         return _wrap_result(result)
-    
+
     @staticmethod
-    def min(arr, axis=None):
+    def min(arr, axis=None, out=None, keepdims=False):
         """返回数组的最小值。"""
-        result = arr._array.min(axis)
-        if axis is None and hasattr(result, 'tolist'):
+        _ = out
+        result = arr._array.min(axis, keepdims)
+        if axis is None and not keepdims and hasattr(result, 'tolist'):
             return result.tolist()
         return _wrap_result(result)
-    
+
     @staticmethod
-    def mean(arr, axis=None):
+    def mean(arr, axis=None, dtype=None, out=None, keepdims=False):
         """计算数组的平均值。"""
-        result = arr._array.mean(axis)
-        if axis is None and hasattr(result, 'tolist'):
+        _ = dtype, out
+        result = arr._array.mean(axis, keepdims)
+        if axis is None and not keepdims and hasattr(result, 'tolist'):
             return result.tolist()
         return _wrap_result(result)
-    
+
     @staticmethod
-    def std(arr, axis=None):
+    def std(arr, axis=None, dtype=None, out=None, ddof=0, keepdims=False):
         """计算数组的标准差。"""
-        result = arr._array.std(axis)
-        if axis is None and hasattr(result, 'tolist'):
+        _ = dtype, out
+        result = arr._array.std(axis, ddof, keepdims)
+        if axis is None and not keepdims and hasattr(result, 'tolist'):
             return result.tolist()
         return _wrap_result(result)
-    
+
     @staticmethod
-    def var(arr, axis=None):
+    def var(arr, axis=None, dtype=None, out=None, ddof=0, keepdims=False):
         """计算数组的方差。"""
-        result = arr._array.var(axis)
-        if axis is None and hasattr(result, 'tolist'):
+        _ = dtype, out
+        result = arr._array.var(axis, ddof, keepdims)
+        if axis is None and not keepdims and hasattr(result, 'tolist'):
             return result.tolist()
         return _wrap_result(result)
-    
+
     @staticmethod
-    def sum(arr, axis=None):
+    def sum(arr, axis=None, dtype=None, out=None, keepdims=False):
         """计算数组元素的和。"""
-        result = arr._array.sum(axis)
-        if axis is None and hasattr(result, 'tolist'):
+        _ = dtype, out
+        result = arr._array.sum(axis, keepdims)
+        if axis is None and not keepdims and hasattr(result, 'tolist'):
             return result.tolist()
         return _wrap_result(result)
-    
+
     @staticmethod
-    def prod(arr, axis=None):
+    def prod(arr, axis=None, dtype=None, out=None, keepdims=False):
         """计算数组元素的乘积。"""
-        result = arr._array.prod(axis)
-        if axis is None and hasattr(result, 'tolist'):
+        _ = dtype, out
+        result = arr._array.prod(axis, keepdims)
+        if axis is None and not keepdims and hasattr(result, 'tolist'):
             return result.tolist()
         return _wrap_result(result)
     

@@ -944,13 +944,13 @@ class ndarray:
         """移除长度为1的轴。"""
         return _ndarray_methods().squeeze(self, axis)
 
-    def max(self, axis=None):
+    def max(self, axis=None, out=None, keepdims=False):
         """返回最大值。"""
-        return _ndarray_methods().max(self, axis)
+        return _ndarray_methods().max(self, axis, out, keepdims)
 
-    def min(self, axis=None):
+    def min(self, axis=None, out=None, keepdims=False):
         """返回最小值。"""
-        return _ndarray_methods().min(self, axis)
+        return _ndarray_methods().min(self, axis, out, keepdims)
 
     def mean(self, axis=None):
         """计算平均值。"""

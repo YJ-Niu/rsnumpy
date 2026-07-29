@@ -114,15 +114,15 @@ def _py_var_std(a, axis, ddof, want_std):
 
 def sum(a, axis=None, dtype=None, out=None, keepdims=False, initial=None, where=True):
     """计算数组元素之和。"""
-    _ = dtype, out, keepdims, initial, where
-    raw_result = _core.sum(_ensure_raw(a), axis)
+    _ = dtype, out, initial, where
+    raw_result = _core.sum(_ensure_raw(a), axis, keepdims)
     return _wrap(raw_result)
 
 
 def mean(a, axis=None, dtype=None, out=None, keepdims=False, where=True):
     """计算数组元素的平均值。"""
-    _ = dtype, out, keepdims, where
-    return _wrap(_core.mean(_ensure_raw(a), axis))
+    _ = dtype, out, where
+    return _wrap(_core.mean(_ensure_raw(a), axis, keepdims))
 
 
 def _needs_py_var_std(a, axis):
@@ -137,36 +137,36 @@ def _needs_py_var_std(a, axis):
 
 def std(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False, where=True):
     """计算数组元素的标准差。"""
-    _ = dtype, out, keepdims, where
+    _ = dtype, out, where
     if _needs_py_var_std(a, axis):
         return _py_var_std(a, axis, ddof, want_std=True)
-    raw_result = _core.std(_ensure_raw(a), axis)
+    raw_result = _core.std(_ensure_raw(a), axis, ddof, keepdims)
     arr_dtype = getattr(a, '_dtype', 'float64') if hasattr(a, '_dtype') else 'float64'
     return _nd()(raw_result, _dtype=arr_dtype)
 
 
 def var(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False, where=True):
     """计算数组元素的方差。"""
-    _ = dtype, out, keepdims, where
+    _ = dtype, out, where
     if _needs_py_var_std(a, axis):
         return _py_var_std(a, axis, ddof, want_std=False)
-    raw_result = _core.var(_ensure_raw(a), axis)
+    raw_result = _core.var(_ensure_raw(a), axis, ddof, keepdims)
     arr_dtype = getattr(a, '_dtype', 'float64') if hasattr(a, '_dtype') else 'float64'
     return _nd()(raw_result, _dtype=arr_dtype)
 
 
 def min(a, axis=None, out=None, keepdims=False, initial=None, where=True):
     """计算数组元素的最小值。"""
-    _ = out, keepdims, initial, where
-    raw_result = _core.min(_ensure_raw(a), axis)
+    _ = out, initial, where
+    raw_result = _core.min(_ensure_raw(a), axis, keepdims)
     dtype = getattr(a, '_dtype', 'float64') if hasattr(a, '_dtype') else 'float64'
     return _nd()(raw_result, _dtype=dtype)
 
 
 def max(a, axis=None, out=None, keepdims=False, initial=None, where=True):
     """计算数组元素的最大值。"""
-    _ = out, keepdims, initial, where
-    raw_result = _core.max(_ensure_raw(a), axis)
+    _ = out, initial, where
+    raw_result = _core.max(_ensure_raw(a), axis, keepdims)
     dtype = getattr(a, '_dtype', 'float64') if hasattr(a, '_dtype') else 'float64'
     return _nd()(raw_result, _dtype=dtype)
 
@@ -284,17 +284,14 @@ def lexsort(keys, axis=-1):
     _ = axis
     if not isinstance(keys, (tuple, list)):
         keys = (keys,)
-    
-    first_key = keys[0]
-    n = len(first_key) if hasattr(first_key, '__len__') else 0
-    if n == 0:
-        return _nd()([], _dtype='int64')
-    
-    indices = list(range(n))
-    
-    indices.sort(key=lambda i: tuple(key[i] for key in reversed(keys)))
-    
-    return _nd()(indices, _dtype='int64')
+    nd = _nd()
+    raw_keys = []
+    for k in keys:
+        if hasattr(k, '_array'):
+            raw_keys.append(k._array)
+        else:
+            raw_keys.append(nd(k)._array)
+    return nd._wrap(_core.lexsort(raw_keys), _dtype='int64')
 
 
 def msort(a):
@@ -305,165 +302,45 @@ def msort(a):
 def sort_complex(a):
     """对复数按照先实部后虚部的顺序进行排序。"""
     arr = _nd()(a) if not _is_ndarray(a) else a
-    data = arr.tolist()
-    data = [complex(x) for x in data]
-    data.sort(key=lambda x: (x.real, x.imag))
-    return _nd()(data)
+    return _nd()._wrap(_core.sort_complex(arr._array, -1), _dtype=getattr(arr, '_dtype', 'float64'))
 
 
 def partition(a, kth, axis=-1, kind=None, order=None):
     """指定一个数，对数组进行分区。"""
     _ = kind, order
     arr = _nd()(a) if not _is_ndarray(a) else a
-    data = arr.tolist()
-    arr_dtype = getattr(arr, '_dtype', None)
-    
-    def partition_single(arr_list, k, last=False):
-        n = len(arr_list)
-        if k < 0:
-            k = n + k
-        if n == 0 or k < 0 or k >= n:
-            return arr_list
-        sorted_list = sorted(arr_list)
-        pivot = sorted_list[k]
-        left = []
-        mid = []
-        right = []
-        for x in arr_list:
-            if x < pivot:
-                left.append(x)
-            elif x == pivot:
-                mid.append(x)
-            else:
-                right.append(x)
-        
-        if not last and len(left) > 0 and k >= len(left):
-            left = left[1:] + [left[0]]
-        
-        return left + mid + right
-    
-    if isinstance(kth, (tuple, list)):
-        kths = sorted(set(kth))
-        for i, k in enumerate(kths):
-            data = partition_single(data, k, i == len(kths) - 1)
-    else:
-        data = partition_single(data, kth)
-    
-    if arr_dtype is not None:
-        return _nd()(data, _dtype=arr_dtype)
-    return _nd()(data)
+    if isinstance(kth, int):
+        kth = [kth]
+    return _nd()._wrap(_core.partition(arr._array, list(kth), axis), _dtype=getattr(arr, '_dtype', 'float64'))
 
 
 def argpartition(a, kth, axis=-1, kind=None, order=None):
     """对数组进行分区并返回索引。"""
     _ = kind, order
     arr = _nd()(a) if not _is_ndarray(a) else a
-    data = arr.tolist()
-    indices = list(range(len(data)))
-    
-    def quick_select(arr_list, idx_list, k):
-        if k < 0:
-            k = len(arr_list) + k
-        low = 0
-        high = len(arr_list) - 1
-        while low < high:
-            pivot_idx = (low + high) // 2
-            arr_list[pivot_idx], arr_list[high] = arr_list[high], arr_list[pivot_idx]
-            idx_list[pivot_idx], idx_list[high] = idx_list[high], idx_list[pivot_idx]
-            pivot = arr_list[high]
-            i = low
-            for j in range(low, high):
-                if arr_list[j] < pivot:
-                    arr_list[i], arr_list[j] = arr_list[j], arr_list[i]
-                    idx_list[i], idx_list[j] = idx_list[j], idx_list[i]
-                    i += 1
-            arr_list[i], arr_list[high] = arr_list[high], arr_list[i]
-            idx_list[i], idx_list[high] = idx_list[high], idx_list[i]
-            if i == k:
-                break
-            elif i < k:
-                low = i + 1
-            else:
-                high = i - 1
-    
-    if isinstance(kth, (tuple, list)):
-        kths = sorted(set(kth))
-        for k in kths:
-            quick_select(data, indices, k)
-    else:
-        quick_select(data, indices, kth)
-    
-    return _nd()(indices, _dtype='int64')
+    if isinstance(kth, int):
+        kth = [kth]
+    return _nd()._wrap(_core.argpartition(arr._array, list(kth), axis), _dtype='int64')
 
 
 def searchsorted(a, v, side='left', sorter=None):
     """查找元素在有序数组中的插入位置。"""
     _ = sorter
     arr = a if hasattr(a, '_array') else _wrap(a)
-    
-    a_shape = arr.shape
-    a_ndim = len(a_shape)
-    
-    if hasattr(v, '_array'):
-        v_arr = v
-        v_is_scalar = len(v_arr.shape) == 0
-    else:
+
+    # 一维数组 + 标量 v：保持返回 Python int 的语义
+    if len(arr.shape) <= 1:
+        if hasattr(v, '_array') and len(v.shape) == 0:
+            return _core.searchsorted(_ensure_raw(arr), float(v.item()), side)
         try:
-            v_arr = _nd()(v)
-            v_is_scalar = len(v_arr.shape) == 0
-        except:
-            v_arr = None
-            v_is_scalar = True
-    
-    if a_ndim == 1 or a_ndim == 0:
-        if v_is_scalar:
-            v_val = float(v.item()) if hasattr(v, 'item') else float(v)
+            v_val = float(v)
             return _core.searchsorted(_ensure_raw(arr), v_val, side)
-        
-        result = []
-        for val in v_arr.tolist():
-            if isinstance(val, (list, tuple)):
-                result.append([_core.searchsorted(_ensure_raw(arr), float(x), side) for x in val])
-            else:
-                result.append(_core.searchsorted(_ensure_raw(arr), float(val), side))
-        
-        return _nd()(result, _dtype='int64')
-    
-    else:
-        axis = -1
-        outer_shape = a_shape[:axis]
-        outer_size = 1
-        for s in outer_shape:
-            outer_size *= s
-        
-        flat_a = arr.tolist()
-        if not isinstance(flat_a[0], (list, tuple)):
-            flat_a = [flat_a]
-        
-        if v_is_scalar:
-            v_val = float(v.item()) if hasattr(v, 'item') else float(v)
-            result = []
-            for row in flat_a:
-                row_arr = _nd()(row)
-                idx = _core.searchsorted(_ensure_raw(row_arr), v_val, side)
-                result.append(idx)
-            return _nd()(result, _dtype='int64').reshape(outer_shape)
-        
-        v_flat = v_arr.tolist()
-        if not isinstance(v_flat[0], (list, tuple)):
-            v_flat = [v_flat]
-        
-        result = []
-        for i, row in enumerate(flat_a):
-            row_arr = _nd()(row)
-            v_row = v_flat[i % len(v_flat)]
-            row_result = []
-            for val in v_row:
-                idx = _core.searchsorted(_ensure_raw(row_arr), float(val), side)
-                row_result.append(idx)
-            result.append(row_result)
-        
-        return _nd()(result, _dtype='int64')
+        except (TypeError, ValueError):
+            pass
+
+    # 多维或 v 为数组：使用 Rust 多维实现
+    v_raw = v._array if hasattr(v, '_array') else v
+    return _nd()._wrap(_core.searchsorted_axis(_ensure_raw(arr), v_raw, side), _dtype='int64')
 
 
 def extract(condition, a):

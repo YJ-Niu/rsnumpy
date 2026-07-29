@@ -113,6 +113,96 @@ fn transpose(a: &NdArray) -> PyResult<NdArray> {
 }
 
 #[pyfunction]
+#[pyo3(signature = (a, axes=None))]
+fn transpose_axes(a: &NdArray, axes: Option<Vec<isize>>) -> PyResult<NdArray> {
+    let ndim = a.data.ndim();
+    let axes = match axes {
+        Some(ax) => ax
+            .iter()
+            .map(|&x| {
+                if x < 0 {
+                    (ndim as isize + x) as usize
+                } else {
+                    x as usize
+                }
+            })
+            .collect::<Vec<_>>(),
+        None => (0..ndim).rev().collect(),
+    };
+    if axes.len() != ndim {
+        return Err(PyValueError::new_err("axes don't match array dimensions"));
+    }
+    let result = a
+        .data
+        .view()
+        .permuted_axes(axes.clone())
+        .into_owned()
+        .into_dyn();
+    let imag = a
+        .imag
+        .as_ref()
+        .map(|im| im.view().permuted_axes(axes).into_owned().into_dyn());
+    Ok(NdArray { imag, data: result })
+}
+
+#[pyfunction]
+#[pyo3(signature = (a, source, destination))]
+fn moveaxis(a: &NdArray, source: Vec<isize>, destination: Vec<isize>) -> PyResult<NdArray> {
+    let ndim = a.data.ndim();
+    let norm_source: Vec<usize> = source
+        .iter()
+        .map(|&s| {
+            if s < 0 {
+                (ndim as isize + s) as usize
+            } else {
+                s as usize
+            }
+        })
+        .collect();
+    let norm_dest: Vec<usize> = destination
+        .iter()
+        .map(|&d| {
+            if d < 0 {
+                (ndim as isize + d) as usize
+            } else {
+                d as usize
+            }
+        })
+        .collect();
+    if norm_source.len() != norm_dest.len() {
+        return Err(PyValueError::new_err(
+            "source and destination arguments must have the same number of elements",
+        ));
+    }
+    let mut axes: Vec<usize> = (0..ndim).collect();
+    let mut removed = Vec::with_capacity(norm_source.len());
+    for &src in norm_source.iter().rev() {
+        if src >= axes.len() {
+            return Err(PyValueError::new_err("axis out of bounds"));
+        }
+        removed.push(axes.remove(src));
+    }
+    removed.reverse();
+    for (dest, ax) in norm_dest.iter().zip(removed.iter()) {
+        if *dest > axes.len() {
+            return Err(PyValueError::new_err("axis out of bounds"));
+        }
+        axes.insert(*dest, *ax);
+    }
+    let result = a
+        .data
+        .view()
+        .permuted_axes(axes.clone())
+        .into_owned()
+        .into_dyn();
+    let imag = a
+        .imag
+        .as_ref()
+        .map(|im| im.view().permuted_axes(axes).into_owned().into_dyn());
+    Ok(NdArray { imag, data: result })
+}
+
+#[pyfunction]
 fn swapaxes(a: &NdArray, axis1: usize, axis2: usize) -> PyResult<NdArray> {
     let ndim = a.data.ndim();
     if axis1 >= ndim || axis2 >= ndim {
@@ -666,32 +756,72 @@ fn roll(a: &NdArray, shift: isize, axis: Option<isize>) -> PyResult<NdArray> {
 }
 
 #[pyfunction]
-fn rot90(a: &NdArray, k: isize) -> PyResult<NdArray> {
+#[pyo3(signature = (a, k=1, axis1=0, axis2=1))]
+fn rot90(a: &NdArray, k: isize, axis1: usize, axis2: usize) -> PyResult<NdArray> {
     let ndim = a.data.ndim();
     if ndim < 2 {
         return Err(PyValueError::new_err("rot90 requires at least 2D array"));
     }
+    if axis1 >= ndim || axis2 >= ndim {
+        return Err(PyValueError::new_err("axis out of bounds"));
+    }
+    if axis1 == axis2 {
+        return Err(PyValueError::new_err("axes must be different"));
+    }
     let k = k.rem_euclid(4);
-    let mut result = a.data.clone();
-    for _ in 0..k {
-        let shape = result.shape().to_vec();
-        let rows = shape[0];
-        let cols = shape[1];
-        let mut new_data = vec![0.0; rows * cols];
-        // 逆时针旋转 90°：new[i][j] = old[j][cols-1-i]
-        for i in 0..cols {
-            for j in 0..rows {
-                new_data[i * rows + j] = result[[j, cols - 1 - i]];
+    if k == 0 {
+        return Ok(a.clone());
+    }
+
+    fn flip_axis(data: &Array<f64, IxDyn>, axis: usize) -> Array<f64, IxDyn> {
+        let shape = data.shape().to_vec();
+        let axis_size = shape[axis];
+        let pre: usize = shape.iter().take(axis).product();
+        let post: usize = shape.iter().skip(axis + 1).product();
+        let data_vec: Vec<f64> = data.iter().copied().collect();
+        let mut result = vec![0.0; data_vec.len()];
+        for p in 0..pre {
+            for i in 0..axis_size {
+                let src = p * axis_size * post + i * post;
+                let dst = p * axis_size * post + (axis_size - 1 - i) * post;
+                result[dst..dst + post].copy_from_slice(&data_vec[src..src + post]);
             }
         }
-        result = Array::from_shape_vec((cols, rows), new_data)
-            .map_err(|e| PyValueError::new_err(e.to_string()))?
-            .into_dyn();
+        Array::from_shape_vec(IxDyn(&shape), result).unwrap()
     }
-    Ok(NdArray {
-        imag: None,
-        data: result,
-    })
+
+    let mut result = a.data.clone();
+    let mut imag = a.imag.clone();
+
+    match k {
+        1 => {
+            result.swap_axes(axis1, axis2);
+            result = flip_axis(&result, axis2);
+            if let Some(im) = imag.as_mut() {
+                im.swap_axes(axis1, axis2);
+                *im = flip_axis(im, axis2);
+            }
+        }
+        2 => {
+            result = flip_axis(&result, axis1);
+            result = flip_axis(&result, axis2);
+            if let Some(im) = imag.as_mut() {
+                *im = flip_axis(im, axis1);
+                *im = flip_axis(im, axis2);
+            }
+        }
+        3 => {
+            result.swap_axes(axis1, axis2);
+            result = flip_axis(&result, axis1);
+            if let Some(im) = imag.as_mut() {
+                im.swap_axes(axis1, axis2);
+                *im = flip_axis(im, axis1);
+            }
+        }
+        _ => {}
+    }
+
+    Ok(NdArray { imag, data: result })
 }
 
 #[pyfunction]
@@ -885,6 +1015,8 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(concatenate, m)?)?;
     m.add_function(wrap_pyfunction!(stack, m)?)?;
     m.add_function(wrap_pyfunction!(transpose, m)?)?;
+    m.add_function(wrap_pyfunction!(transpose_axes, m)?)?;
+    m.add_function(wrap_pyfunction!(moveaxis, m)?)?;
     m.add_function(wrap_pyfunction!(swapaxes, m)?)?;
     m.add_function(wrap_pyfunction!(vstack, m)?)?;
     m.add_function(wrap_pyfunction!(hstack, m)?)?;

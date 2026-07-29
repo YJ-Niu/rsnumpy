@@ -1,39 +1,57 @@
 use crate::*;
 
 #[pyfunction]
-#[pyo3(signature = (x, axis=None))]
-fn sum(_py: Python<'_>, x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
-    _py.detach(move || x.sum(axis))
+#[pyo3(signature = (x, axis=None, keepdims=false))]
+fn sum(_py: Python<'_>, x: &NdArray, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray> {
+    _py.detach(move || x.sum(axis, keepdims))
 }
 
 #[pyfunction]
-#[pyo3(signature = (x, axis=None))]
-fn mean(_py: Python<'_>, x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
-    _py.detach(move || x.mean(axis))
+#[pyo3(signature = (x, axis=None, keepdims=false))]
+fn prod(_py: Python<'_>, x: &NdArray, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray> {
+    _py.detach(move || x.prod(axis, keepdims))
 }
 
 #[pyfunction]
-#[pyo3(signature = (x, axis=None), name = "std")]
-fn std_dev(_py: Python<'_>, x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
-    _py.detach(move || x.std(axis))
+#[pyo3(signature = (x, axis=None, keepdims=false))]
+fn mean(_py: Python<'_>, x: &NdArray, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray> {
+    _py.detach(move || x.mean(axis, keepdims))
 }
 
 #[pyfunction]
-#[pyo3(signature = (x, axis=None))]
-fn var(_py: Python<'_>, x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
-    _py.detach(move || x.var(axis))
+#[pyo3(signature = (x, axis=None, ddof=0, keepdims=false), name = "std")]
+fn std_dev(
+    _py: Python<'_>,
+    x: &NdArray,
+    axis: Option<isize>,
+    ddof: usize,
+    keepdims: bool,
+) -> PyResult<NdArray> {
+    _py.detach(move || x.std(axis, ddof, keepdims))
 }
 
 #[pyfunction]
-#[pyo3(signature = (x, axis=None))]
-fn min(_py: Python<'_>, x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
-    _py.detach(move || x.min(axis))
+#[pyo3(signature = (x, axis=None, ddof=0, keepdims=false))]
+fn var(
+    _py: Python<'_>,
+    x: &NdArray,
+    axis: Option<isize>,
+    ddof: usize,
+    keepdims: bool,
+) -> PyResult<NdArray> {
+    _py.detach(move || x.var(axis, ddof, keepdims))
 }
 
 #[pyfunction]
-#[pyo3(signature = (x, axis=None))]
-fn max(_py: Python<'_>, x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
-    _py.detach(move || x.max(axis))
+#[pyo3(signature = (x, axis=None, keepdims=false))]
+fn min(_py: Python<'_>, x: &NdArray, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray> {
+    _py.detach(move || x.min(axis, keepdims))
+}
+
+#[pyfunction]
+#[pyo3(signature = (x, axis=None, keepdims=false))]
+fn max(_py: Python<'_>, x: &NdArray, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray> {
+    _py.detach(move || x.max(axis, keepdims))
 }
 
 #[pyfunction]
@@ -940,6 +958,7 @@ fn argmin_axis(a: &NdArray, axis: Option<i32>) -> PyResult<NdArray> {
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sum, m)?)?;
+    m.add_function(wrap_pyfunction!(prod, m)?)?;
     m.add_function(wrap_pyfunction!(mean, m)?)?;
     m.add_function(wrap_pyfunction!(std_dev, m)?)?;
     m.add_function(wrap_pyfunction!(var, m)?)?;

@@ -50,28 +50,15 @@ def moveaxis(a, source, destination):
     """将数组的轴从 source 移动到 destination。"""
     arr = a if hasattr(a, '_array') else _wrap(a)
     nd = _nd()
-    ndim = arr.ndim
-    # 标准化 source 和 destination
+    dtype = getattr(arr, '_dtype', "float64")
+    fields = getattr(arr, '_fields', None)
+    raw_data = getattr(arr, '_raw_data', None)
     if isinstance(source, int):
         source = [source]
     if isinstance(destination, int):
         destination = [destination]
-    source = [s % ndim for s in source]
-    destination = [d % ndim for d in destination]
-    # 如果已经是正确位置，直接返回
-    if source == destination:
-        return arr
-    # 通过 swapaxes 实现移动
-    result = arr
-    for s, d in zip(source, destination):
-        # 将轴 s 逐步移动到 d
-        if s < d:
-            for i in range(s, d):
-                result = swapaxes(result, i, i + 1)
-        elif s > d:
-            for i in range(s, d, -1):
-                result = swapaxes(result, i, i - 1)
-    return result
+    result = _core.moveaxis(arr._array, list(source), list(destination))
+    return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
 
 
 def rollaxis(a, axis, start=0):
@@ -97,22 +84,7 @@ def transpose(a, axes=None):
     dtype = getattr(arr, '_dtype', "float64")
     fields = getattr(arr, '_fields', None)
     raw_data = getattr(arr, '_raw_data', None)
-    ndim = arr.ndim
-    if axes is not None:
-        axes = [ax % ndim for ax in axes]
-        if axes != list(reversed(range(ndim))) and axes != list(range(ndim)):
-            # 通过交换轴序列达到任意置换（result 轴 i 来自原轴 axes[i]）
-            result = arr
-            cur = list(range(ndim))
-            for i in range(ndim):
-                j = cur.index(axes[i])
-                if j != i:
-                    result = swapaxes(result, i, j)
-                    cur[i], cur[j] = cur[j], cur[i]
-            return result
-        if axes == list(range(ndim)):
-            return nd._wrap(arr._array, _dtype=dtype, _fields=fields, _raw_data=raw_data)
-    result = _core.transpose(arr._array)
+    result = _core.transpose_axes(arr._array, axes)
     return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
 
 
@@ -301,7 +273,7 @@ def roll(a, shift, axis=None):
 
 def rot90(m, k=1, axes=(0, 1)):
     """将数组旋转 90 度。"""
-    return _wrap(_core.rot90(_ensure_raw(m), k))
+    return _wrap(_core.rot90(_ensure_raw(m), k, axes[0], axes[1]))
 
 
 def resize(a, new_shape):
