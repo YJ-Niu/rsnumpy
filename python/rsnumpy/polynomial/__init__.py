@@ -65,6 +65,10 @@ class Poly:
             return Poly(_wrap(_core.polymul(self._coef_raw, other._coef_raw)))
         return Poly(_wrap(_core.polymul(self._coef_raw, _core.ndarray([float(other)]))))
 
+    def __getitem__(self, index):
+        """支持索引访问系数。"""
+        return self.coef[index]
+
     @property
     def degree(self):
         """多项式的次数。"""

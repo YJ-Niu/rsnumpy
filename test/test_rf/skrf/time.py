@@ -239,6 +239,102 @@ def detect_span(ntwk: Network, t_unit: str = "") -> float:
     return span / time_lookup_dict[t_unit]
 
 
+def _get_window_local(window, Nx, **kwargs):
+    """本地实现的窗口函数，替代 scipy.signal.get_window。
+
+    支持常用窗口类型：hamming、hann、blackman、kaiser、bartlett、flattop、
+    rectangular（boxcar）、cosine、tukey 等。
+    """
+    # 处理 tuple 类型，如 ('kaiser', 6)
+    if isinstance(window, tuple):
+        win_type = window[0]
+        win_param = window[1] if len(window) > 1 else None
+    else:
+        win_type = window
+        win_param = None
+
+    # 标准化窗口名称
+    win_type_lower = str(win_type).lower() if win_type else 'hann'
+
+    # 生成索引
+    if Nx <= 0:
+        return np.array([])
+    if Nx == 1:
+        return np.ones(1)
+
+    n = np.arange(Nx)
+
+    if win_type_lower in ('boxcar', 'rectangular', 'rect'):
+        return np.ones(Nx)
+
+    if win_type_lower in ('hamming',):
+        return np.hamming(Nx)
+
+    if win_type_lower in ('hann', 'hanning'):
+        return np.hanning(Nx)
+
+    if win_type_lower in ('blackman',):
+        return np.blackman(Nx)
+
+    if win_type_lower in ('blackmanharris',):
+        a = [0.35875, -0.48829, 0.14128, -0.01168]
+        w = a[0] * np.ones(Nx)
+        for k in range(1, 4):
+            w += a[k] * np.cos(2 * k * np.pi * n / (Nx - 1))
+        return w
+
+    if win_type_lower in ('flattop',):
+        a = [0.21557895, -0.41663158, 0.277263158, -0.083578947, 0.006947368]
+        w = a[0] * np.ones(Nx)
+        for k in range(1, 5):
+            w += a[k] * np.cos(2 * k * np.pi * n / (Nx - 1))
+        return w
+
+    if win_type_lower in ('bartlett', 'triangular'):
+        return np.bartlett(Nx)
+
+    if win_type_lower in ('kaiser',):
+        beta = float(win_param) if win_param is not None else 6.0
+        return np.kaiser(Nx, beta)
+
+    if win_type_lower in ('cosine', 'sine'):
+        return np.sin(np.pi * n / (Nx - 1))
+
+    if win_type_lower in ('tukey',):
+        alpha = float(win_param) if win_param is not None else 0.5
+        if alpha <= 0:
+            return np.ones(Nx)
+        if alpha >= 1:
+            return np.hanning(Nx)
+        w = np.ones(Nx)
+        ramp_len = int(alpha * (Nx - 1) / 2)
+        if ramp_len > 0:
+            # 前后渐变区域
+            idx_ramp = np.arange(ramp_len + 1)
+            ramp = 0.5 - 0.5 * np.cos(np.pi * idx_ramp / ramp_len)
+            w[:ramp_len + 1] = ramp
+            w[-ramp_len - 1:] = ramp[::-1]
+        return w
+
+    if win_type_lower in ('parzen',):
+        # Parzen 窗口近似
+        m = (Nx - 1) / 2.0
+        ratio = (n - m) / m
+        return np.where(np.abs(ratio) <= 0.5,
+                        1 - 6 * ratio ** 2 + 6 * np.abs(ratio) ** 3,
+                        2 * (1 - np.abs(ratio)) ** 3)
+
+    if win_type_lower in ('nuttall',):
+        a = [0.355768, -0.487396, 0.144232, -0.012604]
+        w = a[0] * np.ones(Nx)
+        for k in range(1, 4):
+            w += a[k] * np.cos(2 * k * np.pi * n / (Nx - 1))
+        return w
+
+    # 默认回退到 hann 窗
+    return np.hanning(Nx)
+
+
 def get_window(
         window: str | tuple | Callable,
         Nx: int,
@@ -262,7 +358,10 @@ def get_window(
     if callable(window):
         return window(Nx, **kwargs)
     else:
-        return scipy.signal.get_window(window, Nx=Nx, **kwargs)
+        try:
+            return scipy.signal.get_window(window, Nx=Nx, **kwargs)
+        except Exception:
+            return _get_window_local(window, Nx, **kwargs)
 
 
 def time_gate(

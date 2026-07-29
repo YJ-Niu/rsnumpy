@@ -47,9 +47,18 @@ def ravel(a, order='C'):
 
 
 def moveaxis(a, source, destination):
-    """移动数组的轴（简化实现）。"""
+    """将数组的轴从 source 移动到 destination。"""
     arr = a if hasattr(a, '_array') else _wrap(a)
-    return arr
+    nd = _nd()
+    dtype = getattr(arr, '_dtype', "float64")
+    fields = getattr(arr, '_fields', None)
+    raw_data = getattr(arr, '_raw_data', None)
+    if isinstance(source, int):
+        source = [source]
+    if isinstance(destination, int):
+        destination = [destination]
+    result = _core.moveaxis(arr._array, list(source), list(destination))
+    return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
 
 
 def rollaxis(a, axis, start=0):
@@ -75,22 +84,7 @@ def transpose(a, axes=None):
     dtype = getattr(arr, '_dtype', "float64")
     fields = getattr(arr, '_fields', None)
     raw_data = getattr(arr, '_raw_data', None)
-    ndim = arr.ndim
-    if axes is not None:
-        axes = [ax % ndim for ax in axes]
-        if axes != list(reversed(range(ndim))) and axes != list(range(ndim)):
-            # 通过交换轴序列达到任意置换（result 轴 i 来自原轴 axes[i]）
-            result = arr
-            cur = list(range(ndim))
-            for i in range(ndim):
-                j = cur.index(axes[i])
-                if j != i:
-                    result = swapaxes(result, i, j)
-                    cur[i], cur[j] = cur[j], cur[i]
-            return result
-        if axes == list(range(ndim)):
-            return nd._wrap(arr._array, _dtype=dtype, _fields=fields, _raw_data=raw_data)
-    result = _core.transpose(arr._array)
+    result = _core.transpose_axes(arr._array, axes)
     return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
 
 
@@ -279,7 +273,7 @@ def roll(a, shift, axis=None):
 
 def rot90(m, k=1, axes=(0, 1)):
     """将数组旋转 90 度。"""
-    return _wrap(_core.rot90(_ensure_raw(m), k))
+    return _wrap(_core.rot90(_ensure_raw(m), k, axes[0], axes[1]))
 
 
 def resize(a, new_shape):
@@ -343,7 +337,7 @@ def insert(arr, obj, values, axis=None):
 
     if isinstance(obj, int):
         obj = [obj]
-    
+
     if not hasattr(values, '_array'):
         if isinstance(values, (list, tuple)):
             values_nd = _nd()(values)
@@ -351,8 +345,42 @@ def insert(arr, obj, values, axis=None):
             values_nd = _nd()([values])
     else:
         values_nd = values
-    
+
     values_flat = values_nd.ravel().tolist()
+
+    # 检查数据中是否包含复数（即使 dtype 声明为 float64）
+    def _contains_complex(data):
+        """递归检查数据中是否包含复数"""
+        if isinstance(data, complex):
+            return True
+        if isinstance(data, (list, tuple)):
+            return any(_contains_complex(x) for x in data)
+        return False
+
+    # 处理复数数据：展平为 [real, imag, real, imag, ...]
+    if dtype == 'complex128' or _contains_complex(values_flat):
+        # 展平复数为 [real, imag, real, imag, ...]
+        flat_real_imag = []
+        for item in values_flat:
+            if isinstance(item, complex):
+                flat_real_imag.extend([item.real, item.imag])
+            elif isinstance(item, (list, tuple)):
+                # 递归展平嵌套列表
+                def _flatten_complex_nested(lst):
+                    result = []
+                    for x in lst:
+                        if isinstance(x, complex):
+                            result.extend([x.real, x.imag])
+                        elif isinstance(x, (list, tuple)):
+                            result.extend(_flatten_complex_nested(x))
+                        else:
+                            result.extend([float(x), 0.0])
+                    return result
+                flat_real_imag.extend(_flatten_complex_nested(item))
+            else:
+                flat_real_imag.extend([float(item), 0.0])
+        values_flat = flat_real_imag
+
     result = _core.insert_rs(arr._array, obj, values_flat, axis)
     return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
 

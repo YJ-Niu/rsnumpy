@@ -48,7 +48,7 @@ _sys.modules['rsnumpy'] = _current_module
 _sys.modules['rsnumpy.__init__'] = _current_module
 _current_module.__name__ = 'rsnumpy'
 
-__version__ = "1.2.1"
+__version__ = "1.2.2"
 
 # 捕获内建函数别名：_extra 挂载会向本模块 globals 注入同名的 rsnumpy 函数
 # （all/any/round），会遮蔽内建函数。以下别名保证本文件内部逻辑始终使用内建实现。
@@ -944,13 +944,13 @@ class ndarray:
         """移除长度为1的轴。"""
         return _ndarray_methods().squeeze(self, axis)
 
-    def max(self, axis=None):
+    def max(self, axis=None, out=None, keepdims=False):
         """返回最大值。"""
-        return _ndarray_methods().max(self, axis)
+        return _ndarray_methods().max(self, axis, out, keepdims)
 
-    def min(self, axis=None):
+    def min(self, axis=None, out=None, keepdims=False):
         """返回最小值。"""
-        return _ndarray_methods().min(self, axis)
+        return _ndarray_methods().min(self, axis, out, keepdims)
 
     def mean(self, axis=None):
         """计算平均值。"""

@@ -99,6 +99,101 @@ Solving boundary value problems for ODE systems
    solve_bvp     -- Solve a boundary value problem for a system of ODEs.
 """  # noqa: E501
 
+import rsnumpy as np
+
+
+def cumulative_trapezoid(y, x=None, dx=1.0, axis=-1, initial=None):
+    """使用复合梯形法则累积积分 y(x)。
+
+    参数
+    ----------
+    y : array_like
+        要积分的值。
+    x : array_like, optional
+        沿其积分的坐标。如果为 None（默认），使用 `y` 中连续元素之间的间距 `dx`。
+    dx : float, optional
+        `y` 元素之间的间距。仅在 `x` 为 None 时使用。
+    axis : int, optional
+        指定累积的轴。默认为 -1（最后一个轴）。
+    initial : scalar, optional
+        如果给定，在返回结果的开头插入此值。仅接受 0 或 None。
+
+    返回
+    -------
+    res : ndarray
+        `y` 沿 `axis` 累积积分的结果。
+    """
+    y = np.asarray(y)
+
+    if y.shape[axis] == 0:
+        raise ValueError("At least one point is required along `axis`.")
+
+    # 将负 axis 转为正 axis，避免后续操作出错
+    nd = len(y.shape)
+    if axis < 0:
+        axis += nd
+
+    if x is None:
+        d = dx
+    else:
+        x = np.asarray(x)
+        if x.ndim == 1:
+            d = np.diff(x)
+            # 重塑为正确的形状
+            shape = [1] * nd
+            shape[axis] = -1
+            d = d.reshape(tuple(shape))
+        elif len(x.shape) != nd:
+            raise ValueError("If given, shape of x must be 1-D or the "
+                             "same as y.")
+        else:
+            d = np.diff(x, axis=axis)
+
+        if d.shape[axis] != y.shape[axis] - 1:
+            raise ValueError("If given, length of x along axis must be the "
+                             "same as y.")
+
+    slice1 = tuple(slice(None) if i != axis else slice(1, None) for i in range(nd))
+    slice2 = tuple(slice(None) if i != axis else slice(None, -1) for i in range(nd))
+    res = np.cumsum(d * (y[slice1] + y[slice2]) / 2.0, axis=axis)
+
+    if initial is not None:
+        if initial != 0:
+            raise ValueError("`initial` must be `None` or `0`.")
+
+        shape = list(res.shape)
+        shape[axis] = 1
+        # 在 axis 前面插入 initial=0 的切片
+        zeros_shape = tuple(shape)
+        zeros_arr = np.full(zeros_shape, initial, dtype=res.dtype)
+        res = np.concatenate((zeros_arr, res), axis=axis)
+
+    return res
+
+
+def trapezoid(y, x=None, dx=1.0, axis=-1):
+    """使用复合梯形法则沿给定轴积分。"""
+    y = np.asarray(y)
+
+    if y.shape[axis] == 0:
+        return 0.0
+
+    if x is None:
+        d = dx
+    else:
+        x = np.asarray(x)
+        if x.ndim == 1:
+            d = np.diff(x)
+            shape = [1] * y.ndim
+            shape[axis] = -1
+            d = d.reshape(tuple(shape))
+        else:
+            d = np.diff(x, axis=axis)
+
+    nd = len(y.shape)
+    slice1 = tuple(slice(None) if i != axis else slice(1, None) for i in range(nd))
+    slice2 = tuple(slice(None) if i != axis else slice(None, -1) for i in range(nd))
+    return np.sum(d * (y[slice1] + y[slice2]) / 2.0, axis=axis)
 
 
 # Deprecated namespaces, to be removed in v2.0.0

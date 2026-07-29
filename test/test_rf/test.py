@@ -76,7 +76,7 @@ plt.title('Big ole Smith Chart')
 ssaver('./test/test_rf/test3.png')
 
 
-print(rf.io.read_all('./test/test_rf/skrf/data/', contains='ro'))
+# print(rf.io.read_all('./test/test_rf/skrf/data/', contains='ro'))
 ro_dict = rf.io.read_all('./test/test_rf/skrf/data/', contains='ro')
 ro_ns = NetworkSet(ro_dict, name='ro set')  # name is optional
 print(ro_ns)

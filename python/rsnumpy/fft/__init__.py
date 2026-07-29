@@ -60,40 +60,104 @@ def _norm_inverse_factor(n, norm):
     return 1.0
 
 
+def _fft_1d(arr_core, n, kind):
+    """对一维核心数组执行 FFT。
+
+    kind: 'fft', 'ifft', 'rfft', 'irfft'
+    """
+    if kind == 'fft':
+        return _core.py_fft_ndarray(arr_core)
+    elif kind == 'ifft':
+        return _core.py_ifft_ndarray(arr_core)
+    elif kind == 'rfft':
+        return _core.py_rfft_ndarray(arr_core)
+    elif kind == 'irfft':
+        return _core.py_irfft_ndarray(arr_core, n)
+    raise ValueError(f"未知 FFT 类型: {kind}")
+
+
+def _fft_nd(arr, n, axis, norm, kind, is_inverse):
+    """沿指定轴对多维数组执行 FFT。
+
+    kind: 'fft', 'ifft', 'rfft', 'irfft'
+    is_inverse: True 表示逆变换（使用 _norm_inverse_factor）
+    """
+    np = _np()
+    nd = np.ndarray
+    arr = arr if hasattr(arr, '_array') else nd(arr)
+
+    # 一维数组直接处理
+    if arr.ndim <= 1:
+        result = nd._wrap(_fft_1d(arr._array, n, kind))
+        if is_inverse:
+            return _scale(result, _norm_inverse_factor(result.shape[0], norm))
+        else:
+            return _scale(result, _norm_forward_factor(arr.size, norm))
+
+    # 多维数组：沿 axis 处理
+    # 标准化 axis
+    ax = axis % arr.ndim if axis is not None else -1
+    ax = ax if ax >= 0 else arr.ndim + ax
+
+    # 将 axis 交换到最后一维
+    if ax != arr.ndim - 1:
+        arr_swapped = np.swapaxes(arr, ax, arr.ndim - 1)
+    else:
+        arr_swapped = arr
+
+    # 展平前面的维度
+    original_shape = arr_swapped.shape
+    last_dim = original_shape[-1]
+    arr_2d = arr_swapped.reshape(-1, last_dim)
+
+    # 对每行做 1D FFT
+    rows = []
+    for i in range(arr_2d.shape[0]):
+        row = arr_2d[i]
+        row_result = nd._wrap(_fft_1d(row._array, n, kind))
+        rows.append(row_result)
+
+    # 合并结果
+    if not rows:
+        result_2d = np.array([])
+    else:
+        result_2d = np.stack(rows)
+
+    # 计算新形状
+    new_last_dim = result_2d.shape[1] if result_2d.ndim >= 2 else result_2d.shape[0]
+    new_shape = original_shape[:-1] + (new_last_dim,)
+    result = result_2d.reshape(new_shape)
+
+    # 将 axis 交换回原位
+    if ax != arr.ndim - 1:
+        result = np.swapaxes(result, arr.ndim - 1, ax)
+
+    # 应用归一化
+    transform_len = result.shape[ax]
+    if is_inverse:
+        return _scale(result, _norm_inverse_factor(transform_len, norm))
+    else:
+        return _scale(result, _norm_forward_factor(arr.size // last_dim * transform_len if transform_len else arr.size, norm))
+
+
 def fft(a, n=None, axis=-1, norm=None):
     """计算一维离散傅里叶变换。"""
-    _ = (n, axis)
-    nd = _np().ndarray
-    arr = a if hasattr(a, '_array') else nd(a)
-    result = nd._wrap(_core.py_fft_ndarray(arr._array))
-    return _scale(result, _norm_forward_factor(arr.size, norm))
+    return _fft_nd(a, n, axis, norm, 'fft', is_inverse=False)
 
 
 def ifft(a, n=None, axis=-1, norm=None):
     """计算一维逆离散傅里叶变换。"""
-    _ = (n, axis)
-    nd = _np().ndarray
-    arr = a if hasattr(a, '_array') else nd(a)
-    result = nd._wrap(_core.py_ifft_ndarray(arr._array))
-    return _scale(result, _norm_inverse_factor(result.shape[0], norm))
+    return _fft_nd(a, n, axis, norm, 'ifft', is_inverse=True)
 
 
 def rfft(a, n=None, axis=-1, norm=None):
     """计算实输入的一维离散傅里叶变换。"""
-    _ = (n, axis)
-    nd = _np().ndarray
-    arr = a if hasattr(a, '_array') else nd(a)
-    result = nd._wrap(_core.py_rfft_ndarray(arr._array))
-    return _scale(result, _norm_forward_factor(arr.size, norm))
+    return _fft_nd(a, n, axis, norm, 'rfft', is_inverse=False)
 
 
 def irfft(a, n=None, axis=-1, norm=None):
     """计算 rfft 的逆变换（返回实数数组）。"""
-    _ = axis
-    nd = _np().ndarray
-    arr = a if hasattr(a, '_array') else nd(a)
-    result = nd._wrap(_core.py_irfft_ndarray(arr._array, n))
-    return _scale(result, _norm_inverse_factor(result.shape[0], norm))
+    return _fft_nd(a, n, axis, norm, 'irfft', is_inverse=True)
 
 
 def _shift(x, axes, inverse):

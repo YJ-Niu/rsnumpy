@@ -1,39 +1,57 @@
 use crate::*;
 
 #[pyfunction]
-#[pyo3(signature = (x, axis=None))]
-fn sum(_py: Python<'_>, x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
-    _py.detach(move || x.sum(axis))
+#[pyo3(signature = (x, axis=None, keepdims=false))]
+fn sum(_py: Python<'_>, x: &NdArray, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray> {
+    _py.detach(move || x.sum(axis, keepdims))
 }
 
 #[pyfunction]
-#[pyo3(signature = (x, axis=None))]
-fn mean(_py: Python<'_>, x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
-    _py.detach(move || x.mean(axis))
+#[pyo3(signature = (x, axis=None, keepdims=false))]
+fn prod(_py: Python<'_>, x: &NdArray, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray> {
+    _py.detach(move || x.prod(axis, keepdims))
 }
 
 #[pyfunction]
-#[pyo3(signature = (x, axis=None), name = "std")]
-fn std_dev(_py: Python<'_>, x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
-    _py.detach(move || x.std(axis))
+#[pyo3(signature = (x, axis=None, keepdims=false))]
+fn mean(_py: Python<'_>, x: &NdArray, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray> {
+    _py.detach(move || x.mean(axis, keepdims))
 }
 
 #[pyfunction]
-#[pyo3(signature = (x, axis=None))]
-fn var(_py: Python<'_>, x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
-    _py.detach(move || x.var(axis))
+#[pyo3(signature = (x, axis=None, ddof=0, keepdims=false), name = "std")]
+fn std_dev(
+    _py: Python<'_>,
+    x: &NdArray,
+    axis: Option<isize>,
+    ddof: usize,
+    keepdims: bool,
+) -> PyResult<NdArray> {
+    _py.detach(move || x.std(axis, ddof, keepdims))
 }
 
 #[pyfunction]
-#[pyo3(signature = (x, axis=None))]
-fn min(_py: Python<'_>, x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
-    _py.detach(move || x.min(axis))
+#[pyo3(signature = (x, axis=None, ddof=0, keepdims=false))]
+fn var(
+    _py: Python<'_>,
+    x: &NdArray,
+    axis: Option<isize>,
+    ddof: usize,
+    keepdims: bool,
+) -> PyResult<NdArray> {
+    _py.detach(move || x.var(axis, ddof, keepdims))
 }
 
 #[pyfunction]
-#[pyo3(signature = (x, axis=None))]
-fn max(_py: Python<'_>, x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
-    _py.detach(move || x.max(axis))
+#[pyo3(signature = (x, axis=None, keepdims=false))]
+fn min(_py: Python<'_>, x: &NdArray, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray> {
+    _py.detach(move || x.min(axis, keepdims))
+}
+
+#[pyfunction]
+#[pyo3(signature = (x, axis=None, keepdims=false))]
+fn max(_py: Python<'_>, x: &NdArray, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray> {
+    _py.detach(move || x.max(axis, keepdims))
 }
 
 #[pyfunction]
@@ -463,8 +481,7 @@ fn histogram<'py>(
 
 #[pyfunction]
 fn gradient(f: &NdArray) -> PyResult<NdArray> {
-    let values: Vec<f64> = f.data.iter().copied().collect();
-    let n = values.len();
+    let n = f.data.len();
     if n == 0 {
         return Err(PyValueError::new_err("Empty array"));
     }
@@ -474,13 +491,39 @@ fn gradient(f: &NdArray) -> PyResult<NdArray> {
             data: Array::from_elem(IxDyn(&[]), 0.0),
         });
     }
-    let mut grad = Vec::with_capacity(n);
-    grad.push(values[1] - values[0]);
+
+    // 计算实部的梯度
+    let re_values: Vec<f64> = f.data.iter().copied().collect();
+    let mut re_grad = Vec::with_capacity(n);
+    re_grad.push(re_values[1] - re_values[0]);
     for i in 1..n - 1 {
-        grad.push((values[i + 1] - values[i - 1]) / 2.0);
+        re_grad.push((re_values[i + 1] - re_values[i - 1]) / 2.0);
     }
-    grad.push(values[n - 1] - values[n - 2]);
-    let arr = Array::from_shape_vec(IxDyn(&[n]), grad)
+    re_grad.push(re_values[n - 1] - re_values[n - 2]);
+
+    // 如果是复数数组，计算虚部的梯度
+    if let Some(ref im_array) = f.imag {
+        let im_values: Vec<f64> = im_array.iter().copied().collect();
+        let mut im_grad = Vec::with_capacity(n);
+        im_grad.push(im_values[1] - im_values[0]);
+        for i in 1..n - 1 {
+            im_grad.push((im_values[i + 1] - im_values[i - 1]) / 2.0);
+        }
+        im_grad.push(im_values[n - 1] - im_values[n - 2]);
+
+        let re_arr = Array::from_shape_vec(IxDyn(&[n]), re_grad)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let im_arr = Array::from_shape_vec(IxDyn(&[n]), im_grad)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+
+        return Ok(NdArray {
+            imag: Some(im_arr),
+            data: re_arr,
+        });
+    }
+
+    // 实数数组
+    let arr = Array::from_shape_vec(IxDyn(&[n]), re_grad)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(NdArray {
         imag: None,
@@ -915,6 +958,7 @@ fn argmin_axis(a: &NdArray, axis: Option<i32>) -> PyResult<NdArray> {
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sum, m)?)?;
+    m.add_function(wrap_pyfunction!(prod, m)?)?;
     m.add_function(wrap_pyfunction!(mean, m)?)?;
     m.add_function(wrap_pyfunction!(std_dev, m)?)?;
     m.add_function(wrap_pyfunction!(var, m)?)?;
