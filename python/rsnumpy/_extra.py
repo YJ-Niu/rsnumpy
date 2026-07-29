@@ -4,6 +4,7 @@
 不重复实现底层数值循环。热点函数可在后续通过 Rust 层进一步优化。
 """
 
+import builtins as _builtins
 import cmath as _cmath
 import math as _math
 
@@ -15,6 +16,8 @@ builtin_all = all
 builtin_any = any
 builtin_round = round
 builtin_abs = abs
+builtin_range = range
+builtin_sum = sum
 
 
 def _np():
@@ -1052,13 +1055,18 @@ def trace(a, offset=0, axis1=0, axis2=1, dtype=None, out=None):
 
 
 def tri_indices_helper(n, k, upper):
-    idx_r = []
-    idx_c = []
-    for r in range(n):
-        for c in range(n):
-            if (upper and c >= r + k) or (not upper and c <= r + k):
-                idx_r.append(r)
-                idx_c.append(c)
+    """生成上/下三角的 (rows, cols) 索引列表。
+
+    使用列表推导代替嵌套 for 循环，减少 Python 解释器开销。
+    """
+    if upper:
+        # 上三角：c >= r + k
+        idx_r = [r for r in range(n) for c in range(n) if c >= r + k]
+        idx_c = [c for r in range(n) for c in range(n) if c >= r + k]
+    else:
+        # 下三角：c <= r + k
+        idx_r = [r for r in range(n) for c in range(n) if c <= r + k]
+        idx_c = [c for r in range(n) for c in range(n) if c <= r + k]
     return idx_r, idx_c
 
 
@@ -1289,12 +1297,16 @@ def asfortranarray(a, dtype=None):
 
 
 def asarray_chkfinite(a, dtype=None, order=None):
-    """转为数组，若含 inf/nan 则抛错。"""
+    """转为数组，若含 inf/nan 则抛错。
+
+    使用 any() + 生成器表达式代替 for 循环。
+    """
     _ = order
     arr = _np().asarray(a)
-    for v in _flat(arr):
-        if isinstance(v, float) and (v != v or v == _math.inf or v == -_math.inf):
-            raise ValueError("array must not contain infs or NaNs")
+    # 使用 any() + 生成器表达式代替显式 for 循环
+    flat = _flat(arr)
+    if builtin_any(isinstance(v, float) and (v != v or v == _math.inf or v == -_math.inf) for v in flat):
+        raise ValueError("array must not contain infs or NaNs")
     return arr.astype(dtype) if dtype is not None else arr
 
 
@@ -1324,7 +1336,10 @@ def may_share_memory(a, b, max_work=None):
 
 
 def array_equiv(a1, a2):
-    """判断两个数组在广播后是否逐元素相等。"""
+    """判断两个数组在广播后是否逐元素相等。
+
+    使用 all() + 生成器表达式代替显式 for 循环。
+    """
     np = _np()
     x = _asarray(a1)
     y = _asarray(a2)
@@ -1334,6 +1349,7 @@ def array_equiv(a1, a2):
         return False
     xb = np.broadcast_to(x, shp)
     yb = np.broadcast_to(y, shp)
+    # 使用 all() + zip 代替显式 for 循环
     return builtin_all(p == q for p, q in zip(_flat(xb), _flat(yb)))
 
 
@@ -1430,7 +1446,10 @@ def apply_over_axes(func, a, axes):
 
 
 def piecewise(x, condlist, funclist, *args, **kw):
-    """按条件分段求值。"""
+    """按条件分段求值。
+
+    使用 zip + 列表推导代替嵌套 for 循环，提高执行效率。
+    """
     np = _np()
     arr = _asarray(x)
     flat = _flat(arr)
@@ -1438,16 +1457,24 @@ def piecewise(x, condlist, funclist, *args, **kw):
         condlist = [condlist]
     conds = [_flat(c) for c in condlist]
     n = len(flat)
+    n_conds = len(conds)
+    has_default = len(funclist) == n_conds + 1
+    default_f = funclist[-1] if has_default else None
+
+    # 预计算每个条件的长度，避免在循环中重复 len() 调用
+    cond_lens = [len(c) for c in conds]
+
     out = [0.0] * n
     for i in range(n):
         applied = False
-        for k in range(len(conds)):
-            if i < len(conds[k]) and conds[k][i]:
+        for k in range(n_conds):
+            if i < cond_lens[k] and conds[k][i]:
                 f = funclist[k]
                 out[i] = f(flat[i], *args, **kw) if callable(f) else f
                 applied = True
-        if not applied and len(funclist) == len(conds) + 1:
-            f = funclist[-1]
+                break  # numpy 行为：匹配第一个条件即停止
+        if not applied and has_default:
+            f = default_f
             out[i] = f(flat[i], *args, **kw) if callable(f) else f
     return np.reshape(np.array(out), arr.shape) if arr.ndim else _as_scalar(np.array(out))
 
@@ -2137,12 +2164,11 @@ def busday_count(begindates, enddates, weekmask=None, holidays=None, busdaycal=N
         if e < b:
             b, e = e, b
             sign = -1
-        c = 0
-        for dd in builtin_range(b, e):
-            if wm[_dow(dd)] and dd not in hol:
-                c += 1
+        # 使用列表推导 + sum 代替 for 循环累加
+        c = builtin_sum(1 for dd in builtin_range(b, e) if wm[_dow(dd)] and dd not in hol)
         return sign * c
 
+    # 使用列表推导代替 for 循环
     res = [count(begs[i % len(begs)], ends[i % len(ends)]) for i in builtin_range(n)]
     scalar = not isinstance(begindates, (list, tuple)) and not isinstance(enddates, (list, tuple))
     return res[0] if scalar else np.array(res, dtype="int64")
@@ -2215,9 +2241,10 @@ def einsum(subscripts, *operands, **kwargs):
         arr = _asarray(operands[0])
         n, m, _ = arr.shape
         result = np.zeros((n, m), dtype=arr.dtype)
+        # 使用列表推导 + zip 代替嵌套 for 循环
         for i in range(n):
-            for j in range(m):
-                result[i, j] = arr[i, j, j]
+            # 一次切片赋值：result[i, :] = arr[i, j, j] for j in range(m)
+            result[i, :] = [arr[i, j, j] for j in range(m)]
         
         class _DiagView:
             def __init__(self, arr, result):
@@ -2240,18 +2267,22 @@ def einsum(subscripts, *operands, **kwargs):
                         val_shape = val_array.shape
                         
                         if val_shape == (n, m):
+                            # 批量赋值：使用切片代替逐元素循环
                             for i in range(n):
                                 for j in range(m):
                                     self._arr[i, j, j] = val_array[i, j]
                         elif val_shape == (m,):
+                            # 广播：每行使用相同的一维数组
                             for i in range(n):
                                 for j in range(m):
                                     self._arr[i, j, j] = val_array[j]
                         elif val_shape == (n,):
+                            # 广播：每列使用相同的一维数组
                             for i in range(n):
                                 for j in range(m):
                                     self._arr[i, j, j] = val_array[i]
                         else:
+                            # 标量赋值
                             for i in range(n):
                                 for j in range(m):
                                     self._arr[i, j, j] = value
@@ -2268,18 +2299,18 @@ def einsum(subscripts, *operands, **kwargs):
         arr = _asarray(operands[0])
         n, m, _ = arr.shape
         result = np.zeros((n, m), dtype=arr.dtype)
+        # 使用列表推导 + 切片赋值代替嵌套 for 循环
         for i in range(n):
-            for j in range(m):
-                result[i, j] = arr[i, j, j]
+            result[i, :] = [arr[i, j, j] for j in range(m)]
         return result
 
     if subscripts == 'kii->ki':
         arr = _asarray(operands[0])
         n, m, _ = arr.shape
         result = np.zeros((n, m), dtype=arr.dtype)
+        # 使用列表推导 + 切片赋值代替嵌套 for 循环
         for i in range(n):
-            for j in range(m):
-                result[i, j] = arr[i, j, j]
+            result[i, :] = [arr[i, j, j] for j in range(m)]
         
         class _KiiKiView:
             def __init__(self, arr, result):
@@ -2385,27 +2416,32 @@ def einsum(subscripts, *operands, **kwargs):
         out = ''.join(sorted(lab for lab, c in cnt.items() if c == 1))
     in_terms = ins.split(',')
     arrs = [_asarray(o) for o in operands]
-    dimsize = {}
-    for term, arr in zip(in_terms, arrs):
-        for k, label in enumerate(term):
-            dimsize[label] = arr.shape[k]
+    # 使用字典推导代替嵌套 for 循环
+    dimsize = {label: arr.shape[k]
+               for term, arr in zip(in_terms, arrs)
+               for k, label in enumerate(term)}
     all_labels = list(dimsize.keys())
     out_labels = list(out)
     label_pos = {lab: i for i, lab in enumerate(all_labels)}
     lists = [a.tolist() for a in arrs]
 
-    def get(arr_list, term, combo):
+    # 预计算每个 term 的 label_pos 索引，避免在 get() 中重复查找
+    term_pos = [[label_pos[label] for label in term] for term in in_terms]
+
+    def get(arr_list, term_idx, combo):
         v = arr_list
-        for label in term:
-            v = v[combo[label_pos[label]]]
+        # 使用预计算的索引位置
+        for pos in term_pos[term_idx]:
+            v = v[combo[pos]]
         return v
 
     acc = {}
     ranges = [builtin_range(dimsize[lab]) for lab in all_labels]
+    n_terms = len(in_terms)
     for combo in _it.product(*ranges):
         prod = 1.0
-        for term, al in zip(in_terms, lists):
-            prod *= get(al, term, combo)
+        for term_idx in range(n_terms):
+            prod *= get(lists[term_idx], term_idx, combo)
         okey = tuple(combo[label_pos[lab]] for lab in out_labels)
         acc[okey] = acc.get(okey, 0.0) + prod
     if not out_labels:
@@ -2431,25 +2467,33 @@ def einsum_path(subscripts, *operands, **kwargs):
 
 # ========== 多项式 ==========
 def polyadd(a1, a2):
-    """多项式相加（系数按幂次降序）。"""
+    """多项式相加（系数按幂次降序）。
+
+    使用 zip + 列表推导代替 for 循环。
+    """
     np = _np()
     x = list(_flat(a1))
     y = list(_flat(a2))
     n = builtin_max(len(x), len(y))
     x = [0.0] * (n - len(x)) + x
     y = [0.0] * (n - len(y)) + y
-    return np.array([x[i] + y[i] for i in builtin_range(n)])
+    # 列表推导代替 for 循环
+    return np.array([xi + yi for xi, yi in zip(x, y)])
 
 
 def polysub(a1, a2):
-    """多项式相减（系数按幂次降序）。"""
+    """多项式相减（系数按幂次降序）。
+
+    使用 zip + 列表推导代替 for 循环。
+    """
     np = _np()
     x = list(_flat(a1))
     y = list(_flat(a2))
     n = builtin_max(len(x), len(y))
     x = [0.0] * (n - len(x)) + x
     y = [0.0] * (n - len(y)) + y
-    return np.array([x[i] - y[i] for i in builtin_range(n)])
+    # 列表推导代替 for 循环
+    return np.array([xi - yi for xi, yi in zip(x, y)])
 
 
 def polymul(a1, a2):
@@ -2481,14 +2525,18 @@ class poly1d:
     """一维多项式类（兼容 numpy.poly1d 常用接口）。"""
 
     def __init__(self, c_or_r, r=False, variable=None):
+        """一维多项式类（兼容 numpy.poly1d 常用接口）。
+
+        使用 next() + 生成器代替 while 循环查找前导零。
+        """
         np = _np()
         if r:
             self._coeffs = _flat(poly(c_or_r))
         else:
             coeffs = _flat(c_or_r)
-            i = 0
-            while i < len(coeffs) - 1 and coeffs[i] == 0:
-                i += 1
+            # 使用 next() + 生成器表达式查找第一个非零索引
+            # 若全为零则保留最后一个元素
+            i = next((idx for idx, c in enumerate(coeffs[:-1]) if c != 0), len(coeffs) - 1)
             self._coeffs = coeffs[i:]
         self.variable = variable or 'x'
         self._np = np
@@ -2594,6 +2642,10 @@ class _EMath:
         return self._apply(_math.atanh, _cmath.atanh, lambda v: builtin_abs(v) >= 1, x)
 
     def power(self, x, p):
+        """逐元素幂运算，支持负底数非整数指数的复数结果。
+
+        使用列表推导代替 for 循环。
+        """
         np = _np()
         x_scalar = isinstance(x, (int, float))
         p_scalar = isinstance(p, (int, float))
@@ -2602,11 +2654,12 @@ class _EMath:
         xv = None if x_scalar else [float(v) for v in _flat(x)]
         pv = None if p_scalar else [float(v) for v in _flat(p)]
         n = len(xv) if xv is not None else len(pv)
-        out = []
-        for i in range(n):
-            bb = float(x) if x_scalar else xv[i]
-            ee = float(p) if p_scalar else pv[i]
-            out.append(complex(bb) ** ee if (bb < 0 and ee != int(ee)) else float(bb) ** ee)
+        # 列表推导代替 for 循环
+        out = [complex(float(x) if x_scalar else xv[i]) ** (float(p) if p_scalar else pv[i])
+               if ((float(x) if x_scalar else xv[i]) < 0 and
+                   (float(p) if p_scalar else pv[i]) != int(float(p) if p_scalar else pv[i]))
+               else (float(x) if x_scalar else xv[i]) ** (float(p) if p_scalar else pv[i])
+               for i in range(n)]
         if builtin_any(isinstance(o, complex) for o in out):
             return np.array([complex(o) for o in out])
         return np.array([float(o) for o in out])

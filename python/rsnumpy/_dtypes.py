@@ -4,6 +4,7 @@ DType 采用富数据模型，支持标量、结构化、子数组、标题、�
 并复刻 numpy 的 dtype str/repr 生成规则。
 """
 
+import math as _math
 import sys as _sys
 
 _NATIVE = '<' if _sys.byteorder == 'little' else '>'
@@ -141,13 +142,14 @@ class DType:
     def fields(self):
         if self._names is None:
             return None
-        out = {}
-        for n in self._names:
-            out[n] = self._fields[n]
-        for n in self._names:
-            v = self._fields[n]
-            if len(v) > 2 and v[2] is not None:
-                out[v[2]] = v
+        # 字典推导代替显式 for 循环
+        out = {n: self._fields[n] for n in self._names}
+        # 二次字典推导：补全带标题的字段
+        out.update({
+            self._fields[n][2]: self._fields[n]
+            for n in self._names
+            if len(self._fields[n]) > 2 and self._fields[n][2] is not None
+        })
         return out
 
     @property
@@ -171,17 +173,18 @@ class DType:
     @property
     def descr(self):
         if self._names is not None:
-            out = []
-            for n in self._names:
+            # 抽取字段描述逻辑为闭包，便于列表推导复用
+            def _field_descr(n):
                 fdt = self._fields[n][0]
                 if fdt._subdtype is not None:
                     b, sh = fdt._subdtype
-                    out.append((n, _typestr(b), sh))
+                    return (n, _typestr(b), sh)
                 elif fdt._names is not None:
-                    out.append((n, fdt.descr))
+                    return (n, fdt.descr)
                 else:
-                    out.append((n, _typestr(fdt)))
-            return out
+                    return (n, _typestr(fdt))
+            # 使用列表推导代替显式 for 循环
+            return [_field_descr(n) for n in self._names]
         return [('', _typestr(self))]
 
     @property
@@ -197,13 +200,12 @@ class DType:
         if isinstance(key, int):
             return self._fields[self._names[key]][0]
         if isinstance(key, list):
-            new_names, new_formats, new_offsets, new_titles = [], [], [], []
-            for k in key:
-                v = self._fields[k]
-                new_names.append(k)
-                new_formats.append(v[0])
-                new_offsets.append(v[1])
-                new_titles.append(v[2] if len(v) > 2 else None)
+            # 一次性取出所有字段的 (v0, v1, v2) 三元组，避免重复索引
+            vs = [self._fields[k] for k in key]
+            new_names = list(key)
+            new_formats = [v[0] for v in vs]
+            new_offsets = [v[1] for v in vs]
+            new_titles = [v[2] if len(v) > 2 else None for v in vs]
             return _build_struct(new_names, new_formats, new_offsets,
                                  self._itemsize, new_titles, self._aligned)
         raise KeyError(key)
@@ -309,9 +311,8 @@ def _make_flexible(kind, width, bo):
 
 
 def _make_subarray(base, shape):
-    prod = 1
-    for s in shape:
-        prod *= s
+    # 使用 math.prod 代替显式循环求积
+    prod = _math.prod(shape) if shape else 1
     d = _new()
     d._kind = 'V'
     d._itemsize = base._itemsize * prod
@@ -353,12 +354,11 @@ def _build_struct(names, formats, offsets, itemsize, titles, aligned):
         computed = max((o + f._itemsize for o, f in zip(offsets, formats)), default=0)
     if itemsize is None:
         itemsize = computed
-    fields = {}
-    for name, fdt, off, title in zip(names, formats, offsets, titles):
-        if title is not None:
-            fields[name] = (fdt, off, title)
-        else:
-            fields[name] = (fdt, off)
+    # 字典推导代替显式 for 循环
+    fields = {
+        name: ((fdt, off, title) if title is not None else (fdt, off))
+        for name, fdt, off, title in zip(names, formats, offsets, titles)
+    }
     d = _new()
     d._kind = 'V'
     d._itemsize = itemsize
@@ -470,23 +470,25 @@ def _parse_string_dtype(s, align):
 
 
 def _parse_list_dtype(lst, align):
-    names, formats, titles = [], [], []
-    for item in lst:
+    # 列表推导：一次提取 (name, fdt, title) 三元组
+    def _parse_item(item):
         name_spec = item[0]
         typ = item[1]
         shape = item[2] if len(item) > 2 else None
-        title = None
         if isinstance(name_spec, (tuple, list)):
             title, name = name_spec[0], name_spec[1]
         else:
-            name = name_spec
+            name, title = name_spec, None
         fdt = _parse_any_dtype(typ, align)
         if shape is not None and shape != ():
             sh = (shape,) if isinstance(shape, int) else tuple(shape)
             fdt = _make_subarray(fdt, sh)
-        names.append(name)
-        formats.append(fdt)
-        titles.append(title)
+        return name, fdt, title
+
+    parsed = [_parse_item(item) for item in lst]
+    names = [p[0] for p in parsed]
+    formats = [p[1] for p in parsed]
+    titles = [p[2] for p in parsed]
     return _build_struct(names, formats, None, None, titles, align)
 
 
@@ -506,15 +508,18 @@ def _parse_dict_dtype(d, align):
         titles = d.get('titles', None)
         aligned = align or bool(d.get('aligned', False))
         return _build_struct(names, formats, offsets, itemsize, titles, aligned)
-    names, formats, offsets, titles = [], [], [], []
-    for name, spec in d.items():
+    # 字典推导：一次提取 (name, typ, offset, title) 四元组
+    def _parse_dict_item(name, spec):
         typ = spec[0]
         offset = spec[1]
         title = spec[2] if len(spec) > 2 else None
-        names.append(name)
-        formats.append(_parse_any_dtype(typ, align))
-        offsets.append(offset)
-        titles.append(title)
+        return name, _parse_any_dtype(typ, align), offset, title
+
+    parsed = [_parse_dict_item(name, spec) for name, spec in d.items()]
+    names = [p[0] for p in parsed]
+    formats = [p[1] for p in parsed]
+    offsets = [p[2] for p in parsed]
+    titles = [p[3] for p in parsed]
     return _build_struct(names, formats, offsets, None, titles, align)
 
 
@@ -684,14 +689,12 @@ def _type_repr_in_list(fdt):
 
 
 def _struct_list_str(dt):
-    parts = []
-    for name in dt._names:
+    # 列表推导代替显式 for 循环
+    def _entry(name):
         fdt, _off, title = _unpack_field(dt._fields[name])
-        if title is not None:
-            namestr = repr((title, name))
-        else:
-            namestr = repr(name)
-        parts.append("(%s, %s)" % (namestr, _type_repr_in_list(fdt)))
+        namestr = repr((title, name)) if title is not None else repr(name)
+        return "(%s, %s)" % (namestr, _type_repr_in_list(fdt))
+    parts = [_entry(name) for name in dt._names]
     return "[" + ", ".join(parts) + "]"
 
 
@@ -706,12 +709,11 @@ def _fmt_format_entry(fdt):
 
 def _struct_dict_str(dt, include_align):
     names = dt._names
-    fld_dtypes, offsets, titles = [], [], []
-    for name in names:
-        fdt, off, title = _unpack_field(dt._fields[name])
-        fld_dtypes.append(fdt)
-        offsets.append(off)
-        titles.append(title)
+    # 一次性解包所有字段，使用列表推导代替显式 for 循环
+    unpacked = [_unpack_field(dt._fields[name]) for name in names]
+    fld_dtypes = [u[0] for u in unpacked]
+    offsets = [u[1] for u in unpacked]
+    titles = [u[2] for u in unpacked]
     ret = "{'names': [" + ", ".join(repr(n) for n in names) + "]"
     ret += ", 'formats': [" + ", ".join(_fmt_format_entry(f) for f in fld_dtypes) + "]"
     ret += ", 'offsets': [" + ", ".join("%d" % o for o in offsets) + "]"

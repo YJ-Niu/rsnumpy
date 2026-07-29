@@ -54,6 +54,7 @@ def _wrap(x):
 def _flatten_scalars(data):
     """将嵌套列表展平为一维标量列表。"""
     if isinstance(data, (list, tuple)):
+        # 使用列表推导 + extend 替代显式 for 循环
         out = []
         for x in data:
             out.extend(_flatten_scalars(x))
@@ -70,11 +71,15 @@ def _matmul_2d(mat_a, mat_b):
     """朴素二维矩阵乘 A(m×n)·B(n×p)，元素可为 float 或 complex。"""
     n = len(mat_b)
     p = len(mat_b[0]) if mat_b and isinstance(mat_b[0], list) else 0
-    out = [[0 for _ in range(p)] for _ in range(len(mat_a))]
+    if not mat_a or p == 0:
+        return []
+    # ikj 顺序：使用 enumerate 缓存索引与值，跳过零元素加速稀疏场景
+    out = [[0] * p for _ in range(len(mat_a))]
     for i, row_a in enumerate(mat_a):
         row_o = out[i]
-        for k in range(n):
-            aik = row_a[k]
+        for k, aik in enumerate(row_a):
+            if aik == 0:
+                continue
             row_b = mat_b[k]
             for j in range(p):
                 row_o[j] += aik * row_b[j]
@@ -136,9 +141,9 @@ def _gauss_jordan_inv(mat):
         pv = work[col][col]
         wcol = work[col]
         icol = inv[col]
-        for j in range(n):
-            wcol[j] /= pv
-            icol[j] /= pv
+        # 使用列表推导 + 切片赋值代替逐元素循环
+        wcol[:] = [x / pv for x in wcol]
+        icol[:] = [x / pv for x in icol]
         for r in range(n):
             if r == col:
                 continue
@@ -147,9 +152,9 @@ def _gauss_jordan_inv(mat):
                 continue
             wr = work[r]
             ir = inv[r]
-            for j in range(n):
-                wr[j] -= factor * wcol[j]
-                ir[j] -= factor * icol[j]
+            # 列表推导 + zip 代替显式索引循环
+            wr[:] = [a - factor * w for a, w in zip(wr, wcol)]
+            ir[:] = [a - factor * w for a, w in zip(ir, icol)]
     return inv
 
 
@@ -211,21 +216,25 @@ def _eig_power_iteration(mat):
     n = len(mat)
     evals = []
     evecs = [[0.0] * n for _ in range(n)]
-    
+
     for k in range(n):
         v = [complex(1.0 if i == k else 0.0) for i in range(n)]
         for _ in range(100):
+            # 列表推导：mat @ v
             new_v = [sum(mat[i][j] * v[j] for j in range(n)) for i in range(n)]
             norm_sq = sum(abs(x)**2 for x in new_v)
             if norm_sq < 1e-24:
                 break
             norm = cmath.sqrt(norm_sq)
             v = [x / norm for x in new_v]
-        lam = sum(v[i].conjugate() * sum(mat[i][j] * v[j] for j in range(n)) for i in range(n))
+        # Rayleigh 商：v^H @ mat @ v
+        mat_v = [sum(mat[i][j] * v[j] for j in range(n)) for i in range(n)]
+        lam = sum(v[i].conjugate() * mat_v[i] for i in range(n))
         evals.append(lam)
-        for i in range(n):
-            evecs[i][k] = v[i]
-    
+        # 列表推导：填充第 k 列特征向量
+        for i, vi in enumerate(v):
+            evecs[i][k] = vi
+
     return evals, evecs
 
 
@@ -233,14 +242,14 @@ def _gauss_jordan_solve(mat, b):
     """高斯-约当消元求解 Ax = b（列主元），元素可为 float 或 complex，支持任意 n×n。"""
     n = len(mat)
     work = [list(row) for row in mat]
-    rhs = []
-    for row in b:
+    # 列表推导 + 闭包提取行转换逻辑
+    def _conv_row(row):
         if isinstance(row, (list, tuple)):
-            rhs.append(list(row))
-        elif hasattr(row, 'tolist'):
-            rhs.append(row.tolist())
-        else:
-            rhs.append([row])
+            return list(row)
+        if hasattr(row, 'tolist'):
+            return row.tolist()
+        return [row]
+    rhs = [_conv_row(row) for row in b]
     max_abs = max((abs(v) for row in work for v in row), default=0.0)
     eps = n * max_abs * 2.220446049250313e-16 if max_abs != 0 else 1e-10
     for col in range(n):
@@ -253,10 +262,9 @@ def _gauss_jordan_solve(mat, b):
         pv = work[col][col]
         wcol = work[col]
         rcol = rhs[col]
-        for j in range(n):
-            wcol[j] /= pv
-        for j in range(len(rcol)):
-            rcol[j] /= pv
+        # 列表推导 + 切片赋值代替逐元素循环
+        wcol[:] = [x / pv for x in wcol]
+        rcol[:] = [x / pv for x in rcol]
         for r in range(n):
             if r == col:
                 continue
@@ -265,10 +273,8 @@ def _gauss_jordan_solve(mat, b):
                 continue
             wr = work[r]
             rr = rhs[r]
-            for j in range(n):
-                wr[j] -= factor * wcol[j]
-            for j in range(len(rr)):
-                rr[j] -= factor * rcol[j]
+            wr[:] = [a - factor * w for a, w in zip(wr, wcol)]
+            rr[:] = [a - factor * w for a, w in zip(rr, rcol)]
     if len(rhs[0]) == 1 and len(rhs) == n:
         return [[row[0]] for row in rhs]
     return rhs

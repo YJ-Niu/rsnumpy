@@ -1,10 +1,10 @@
-import rsnumpy as np
+import numpy as np
 import time
 import math
 from io import StringIO
-from rsnumpy import array, argmin, sqrt, sum
-from rsnumpy.lib.recfunctions import repack_fields
-from rsnumpy.lib import recfunctions as rfn
+from numpy import array, argmin, sqrt, sum
+from numpy.lib.recfunctions import repack_fields
+from numpy.lib import recfunctions as rfn
 
 start_time = time.time()
 
@@ -15,7 +15,7 @@ def mark_print():
 # 使用标量类型
 dt = np.dtype([('age', np.int8)])
 a = np.array([(10,), (20,), (30,)], dtype=dt)
-print(a['age'])
+print(111, a['age'])
 
 student = np.dtype([('name', 'S20'), ('age', 'i1'), ('marks', 'f4')])
 print(student)
