@@ -5,11 +5,17 @@ ndarray 对象方法模块
 """
 
 import rsnumpy.num_core as _core
-from .__init__ import ndarray, _ensure
+
+
+def _get_deps():
+    """延迟获取 ndarray 和 _ensure，避免循环导入导致的 import 缓慢。"""
+    import rsnumpy
+    return rsnumpy.ndarray, rsnumpy._ensure
 
 
 def _wrap_result(result, dtype="float64"):
     """包装结果为 ndarray 对象"""
+    ndarray, _ = _get_deps()
     if hasattr(result, '__class__') and result.__class__.__name__ == 'ndarray':
         return ndarray._wrap(result, _dtype=dtype)
     return result
@@ -27,6 +33,7 @@ class NdArrayMethods:
     @staticmethod
     def reshape(arr, *shape):
         """改变数组形状而不改变数据。"""
+        ndarray, _ = _get_deps()
         if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
             shape = shape[0]
         else:
@@ -63,6 +70,7 @@ class NdArrayMethods:
     @staticmethod
     def transpose(arr, *axes):
         """转置数组。"""
+        ndarray, _ = _get_deps()
         dtype = getattr(arr, '_dtype', "float64")
         fields = getattr(arr, '_fields', None)
         raw = getattr(arr, '_raw_data', None)
@@ -77,6 +85,7 @@ class NdArrayMethods:
     @staticmethod
     def swapaxes(arr, axis1, axis2):
         """交换两个轴的位置。"""
+        ndarray, _ = _get_deps()
         dtype = getattr(arr, '_dtype', "float64")
         fields = getattr(arr, '_fields', None)
         raw_data = getattr(arr, '_raw_data', None)
@@ -225,12 +234,14 @@ class NdArrayMethods:
     @staticmethod
     def take(arr, indices, axis=None):
         """根据索引获取元素。"""
+        _, _ensure = _get_deps()
         result = arr._array.take(_ensure(indices), axis)
         return _wrap_result(result)
     
     @staticmethod
     def put(arr, indices, values):
         """将值放入数组的指定位置。"""
+        _, _ensure = _get_deps()
         arr._array.put(_ensure(indices), _ensure(values))
     
     @staticmethod
@@ -242,5 +253,6 @@ class NdArrayMethods:
     @staticmethod
     def nonzero(arr):
         """返回非零元素的索引。"""
+        ndarray, _ = _get_deps()
         raw = _core.nonzero_arrs(arr._array)
         return tuple(ndarray._wrap(r) for r in raw)

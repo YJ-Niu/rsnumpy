@@ -20,6 +20,13 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+/// 获取逻辑 CPU 核心数（优先使用标准库，失败时回退到 1）
+fn num_cpus_get() -> usize {
+    std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1)
+}
+
 /// 全局 rayon 线程池（通过 RwLock 包装，支持动态重建）
 static GLOBAL_POOL: RwLock<Option<Arc<ThreadPool>>> = RwLock::new(None);
 
@@ -32,9 +39,9 @@ fn default_num_threads() -> usize {
         && let Ok(threads) = threads_str.parse::<usize>()
         && threads > 0
     {
-        return threads.min(num_cpus::get());
+        return threads.min(num_cpus_get());
     }
-    num_cpus::get()
+    num_cpus_get()
 }
 
 /// 确保全局线程池已初始化（如未初始化则用 default_num_threads 构建）
@@ -64,7 +71,7 @@ fn ensure_pool() -> Arc<ThreadPool> {
 
 /// 重建全局线程池（set_num_threads / parallel_context 内部使用）
 fn rebuild_pool(num_threads: usize) -> Arc<ThreadPool> {
-    let n = num_threads.max(1).min(num_cpus::get());
+    let n = num_threads.max(1).min(num_cpus_get());
     let pool = ThreadPoolBuilder::new()
         .num_threads(n)
         .thread_name(|i| format!("rsnumpy-wk-{}", i))
@@ -108,7 +115,7 @@ pub fn set_num_threads(num_threads: usize) -> PyResult<()> {
     let actual = if num_threads == 0 {
         default_num_threads()
     } else {
-        num_threads.max(1).min(num_cpus::get())
+        num_threads.max(1).min(num_cpus_get())
     };
     rebuild_pool(actual);
     Ok(())
@@ -129,7 +136,7 @@ pub fn get_num_threads() -> usize {
 /// 获取 CPU 核心数（Python 接口）
 #[pyfunction]
 pub fn get_num_cpus() -> usize {
-    num_cpus::get()
+    num_cpus_get()
 }
 
 /// 获取并行阈值（Python 接口）
@@ -221,7 +228,7 @@ impl ParallelContext {
         let actual = if num_threads == 0 {
             default_num_threads()
         } else {
-            num_threads.max(1).min(num_cpus::get())
+            num_threads.max(1).min(num_cpus_get())
         };
         let _new_pool = rebuild_pool(actual);
         ParallelContext {
