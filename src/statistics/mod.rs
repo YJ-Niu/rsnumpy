@@ -682,10 +682,20 @@ fn digitize(x: &NdArray, bins: &NdArray) -> PyResult<NdArray> {
     let mut bin_edges: Vec<f64> = bins.data.iter().copied().collect();
     bin_edges.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     // 二分查找 + 并行计算：O(n*log m)，原先线性 O(n*m)
-    let result: Vec<f64> = x_vals
-        .par_iter()
-        .map(|&v| bin_edges.partition_point(|&edge| v >= edge) as f64)
-        .collect();
+    let len = x_vals.len();
+    let result: Vec<f64> = if len >= crate::PAR_THRESHOLD {
+        crate::threadpool::with_pool(|| {
+            x_vals
+                .par_iter()
+                .map(|&v| bin_edges.partition_point(|&edge| v >= edge) as f64)
+                .collect()
+        })
+    } else {
+        x_vals
+            .iter()
+            .map(|&v| bin_edges.partition_point(|&edge| v >= edge) as f64)
+            .collect()
+    };
     let arr = Array::from_shape_vec(IxDyn(&[result.len()]), result)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(NdArray {
@@ -1122,23 +1132,25 @@ fn nansum(x: &NdArray, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray>
 
     // 并行优化：当外层循环足够大时使用并行
     let out = if outer * inner >= PAR_THRESHOLD_CHEAP / 4 {
-        // 并行路径
-        let out_vec: Vec<f64> = (0..outer * inner)
-            .into_par_iter()
-            .map(|o| {
-                let out_o = o / inner;
-                let inn = o % inner;
-                let base = out_o * dim_size * inner;
-                let mut s = 0.0f64;
-                for i in 0..dim_size {
-                    let v = data[base + i * inner + inn];
-                    if !v.is_nan() {
-                        s += v;
+        // 并行路径（通过 with_pool 绑定到用户配置的 rayon 池）
+        let out_vec: Vec<f64> = crate::threadpool::with_pool(|| {
+            (0..outer * inner)
+                .into_par_iter()
+                .map(|o| {
+                    let out_o = o / inner;
+                    let inn = o % inner;
+                    let base = out_o * dim_size * inner;
+                    let mut s = 0.0f64;
+                    for i in 0..dim_size {
+                        let v = data[base + i * inner + inn];
+                        if !v.is_nan() {
+                            s += v;
+                        }
                     }
-                }
-                s
-            })
-            .collect();
+                    s
+                })
+                .collect()
+        });
         out_vec
     } else {
         // 串行路径

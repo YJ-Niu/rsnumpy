@@ -5,7 +5,7 @@ fn unary_math_op(py: Python<'_>, x: &NdArray, threshold: usize, op: fn(f64) -> f
     // 纯计算，主动释放 GIL；小数组走串行避免线程调度开销。
     let out = py.detach(|| {
         if data.len() >= threshold {
-            Zip::from(data).par_map_collect(|&v| op(v))
+            crate::threadpool::with_pool(|| Zip::from(data).par_map_collect(|&v| op(v)))
         } else {
             data.mapv(op)
         }
@@ -492,7 +492,7 @@ fn i0(py: Python<'_>, x: &NdArray) -> NdArray {
     let data = &x.data;
     let out = py.detach(|| {
         if data.len() >= PAR_THRESHOLD {
-            Zip::from(data).par_map_collect(|&v| bessel_i0(v))
+            crate::threadpool::with_pool(|| Zip::from(data).par_map_collect(|&v| bessel_i0(v)))
         } else {
             data.mapv(bessel_i0)
         }
@@ -542,7 +542,9 @@ fn interp(
     let data = &x.data;
     let out = py.detach(|| {
         if data.len() >= PAR_THRESHOLD {
-            Zip::from(data).par_map_collect(|&xi| interp_one(xi, &xpv, &fpv, lo, hi))
+            crate::threadpool::with_pool(|| {
+                Zip::from(data).par_map_collect(|&xi| interp_one(xi, &xpv, &fpv, lo, hi))
+            })
         } else {
             data.mapv(|xi| interp_one(xi, &xpv, &fpv, lo, hi))
         }

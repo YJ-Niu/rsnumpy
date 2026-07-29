@@ -39,6 +39,13 @@ from . import _extra as _extra_module
 # ---------- dtype 提升与浮点判定 ----------
 import rsnumpy.num_core as np
 from rsnumpy.num_core import ndarray_iter as NdArrayIter
+from rsnumpy.num_core import (
+    set_num_threads,
+    get_num_threads,
+    get_num_cpus,
+    get_parallel_thresholds,
+    parallel_context,
+)
 from ._dtypes import (
     DType, dtype, _make_flexible, _make_subarray,
     _build_struct, _scalar_typestr_short,
@@ -4792,7 +4799,10 @@ __all__ = [
     'half', 'single', 'double', 'longdouble', 'csingle', 'cdouble', 'clongdouble',
     'True_', 'False_', 'little_endian', 'ScalarType', 'sctypeDict', 'typecodes',
     'issubdtype', 'finfo', 'iinfo', 'ndindex', 'ndenumerate', 'index_exp',
-    'dtype', 'DType', 'rec', 'ma', 'recarray'
+    'dtype', 'DType', 'rec', 'ma', 'recarray',
+    # 线程控制接口
+    'set_num_threads', 'get_num_threads', 'get_num_cpus',
+    'get_parallel_thresholds', 'parallel_context',
 ]
 
 
