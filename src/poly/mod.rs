@@ -335,6 +335,76 @@ fn polymul(a: &NdArray, b: &NdArray) -> PyResult<NdArray> {
     })
 }
 
+// ========== 多项式除法 ==========
+/// 多项式除法，返回 (商, 余数)
+#[pyfunction]
+fn polydiv(u: &NdArray, v: &NdArray) -> PyResult<(NdArray, NdArray)> {
+    let u_vals: Vec<f64> = u.data.iter().copied().collect();
+    let v_vals: Vec<f64> = v.data.iter().copied().collect();
+    let m = u_vals.len();
+    let n = v_vals.len();
+    if n == 0 || v_vals[0].abs() < 1e-300 {
+        return Err(PyValueError::new_err("除数多项式不能为零或首项系数为零"));
+    }
+    let scale = 1.0 / v_vals[0];
+    let mut r = u_vals.clone();
+    let (q, rem) = if m >= n {
+        let mut q = vec![0.0; m - n + 1];
+        for k in 0..(m - n + 1) {
+            let d = r[k] * scale;
+            q[k] = d;
+            for j in 0..n {
+                r[k + j] -= d * v_vals[j];
+            }
+        }
+        let rem = r[m - n + 1..].to_vec();
+        (q, rem)
+    } else {
+        (vec![0.0], r.clone())
+    };
+    // 裁剪余数前导零
+    let mut trimmed_rem = rem;
+    while trimmed_rem.len() > 1 && trimmed_rem[0].abs() < 1e-14 {
+        trimmed_rem.remove(0);
+    }
+    let q_arr = Array::from_shape_vec(IxDyn(&[q.len()]), q)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let rem_arr = Array::from_shape_vec(IxDyn(&[trimmed_rem.len()]), trimmed_rem)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok((
+        NdArray {
+            imag: None,
+            data: q_arr,
+        },
+        NdArray {
+            imag: None,
+            data: rem_arr,
+        },
+    ))
+}
+
+// ========== 由根序列构造多项式 ==========
+/// 由根序列返回多项式系数
+#[pyfunction]
+fn poly_from_roots(roots: &NdArray) -> NdArray {
+    let roots_vals: Vec<f64> = roots.data.iter().copied().collect();
+    let mut coeffs = vec![1.0_f64];
+    for &rt in &roots_vals {
+        let mut new_coeffs = vec![0.0; coeffs.len() + 1];
+        for (i, &c) in coeffs.iter().enumerate() {
+            new_coeffs[i] += c;
+            new_coeffs[i + 1] -= c * rt;
+        }
+        coeffs = new_coeffs;
+    }
+    let arr = Array::from_shape_vec(IxDyn(&[coeffs.len()]), coeffs)
+        .expect("由根序列构造系数数组形状必然合法");
+    NdArray {
+        imag: None,
+        data: arr,
+    }
+}
+
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(polyval_rs, m)?)?;
     m.add_function(wrap_pyfunction!(polyder_rs, m)?)?;
@@ -344,5 +414,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(polyadd, m)?)?;
     m.add_function(wrap_pyfunction!(polysub, m)?)?;
     m.add_function(wrap_pyfunction!(polymul, m)?)?;
+    m.add_function(wrap_pyfunction!(polydiv, m)?)?;
+    m.add_function(wrap_pyfunction!(poly_from_roots, m)?)?;
     Ok(())
 }

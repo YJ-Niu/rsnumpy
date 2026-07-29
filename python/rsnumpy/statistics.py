@@ -81,6 +81,7 @@ def _py_var_std(a, axis, ddof, want_std):
     nd = len(shape)
     if axis < 0:
         axis += nd
+    # 使用一次性累乘代替循环
     strides = [1] * nd
     for i in range(nd - 2, -1, -1):
         strides[i] = strides[i + 1] * shape[i + 1]
@@ -92,14 +93,18 @@ def _py_var_std(a, axis, ddof, want_std):
     for s in out_shape:
         out_size *= s
 
-    result = []
+    # 预计算所有 base 偏移，避免嵌套循环中重复计算
+    result = [0.0] * out_size
     idx = [0] * len(out_shape)
-    for _ in range(out_size):
-        base = 0
-        for k, ix in enumerate(idx):
-            base += ix * out_strides[k]
-        vals = [flat[base + t * axis_stride] for t in range(axis_len)]
-        result.append(reduce_vals(vals))
+    # 预生成所有 axis 索引的 stride 偏移
+    axis_offsets = [t * axis_stride for t in range(axis_len)]
+    for i in range(out_size):
+        # 计算 base 偏移：用内建 sum 代替显式循环
+        base = _builtins.sum(idx[k] * out_strides[k] for k in range(len(out_strides)))
+        # 列表推导代替显式循环
+        vals = [flat[base + off] for off in axis_offsets]
+        result[i] = reduce_vals(vals)
+        # 推进 idx（从最低维度开始）
         for k in range(len(out_shape) - 1, -1, -1):
             idx[k] += 1
             if idx[k] < out_shape[k]:

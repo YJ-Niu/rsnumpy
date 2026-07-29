@@ -359,23 +359,24 @@ def insert(arr, obj, values, axis=None):
 
     # 处理复数数据：展平为 [real, imag, real, imag, ...]
     if dtype == 'complex128' or _contains_complex(values_flat):
-        # 展平复数为 [real, imag, real, imag, ...]
+        # 递归展平嵌套复数列表
+        def _flatten_complex_nested(lst):
+            result = []
+            for x in lst:
+                if isinstance(x, complex):
+                    result.extend([x.real, x.imag])
+                elif isinstance(x, (list, tuple)):
+                    result.extend(_flatten_complex_nested(x))
+                else:
+                    result.extend([float(x), 0.0])
+            return result
+
+        # 列表推导 + 闭包，避免在循环中重复定义函数
         flat_real_imag = []
         for item in values_flat:
             if isinstance(item, complex):
                 flat_real_imag.extend([item.real, item.imag])
             elif isinstance(item, (list, tuple)):
-                # 递归展平嵌套列表
-                def _flatten_complex_nested(lst):
-                    result = []
-                    for x in lst:
-                        if isinstance(x, complex):
-                            result.extend([x.real, x.imag])
-                        elif isinstance(x, (list, tuple)):
-                            result.extend(_flatten_complex_nested(x))
-                        else:
-                            result.extend([float(x), 0.0])
-                    return result
                 flat_real_imag.extend(_flatten_complex_nested(item))
             else:
                 flat_real_imag.extend([float(item), 0.0])
@@ -411,7 +412,5 @@ def unique(a, return_index=False, return_inverse=False, return_counts=False,
     unique_arr = nd._wrap(results[0], _dtype=dtype, _fields=fields, _raw_data=raw_data)
     if not (return_index or return_inverse or return_counts):
         return unique_arr
-    outputs = [unique_arr]
-    for r in results[1:]:
-        outputs.append(nd._wrap(r, _dtype="int64"))
+    outputs = [unique_arr] + [nd._wrap(r, _dtype="int64") for r in results[1:]]
     return tuple(outputs)

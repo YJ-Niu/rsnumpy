@@ -110,12 +110,8 @@ def _fft_nd(arr, n, axis, norm, kind, is_inverse):
     last_dim = original_shape[-1]
     arr_2d = arr_swapped.reshape(-1, last_dim)
 
-    # 对每行做 1D FFT
-    rows = []
-    for i in range(arr_2d.shape[0]):
-        row = arr_2d[i]
-        row_result = nd._wrap(_fft_1d(row._array, n, kind))
-        rows.append(row_result)
+    # 对每行做 1D FFT，使用列表推导代替显式 for 循环
+    rows = [nd._wrap(_fft_1d(arr_2d[i]._array, n, kind)) for i in range(arr_2d.shape[0])]
 
     # 合并结果
     if not rows:

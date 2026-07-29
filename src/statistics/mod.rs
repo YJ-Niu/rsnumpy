@@ -682,10 +682,20 @@ fn digitize(x: &NdArray, bins: &NdArray) -> PyResult<NdArray> {
     let mut bin_edges: Vec<f64> = bins.data.iter().copied().collect();
     bin_edges.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     // 二分查找 + 并行计算：O(n*log m)，原先线性 O(n*m)
-    let result: Vec<f64> = x_vals
-        .par_iter()
-        .map(|&v| bin_edges.partition_point(|&edge| v >= edge) as f64)
-        .collect();
+    let len = x_vals.len();
+    let result: Vec<f64> = if len >= crate::PAR_THRESHOLD {
+        crate::threadpool::with_pool(|| {
+            x_vals
+                .par_iter()
+                .map(|&v| bin_edges.partition_point(|&edge| v >= edge) as f64)
+                .collect()
+        })
+    } else {
+        x_vals
+            .iter()
+            .map(|&v| bin_edges.partition_point(|&edge| v >= edge) as f64)
+            .collect()
+    };
     let arr = Array::from_shape_vec(IxDyn(&[result.len()]), result)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
     Ok(NdArray {
@@ -956,6 +966,649 @@ fn argmin_axis(a: &NdArray, axis: Option<i32>) -> PyResult<NdArray> {
     })
 }
 
+// ========== NaN 替换为数值 ==========
+#[pyfunction]
+#[pyo3(signature = (x, nan=0.0, posinf=None, neginf=None))]
+fn nan_to_num(x: &NdArray, nan: f64, posinf: Option<f64>, neginf: Option<f64>) -> NdArray {
+    // 将 NaN 替换为 nan，正无穷替换为 posinf（默认 f64::MAX），负无穷替换为 neginf（默认 f64::MIN）
+    let pos = posinf.unwrap_or(f64::MAX);
+    let neg = neginf.unwrap_or(f64::MIN);
+    let result: Vec<f64> = x
+        .data
+        .iter()
+        .map(|&v| {
+            if v.is_nan() {
+                nan
+            } else if v.is_infinite() && v > 0.0 {
+                pos
+            } else if v.is_infinite() && v < 0.0 {
+                neg
+            } else {
+                v
+            }
+        })
+        .collect();
+    let shape = x.data.shape().to_vec();
+    NdArray {
+        imag: None,
+        data: Array::from_shape_vec(IxDyn(&shape), result).unwrap(),
+    }
+}
+
+// ========== 数组相邻元素差分（带可选首尾追加） ==========
+#[pyfunction]
+#[pyo3(signature = (ary, to_end=None, to_begin=None))]
+fn ediff1d(ary: &NdArray, to_end: Option<Vec<f64>>, to_begin: Option<Vec<f64>>) -> NdArray {
+    // 计算一阶差分，可选拼接前缀和后缀
+    let data: Vec<f64> = ary.data.iter().copied().collect();
+    let n = data.len();
+    let diffs: Vec<f64> = if n > 1 {
+        (0..n - 1).map(|i| data[i + 1] - data[i]).collect()
+    } else {
+        Vec::new()
+    };
+    let mut result = Vec::new();
+    if let Some(prepend) = to_begin {
+        result.extend(prepend);
+    }
+    result.extend(diffs);
+    if let Some(append) = to_end {
+        result.extend(append);
+    }
+    NdArray {
+        imag: None,
+        data: Array::from_shape_vec(IxDyn(&[result.len()]), result).unwrap(),
+    }
+}
+
+// ========== 去除首尾零元素 ==========
+#[pyfunction]
+#[pyo3(signature = (filt, trim="fb"))]
+fn trim_zeros(filt: &NdArray, trim: &str) -> NdArray {
+    // trim 字符串包含 'f' 去除前导零，包含 'b' 去除末尾零
+    let data: Vec<f64> = filt.data.iter().copied().collect();
+    let mut start = 0;
+    let mut end = data.len();
+    if trim.contains('f') {
+        while start < end && data[start] == 0.0 {
+            start += 1;
+        }
+    }
+    if trim.contains('b') {
+        while end > start && data[end - 1] == 0.0 {
+            end -= 1;
+        }
+    }
+    let result = data[start..end].to_vec();
+    NdArray {
+        imag: None,
+        data: Array::from_shape_vec(IxDyn(&[result.len()]), result).unwrap(),
+    }
+}
+
+// ========== 带权重的 bincount ==========
+#[pyfunction]
+#[pyo3(signature = (x, weights, minlength=0))]
+fn bincount_weighted(x: &NdArray, weights: &NdArray, minlength: usize) -> NdArray {
+    // 对每个非负整数索引累加对应权重
+    let xv: Vec<usize> = x.data.iter().map(|&v| v as usize).collect();
+    let wv: Vec<f64> = weights.data.iter().copied().collect();
+    let max_val = xv.iter().copied().max().unwrap_or(0);
+    let n = (max_val + 1).max(minlength).max(1);
+    let mut out = vec![0.0_f64; n];
+    for (i, &v) in xv.iter().enumerate() {
+        if v < n {
+            out[v] += wv[i];
+        }
+    }
+    NdArray {
+        imag: None,
+        data: Array::from_shape_vec(IxDyn(&[n]), out).unwrap(),
+    }
+}
+
+// ========== NaN 忽略的统计函数 ==========
+//
+// 设计：所有 nan_* 函数复用同一套「按 axis 分块」的扁平遍历模式：
+//   outer × dim_size × inner 三层循环，对每个 (outer, inner) 在 dim_size 维度上做归约。
+// axis=None 时按全数组归约，axis 为正/负整数时沿指定轴。
+
+/// 计算沿 axis 归约时的几何参数 (outer, dim_size, inner, result_shape)。
+/// keepdims=true 时 result_shape[ax] = 1，否则去掉该维。
+fn axis_reduce_layout(
+    shape: &[usize],
+    axis: Option<isize>,
+    keepdims: bool,
+) -> PyResult<(usize, usize, usize, Vec<usize>)> {
+    match axis {
+        None => {
+            let total: usize = shape.iter().product();
+            let result_shape = if keepdims {
+                vec![1usize; shape.len()]
+            } else {
+                Vec::new()
+            };
+            Ok((1, total, 1, result_shape))
+        }
+        Some(ax) => {
+            let ndim = shape.len();
+            let ax = if ax < 0 {
+                (ndim as isize + ax) as usize
+            } else {
+                ax as usize
+            };
+            if ax >= ndim {
+                return Err(PyValueError::new_err("axis out of bounds"));
+            }
+            let outer: usize = shape.iter().take(ax).product();
+            let inner: usize = shape.iter().skip(ax + 1).product();
+            let dim_size = shape[ax];
+            let result_shape = if keepdims {
+                let mut s = shape.to_vec();
+                s[ax] = 1;
+                s
+            } else {
+                let mut s = shape.to_vec();
+                s.remove(ax);
+                s
+            };
+            Ok((outer, dim_size, inner, result_shape))
+        }
+    }
+}
+
+/// 沿轴求和（NaN 视为 0）。
+#[pyfunction]
+#[pyo3(signature = (x, axis=None, keepdims=false))]
+fn nansum(x: &NdArray, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray> {
+    let shape = x.data.shape().to_vec();
+    let (outer, dim_size, inner, result_shape) = axis_reduce_layout(&shape, axis, keepdims)?;
+    let data: Vec<f64> = x.data.iter().copied().collect();
+    let total_out = if result_shape.is_empty() {
+        1
+    } else {
+        result_shape.iter().product::<usize>().max(1)
+    };
+
+    // 并行优化：当外层循环足够大时使用并行
+    let out = if outer * inner >= PAR_THRESHOLD_CHEAP / 4 {
+        // 并行路径（通过 with_pool 绑定到用户配置的 rayon 池）
+        let out_vec: Vec<f64> = crate::threadpool::with_pool(|| {
+            (0..outer * inner)
+                .into_par_iter()
+                .map(|o| {
+                    let out_o = o / inner;
+                    let inn = o % inner;
+                    let base = out_o * dim_size * inner;
+                    let mut s = 0.0f64;
+                    for i in 0..dim_size {
+                        let v = data[base + i * inner + inn];
+                        if !v.is_nan() {
+                            s += v;
+                        }
+                    }
+                    s
+                })
+                .collect()
+        });
+        out_vec
+    } else {
+        // 串行路径
+        let mut out = vec![0.0f64; total_out];
+        let mut o = 0usize;
+        for out_o in 0..outer {
+            for inn in 0..inner {
+                let base = out_o * dim_size * inner;
+                let mut s = 0.0f64;
+                for i in 0..dim_size {
+                    let v = data[base + i * inner + inn];
+                    if !v.is_nan() {
+                        s += v;
+                    }
+                }
+                out[o] = s;
+                o += 1;
+            }
+        }
+        let _ = o;
+        out
+    };
+
+    let arr = Array::from_shape_vec(IxDyn(&result_shape), out)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
+}
+
+/// 沿轴求积（NaN 视为 1）。
+#[pyfunction]
+#[pyo3(signature = (x, axis=None, keepdims=false))]
+fn nanprod(x: &NdArray, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray> {
+    let shape = x.data.shape().to_vec();
+    let (outer, dim_size, inner, result_shape) = axis_reduce_layout(&shape, axis, keepdims)?;
+    let data: Vec<f64> = x.data.iter().copied().collect();
+    let total_out = if result_shape.is_empty() {
+        1
+    } else {
+        result_shape.iter().product::<usize>().max(1)
+    };
+    let mut out = vec![1.0f64; total_out];
+    let mut o = 0usize;
+    for out_o in 0..outer {
+        for inn in 0..inner {
+            let base = out_o * dim_size * inner;
+            let mut p = 1.0f64;
+            for i in 0..dim_size {
+                let v = data[base + i * inner + inn];
+                if !v.is_nan() {
+                    p *= v;
+                }
+            }
+            out[o] = p;
+            o += 1;
+        }
+    }
+    let _ = o;
+    let arr = Array::from_shape_vec(IxDyn(&result_shape), out)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
+}
+
+/// 沿轴求最大值（忽略 NaN；若全为 NaN 则返回 NaN）。
+#[pyfunction]
+#[pyo3(signature = (x, axis=None, keepdims=false))]
+fn nanmax(x: &NdArray, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray> {
+    let shape = x.data.shape().to_vec();
+    let (outer, dim_size, inner, result_shape) = axis_reduce_layout(&shape, axis, keepdims)?;
+    let data: Vec<f64> = x.data.iter().copied().collect();
+    let total_out = if result_shape.is_empty() {
+        1
+    } else {
+        result_shape.iter().product::<usize>().max(1)
+    };
+    let mut out = vec![f64::NAN; total_out];
+    let mut o = 0usize;
+    for out_o in 0..outer {
+        for inn in 0..inner {
+            let base = out_o * dim_size * inner;
+            let mut best: Option<f64> = None;
+            for i in 0..dim_size {
+                let v = data[base + i * inner + inn];
+                if !v.is_nan() {
+                    best = Some(match best {
+                        Some(b) if b >= v => b,
+                        _ => v,
+                    });
+                }
+            }
+            out[o] = best.unwrap_or(f64::NAN);
+            o += 1;
+        }
+    }
+    let _ = o;
+    let arr = Array::from_shape_vec(IxDyn(&result_shape), out)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
+}
+
+/// 沿轴求最小值（忽略 NaN；若全为 NaN 则返回 NaN）。
+#[pyfunction]
+#[pyo3(signature = (x, axis=None, keepdims=false))]
+fn nanmin(x: &NdArray, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray> {
+    let shape = x.data.shape().to_vec();
+    let (outer, dim_size, inner, result_shape) = axis_reduce_layout(&shape, axis, keepdims)?;
+    let data: Vec<f64> = x.data.iter().copied().collect();
+    let total_out = if result_shape.is_empty() {
+        1
+    } else {
+        result_shape.iter().product::<usize>().max(1)
+    };
+    let mut out = vec![f64::NAN; total_out];
+    let mut o = 0usize;
+    for out_o in 0..outer {
+        for inn in 0..inner {
+            let base = out_o * dim_size * inner;
+            let mut best: Option<f64> = None;
+            for i in 0..dim_size {
+                let v = data[base + i * inner + inn];
+                if !v.is_nan() {
+                    best = Some(match best {
+                        Some(b) if b <= v => b,
+                        _ => v,
+                    });
+                }
+            }
+            out[o] = best.unwrap_or(f64::NAN);
+            o += 1;
+        }
+    }
+    let _ = o;
+    let arr = Array::from_shape_vec(IxDyn(&result_shape), out)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
+}
+
+/// 沿轴求均值（忽略 NaN；若全为 NaN 则返回 NaN）。
+#[pyfunction]
+#[pyo3(signature = (x, axis=None, keepdims=false))]
+fn nanmean(x: &NdArray, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray> {
+    let shape = x.data.shape().to_vec();
+    let (outer, dim_size, inner, result_shape) = axis_reduce_layout(&shape, axis, keepdims)?;
+    let data: Vec<f64> = x.data.iter().copied().collect();
+    let total_out = if result_shape.is_empty() {
+        1
+    } else {
+        result_shape.iter().product::<usize>().max(1)
+    };
+    let mut out = vec![f64::NAN; total_out];
+    let mut o = 0usize;
+    for out_o in 0..outer {
+        for inn in 0..inner {
+            let base = out_o * dim_size * inner;
+            let mut s = 0.0f64;
+            let mut cnt = 0usize;
+            for i in 0..dim_size {
+                let v = data[base + i * inner + inn];
+                if !v.is_nan() {
+                    s += v;
+                    cnt += 1;
+                }
+            }
+            out[o] = if cnt == 0 { f64::NAN } else { s / cnt as f64 };
+            o += 1;
+        }
+    }
+    let _ = o;
+    let arr = Array::from_shape_vec(IxDyn(&result_shape), out)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
+}
+
+/// 沿轴求方差（忽略 NaN；若有效元素数 <= ddof 则返回 NaN）。
+#[pyfunction]
+#[pyo3(signature = (x, axis=None, ddof=0, keepdims=false))]
+fn nanvar(x: &NdArray, axis: Option<isize>, ddof: usize, keepdims: bool) -> PyResult<NdArray> {
+    let shape = x.data.shape().to_vec();
+    let (outer, dim_size, inner, result_shape) = axis_reduce_layout(&shape, axis, keepdims)?;
+    let data: Vec<f64> = x.data.iter().copied().collect();
+    let total_out = if result_shape.is_empty() {
+        1
+    } else {
+        result_shape.iter().product::<usize>().max(1)
+    };
+    let mut out = vec![f64::NAN; total_out];
+    let mut o = 0usize;
+    for out_o in 0..outer {
+        for inn in 0..inner {
+            let base = out_o * dim_size * inner;
+            let mut s = 0.0f64;
+            let mut cnt = 0usize;
+            // 第一遍：求均值
+            for i in 0..dim_size {
+                let v = data[base + i * inner + inn];
+                if !v.is_nan() {
+                    s += v;
+                    cnt += 1;
+                }
+            }
+            if cnt > ddof {
+                let mu = s / cnt as f64;
+                // 第二遍：求平方差和
+                let mut sq = 0.0f64;
+                for i in 0..dim_size {
+                    let v = data[base + i * inner + inn];
+                    if !v.is_nan() {
+                        let d = v - mu;
+                        sq += d * d;
+                    }
+                }
+                let n = (cnt - ddof) as f64;
+                out[o] = sq / n;
+            } else {
+                out[o] = f64::NAN;
+            }
+            o += 1;
+        }
+    }
+    let _ = o;
+    let arr = Array::from_shape_vec(IxDyn(&result_shape), out)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
+}
+
+/// 沿轴求标准差（忽略 NaN）。
+#[pyfunction]
+#[pyo3(signature = (x, axis=None, ddof=0, keepdims=false))]
+fn nanstd(x: &NdArray, axis: Option<isize>, ddof: usize, keepdims: bool) -> PyResult<NdArray> {
+    let mut v = nanvar(x, axis, ddof, keepdims)?;
+    v.data.mapv_inplace(|x| x.sqrt());
+    Ok(v)
+}
+
+/// 沿轴求最大值索引（忽略 NaN；若全为 NaN 则返回 0）。
+#[pyfunction]
+#[pyo3(signature = (a, axis=None))]
+fn nanargmax_axis(a: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
+    let shape = a.data.shape().to_vec();
+    let (outer, dim_size, inner, result_shape) = axis_reduce_layout(&shape, axis, false)?;
+    let data: Vec<f64> = a.data.iter().copied().collect();
+    let total_out = if result_shape.is_empty() {
+        1
+    } else {
+        result_shape.iter().product::<usize>().max(1)
+    };
+    let mut out = vec![0.0f64; total_out];
+    let mut o = 0usize;
+    for out_o in 0..outer {
+        for inn in 0..inner {
+            let base = out_o * dim_size * inner;
+            let mut best_idx = 0usize;
+            let mut best_val: Option<f64> = None;
+            for i in 0..dim_size {
+                let v = data[base + i * inner + inn];
+                if !v.is_nan() {
+                    match best_val {
+                        Some(b) if b >= v => {}
+                        _ => {
+                            best_val = Some(v);
+                            best_idx = i;
+                        }
+                    }
+                }
+            }
+            out[o] = best_idx as f64;
+            o += 1;
+        }
+    }
+    let _ = o;
+    let arr = Array::from_shape_vec(IxDyn(&result_shape), out)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
+}
+
+/// 沿轴求最小值索引（忽略 NaN；若全为 NaN 则返回 0）。
+#[pyfunction]
+#[pyo3(signature = (a, axis=None))]
+fn nanargmin_axis(a: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
+    let shape = a.data.shape().to_vec();
+    let (outer, dim_size, inner, result_shape) = axis_reduce_layout(&shape, axis, false)?;
+    let data: Vec<f64> = a.data.iter().copied().collect();
+    let total_out = if result_shape.is_empty() {
+        1
+    } else {
+        result_shape.iter().product::<usize>().max(1)
+    };
+    let mut out = vec![0.0f64; total_out];
+    let mut o = 0usize;
+    for out_o in 0..outer {
+        for inn in 0..inner {
+            let base = out_o * dim_size * inner;
+            let mut best_idx = 0usize;
+            let mut best_val: Option<f64> = None;
+            for i in 0..dim_size {
+                let v = data[base + i * inner + inn];
+                if !v.is_nan() {
+                    match best_val {
+                        Some(b) if b <= v => {}
+                        _ => {
+                            best_val = Some(v);
+                            best_idx = i;
+                        }
+                    }
+                }
+            }
+            out[o] = best_idx as f64;
+            o += 1;
+        }
+    }
+    let _ = o;
+    let arr = Array::from_shape_vec(IxDyn(&result_shape), out)
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok(NdArray {
+        imag: None,
+        data: arr,
+    })
+}
+
+/// 累积和（NaN 视为 0）。axis=None 时按扁平展开。
+#[pyfunction]
+#[pyo3(signature = (x, axis=None))]
+fn nancumsum(x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
+    let shape = x.data.shape().to_vec();
+    let data: Vec<f64> = x.data.iter().copied().collect();
+    if let Some(ax) = axis {
+        let ndim = shape.len();
+        let ax = if ax < 0 {
+            (ndim as isize + ax) as usize
+        } else {
+            ax as usize
+        };
+        if ax >= ndim {
+            return Err(PyValueError::new_err("axis out of bounds"));
+        }
+        let outer: usize = shape.iter().take(ax).product();
+        let inner: usize = shape.iter().skip(ax + 1).product();
+        let dim_size = shape[ax];
+        let mut out = vec![0.0f64; data.len()];
+        for o in 0..outer {
+            for inn in 0..inner {
+                let mut acc = 0.0f64;
+                for i in 0..dim_size {
+                    let idx = o * dim_size * inner + i * inner + inn;
+                    let v = data[idx];
+                    if !v.is_nan() {
+                        acc += v;
+                    }
+                    out[idx] = acc;
+                }
+            }
+        }
+        let arr = Array::from_shape_vec(IxDyn(&shape), out)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(NdArray {
+            imag: None,
+            data: arr,
+        })
+    } else {
+        // 扁平展开
+        let mut acc = 0.0f64;
+        let out: Vec<f64> = data
+            .iter()
+            .map(|&v| {
+                if !v.is_nan() {
+                    acc += v;
+                }
+                acc
+            })
+            .collect();
+        let arr = Array::from_shape_vec(IxDyn(&[out.len()]), out)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(NdArray {
+            imag: None,
+            data: arr,
+        })
+    }
+}
+
+/// 累积积（NaN 视为 1）。axis=None 时按扁平展开。
+#[pyfunction]
+#[pyo3(signature = (x, axis=None))]
+fn nancumprod(x: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
+    let shape = x.data.shape().to_vec();
+    let data: Vec<f64> = x.data.iter().copied().collect();
+    if let Some(ax) = axis {
+        let ndim = shape.len();
+        let ax = if ax < 0 {
+            (ndim as isize + ax) as usize
+        } else {
+            ax as usize
+        };
+        if ax >= ndim {
+            return Err(PyValueError::new_err("axis out of bounds"));
+        }
+        let outer: usize = shape.iter().take(ax).product();
+        let inner: usize = shape.iter().skip(ax + 1).product();
+        let dim_size = shape[ax];
+        let mut out = vec![0.0f64; data.len()];
+        for o in 0..outer {
+            for inn in 0..inner {
+                let mut acc = 1.0f64;
+                for i in 0..dim_size {
+                    let idx = o * dim_size * inner + i * inner + inn;
+                    let v = data[idx];
+                    if !v.is_nan() {
+                        acc *= v;
+                    }
+                    out[idx] = acc;
+                }
+            }
+        }
+        let arr = Array::from_shape_vec(IxDyn(&shape), out)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(NdArray {
+            imag: None,
+            data: arr,
+        })
+    } else {
+        let mut acc = 1.0f64;
+        let out: Vec<f64> = data
+            .iter()
+            .map(|&v| {
+                if !v.is_nan() {
+                    acc *= v;
+                }
+                acc
+            })
+            .collect();
+        let arr = Array::from_shape_vec(IxDyn(&[out.len()]), out)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(NdArray {
+            imag: None,
+            data: arr,
+        })
+    }
+}
+
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sum, m)?)?;
     m.add_function(wrap_pyfunction!(prod, m)?)?;
@@ -981,5 +1634,20 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(digitize, m)?)?;
     m.add_function(wrap_pyfunction!(argmax_axis, m)?)?;
     m.add_function(wrap_pyfunction!(argmin_axis, m)?)?;
+    m.add_function(wrap_pyfunction!(nan_to_num, m)?)?;
+    m.add_function(wrap_pyfunction!(ediff1d, m)?)?;
+    m.add_function(wrap_pyfunction!(trim_zeros, m)?)?;
+    m.add_function(wrap_pyfunction!(bincount_weighted, m)?)?;
+    m.add_function(wrap_pyfunction!(nansum, m)?)?;
+    m.add_function(wrap_pyfunction!(nanprod, m)?)?;
+    m.add_function(wrap_pyfunction!(nanmax, m)?)?;
+    m.add_function(wrap_pyfunction!(nanmin, m)?)?;
+    m.add_function(wrap_pyfunction!(nanmean, m)?)?;
+    m.add_function(wrap_pyfunction!(nanvar, m)?)?;
+    m.add_function(wrap_pyfunction!(nanstd, m)?)?;
+    m.add_function(wrap_pyfunction!(nanargmax_axis, m)?)?;
+    m.add_function(wrap_pyfunction!(nanargmin_axis, m)?)?;
+    m.add_function(wrap_pyfunction!(nancumsum, m)?)?;
+    m.add_function(wrap_pyfunction!(nancumprod, m)?)?;
     Ok(())
 }

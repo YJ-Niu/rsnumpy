@@ -52,11 +52,22 @@ fn where_<'py>(
             let cond_vec: Vec<f64> = condition.data.iter().copied().collect();
             let x_vec: Vec<f64> = xv.data.iter().copied().collect();
             let y_vec: Vec<f64> = yv.data.iter().copied().collect();
-            let result: Vec<f64> = cond_vec
-                .into_par_iter()
-                .zip(x_vec.into_par_iter().zip(y_vec.into_par_iter()))
-                .map(|(c, (xv, yv))| if c != 0.0 { xv } else { yv })
-                .collect();
+            let n = cond_vec.len();
+            let result: Vec<f64> = if n >= crate::PAR_THRESHOLD_CHEAP {
+                crate::threadpool::with_pool(|| {
+                    cond_vec
+                        .into_par_iter()
+                        .zip(x_vec.into_par_iter().zip(y_vec.into_par_iter()))
+                        .map(|(c, (xv, yv))| if c != 0.0 { xv } else { yv })
+                        .collect()
+                })
+            } else {
+                cond_vec
+                    .into_iter()
+                    .zip(x_vec.into_iter().zip(y_vec))
+                    .map(|(c, (xv, yv))| if c != 0.0 { xv } else { yv })
+                    .collect()
+            };
             let arr = Array::from_shape_vec(condition.data.dim(), result)
                 .map_err(|e| PyValueError::new_err(e.to_string()))?;
             let nd = NdArray {

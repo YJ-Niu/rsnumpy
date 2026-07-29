@@ -1,5 +1,7 @@
 """I/O 模块 - 所有实现位于 Rust，这里仅保留薄包装。"""
 
+from itertools import accumulate as _accumulate
+
 import rsnumpy.num_core as _core
 
 
@@ -143,12 +145,10 @@ def _split_fields(line, delimiter):
         line = line.strip("\r\n")
         if not line:
             return []
-        parts = []
-        pos = 0
-        for w in delimiter:
-            parts.append(line[pos:pos + w])
-            pos += w
-        return parts
+        # 使用 accumulate 计算累积结束位置，列表推导代替显式循环
+        ends = list(_accumulate(delimiter))
+        starts = [0] + ends[:-1]
+        return [line[s:e] for s, e in zip(starts, ends)]
     line = line.strip(" \r\n")
     return line.split(delimiter) if line else []
 
@@ -205,20 +205,21 @@ def genfromtxt(fname, dtype=float, comments='#', delimiter=None, skip_header=0,
         usecols = (usecols,)
 
     # 第一遍：按行拆成字符串字段（去注释、拆分）。
-    str_rows = []
-    count = 0
-    for line in lines:
+    # 抽取注释剥离为闭包，便于列表推导复用，避免显式 for 循环
+    def _strip_comment(line):
         if comments:
             ci = line.find(comments)
             if ci != -1:
-                line = line[:ci]
-        parts = _split_fields(line, delimiter)
-        if not parts:
-            continue
-        str_rows.append(parts)
-        count += 1
-        if max_rows is not None and count >= max_rows:
-            break
+                return line[:ci]
+        return line
+
+    # 生成器推导：惰性计算每行拆分结果，列表推导过滤空行
+    str_rows = [
+        parts for parts in (_split_fields(_strip_comment(line), delimiter) for line in lines)
+        if parts
+    ]
+    if max_rows is not None:
+        str_rows = str_rows[:max_rows]
 
     ndarray_cls = _get_ndarray()
     total_ncols = len(str_rows[0]) if str_rows else 0
@@ -226,14 +227,12 @@ def genfromtxt(fname, dtype=float, comments='#', delimiter=None, skip_header=0,
     # 完整字段名：提供的 names 填充前若干列，其余用 defaultfmt 编号（从 0 计未命名列）。
     full_names = None
     if name_list is not None:
-        full_names = []
-        k = 0
-        for i in range(total_ncols):
-            if i < len(name_list):
-                full_names.append(name_list[i])
-            else:
-                full_names.append(defaultfmt % k)
-                k += 1
+        n_provided = len(name_list)
+        # 使用列表推导代替显式循环，避免 k 计数器
+        full_names = [
+            name_list[i] if i < n_provided else defaultfmt % (i - n_provided)
+            for i in range(total_ncols)
+        ]
     elif dt_names is not None:
         full_names = list(dt_names)
     elif is_struct:
@@ -249,38 +248,39 @@ def genfromtxt(fname, dtype=float, comments='#', delimiter=None, skip_header=0,
 
     # 解析 usecols（字符串列名→索引，负索引归一）。
     if usecols is not None:
-        sel_indices = []
-        for c in usecols:
-            if isinstance(c, str):
-                sel_indices.append(full_names.index(c))
-            elif c < 0:
-                sel_indices.append(total_ncols + c)
-            else:
-                sel_indices.append(c)
+        # 使用列表推导代替显式 for 循环
+        sel_indices = [
+            full_names.index(c) if isinstance(c, str)
+            else (total_ncols + c if c < 0 else c)
+            for c in usecols
+        ]
     else:
         sel_indices = list(range(total_ncols))
 
     # converters：键（列名或索引）映射到完整列索引。
-    conv_by_idx = {}
+    # 使用字典推导代替显式 for 循环
     if converters:
-        for key, fn in converters.items():
-            if isinstance(key, str):
-                conv_by_idx[full_names.index(key)] = fn
-            elif key < 0:
-                conv_by_idx[total_ncols + key] = fn
-            else:
-                conv_by_idx[key] = fn
+        conv_by_idx = {
+            (full_names.index(key) if isinstance(key, str)
+             else (total_ncols + key if key < 0 else key)): fn
+            for key, fn in converters.items()
+        }
+    else:
+        conv_by_idx = {}
 
     # 字符串 dtype 分支：保留字段文本。
     if string_dtype:
-        rows = []
-        for parts in str_rows:
+        # 抽取行处理逻辑为闭包，便于列表推导复用
+        def _process_row(parts):
             sel = [parts[i] for i in sel_indices]
             if autostrip:
                 sel = [p.strip() for p in sel]
             if str_width is not None:
                 sel = [p[:str_width] for p in sel]
-            rows.append(sel)
+            return sel
+
+        # 使用列表推导代替显式 for 循环
+        rows = [_process_row(parts) for parts in str_rows]
         if rows and all(len(r) == 1 for r in rows):
             data = [r[0] for r in rows]
         elif len(rows) == 1:
@@ -348,37 +348,31 @@ def genfromtxt(fname, dtype=float, comments='#', delimiter=None, skip_header=0,
 
 def savez(file, *args, **kwds):
     """将多个数组保存为未压缩的 .npz 文件。"""
-    arrays = []
-    names = []
-    for name in sorted(kwds.keys()):
-        arrays.append(_ensure_raw(kwds[name]))
-        names.append(name)
-    for i, arg in enumerate(args):
-        arrays.append(_ensure_raw(arg))
-        names.append('arr_%d' % i)
+    # 使用 sorted + 列表推导代替显式 for 循环
+    sorted_names = sorted(kwds.keys())
+    arrays = [_ensure_raw(kwds[name]) for name in sorted_names] + [_ensure_raw(arg) for arg in args]
+    names = sorted_names + ['arr_%d' % i for i in range(len(args))]
     _core.savez_npz(file, arrays, names)
 
 
 def _is_integer_array(arr):
     """检查数组是否应该是整数类型。"""
     raw_list = arr.tolist()
-    
+
     def check_nested(data):
         if isinstance(data, list):
             return all(check_nested(x) for x in data)
         return abs(data - round(data)) < 1e-10
-    
+
     return check_nested(raw_list)
 
 
 def load_npz(file):
     """从 .npz 文件加载数组（返回 dict）。"""
     pairs = _core.load_npz(file)
-    result = {}
     ndarray_cls = _get_ndarray()
-    for key, raw in pairs:
-        if _is_integer_array(raw):
-            result[key] = ndarray_cls._wrap(raw, _dtype='int64')
-        else:
-            result[key] = ndarray_cls._wrap(raw, _dtype='float64')
-    return result
+    # 使用字典推导代替显式 for 循环
+    return {
+        key: ndarray_cls._wrap(raw, _dtype='int64' if _is_integer_array(raw) else 'float64')
+        for key, raw in pairs
+    }

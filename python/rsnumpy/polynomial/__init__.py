@@ -34,18 +34,21 @@ class Poly:
         return _wrap(_core.polyval_rs(self._coef_raw, x_arr._array))
 
     def __repr__(self):
-        terms = []
         deg = len(self.coef) - 1
-        for i, c in enumerate(self.coef):
+
+        # 抽取单项式格式化逻辑为闭包，便于列表推导复用
+        def _term(i, c):
             if c == 0:
-                continue
+                return None
             p = deg - i
             if p == 0:
-                terms.append(str(c))
-            elif p == 1:
-                terms.append(str(c) + "x")
-            else:
-                terms.append(str(c) + "x^" + str(p))
+                return str(c)
+            if p == 1:
+                return str(c) + "x"
+            return str(c) + "x^" + str(p)
+
+        # 列表推导 + 过滤 None
+        terms = [t for t in (_term(i, c) for i, c in enumerate(self.coef)) if t is not None]
         if not terms:
             return "Poly([0.])"
         return "Poly([" + ", ".join(terms) + "])"

@@ -29,6 +29,7 @@ mod searching;
 mod setops;
 mod sorting;
 mod statistics;
+mod threadpool;
 
 pub(crate) fn parse_py_list_to_flat(data: &Bound<'_, PyAny>) -> PyResult<(Vec<f64>, Vec<usize>)> {
     if let Ok(val) = data.extract::<f64>() {
@@ -1385,21 +1386,23 @@ impl NdArray {
                 let post_size: usize = shape.iter().skip(ax + 1).product();
                 let block_size = axis_size * post_size;
                 let data_vec: Vec<f64> = self.data.iter().copied().collect();
-                // 并行计算每个切片的乘积
+                // 并行计算每个切片的乘积（通过 with_pool 绑定到用户配置的 rayon 池）
                 let n_slices = pre_size * post_size;
-                let results: Vec<f64> = (0..n_slices)
-                    .into_par_iter()
-                    .map(|idx| {
-                        let outer = idx / post_size;
-                        let inner = idx % post_size;
-                        let base = outer * block_size + inner;
-                        let mut prod = 1.0_f64;
-                        for k in 0..axis_size {
-                            prod *= data_vec[base + k * post_size];
-                        }
-                        prod
-                    })
-                    .collect();
+                let results: Vec<f64> = crate::threadpool::with_pool(|| {
+                    (0..n_slices)
+                        .into_par_iter()
+                        .map(|idx| {
+                            let outer = idx / post_size;
+                            let inner = idx % post_size;
+                            let base = outer * block_size + inner;
+                            let mut prod = 1.0_f64;
+                            for k in 0..axis_size {
+                                prod *= data_vec[base + k * post_size];
+                            }
+                            prod
+                        })
+                        .collect()
+                });
                 let new_shape: Vec<usize> = if keepdims {
                     let mut s = shape.clone();
                     s[ax] = 1;
@@ -1835,21 +1838,23 @@ impl NdArray {
                             f64::NAN
                         };
                         let n_slices = pre_size * post_size;
-                        let results: Vec<f64> = (0..n_slices)
-                            .into_par_iter()
-                            .map(|idx| {
-                                let outer = idx / post_size;
-                                let inner = idx % post_size;
-                                let base = outer * axis_size * post_size + inner;
-                                let mean = mean_arr[outer * post_size + inner];
-                                let mut sum_sq = 0.0;
-                                for k in 0..axis_size {
-                                    let diff = data_vec[base + k * post_size] - mean;
-                                    sum_sq += diff * diff;
-                                }
-                                (sum_sq / denom).sqrt()
-                            })
-                            .collect();
+                        let results: Vec<f64> = crate::threadpool::with_pool(|| {
+                            (0..n_slices)
+                                .into_par_iter()
+                                .map(|idx| {
+                                    let outer = idx / post_size;
+                                    let inner = idx % post_size;
+                                    let base = outer * axis_size * post_size + inner;
+                                    let mean = mean_arr[outer * post_size + inner];
+                                    let mut sum_sq = 0.0;
+                                    for k in 0..axis_size {
+                                        let diff = data_vec[base + k * post_size] - mean;
+                                        sum_sq += diff * diff;
+                                    }
+                                    (sum_sq / denom).sqrt()
+                                })
+                                .collect()
+                        });
 
                         let out_shape = if keepdims {
                             let mut s = shape.clone();
@@ -1928,21 +1933,23 @@ impl NdArray {
                             f64::NAN
                         };
                         let n_slices = pre_size * post_size;
-                        let results: Vec<f64> = (0..n_slices)
-                            .into_par_iter()
-                            .map(|idx| {
-                                let outer = idx / post_size;
-                                let inner = idx % post_size;
-                                let base = outer * axis_size * post_size + inner;
-                                let mean = mean_arr[outer * post_size + inner];
-                                let mut sum_sq = 0.0;
-                                for k in 0..axis_size {
-                                    let diff = data_vec[base + k * post_size] - mean;
-                                    sum_sq += diff * diff;
-                                }
-                                sum_sq / denom
-                            })
-                            .collect();
+                        let results: Vec<f64> = crate::threadpool::with_pool(|| {
+                            (0..n_slices)
+                                .into_par_iter()
+                                .map(|idx| {
+                                    let outer = idx / post_size;
+                                    let inner = idx % post_size;
+                                    let base = outer * axis_size * post_size + inner;
+                                    let mean = mean_arr[outer * post_size + inner];
+                                    let mut sum_sq = 0.0;
+                                    for k in 0..axis_size {
+                                        let diff = data_vec[base + k * post_size] - mean;
+                                        sum_sq += diff * diff;
+                                    }
+                                    sum_sq / denom
+                                })
+                                .collect()
+                        });
 
                         let out_shape = if keepdims {
                             let mut s = shape.clone();
@@ -2158,19 +2165,23 @@ impl NdArray {
                 let block_size = axis_size * post_size;
                 // 并行排序每个轴切片
                 let n_slices = pre_size * post_size;
-                let sorted_slices: Vec<Vec<f64>> = (0..n_slices)
-                    .into_par_iter()
-                    .map(|idx| {
-                        let outer = idx / post_size;
-                        let inner = idx % post_size;
-                        let base = outer * block_size + inner;
-                        let mut slice: Vec<f64> = (0..axis_size)
-                            .map(|k| data_vec[base + k * post_size])
-                            .collect();
-                        slice.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-                        slice
-                    })
-                    .collect();
+                let sorted_slices: Vec<Vec<f64>> = crate::threadpool::with_pool(|| {
+                    (0..n_slices)
+                        .into_par_iter()
+                        .map(|idx| {
+                            let outer = idx / post_size;
+                            let inner = idx % post_size;
+                            let base = outer * block_size + inner;
+                            let mut slice: Vec<f64> = (0..axis_size)
+                                .map(|k| data_vec[base + k * post_size])
+                                .collect();
+                            slice.sort_by(|a, b| {
+                                a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+                            });
+                            slice
+                        })
+                        .collect()
+                });
                 // 写回结果（串行，排序已并行完成）
                 for (idx, sorted_slice) in sorted_slices.into_iter().enumerate() {
                     let outer = idx / post_size;
@@ -2224,21 +2235,23 @@ impl NdArray {
                 let block_size = axis_size * post_size;
                 // 并行计算每个轴切片的排序索引
                 let n_slices = pre_size * post_size;
-                let index_results: Vec<Vec<(usize, f64)>> = (0..n_slices)
-                    .into_par_iter()
-                    .map(|idx| {
-                        let outer = idx / post_size;
-                        let inner = idx % post_size;
-                        let base = outer * block_size + inner;
-                        let mut indexed: Vec<(usize, f64)> = (0..axis_size)
-                            .map(|k| (k, data_vec[base + k * post_size]))
-                            .collect();
-                        indexed.sort_by(|(_, a), (_, b)| {
-                            a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
-                        });
-                        indexed
-                    })
-                    .collect();
+                let index_results: Vec<Vec<(usize, f64)>> = crate::threadpool::with_pool(|| {
+                    (0..n_slices)
+                        .into_par_iter()
+                        .map(|idx| {
+                            let outer = idx / post_size;
+                            let inner = idx % post_size;
+                            let base = outer * block_size + inner;
+                            let mut indexed: Vec<(usize, f64)> = (0..axis_size)
+                                .map(|k| (k, data_vec[base + k * post_size]))
+                                .collect();
+                            indexed.sort_by(|(_, a), (_, b)| {
+                                a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+                            });
+                            indexed
+                        })
+                        .collect()
+                });
                 let mut result = data_vec;
                 for (idx, indexed) in index_results.into_iter().enumerate() {
                     let outer = idx / post_size;
@@ -2281,7 +2294,7 @@ where
         // 纯计算，主动释放 GIL 让其它 Python 线程可并行推进。
         let out = py.detach(|| {
             if data.len() >= PAR_THRESHOLD_CHEAP {
-                Zip::from(data).par_map_collect(|&x| op(x, scalar))
+                crate::threadpool::with_pool(|| Zip::from(data).par_map_collect(|&x| op(x, scalar)))
             } else {
                 data.mapv(|x| op(x, scalar))
             }
@@ -2347,7 +2360,7 @@ where
         // 省去把两个输入分别物化成 Vec 的额外分配。
         let z = Zip::from(a).and(b);
         return Ok(if a.len() >= PAR_THRESHOLD_CHEAP {
-            z.par_map_collect(|&x, &y| op(x, y))
+            crate::threadpool::with_pool(|| z.par_map_collect(|&x, &y| op(x, y)))
         } else {
             z.map_collect(|&x, &y| op(x, y))
         });
@@ -2358,7 +2371,7 @@ where
     if a.ndim() == 0 {
         let s = *a.first().unwrap();
         return Ok(if b.len() >= PAR_THRESHOLD_CHEAP {
-            Zip::from(b).par_map_collect(|&y| op(s, y))
+            crate::threadpool::with_pool(|| Zip::from(b).par_map_collect(|&y| op(s, y)))
         } else {
             b.mapv(|y| op(s, y))
         });
@@ -2366,7 +2379,7 @@ where
     if b.ndim() == 0 {
         let s = *b.first().unwrap();
         return Ok(if a.len() >= PAR_THRESHOLD_CHEAP {
-            Zip::from(a).par_map_collect(|&x| op(x, s))
+            crate::threadpool::with_pool(|| Zip::from(a).par_map_collect(|&x| op(x, s)))
         } else {
             a.mapv(|x| op(x, s))
         });
@@ -2411,7 +2424,7 @@ where
     let out_len: usize = out_shape.iter().product();
     let z = Zip::from(a_view).and(b_view);
     Ok(if out_len >= PAR_THRESHOLD_CHEAP {
-        z.par_map_collect(|&x, &y| op(x, y))
+        crate::threadpool::with_pool(|| z.par_map_collect(|&x, &y| op(x, y)))
     } else {
         z.map_collect(|&x, &y| op(x, y))
     })
@@ -2820,6 +2833,7 @@ fn num_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     io::register(m)?;
     buffer::register(m)?;
     formatting::register(m)?;
+    threadpool::register_module(m)?;
 
     m.add_function(wrap_pyfunction!(indexing::getitem_multi, m)?)?;
     m.add_function(wrap_pyfunction!(indexing::getitem_scalar, m)?)?;

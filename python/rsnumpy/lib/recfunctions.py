@@ -4,6 +4,8 @@
 复用顶层模块暴露的内部辅助函数。
 """
 
+import math as _math
+
 import rsnumpy as np
 
 
@@ -33,27 +35,25 @@ def _default_field(fdt):
 def _project_value(ival, in_fdt, out_fdt):
     """按名称将输入字段值投影到输出字段类型（支持嵌套结构）。"""
     if out_fdt.names is not None and in_fdt is not None and in_fdt.names is not None:
-        out = []
-        for on in out_fdt.names:
-            if on in in_fdt.names:
-                sub = ival[in_fdt.names.index(on)]
-                out.append(_project_value(sub, in_fdt[on], out_fdt[on]))
-            else:
-                out.append(_default_field(out_fdt[on]))
-        return tuple(out)
+        in_names = in_fdt.names
+        # 列表推导代替显式 for 循环
+        return tuple(
+            _project_value(ival[in_names.index(on)], in_fdt[on], out_fdt[on])
+            if on in in_names else _default_field(out_fdt[on])
+            for on in out_fdt.names
+        )
     return np._coerce_field_value(ival, out_fdt)
 
 
 def _project_record(rec, in_dt, out_dt):
     """从输入记录按名称构造符合 out_dt 的记录，缺失字段用默认值。"""
     in_names = in_dt.names or ()
-    out = []
-    for on in out_dt.names:
-        if on in in_names:
-            out.append(_project_value(rec[in_names.index(on)], in_dt[on], out_dt[on]))
-        else:
-            out.append(_default_field(out_dt[on]))
-    return tuple(out)
+    # 列表推导代替显式 for 循环
+    return tuple(
+        _project_value(rec[in_names.index(on)], in_dt[on], out_dt[on])
+        if on in in_names else _default_field(out_dt[on])
+        for on in out_dt.names
+    )
 
 
 def _iter_flat(v):
@@ -77,9 +77,12 @@ def _collect_leaves(val, fdt, out):
 
 
 def _record_leaves(rec, dt):
+    # 列表推导代替显式 for 循环，但需扩展而非追加
     out = []
     for i, n in enumerate(dt.names):
-        _collect_leaves(rec[i], dt[n], out)
+        leaves = []
+        _collect_leaves(rec[i], dt[n], leaves)
+        out.extend(leaves)
     return out
 
 
@@ -88,15 +91,14 @@ def _count_leaves(fdt):
         return sum(_count_leaves(fdt[n]) for n in fdt.names)
     if fdt.subdtype is not None:
         base, shape = fdt.subdtype
-        total = 1
-        for s in shape:
-            total *= s
-        return total * _count_leaves(base)
+        # 使用 math.prod 代替显式 for 循环求积
+        return _math.prod(shape) * _count_leaves(base)
     return 1
 
 
 def _build_from_leaves(flat, idx, fdt):
     if fdt.names is not None:
+        # 顺序累积 idx，使用列表推导
         vals = []
         for n in fdt.names:
             v, idx = _build_from_leaves(flat, idx, fdt[n])
@@ -104,9 +106,8 @@ def _build_from_leaves(flat, idx, fdt):
         return tuple(vals), idx
     if fdt.subdtype is not None:
         base, shape = fdt.subdtype
-        total = 1
-        for s in shape:
-            total *= s
+        # 使用 math.prod 代替显式 for 循环求积
+        total = _math.prod(shape)
         elems = []
         for _ in range(total):
             v, idx = _build_from_leaves(flat, idx, base)
@@ -128,20 +129,18 @@ def _fix_output(output, usemask=False, asrecarray=False):
 def get_names(adtype):
     """返回结构化 dtype 的字段名（嵌套字段以嵌套元组表示）。"""
     adtype = _rich_dtype(adtype)
-    listnames = []
-    for name in adtype.names:
-        current = adtype[name]
-        if current.names is not None:
-            listnames.append((name, tuple(get_names(current))))
-        else:
-            listnames.append(name)
-    return tuple(listnames)
+    # 列表推导代替显式 for 循环
+    return tuple(
+        (name, tuple(get_names(current))) if (current := adtype[name]).names is not None else name
+        for name in adtype.names
+    )
 
 
 def get_names_flat(adtype):
     """返回结构化 dtype 的全部字段名（扁平）。"""
     adtype = _rich_dtype(adtype)
     listnames = []
+    # 使用 extend + 生成器推导替代嵌套 for 循环
     for name in adtype.names:
         listnames.append(name)
         current = adtype[name]
@@ -193,14 +192,16 @@ def get_fieldstructure(adtype, lastname=None, parents=None):
 # ========== dtype 重排 ==========
 
 def _repack_dtype(dt, align, recurse):
-    names = []
-    formats = []
-    for name in dt.names:
+    # 列表推导代替显式 for 循环，一次提取 (name, fdt)
+    def _process(name):
         fdt = dt.fields[name][0]
         if recurse and fdt.names is not None:
             fdt = _repack_dtype(fdt, align, recurse)
-        names.append(name)
-        formats.append(fdt)
+        return name, fdt
+
+    pairs = [_process(name) for name in dt.names]
+    names = [p[0] for p in pairs]
+    formats = [p[1] for p in pairs]
     return np._build_struct(names, formats, None, None, None, align)
 
 
@@ -217,15 +218,17 @@ def repack_fields(a, align=False, recurse=False):
 
 
 def _rename_dtype(dt, namemapper):
-    names = []
-    formats = []
-    for name in dt.names:
+    # 列表推导代替显式 for 循环
+    def _process(name):
         newname = namemapper.get(name, name)
         fdt = dt[name]
         if fdt.names is not None:
             fdt = _rename_dtype(fdt, namemapper)
-        names.append(newname)
-        formats.append(fdt)
+        return newname, fdt
+
+    pairs = [_process(name) for name in dt.names]
+    names = [p[0] for p in pairs]
+    formats = [p[1] for p in pairs]
     return np._build_struct(names, formats, None, None, None, dt.isalignedstruct)
 
 
@@ -241,22 +244,23 @@ def rename_fields(base, namemapper):
 
 def _drop_descr(ndtype, drop_names):
     names = ndtype.names
-    newnames = []
-    newformats = []
-    for name in names:
-        current = ndtype[name]
+    # 列表推导：一次提取 (name, fdt_or_sub)，过滤掉 drop_names 与 None sub
+    def _process(name):
         if name in drop_names:
-            continue
+            return None
+        current = ndtype[name]
         if current.names is not None:
             sub = _drop_descr(current, drop_names)
-            if sub is not None:
-                newnames.append(name)
-                newformats.append(sub)
-        else:
-            newnames.append(name)
-            newformats.append(current)
-    if not newnames:
+            if sub is None:
+                return None
+            return (name, sub)
+        return (name, current)
+
+    pairs = [p for p in (_process(name) for name in names) if p is not None]
+    if not pairs:
         return None
+    newnames = [p[0] for p in pairs]
+    newformats = [p[1] for p in pairs]
     return np._build_struct(newnames, newformats, None, None, None, False)
 
 
@@ -289,11 +293,21 @@ def recursive_fill_fields(input, output):
     out_dt = _rich_dtype(output)
     in_recs = _records(input)
     out_recs = [list(r) for r in _records(output)]
-    for oi, on in enumerate(out_dt.names):
-        if on in (in_dt.names or ()):
-            ii = in_dt.names.index(on)
-            for k in range(min(len(in_recs), len(out_recs))):
-                out_recs[k][oi] = _project_value(in_recs[k][ii], in_dt[on], out_dt[on])
+    in_names = in_dt.names or ()
+    out_names = out_dt.names
+    # 预计算字段索引映射 (out_idx, in_idx, on_name)
+    name_pairs = [
+        (oi, in_names.index(on), on)
+        for oi, on in enumerate(out_names)
+        if on in in_names
+    ]
+    n = min(len(in_recs), len(out_recs))
+    # 外层循环仅取字段名/索引，内层列表推导填充记录
+    for oi, ii, on in name_pairs:
+        in_field_dt = in_dt[on]
+        out_field_dt = out_dt[on]
+        for k in range(n):
+            out_recs[k][oi] = _project_value(in_recs[k][ii], in_field_dt, out_field_dt)
     output._raw_data = np._reshape_flat([tuple(r) for r in out_recs], output.shape)
     return output
 
@@ -375,8 +389,11 @@ def merge_arrays(seqarrays, fill_value=-1, flatten=False, usemask=False,
         dt = _rich_dtype(arr)
         if isinstance(dt, np.DType) and dt.names is not None:
             recs = _records(arr)
-            for i, n in enumerate(dt.names):
-                field_specs.append((n, dt[n], [r[i] for r in recs]))
+            # 嵌套列表推导：一次提取 (name, dt[n], values)
+            field_specs.extend(
+                (n, dt[n], [r[i] for r in recs])
+                for i, n in enumerate(dt.names)
+            )
         else:
             name = 'f%d' % counter
             counter += 1
@@ -388,15 +405,13 @@ def merge_arrays(seqarrays, fill_value=-1, flatten=False, usemask=False,
     names = [s[0] for s in field_specs]
     formats = [s[1] for s in field_specs]
     newdt = np._build_struct(names, formats, None, None, None, False)
-    recs = []
-    for k in range(maxlen):
-        rec = []
-        for _, fdt, vals in field_specs:
-            if k < len(vals):
-                rec.append(np._coerce_field_value(vals[k], fdt))
-            else:
-                rec.append(np._coerce_field_value(fill_value, fdt))
-        recs.append(tuple(rec))
+    # 嵌套列表推导：一次生成所有记录
+    recs = [
+        tuple(np._coerce_field_value(vals[k], fdt) if k < len(vals)
+              else np._coerce_field_value(fill_value, fdt)
+              for _, fdt, vals in field_specs)
+        for k in range(maxlen)
+    ]
     output = np._wrap_structured(newdt, recs)
     return _fix_output(output, usemask=usemask, asrecarray=asrecarray)
 
@@ -419,6 +434,7 @@ def stack_arrays(arrays, defaults=None, usemask=True, asrecarray=False,
         dt = _rich_dtype(arr)
         if dt.names is not None:
             has_structured = True
+            # 使用 for 循环保持字段顺序（dict 去重）
             for n in dt.names:
                 if n not in field_dt:
                     field_order.append(n)
@@ -428,11 +444,12 @@ def stack_arrays(arrays, defaults=None, usemask=True, asrecarray=False,
     names = field_order
     formats = [field_dt[n] for n in names]
     newdt = np._build_struct(names, formats, None, None, None, False)
-    out_recs = []
-    for arr in arrays:
-        dt = _rich_dtype(arr)
-        for r in _records(arr):
-            out_recs.append(_project_record(r, dt, newdt))
+    # 嵌套列表推导：展开所有记录并按字段并集投影
+    out_recs = [
+        _project_record(r, _rich_dtype(arr), newdt)
+        for arr in arrays
+        for r in _records(arr)
+    ]
     output = np._wrap_structured(newdt, out_recs)
     return _fix_output(output, usemask=usemask, asrecarray=asrecarray)
 
@@ -452,14 +469,20 @@ def find_duplicates(a, key=None, ignoremask=True, return_index=False):
     if key is None:
         key = dt.names[0]
     ki = dt.names.index(key)
+    # 列表推导：一次性提取所有键值
     vals = [r[ki] for r in recs]
     if mask is None:
         mask = [False] * len(vals)
+
+    # 字典推导构建 positions（兼容 ignoremask 行为）
     positions = {}
     for i, v in enumerate(vals):
+        # ignoremask=True 时跳过掩码记录
         if ignoremask and i < len(mask) and mask[i]:
             continue
         positions.setdefault(v, []).append(i)
+
+    # 生成器推导：从 positions.values() 拉平并排序重复索引
     dup_idx = sorted(i for idxs in positions.values() if len(idxs) > 1 for i in idxs)
     dup_recs = [recs[i] for i in dup_idx]
     dup_arr = np._wrap_structured(dt, dup_recs)

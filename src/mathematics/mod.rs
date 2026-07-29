@@ -5,7 +5,7 @@ fn unary_math_op(py: Python<'_>, x: &NdArray, threshold: usize, op: fn(f64) -> f
     // 纯计算，主动释放 GIL；小数组走串行避免线程调度开销。
     let out = py.detach(|| {
         if data.len() >= threshold {
-            Zip::from(data).par_map_collect(|&v| op(v))
+            crate::threadpool::with_pool(|| Zip::from(data).par_map_collect(|&v| op(v)))
         } else {
             data.mapv(op)
         }
@@ -492,7 +492,7 @@ fn i0(py: Python<'_>, x: &NdArray) -> NdArray {
     let data = &x.data;
     let out = py.detach(|| {
         if data.len() >= PAR_THRESHOLD {
-            Zip::from(data).par_map_collect(|&v| bessel_i0(v))
+            crate::threadpool::with_pool(|| Zip::from(data).par_map_collect(|&v| bessel_i0(v)))
         } else {
             data.mapv(bessel_i0)
         }
@@ -542,7 +542,9 @@ fn interp(
     let data = &x.data;
     let out = py.detach(|| {
         if data.len() >= PAR_THRESHOLD {
-            Zip::from(data).par_map_collect(|&xi| interp_one(xi, &xpv, &fpv, lo, hi))
+            crate::threadpool::with_pool(|| {
+                Zip::from(data).par_map_collect(|&xi| interp_one(xi, &xpv, &fpv, lo, hi))
+            })
         } else {
             data.mapv(|xi| interp_one(xi, &xpv, &fpv, lo, hi))
         }
@@ -664,5 +666,158 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(interp, m)?)?;
     m.add_function(wrap_pyfunction!(convolve, m)?)?;
     m.add_function(wrap_pyfunction!(correlate, m)?)?;
+    m.add_function(wrap_pyfunction!(unwrap, m)?)?;
+    m.add_function(wrap_pyfunction!(base_repr, m)?)?;
+    m.add_function(wrap_pyfunction!(fmax, m)?)?;
+    m.add_function(wrap_pyfunction!(fmin, m)?)?;
+    m.add_function(wrap_pyfunction!(polymul, m)?)?;
     Ok(())
+}
+
+/// 相位解卷绕，沿指定轴
+#[pyfunction]
+#[pyo3(signature = (p, discont=None, axis=-1, period=6.283185307179587))]
+fn unwrap(p: &NdArray, discont: Option<f64>, axis: isize, period: f64) -> NdArray {
+    let shape = p.data.shape();
+    let ndim = shape.len();
+    if ndim == 0 {
+        return NdArray {
+            imag: p.imag.clone(),
+            data: p.data.clone(),
+        };
+    }
+    let ax = if axis < 0 {
+        (ndim as isize + axis) as usize
+    } else {
+        axis as usize
+    };
+    let discont_val = discont.unwrap_or(period / 2.0);
+
+    let flat: Vec<f64> = p.data.iter().copied().collect();
+    let mut result = flat.clone();
+
+    let outer_size: usize = shape[..ax].iter().product();
+    let inner_size: usize = shape[ax + 1..].iter().product();
+    let ax_len = shape[ax];
+    let outer_strides = inner_size * ax_len;
+    let inner_strides = inner_size;
+
+    // NumPy 算法：基于原始值计算 delta，用 cumsum 累加修正
+    for outer in 0..outer_size {
+        for inner in 0..inner_size {
+            let start = outer * outer_strides + inner;
+            let mut cumulative = 0.0_f64;
+            for i in 1..ax_len {
+                let idx_prev = start + (i - 1) * inner_strides;
+                let idx_curr = start + i * inner_strides;
+                // 使用原始值计算 delta
+                let delta = flat[idx_curr] - flat[idx_prev];
+                // 仅在超过 discont 时修正
+                if delta > discont_val {
+                    cumulative -= period;
+                } else if delta < -discont_val {
+                    cumulative += period;
+                }
+                result[idx_curr] += cumulative;
+            }
+        }
+    }
+
+    NdArray {
+        imag: None,
+        data: Array::from_shape_vec(IxDyn(shape), result).expect("形状不变"),
+    }
+}
+
+/// 将整数转换为给定进制的字符串
+#[pyfunction]
+#[pyo3(signature = (number, base=2, padding=0))]
+fn base_repr(number: i64, base: u32, padding: usize) -> String {
+    if !(2..=36).contains(&base) {
+        return String::new();
+    }
+    let digits = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    let neg = number < 0;
+    let mut num = number.unsigned_abs();
+    let mut out = Vec::new();
+    if num == 0 {
+        out.push(b'0');
+    }
+    while num > 0 {
+        out.push(digits[(num % base as u64) as usize]);
+        num /= base as u64;
+    }
+    // 前置 padding 个零（reverse 前追加，等价于在最终字符串前面补零）
+    out.extend(std::iter::repeat_n(b'0', padding));
+    out.reverse();
+    let mut s = String::from_utf8(out).unwrap_or_default();
+    if neg {
+        s.insert(0, '-');
+    }
+    s
+}
+
+/// fmax: 逐元素取较大值，NaN 视作缺失（与 NumPy 一致：仅当两者皆 NaN 才返回 NaN）。
+#[pyfunction]
+fn fmax(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
+    let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| {
+        if a.is_nan() {
+            b
+        } else if b.is_nan() || a >= b {
+            a
+        } else {
+            b
+        }
+    })?;
+    Ok(NdArray {
+        imag: None,
+        data: result,
+    })
+}
+
+/// fmin: 逐元素取较小值，NaN 视作缺失（与 NumPy 一致：仅当两者皆 NaN 才返回 NaN）。
+#[pyfunction]
+fn fmin(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
+    let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| {
+        if a.is_nan() {
+            b
+        } else if b.is_nan() || a <= b {
+            a
+        } else {
+            b
+        }
+    })?;
+    Ok(NdArray {
+        imag: None,
+        data: result,
+    })
+}
+
+/// 多项式乘法（系数按幂次降序），等价于离散卷积。
+#[pyfunction]
+fn polymul(a1: &NdArray, a2: &NdArray) -> PyResult<NdArray> {
+    let x: Vec<f64> = a1.data.iter().copied().collect();
+    let y: Vec<f64> = a2.data.iter().copied().collect();
+    if x.is_empty() || y.is_empty() {
+        return Ok(NdArray {
+            imag: None,
+            data: Array::from_shape_vec(IxDyn(&[0]), Vec::new())
+                .map_err(|e| PyValueError::new_err(e.to_string()))?,
+        });
+    }
+    let n = x.len() + y.len() - 1;
+    let mut res = vec![0.0_f64; n];
+    for (i, &xi) in x.iter().enumerate() {
+        if xi == 0.0 {
+            continue;
+        }
+        for (j, &yj) in y.iter().enumerate() {
+            res[i + j] += xi * yj;
+        }
+    }
+    Ok(NdArray {
+        imag: None,
+        data: Array::from_shape_vec(IxDyn(&[n]), res)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?,
+    })
 }

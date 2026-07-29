@@ -482,56 +482,108 @@ fn select_from(
         })
         .collect();
 
-    let result: Vec<f64> = (0..total)
-        .into_par_iter()
-        .map(|lin| {
-            // 解码输出多下标。
-            let mut rem = lin;
-            let mut out_coord = vec![0usize; out_shape.len()];
-            for (k, oc) in out_coord.iter_mut().enumerate() {
-                *oc = rem / out_strides[k];
-                rem %= out_strides[k];
-            }
-            // 组装源多下标：切片/高级块按输出坐标映射（整型轴已并入高级块）。
-            let mut src_idx = vec![0usize; axes.len()];
-            let mut cursor = 0usize;
-            for oa in &out_axes {
-                match oa {
-                    OutAxis::Slice(d) => {
-                        if let AxisPlan::Slice(idxs) = &axes[*d] {
-                            src_idx[*d] = idxs[out_coord[cursor]];
-                        }
-                        cursor += 1;
+    let result: Vec<f64> = if total >= crate::PAR_THRESHOLD_MEDIUM {
+        crate::threadpool::with_pool(|| {
+            (0..total)
+                .into_par_iter()
+                .map(|lin| {
+                    // 解码输出多下标。
+                    let mut rem = lin;
+                    let mut out_coord = vec![0usize; out_shape.len()];
+                    for (k, oc) in out_coord.iter_mut().enumerate() {
+                        *oc = rem / out_strides[k];
+                        rem %= out_strides[k];
                     }
-                    OutAxis::AdvBlock => {
-                        let adv_coord = &out_coord[cursor..cursor + adv_ndim];
-                        for (j, &ai) in adv_axes.iter().enumerate() {
-                            if let AxisPlan::Adv {
-                                shape: sh, flat, ..
-                            } = &axes[ai]
-                            {
-                                let off = adv_ndim - sh.len();
-                                let mut fidx = 0usize;
-                                for (dd, &sd) in sh.iter().enumerate() {
-                                    let c = if sd == 1 { 0 } else { adv_coord[off + dd] };
-                                    fidx += c * adv_strides[j][dd];
+                    // 组装源多下标：切片/高级块按输出坐标映射（整型轴已并入高级块）。
+                    let mut src_idx = vec![0usize; axes.len()];
+                    let mut cursor = 0usize;
+                    for oa in &out_axes {
+                        match oa {
+                            OutAxis::Slice(d) => {
+                                if let AxisPlan::Slice(idxs) = &axes[*d] {
+                                    src_idx[*d] = idxs[out_coord[cursor]];
                                 }
-                                if !flat.is_empty() && fidx < flat.len() {
-                                    src_idx[ai] = flat[fidx];
+                                cursor += 1;
+                            }
+                            OutAxis::AdvBlock => {
+                                let adv_coord = &out_coord[cursor..cursor + adv_ndim];
+                                for (j, &ai) in adv_axes.iter().enumerate() {
+                                    if let AxisPlan::Adv {
+                                        shape: sh, flat, ..
+                                    } = &axes[ai]
+                                    {
+                                        let off = adv_ndim - sh.len();
+                                        let mut fidx = 0usize;
+                                        for (dd, &sd) in sh.iter().enumerate() {
+                                            let c = if sd == 1 { 0 } else { adv_coord[off + dd] };
+                                            fidx += c * adv_strides[j][dd];
+                                        }
+                                        if !flat.is_empty() && fidx < flat.len() {
+                                            src_idx[ai] = flat[fidx];
+                                        }
+                                    }
                                 }
+                                cursor += adv_ndim;
                             }
                         }
-                        cursor += adv_ndim;
+                    }
+                    let mut src_off = 0usize;
+                    for (d, &si) in src_idx.iter().enumerate() {
+                        src_off += si * src_strides[d];
+                    }
+                    src_flat[src_off]
+                })
+                .collect()
+        })
+    } else {
+        (0..total)
+            .map(|lin| {
+                let mut rem = lin;
+                let mut out_coord = vec![0usize; out_shape.len()];
+                for (k, oc) in out_coord.iter_mut().enumerate() {
+                    *oc = rem / out_strides[k];
+                    rem %= out_strides[k];
+                }
+                let mut src_idx = vec![0usize; axes.len()];
+                let mut cursor = 0usize;
+                for oa in &out_axes {
+                    match oa {
+                        OutAxis::Slice(d) => {
+                            if let AxisPlan::Slice(idxs) = &axes[*d] {
+                                src_idx[*d] = idxs[out_coord[cursor]];
+                            }
+                            cursor += 1;
+                        }
+                        OutAxis::AdvBlock => {
+                            let adv_coord = &out_coord[cursor..cursor + adv_ndim];
+                            for (j, &ai) in adv_axes.iter().enumerate() {
+                                if let AxisPlan::Adv {
+                                    shape: sh, flat, ..
+                                } = &axes[ai]
+                                {
+                                    let off = adv_ndim - sh.len();
+                                    let mut fidx = 0usize;
+                                    for (dd, &sd) in sh.iter().enumerate() {
+                                        let c = if sd == 1 { 0 } else { adv_coord[off + dd] };
+                                        fidx += c * adv_strides[j][dd];
+                                    }
+                                    if !flat.is_empty() && fidx < flat.len() {
+                                        src_idx[ai] = flat[fidx];
+                                    }
+                                }
+                            }
+                            cursor += adv_ndim;
+                        }
                     }
                 }
-            }
-            let mut src_off = 0usize;
-            for (d, &si) in src_idx.iter().enumerate() {
-                src_off += si * src_strides[d];
-            }
-            src_flat[src_off]
-        })
-        .collect();
+                let mut src_off = 0usize;
+                for (d, &si) in src_idx.iter().enumerate() {
+                    src_off += si * src_strides[d];
+                }
+                src_flat[src_off]
+            })
+            .collect()
+    };
 
     Array::from_shape_vec(IxDyn(&out_shape), result)
         .map_err(|e| PyValueError::new_err(e.to_string()))

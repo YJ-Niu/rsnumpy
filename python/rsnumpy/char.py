@@ -121,15 +121,18 @@ def join(sep, a):
     """通过指定分隔符来连接数组中的元素或字符串。"""
     seps = _get_strings(sep)
     s = _get_strings(a)
-    result = []
-    for i, x in enumerate(s):
-        current_sep = seps[i % len(seps)]
+    n_seps = len(seps)
+
+    def _join_one(i, x):
+        current_sep = seps[i % n_seps]
         if isinstance(x, (list, tuple)):
-            result.append(current_sep.join(x))
-        elif isinstance(x, str):
-            result.append(current_sep.join(x))
-        else:
-            result.append(current_sep.join(str(c) for c in x))
+            return current_sep.join(x)
+        if isinstance(x, str):
+            return current_sep.join(x)
+        return current_sep.join(str(c) for c in x)
+
+    # 列表推导代替显式 for 循环
+    result = [_join_one(i, x) for i, x in enumerate(s)]
     if isinstance(a, str) and isinstance(sep, str):
         return result[0]
     return _make_result(result)
