@@ -696,7 +696,10 @@ class ndarray:
 
     def __abs__(self):
         """逐元素绝对值（内建 abs() 函数）。"""
-        return _wrap_result(np.abs(self._array), self._dtype)
+        result = _wrap_result(np.abs(self._array), self._dtype)
+        if result.ndim == 0:
+            return result.item()
+        return result
 
     def __eq__(self, other):
         if getattr(self, '_dtype_obj', None) is not None and \
@@ -4867,7 +4870,7 @@ __all__ = [
     'transpose', 'swapaxes', 'expand_dims', 'squeeze',
     'concatenate', 'stack', 'vstack', 'hstack', 'dstack', 'column_stack',
     'split', 'hsplit', 'vsplit', 'dsplit',
-    'tile', 'repeat',
+    'tile', 'repeat', 'LazyArray',
     'flip', 'fliplr', 'flipud', 'roll', 'rot90',
     'append', 'insert', 'delete', 'unique', 'resize',
     'where', 'take', 'put', 'select', 'nonzero', 'argwhere', 'flatnonzero',
