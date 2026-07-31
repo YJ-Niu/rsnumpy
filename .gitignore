@@ -26,7 +26,6 @@ user_rules.md
 *.swp
 *.swo
 *~
-WiFi_Loadpull_Audit.py
 # OS
 .DS_Store
 Thumbs.db
@@ -38,6 +37,7 @@ run_test2.py
 out.txt
 outfile*.npy
 runoob.npz
+WiFi_Loadpull_Audit.py
 outfile*
 skrf_copy/
 test_rf_1/
