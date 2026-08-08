@@ -1333,6 +1333,22 @@ def _is_ndarray(obj):
     return hasattr(obj, '_array')
 
 
+def _is_raw_ndarray(obj):
+    """检查对象是否为底层 Rust 绑定 ndarray（builtins.ndarray，无 _array 属性）。"""
+    return (
+        hasattr(obj, 'shape')
+        and hasattr(obj, 'dtype')
+        and hasattr(obj, 'ndim')
+        and hasattr(obj, 'tolist')
+        and not hasattr(obj, '_array')
+    )
+
+
+def _is_any_ndarray(obj):
+    """检查对象是否为 rsnumpy ndarray 或底层 Rust 绑定 ndarray。"""
+    return _is_ndarray(obj) or _is_raw_ndarray(obj)
+
+
 def _wrap_result(result, dtype="float64"):
     """将原始 ndarray 结果包装到 ndarray 类中。"""
     if hasattr(result, '__class__') and result.__class__.__name__ == 'ndarray':
@@ -3330,6 +3346,31 @@ def _flatten_data(data):
     return flat
 
 
+def _contains_ndarray(data):
+    """递归检查嵌套列表/元组中是否包含 rsnumpy ndarray 或底层 Rust 绑定 ndarray。"""
+    if _is_any_ndarray(data):
+        return True
+    if isinstance(data, (list, tuple)):
+        for x in data:
+            if _contains_ndarray(x):
+                return True
+    return False
+
+
+def _convert_ndarray_deep(data):
+    """递归将嵌套列表/元组中的 ndarray（含底层 Rust 绑定）转为 Python 原生数据（tolist）。
+
+    保持原有嵌套结构，仅替换 ndarray 节点为其 tolist() 结果。
+    """
+    if _is_any_ndarray(data):
+        return data.tolist()
+    if isinstance(data, list):
+        return [_convert_ndarray_deep(x) for x in data]
+    if isinstance(data, tuple):
+        return tuple(_convert_ndarray_deep(x) for x in data)
+    return data
+
+
 def _setitem_value(value):
     """规范化赋值右值供 Rust setitem_multi 使用：
     标量原样返回；ndarray 或嵌套列表展平为 C 序浮点列表（逐元素赋值）。
@@ -3347,7 +3388,14 @@ def _setitem_value(value):
         return value
     if isinstance(value, (list, tuple)):
         flat = _flatten_data(value)
-        if _py_any(isinstance(v, complex) for v in flat):
+        # 检查是否含复数：Python complex，或 0 维复数 ndarray 元素（如 arr[i,j,j]）
+        # 复数右值原样透传，交由 Rust coerce_value_to_nd -> parse_py_complex 保留虚部
+        has_complex = _py_any(
+            isinstance(v, complex)
+            or (hasattr(v, '_array') and getattr(v._array, 'is_complex', False))
+            for v in flat
+        )
+        if has_complex:
             return value
         return [float(v) for v in flat]
     return value
@@ -3450,6 +3498,13 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
     - 混合类型：使用结构化数组或 Python 列表
     """
     if dtype is None:
+        # ndarray 输入快速路径：直接沿用其 dtype，避免走回退路径产生 object dtype 警告。
+        if _is_ndarray(data):
+            arr = data.copy() if copy else data
+            if ndmin > arr.ndim:
+                new_shape = (1,) * (ndmin - arr.ndim) + arr.shape
+                arr = ndarray._wrap(arr._array.reshape(new_shape), _dtype=arr._dtype)
+            return arr
         # 数值 list/tuple 快速路径：Rust 单次完成展平 + dtype 推断 + 构造。
         if isinstance(data, (list, tuple)):
             try:
@@ -3463,6 +3518,21 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
                     new_shape = (1,) * (ndmin - arr.ndim) + arr.shape
                     arr = ndarray._wrap(arr._array.reshape(new_shape), _dtype=_dtype)
                 return arr
+        # build_array 不支持 ndarray 元素：递归展平嵌套列表中的 ndarray 再重试
+        if _contains_ndarray(data):
+            converted = _convert_ndarray_deep(data)
+            try:
+                raw, code = np.build_array(converted)
+            except (ValueError, TypeError):
+                raw = None
+            if raw is not None:
+                _dtype = _BUILD_ARRAY_DTYPES[code]
+                arr = ndarray._wrap(raw, _dtype=_dtype)
+                if ndmin > arr.ndim:
+                    new_shape = (1,) * (ndmin - arr.ndim) + arr.shape
+                    arr = ndarray._wrap(arr._array.reshape(new_shape), _dtype=_dtype)
+                return arr
+            data = converted
         # 回退慢路径：复数/字符串/不规则/标量
         if isinstance(data, tuple):
             data = list(data)
