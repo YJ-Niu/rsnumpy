@@ -2410,24 +2410,40 @@ def _set_slice(arr, key, value):
     n = len(recs)
     indices = list(range(*key.indices(n))) if isinstance(key, slice) else list(range(n))
     names = dt._names
+    nf = len(names)
     if _is_ndarray(value) and getattr(value, '_dtype_obj', None) is not None:
         vrecs = _flatten_records(value._raw_data)
         for pos, i in enumerate(indices):
             src = vrecs[pos % len(vrecs)]
             recs[i] = tuple(_coerce_field_value(src[j], dt._fields[names[j]][0])
-                            for j in range(len(names)))
+                            for j in range(nf))
     elif _is_ndarray(value):
         vals = value.tolist()
         for pos, i in enumerate(indices):
             sv = vals[pos % len(vals)]
-            recs[i] = tuple(_coerce_field_value(sv, dt._fields[nm][0]) for nm in names)
-    elif isinstance(value, (list, tuple)) and len(value) == len(names):
-        rec = _coerce_record(value, dt)
+            if isinstance(sv, (list, tuple)):
+                # 2-D ndarray：每行作为一条记录，sv[j] 对应第 j 个字段
+                recs[i] = tuple(_coerce_field_value(sv[j], dt._fields[names[j]][0])
+                                for j in range(nf))
+            else:
+                # 1-D ndarray：标量广播到所有字段
+                recs[i] = tuple(_coerce_field_value(sv, dt._fields[names[j]][0])
+                                for j in range(nf))
+    elif isinstance(value, list) and value and isinstance(value[0], (list, tuple)):
+        # 记录列表：每个元素是一条记录，按位置赋值（支持广播）
+        for pos, i in enumerate(indices):
+            recs[i] = _coerce_record(value[pos % len(value)], dt)
+    else:
+        # 单条记录或标量广播到所有索引
+        if isinstance(value, (list, tuple)):
+            # tuple/list 视为单条记录（符合 NumPy 约定）
+            rec = _coerce_record(value, dt)
+        else:
+            # 标量：广播到所有字段
+            rec = tuple(_coerce_field_value(value, dt._fields[names[j]][0])
+                        for j in range(nf))
         for i in indices:
             recs[i] = rec
-    else:
-        for i in indices:
-            recs[i] = tuple(_coerce_field_value(value, dt._fields[nm][0]) for nm in names)
     arr._raw_data = _reshape_flat(recs, arr.shape)
 
 
