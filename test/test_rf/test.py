@@ -1278,3 +1278,4 @@ Marchand_circuit.plot_s_db(m=1, n=1, lw=2)
 
 plt.ylim(-50, 10)
 ssaver('./test/test_rf/test61.png')
+print(np.random.rand(10))

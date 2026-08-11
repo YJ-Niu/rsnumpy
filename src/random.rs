@@ -16,6 +16,10 @@ thread_local! {
 
 static GLOBAL_SEED: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
 
+fn get_global_seed() -> u64 {
+    *GLOBAL_SEED.get_or_init(rand::random)
+}
+
 fn with_thread_rng<F, R>(f: F) -> R
 where
     F: FnOnce(&mut ::rand::rngs::StdRng) -> R,
@@ -23,7 +27,7 @@ where
     THREAD_RNG.with(|cell| {
         let mut rng = cell.borrow_mut();
         if rng.is_none() {
-            let seed = GLOBAL_SEED.get().copied().unwrap_or(0xdeadbeef);
+            let seed = get_global_seed();
             let mut hasher = std::collections::hash_map::DefaultHasher::new();
             std::thread::current().id().hash(&mut hasher);
             let thread_seed = seed.wrapping_add(hasher.finish().wrapping_mul(0x9e3779b97f4a7c15));
@@ -144,7 +148,7 @@ fn seed(val: u64) {
 
 #[pyfunction]
 fn get_state() -> u64 {
-    GLOBAL_SEED.get().copied().unwrap_or(0xdeadbeef)
+    get_global_seed()
 }
 
 #[pyfunction]
@@ -209,6 +213,7 @@ struct PyRandomState {
 #[pymethods]
 impl PyRandomState {
     #[new]
+    #[pyo3(signature = (seed=None))]
     fn new(seed: Option<u64>) -> Self {
         PyRandomState {
             rng: Mutex::new(::rand::rngs::StdRng::seed_from_u64(
@@ -348,6 +353,7 @@ impl PyGenerator {
 #[pymethods]
 impl PyGenerator {
     #[new]
+    #[pyo3(signature = (seed=None))]
     fn new(seed: Option<u64>) -> Self {
         PyGenerator {
             rng: Mutex::new(::rand::rngs::StdRng::seed_from_u64(

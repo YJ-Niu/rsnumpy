@@ -254,6 +254,5 @@ mod.name = 'Model'
 mod.plot_s_db(0, 0, color='k')
 mod.plot_s_db(1, 0, color='k')
 ssaver('./test/test_rf/test_data/test10.png')
-
 start_time = time.time()
 print(f"Time cost: {start_time - end_time} seconds")

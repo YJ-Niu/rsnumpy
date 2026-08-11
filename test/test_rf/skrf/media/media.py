@@ -1156,6 +1156,7 @@ class Media(ABC):
         return result
 
     def delay_load(
+        
             self,
             Gamma0: NumberLike,
             d: Number,
