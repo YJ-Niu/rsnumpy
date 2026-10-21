@@ -248,7 +248,8 @@ fn savez_npz(filename: &str, arrays: &Bound<'_, PyAny>, names: &Bound<'_, PyAny>
     let file = File::create(filename)
         .map_err(|e| PyValueError::new_err(format!("Failed to create file: {}", e)))?;
     let mut zip = zip::ZipWriter::new(file);
-    let options: zip::write::FileOptions<'_, '_, ()> = zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    let options: zip::write::FileOptions<'_, '_, ()> =
+        zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
 
     for (item, name_item) in arr_list.iter().zip(name_list.iter()) {
         let nd = item.extract::<NdArray>()?;
@@ -311,7 +312,10 @@ fn load_npz(filename: &str) -> PyResult<Vec<(String, NdArray)>> {
         let mut entry = zip
             .by_index(i)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let name = entry.name().map_err(|e| PyValueError::new_err(e.to_string()))?.to_string();
+        let name = entry
+            .name()
+            .map_err(|e| PyValueError::new_err(e.to_string()))?
+            .to_string();
         if !name.ends_with(".npy") {
             continue;
         }
