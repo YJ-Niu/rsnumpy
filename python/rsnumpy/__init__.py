@@ -866,6 +866,11 @@ class ndarray:
             return tuple(shape)
         return self._array.shape
 
+    @property
+    def device(self):
+        """返回数组所在的设备（rsnumpy 仅支持 CPU）。"""
+        return 'cpu'
+
     @shape.setter
     def shape(self, new_shape):
         """设置数组形状，相当于原地 reshape。"""
@@ -3963,7 +3968,7 @@ def _resolve_dtype(dtype):
         return dtype.name
     if isinstance(dtype, (list, tuple)):
         return "void"
-    dt_str = dtype if isinstance(dtype, str) else dtype.__name__
+    dt_str = dtype if isinstance(dtype, str) else getattr(dtype, 'name', getattr(dtype, '__name__', str(dtype)))
     if dt_str in ("complex", "complex128", "complex64", "cfloat", "cdouble"):
         return "complex128"
     if dt_str in ("int", "int_", "intp", "intc"):
