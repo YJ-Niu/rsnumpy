@@ -12,9 +12,22 @@ def _wrap(result):
     return _nd()(result)
 
 
+def _nested_to_list(x):
+    """Recursively turn nested arrays / lists / tuples into pure nested lists."""
+    if hasattr(x, '_array'):
+        return x.tolist()
+    if isinstance(x, (list, tuple)):
+        return [_nested_to_list(i) for i in x]
+    return x
+
+
 def _ensure_raw(a):
     if hasattr(a, '_array'):
         return a._array
+    if isinstance(a, (list, tuple)):
+        # Rust core cannot parse lists that contain array objects; promote
+        # them to pure nested lists first (e.g. concatenate([[X[0]], [X[1]]])).
+        return _core.ndarray(_nested_to_list(a))
     return _core.ndarray(a)
 
 
@@ -66,8 +79,8 @@ def rollaxis(a, axis, start=0):
     return moveaxis(a, axis, start)
 
 
-def broadcast_to(a, shape):
-    """将数组广播到新形状。"""
+def broadcast_to(a, shape, subok=None, device=None):
+    """将数组广播到新形状。subok/device 仅为兼容 numpy/array-api 签名，忽略。"""
     arr = a if hasattr(a, '_array') else _wrap(a)
     nd = _nd()
     dtype = getattr(arr, '_dtype', "float64")
@@ -135,7 +148,7 @@ def concatenate(arrays, axis=0):
     dtype = getattr(first, '_dtype', "float64")
     fields = getattr(first, '_fields', None)
     raw_data = getattr(first, '_raw_data', None)
-    raw_list = [a._array if hasattr(a, '_array') else _core.ndarray(a) for a in arr_list]
+    raw_list = [_ensure_raw(a) for a in arr_list]
     result = _core.concatenate(raw_list, axis)
     return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
 
@@ -150,7 +163,7 @@ def stack(arrays, axis=0):
     dtype = getattr(first, '_dtype', "float64")
     fields = getattr(first, '_fields', None)
     raw_data = getattr(first, '_raw_data', None)
-    raw_list = [a._array if hasattr(a, '_array') else _core.ndarray(a) for a in arr_list]
+    raw_list = [_ensure_raw(a) for a in arr_list]
     result = _core.stack(raw_list, axis)
     return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
 
@@ -165,7 +178,7 @@ def vstack(arrays):
     dtype = getattr(first, '_dtype', "float64")
     fields = getattr(first, '_fields', None)
     raw_data = getattr(first, '_raw_data', None)
-    raw_list = [a._array if hasattr(a, '_array') else _core.ndarray(a) for a in arr_list]
+    raw_list = [_ensure_raw(a) for a in arr_list]
     result = _core.vstack(raw_list)
     return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
 
@@ -180,7 +193,7 @@ def hstack(arrays):
     dtype = getattr(first, '_dtype', "float64")
     fields = getattr(first, '_fields', None)
     raw_data = getattr(first, '_raw_data', None)
-    raw_list = [a._array if hasattr(a, '_array') else _core.ndarray(a) for a in arr_list]
+    raw_list = [_ensure_raw(a) for a in arr_list]
     result = _core.hstack(raw_list)
     return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
 
@@ -195,7 +208,7 @@ def dstack(arrays):
     dtype = getattr(first, '_dtype', "float64")
     fields = getattr(first, '_fields', None)
     raw_data = getattr(first, '_raw_data', None)
-    raw_list = [a._array if hasattr(a, '_array') else _core.ndarray(a) for a in arr_list]
+    raw_list = [_ensure_raw(a) for a in arr_list]
     result = _core.concatenate(raw_list, 2)
     return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
 
@@ -210,7 +223,7 @@ def column_stack(arrays):
     dtype = getattr(first, '_dtype', "float64")
     fields = getattr(first, '_fields', None)
     raw_data = getattr(first, '_raw_data', None)
-    raw_list = [a._array if hasattr(a, '_array') else _core.ndarray(a) for a in arr_list]
+    raw_list = [_ensure_raw(a) for a in arr_list]
     result = _core.column_stack(raw_list)
     return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
 

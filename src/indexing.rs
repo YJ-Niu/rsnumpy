@@ -351,6 +351,15 @@ fn select_from(
     shape: &[usize],
 ) -> PyResult<Array<f64, IxDyn>> {
     if is_all_int(filled_indices) {
+        if shape.is_empty() || filled_indices.is_empty() {
+            // 0-d array or empty index - return first element or error
+            let d = data.as_standard_layout();
+            let flat = d.as_slice().unwrap();
+            if flat.is_empty() {
+                return Err(PyIndexError::new_err("index out of bounds"));
+            }
+            return Ok(Array::from_elem(IxDyn(&[]), flat[0]));
+        }
         let strides = compute_strides(shape);
         let d = data.as_standard_layout();
         let flat = d.as_slice().unwrap();
@@ -359,7 +368,11 @@ fn select_from(
             .enumerate()
             .map(|(i, idx)| {
                 if let IndexDesc::Int(v) = idx {
-                    v * strides[i]
+                    if i < strides.len() {
+                        *v * strides[i]
+                    } else {
+                        *v
+                    }
                 } else {
                     0
                 }
@@ -584,7 +597,7 @@ fn select_from(
                 for (d, &si) in src_idx.iter().enumerate() {
                     src_off += si * src_strides[d];
                 }
-                src_flat[src_off]
+                src_flat.get(src_off).copied().unwrap_or(0.0)
             })
             .collect()
     };

@@ -131,6 +131,13 @@ def getdata(a):
     return a._data if isinstance(a, MaskedArray) else a
 
 
+def getmask(a):
+    """numpy.ma.getmask 兼容：非掩码数组返回 nomask。"""
+    if isinstance(a, MaskedArray):
+        return a._mask
+    return nomask
+
+
 def getmaskarray(a):
     """返回掩码数组的布尔掩码。"""
     if isinstance(a, MaskedArray):

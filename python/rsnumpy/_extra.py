@@ -1785,10 +1785,39 @@ def promote_types(type1, type2):
 
 def result_type(*arrays_and_dtypes):
     """按 NumPy 提升规则返回结果类型。"""
-    names = [_canon_dt(x) for x in arrays_and_dtypes]
-    acc = names[0]
-    for n in names[1:]:
-        acc = _promote2(acc, n)
+    import sys as _sys
+    names = []
+    for x in arrays_and_dtypes:
+        try:
+            n = _canon_dt(x)
+        except Exception as e:
+            print(f"result_type: _canon_dt({type(x).__name__}) raised {e}", file=_sys.stderr)
+            n = 'float64'
+        if not isinstance(n, str):
+            n = str(n)
+        names.append(n)
+    # 过滤掉不在 _DT_INFO 中的名称
+    valid_names = []
+    for n in names:
+        if n in _DT_INFO:
+            valid_names.append(n)
+        else:
+            try:
+                resolved = _np().dtype(n).name
+                if resolved in _DT_INFO:
+                    valid_names.append(resolved)
+                else:
+                    valid_names.append('float64')
+            except Exception:
+                valid_names.append('float64')
+    if not valid_names:
+        return _np().dtype('float64')
+    acc = valid_names[0]
+    for n in valid_names[1:]:
+        try:
+            acc = _promote2(acc, n)
+        except Exception:
+            acc = 'float64'
     return _np().dtype(acc)
 
 
