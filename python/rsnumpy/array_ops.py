@@ -73,7 +73,11 @@ def broadcast_to(a, shape):
     dtype = getattr(arr, '_dtype', "float64")
     fields = getattr(arr, '_fields', None)
     raw_data = getattr(arr, '_raw_data', None)
-    result = _core.broadcast_to(arr._array, shape)
+    # Handle broadcasting to scalar shape ()
+    if shape == () or shape == []:
+        result = arr._array  # 0-d array is already scalar-shaped
+    else:
+        result = _core.broadcast_to(arr._array, shape)
     return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
 
 

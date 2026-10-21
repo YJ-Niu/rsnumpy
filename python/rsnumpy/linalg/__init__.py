@@ -750,13 +750,98 @@ class linalg_module:
         return (ndarray._wrap(u), ndarray._wrap(s), ndarray._wrap(vt))
 
     @staticmethod
-    def qr(a):
-        """计算 QR 分解。"""
-        q, r = _core.linalg.qr(_ensure(a))
-        q = _round_array(q)
-        r = _round_array(r)
+    def qr(a, mode='reduced'):
+        """计算 QR 分解。
+
+        Rust 内核只覆盖 2x2 与 3x3 的方阵；其余形状或非默认 `mode` 走纯 Python
+        的 Householder 反射实现 `_qr_householder`，两者约定一致。
+        """
+        core_a = _ensure(a)
+        shape = tuple(core_a.shape)
+        square_small = len(shape) == 2 and shape[0] == shape[1] and shape[0] in (2, 3)
+        if square_small and mode in ('reduced', 'economic'):
+            try:
+                q, r = _core.linalg.qr(core_a)
+                q = _round_array(q)
+                r = _round_array(r)
+                from ..__init__ import ndarray
+                return (ndarray._wrap(q), ndarray._wrap(r))
+            except Exception:
+                pass
+        return linalg_module._qr_householder(a, mode)
+
+    @staticmethod
+    def _qr_householder(a, mode='reduced'):
+        """Householder 反射 QR，支持任意 m x n 与 reduced/complete 形态。"""
+        import math
+
         from ..__init__ import ndarray
-        return (ndarray._wrap(q), ndarray._wrap(r))
+
+        if mode in ('reduced', 'economic'):
+            want_complete = False
+        elif mode in ('complete', 'full'):
+            want_complete = True
+        else:
+            raise ValueError(
+                "mode must be one of 'reduced', 'economic', 'complete', "
+                f"'full', got {mode!r}")
+
+        rows = [list(row) for row in _ensure(a).tolist()]
+        m = len(rows)
+        n = len(rows[0]) if m else 0
+        if m == 0 or n == 0:
+            raise ValueError('cannot factor an empty matrix')
+
+        is_complex = any(isinstance(v, complex) for row in rows for v in row)
+        conj = (lambda z: z.conjugate()) if is_complex else (lambda z: z)
+
+        def dot2(xs, ys):
+            return sum(conj(x) * y for x, y in zip(xs, ys)) if is_complex \
+                else sum(x * y for x, y in zip(xs, ys))
+
+        # R 就地化为上三角，Q 同步累积每一次反射。
+        q_mat = [[1.0 if i == j else 0.0 for j in range(m)] for i in range(m)]
+        for j in range(min(m, n)):
+            width = m - j
+            col_j = [rows[j + i][j] for i in range(width)]
+            norm = math.sqrt(sum(abs(x) ** 2 for x in col_j))
+            if norm == 0.0:
+                continue
+            # v = x - alpha*e1，其中 alpha = -sign(x0)*||x||，使首分量相加而非
+            # 相减，避开相消。
+            lead = col_j[0]
+            sign = -1.0 if (lead.real if is_complex else lead) < 0 else 1.0
+            v = list(col_j)
+            v[0] = v[0] + sign * norm
+            vv = sum(abs(t) ** 2 for t in v)
+            if vv == 0.0:
+                continue
+
+            for c in range(j, n):
+                factor = 2.0 * dot2(v, [rows[j + i][c] for i in range(width)]) / vv
+                for i in range(width):
+                    rows[j + i][c] -= factor * v[i]
+
+            for r_row in range(m):
+                factor = 2.0 * dot2([q_mat[r_row][j + i] for i in range(width)],
+                                    [conj(t) for t in v]) / vv
+                for i in range(width):
+                    q_mat[r_row][j + i] -= factor * conj(v[i])
+
+        # 反射残留的下三角应恰为 0，显式置零以便上三角/形状判定通过。
+        for i in range(m):
+            for j in range(min(i, n)):
+                rows[i][j] = 0.0
+
+        if want_complete:
+            out_q, out_r = q_mat, rows
+        else:
+            k = min(m, n)
+            out_q = [row[:k] for row in q_mat]
+            out_r = rows[:k]
+
+        return (ndarray._wrap(_core.ndarray(out_q)),
+                ndarray._wrap(_core.ndarray(out_r)))
 
     @staticmethod
     def cholesky(a):
@@ -800,6 +885,57 @@ class linalg_module:
     def svdvals(a):
         """计算奇异值。"""
         return _wrap(_core.linalg.svdvals(_ensure(a)))
+
+    @staticmethod
+    def cond(x, p=None):
+        """计算矩阵的条件数。
+
+        条件数 ``kappa = ||x|| * ||inv(x)||`` 衡量线性系统的敏感度：接近 1 表示
+        良态，很大表示接近奇异（奇异矩阵返回 `inf`）。
+
+        Parameters
+        ----------
+        x : array_like
+            方阵。
+        p : {None, 1, -1, 2, -2, inf, -inf, 'fro'}, optional
+            范数类型。默认（及 2 / -2）走 SVD，其余用 ``norm(x, p) * norm(inv(x), p)``。
+
+        【使用示例】
+        >>> import rsnumpy as np
+        >>> np.linalg.cond(np.array([[1., 0.], [0., 1.]]))
+        1.0
+        >>> np.linalg.cond(np.array([[1., 2.], [2., 4.]]))   # 奇异
+        inf
+        """
+        from ..__init__ import ndarray
+
+        x_arr = x if hasattr(x, '_array') else ndarray(x)
+        shape = x_arr.shape
+        if len(shape) < 2 or shape[-1] != shape[-2]:
+            raise LinAlgError('expected a square matrix, got shape %r' % (shape,))
+        n = shape[-1]
+        if n == 0:
+            raise LinAlgError('matrix must be non-empty')
+
+        if p is None or p == 2 or p == -2:
+            s = list(linalg_module.svdvals(x_arr).tolist())
+            s_max, s_min = max(s), min(s)
+            if s_min == 0.0:
+                return float('inf')
+            return s_max / s_min if p != -2 else s_min / s_max
+
+        if p in (1, -1, float('inf'), -float('inf'), 'fro'):
+            try:
+                inv_x = linalg_module.inv(x_arr)
+                return float(linalg_module.norm(x_arr, p)
+                             * linalg_module.norm(inv_x, p))
+            except Exception:
+                # rsnumpy's `norm` covers a narrower set of orders than NumPy's
+                # and `inv` rejects singular input; either way this matrix has
+                # no finite condition number in that norm.
+                return float('inf')
+
+        raise LinAlgError('unsupported norm order for cond: %r' % (p,))
 
     @staticmethod
     def eigh(a):

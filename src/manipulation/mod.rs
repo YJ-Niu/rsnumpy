@@ -415,43 +415,66 @@ fn insert_rs_internal(
     let pre_size: usize = shape.iter().take(ax).product();
     let post_size: usize = shape.iter().skip(ax + 1).product();
 
-    let needed = pre_size * post_size;
-    let mut vals = Vec::with_capacity(needed);
-    for i in 0..needed {
-        vals.push(values[i % values.len()]);
-    }
-
-    let idx_set: std::collections::BTreeSet<usize> = indices
+    // NumPy 不去重：`np.insert(a, [1, 1, 1], u, 0)` 要在同一处插入三次。
+    // 早先把下标收进 BTreeSet 会吃掉重复项，于是只插了一次，形状少 K-1。
+    let mut pairs: Vec<(usize, usize)> = indices
         .iter()
-        .map(|&i| {
+        .enumerate()
+        .map(|(slot, &i)| {
             let idx = if i < 0 {
                 (axis_size as isize + i) as usize
             } else {
                 i as usize
             };
-            idx.min(axis_size)
+            (idx.min(axis_size), slot)
         })
         .collect();
+    // 稳定按下标排序，同一位置的多次插入仍按 obj 给出的先后顺序写出。
+    pairs.sort_by_key(|&(idx, _)| idx);
 
-    let new_axis_size = axis_size + idx_set.len();
+    let k = pairs.len();
+    let new_axis_size = axis_size + k;
+
+    // 每个下标插入一片（post_size 个值）；values 不够时循环广播。
+    let total = pre_size * k * post_size;
+    let src_len = values.len().max(1);
+    let mut vals = Vec::with_capacity(total);
+    for i in 0..total {
+        vals.push(values[i % src_len]);
+    }
+
     let mut result = Vec::with_capacity(pre_size * new_axis_size * post_size);
     let block_size = axis_size * post_size;
 
     for outer in 0..pre_size {
         let base = outer * block_size;
-        let mut src_idx = 0;
-
-        for dest_idx in 0..new_axis_size {
-            if idx_set.contains(&dest_idx) {
-                let val_base = outer * post_size;
-                result.extend_from_slice(&vals[val_base..val_base + post_size]);
-            } else {
-                result.extend_from_slice(
-                    &flat_data[base + src_idx * post_size..base + (src_idx + 1) * post_size],
-                );
+        let mut out: Vec<f64> = Vec::with_capacity(new_axis_size * post_size);
+        let mut src_idx = 0usize;
+        // 按位置分组，同一位置的若干次插入连续写出。
+        let mut groups: Vec<(usize, Vec<usize>)> = Vec::new();
+        for &(idx, slot) in &pairs {
+            match groups.last_mut() {
+                Some(entry) if entry.0 == idx => entry.1.push(slot),
+                _ => groups.push((idx, vec![slot])),
+            }
+        }
+        let mut gi = 0usize;
+        for _dest in 0..new_axis_size {
+            if gi < groups.len() && groups[gi].0 == src_idx {
+                for &slot in &groups[gi].1 {
+                    let vb = (outer * k + slot) * post_size;
+                    for t in 0..post_size {
+                        out.push(vals[vb + t]);
+                    }
+                }
+                gi += 1;
+            } else if src_idx < axis_size {
+                let sb = base + src_idx * post_size;
+                out.extend_from_slice(&flat_data[sb..sb + post_size]);
                 src_idx += 1;
             }
         }
+        result.extend_from_slice(&out);
     }
 
     let mut new_shape = shape;

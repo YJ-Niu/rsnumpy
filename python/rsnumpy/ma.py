@@ -57,12 +57,29 @@ class MaskedArray:
         return self._data.shape
 
     @property
+    def ndim(self):
+        return self._data.ndim
+
+    @property
     def data(self):
         return self._data
 
     @property
     def mask(self):
-        return np.array(self._mask, dtype='bool')
+        return np.array(self._mask, dtype='bool').reshape(self.shape)
+
+    @mask.setter
+    def mask(self, value):
+        if value is None:
+            self._mask = [False] * _record_count(self._data)
+            return
+        mask = np.asarray(value, dtype='bool')
+        if mask.ndim == 0:
+            self._mask = [bool(mask)] * _record_count(self._data)
+            return
+        if mask.shape != self.shape:
+            raise ValueError("mask and data must have the same shape")
+        self._mask = [bool(item) for item in mask.reshape((-1,)).tolist()]
 
     def view(self, dtype=None, type=None):
         _ = type
@@ -74,8 +91,15 @@ class MaskedArray:
         return MaskedArray(newdata, newmask)
 
     def filled(self, fill_value=None):
-        _ = fill_value
-        return self._data
+        value = self.fill_value if fill_value is None else fill_value
+        if value is None:
+            value = 0
+        result = self._data.copy()
+        result[self.mask] = value
+        return result
+
+    def compressed(self):
+        return self._data[~self.mask].copy()
 
     def __getitem__(self, key):
         return self._data[key]
@@ -112,3 +136,39 @@ def getmaskarray(a):
     if isinstance(a, MaskedArray):
         return a.mask
     return np.zeros(getattr(a, 'shape', (0,)), dtype='bool')
+
+
+def asarray(a, dtype=None):
+    if isinstance(a, MaskedArray):
+        if dtype is not None and a.dtype != np.dtype(dtype):
+            return MaskedArray(a.data.astype(dtype), a.mask, fill_value=a.fill_value)
+        return a
+    return MaskedArray(np.asarray(a, dtype=dtype))
+
+
+def isMaskedArray(a):
+    return isinstance(a, MaskedArray)
+
+
+def masked_values(data, value, rtol=1e-5, atol=1e-8, copy=True):
+    data = np.array(data, copy=copy)
+    mask = np.abs(data - value) <= atol + rtol * np.abs(value)
+    return MaskedArray(data, mask=mask, fill_value=value)
+
+
+def masked_invalid(data, copy=True):
+    data = np.array(data, copy=copy)
+    return MaskedArray(data, mask=~np.isfinite(data))
+
+
+class _MaskedConstant:
+    def __repr__(self):
+        return 'masked'
+    def __str__(self):
+        return 'masked'
+    def __bool__(self):
+        return False
+
+
+masked = _MaskedConstant()
+nomask = False

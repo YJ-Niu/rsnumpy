@@ -365,7 +365,11 @@ fn select_from(
                 }
             })
             .sum();
-        return Ok(Array::from_elem(IxDyn(&[]), flat[flat_idx]));
+        if flat_idx >= flat.len() {
+            return Err(PyIndexError::new_err("index out of bounds"));
+        }
+        let val = flat.get(flat_idx).copied().unwrap_or(0.0);
+        return Ok(Array::from_elem(IxDyn(&[]), val));
     }
 
     if !has_fancy(filled_indices) {
