@@ -1,6 +1,6 @@
 [package]
 name = "rsnumpy"
-version = "1.2.4"
+version = "1.2.5"
 edition = "2024"
 
 [lib]
@@ -8,20 +8,20 @@ name = "rsnumpy"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.29.2", features = ["extension-module"] }
+pyo3 = { version = "0.30.1", features = ["extension-module"] }
 # matrixmultiply-threading：非 BLAS 平台上让纯 Rust GEMM 内核多线程并行。
 ndarray = { version = "0.17.2", features = [
     "rayon",
     "matrixmultiply-threading",
 ] }
 rayon = "1.12.0"
-rand = "0.10.2"
+rand = "0.10.3"
 rand_distr = "0.6.0"
 num-traits = "0.2.19"
 rustfft = "6.4.1"
 # 仅用 Stored 写 + 读 .npz（含 np.savez_compressed 的 deflate）。
 # 关掉默认特性，避免链入 zstd(C)/lzma/bzip2/ppmd/xz/aes 等未用编解码器，显著减小 .so。
-zip = { version = "8.6.0", default-features = false, features = [
+zip = { version = "9.0.5", default-features = false, features = [
     "deflate-flate2-zlib-rs",
 ] }
 num-complex = "0.4.6"

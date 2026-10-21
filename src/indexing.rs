@@ -365,6 +365,11 @@ fn select_from(
                 }
             })
             .sum();
+        if flat_idx >= flat.len() {
+            return Err(PyIndexError::new_err(
+                "index out of bounds",
+            ));
+        }
         return Ok(Array::from_elem(IxDyn(&[]), flat[flat_idx]));
     }
 

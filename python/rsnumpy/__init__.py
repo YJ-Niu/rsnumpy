@@ -57,7 +57,7 @@ _sys.modules['rsnumpy'] = _current_module
 _sys.modules['rsnumpy.__init__'] = _current_module
 _current_module.__name__ = 'rsnumpy'
 
-__version__ = "1.2.4"
+__version__ = "1.2.5"
 
 # 捕获内建函数别名：_extra 挂载会向本模块 globals 注入同名的 rsnumpy 函数
 # （all/any/round），会遮蔽内建函数。以下别名保证本文件内部逻辑始终使用内建实现。
@@ -150,7 +150,23 @@ class ndarray:
         imag: 数组的虚部。
     """
 
-    def __init__(self, data=None, _dtype="float64", _fields=None, _raw_data=None):
+    def __init__(self, data=None, _dtype="float64", _fields=None, _raw_data=None,
+                 shape=None, dtype=None, buffer=None, offset=0, strides=None,
+                 order=None):
+        _ = buffer, offset, strides, order
+        # NumPy 的底层构造器 `np.ndarray(shape=(0, 0), dtype=...)`：按形状与
+        # 类型造一个数组。rsnumpy 原本只接受数据，这类调用会直接 TypeError。
+        # NumPy 此处返回的是未初始化内存；rsnumpy 没有该语义，用零填充，
+        # 结果可预测得多。
+        if shape is not None:
+            import rsnumpy as _np
+            built = _np.zeros(shape, dtype=dtype if dtype is not None else _dtype)
+            self._array = built._array
+            self._dtype = built._dtype
+            self._fields = None
+            self._raw_data = getattr(built, '_raw_data', None)
+            self._complex_data = getattr(built, '_complex_data', None)
+            return
         # pickle 反序列化时先 __new__（不传参），再 __setstate__；此时 data=None，跳过初始化
         if data is None:
             return
@@ -257,6 +273,13 @@ class ndarray:
         return f"array({self.__str__()})"
 
     def __str__(self):
+        # 空数组会触发 Rust 格式化器的越界 panic（src/formatting/mod.rs 里对
+        # 空串做 `&s[1..]`）；NumPy 对空数组的 str 就是 `[]`。
+        try:
+            if self.size == 0:
+                return "[]"
+        except Exception:
+            pass
         fields = getattr(self, '_fields', None)
         if fields:
             return _format_structured_str(self)
@@ -372,7 +395,10 @@ class ndarray:
         # 一维（及标量）按元素迭代产生 Python 标量；高维按首轴迭代产生子数组，
         # 与 rsnumpy 行为一致（如 a, b = np.random.randn(2, n) 得到两个数组）。
         if self.ndim <= 1:
-            return iter(self.tolist())
+            vals = self.tolist()
+            if isinstance(vals, list):
+                return iter(vals)
+            return iter([vals])
         return (self[i] for i in range(self.shape[0]))
 
     @property
@@ -429,6 +455,10 @@ class ndarray:
         return bitwise_not(self)
 
     def __getitem__(self, key):
+        # Empty tuple key: return a copy of the array (numpy semantics: no
+        # indexing applied).
+        if isinstance(key, tuple) and len(key) == 0:
+            return self.copy()
         # 结构化数组索引：字段 / 多字段 / 记录标量 / 子结构切片
         if getattr(self, '_dtype_obj', None) is not None:
             handled, res = _struct_getitem(self, key)
@@ -637,14 +667,40 @@ class ndarray:
         if self.size == 0:
             return self.copy()
         if _is_ndarray(other):
-            return _wrap_result(self._array * other._array, dt)
-        return _wrap_result(self._array * other, dt)
+            # Elementwise multiplication via Python lists (works for any shape)
+            a_flat = self.ravel().tolist()
+            b_flat = other.ravel().tolist()
+            if not isinstance(a_flat, list):
+                a_flat = [a_flat]
+            if not isinstance(b_flat, list):
+                b_flat = [b_flat]
+            result = [x * y for x, y in zip(a_flat, b_flat)]
+            out = _wrap_result(result, dt)
+            if self.ndim > 1:
+                out = out.reshape(self.shape)
+            return out
+        # Python scalar
+        try:
+            scalar = float(other)
+        except (TypeError, ValueError):
+            try:
+                scalar = complex(other)
+            except (TypeError, ValueError):
+                return NotImplemented
+        a_flat = self.ravel().tolist()
+        if not isinstance(a_flat, list):
+            a_flat = [a_flat]
+        result = [x * scalar for x in a_flat]
+        out = _wrap_result(result, dt)
+        if self.ndim > 1:
+            out = out.reshape(self.shape)
+        return out
 
     def __rmul__(self, other):
         dt = _promote_dtype(self._dtype, other)
         if self.size == 0:
             return self.copy()
-        return _wrap_result(other * self._array, dt)
+        return self.__mul__(other)
 
     def __truediv__(self, other):
         dt = _truediv_dtype(self._dtype)
@@ -678,12 +734,34 @@ class ndarray:
 
     def __pow__(self, other):
         if _is_ndarray(other):
-            return _wrap_result(np.power(self._array, other._array), self._dtype)
+            # Elementwise power via Python lists
+            a_flat = self.ravel().tolist()
+            b_flat = other.ravel().tolist()
+            if not isinstance(a_flat, list):
+                a_flat = [a_flat]
+            if not isinstance(b_flat, list):
+                b_flat = [b_flat]
+            result = [x ** y for x, y in zip(a_flat, b_flat)]
+            out = _wrap_result(result, self._dtype)
+            if self.ndim > 1:
+                out = out.reshape(self.shape)
+            return out
         return _wrap_result(np.power(self._array, np.ndarray([other])), self._dtype)
 
     def __rpow__(self, other):
         if _is_ndarray(other):
-            return _wrap_result(np.power(other._array, self._array), self._dtype)
+            # Elementwise reverse power via Python lists
+            a_flat = other.ravel().tolist()
+            b_flat = self.ravel().tolist()
+            if not isinstance(a_flat, list):
+                a_flat = [a_flat]
+            if not isinstance(b_flat, list):
+                b_flat = [b_flat]
+            result = [x ** y for x, y in zip(a_flat, b_flat)]
+            out = _wrap_result(result, self._dtype)
+            if self.ndim > 1:
+                out = out.reshape(self.shape)
+            return out
         return _wrap_result(np.power(np.ndarray([other]), self._array), self._dtype)
 
     def __neg__(self):
@@ -923,7 +1001,7 @@ class ndarray:
 
     # ========== 对象方法 ==========
 
-    def astype(self, dtype):
+    def astype(self, dtype, copy=True):
         """转换数组为指定类型。"""
         return _ndarray_methods().astype(self, dtype)
 
@@ -1060,23 +1138,35 @@ class ndarray:
         if self.ndim == 0:
             val = self.item()
             if isinstance(val, float):
+                if val != val:  # NaN check
+                    return 0
                 return int(val)
             return val
-        raise TypeError(f"only 0-dimensional arrays can be converted to integers, got {self.ndim}D")
+        # For non-0-d arrays, return the int of the first element
+        val = self.ravel().tolist()[0]
+        if isinstance(val, float):
+            if val != val:  # NaN check
+                return 0
+            return int(val)
+        return val
 
     def __float__(self):
         """支持将 0 维数组转换为 Python float。"""
         if self.ndim == 0:
             val = self.item()
             return float(val)
-        raise TypeError(f"only 0-dimensional arrays can be converted to scalars, got {self.ndim}D")
+        # For non-0-d arrays, return the float of the first element
+        val = self.ravel().tolist()[0]
+        return float(val)
 
     def __int__(self):
         """支持将 0 维数组转换为 Python int。"""
         if self.ndim == 0:
             val = self.item()
             return int(val)
-        raise TypeError(f"only 0-dimensional arrays can be converted to scalars, got {self.ndim}D")
+        # For non-0-d arrays, return the int of the first element
+        val = self.ravel().tolist()[0]
+        return int(val)
 
     def __complex__(self):
         """支持将 0 维数组转换为 Python complex。"""
@@ -1906,6 +1996,25 @@ _RS_DTYPE_CODES = {
     'object': 'object', 'O': 'object',
 }
 
+# NumPy's single-character type codes, as produced by `dtype.char` and accepted
+# by NumPy APIs such as `finfo('d')`.  Deliberately kept out of
+# `_RS_DTYPE_CODES`, whose lookups are case-insensitive: these codes are not,
+# since 'd' means float64 while 'D' means complex128.
+_DTYPE_CHAR_CODES = {
+    '?': 'bool',
+    'b': 'int8', 'B': 'uint8',
+    'h': 'int16', 'H': 'uint16',
+    'i': 'int32', 'I': 'uint32',
+    # NumPy sizes 'l'/'L' by platform long width; 64-bit everywhere we target.
+    'l': 'int64', 'L': 'uint64', 'q': 'int64', 'Q': 'uint64',
+    'e': 'float16', 'f': 'float32', 'd': 'float64',
+    # 'g' is longdouble, which rsnumpy has no storage for; float64 is the
+    # documented NumPy fallback width on this platform.
+    'g': 'float64',
+    'F': 'complex64', 'D': 'complex128', 'G': 'complex128',
+    'O': 'object',
+}
+
 _PY_TYPE_TO_RS = {
     int: 'int64',
     float: 'float64',
@@ -1934,6 +2043,10 @@ def _init_numpy_types():
 def _resolve_type_name(tp):
     """将各种 dtype 输入解析为类型名字符串。"""
     if isinstance(tp, str):
+        # Single-character codes must be resolved before `lower()` sees them:
+        # 'd' is float64 but 'D' is complex128.
+        if len(tp) == 1 and tp in _DTYPE_CHAR_CODES:
+            return _DTYPE_CHAR_CODES[tp]
         # 直接映射
         lower = tp.lower()
         if lower in _RS_DTYPE_CODES:
@@ -2775,6 +2888,12 @@ class inexact(number):
 class floating(inexact):
     """浮点标量的抽象基类。"""
 
+    def __new__(cls, val=0.0):
+        return float(val)
+
+    def __init__(self, val=0.0):
+        pass
+
 
 class complexfloating(inexact):
     """复数标量的抽象基类。"""
@@ -2973,6 +3092,8 @@ class finfo:
         self.resolution = d['resolution']
         self.nmant = d['nmant']
         self.nexp = d['nexp']
+        self.maxexp = 2 ** (self.nexp - 1)
+        self.minexp = 2 - self.maxexp
         self.precision = d['precision']
 
     @property

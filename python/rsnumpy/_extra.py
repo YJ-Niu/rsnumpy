@@ -1129,15 +1129,30 @@ def tensordot(a, b, axes=2):
 
 
 def tri(N, M=None, k=0, dtype=None):
-    """下三角为 1、其余为 0 的矩阵。"""
-    _ = dtype
+    """下三角为 1、其余为 0 的矩阵。
+
+    `dtype` 决定结果类型；`np.bool_` 会给出真正的布尔数组。
+    """
     np = _np()
     if M is None:
         M = N
     rows = np.reshape(np.arange(0, N, 1), (N, 1))
     cols = np.reshape(np.arange(0, M, 1), (1, M))
-    return np.where(np.less_equal(cols, np.add(rows, float(k))),
-                    np.full((N, M), 1.0), np.full((N, M), 0.0))
+    result = np.where(np.less_equal(cols, np.add(rows, float(k))),
+                      np.full((N, M), 1.0), np.full((N, M), 0.0))
+    if dtype is None:
+        return result
+
+    # 早先这里整体丢弃了 dtype（`_ = dtype`），于是
+    # `np.tri(..., dtype=bool)` 交回的是浮点 0.0/1.0。而布尔索引分支靠
+    # dtype == 'bool' 判定，拿不到真布尔就会退化成整数索引，把 `a[mask]`
+    # 变成按行挑选的 (n, n, n)，而不是掩码选出的元素。
+    name = getattr(dtype, 'name', None)
+    if name is None:
+        name = getattr(dtype, '__name__', None) or str(dtype)
+    if name in ('bool_', '?'):
+        name = 'bool'
+    return result.astype(name)
 
 
 def tril(m, k=0):
@@ -1697,6 +1712,7 @@ _DT_INFO = {
     'uint8': ('u', 1), 'uint16': ('u', 2), 'uint32': ('u', 4), 'uint64': ('u', 8),
     'float16': ('f', 2), 'float32': ('f', 4), 'float64': ('f', 8),
     'complex64': ('c', 8), 'complex128': ('c', 16),
+    'string_': ('S', 0),
 }
 
 
@@ -2207,17 +2223,22 @@ class vectorize:
     - kwargs参数会显著降低性能（约5倍），建议使用位置参数
     """
 
-    def __init__(self, pyfunc, otypes=None, doc=None, excluded=None,
+    def __init__(self, pyfunc=None, otypes=None, doc=None, excluded=None,
                  cache=False, signature=None):
         self.pyfunc = pyfunc
         self.otypes = otypes
-        self.__doc__ = doc or getattr(pyfunc, '__doc__', None) or self.__doc__
+        self.__doc__ = doc or (getattr(pyfunc, '__doc__', None) if pyfunc else None) or self.__doc__
         self.excluded = excluded
         self.cache = cache
         self.signature = signature
         self._cached_result = None  # 缓存机制
 
     def __call__(self, *args, **kwargs):
+        # If used as @np.vectorize(otypes=...) without pyfunc, return a decorator
+        if self.pyfunc is None and len(args) == 1 and not kwargs and callable(args[0]):
+            self.pyfunc = args[0]
+            self.__doc__ = self.__doc__ or getattr(args[0], '__doc__', None)
+            return self
         """执行向量化函数调用。
 
         自动广播所有输入数组，并逐元素应用原函数。

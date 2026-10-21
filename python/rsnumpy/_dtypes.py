@@ -133,12 +133,69 @@ class DType:
         return self._itemsize
 
     @property
+    def type(self):
+        """该 dtype 对应的 Python 标量类型，对齐 `numpy.dtype.type`。
+
+        NumPy 通过它构造标量来嗅探类别，典型写法是
+        `np.iscomplexobj(dtype.type(1))`，所以要返回可调用的 builtin 类型，
+        而不是 rsnumpy 自己的标量包装。
+
+        【使用示例】
+        >>> import rsnumpy as np
+        >>> np.dtype('float64').type
+        <class 'float'>
+        >>> np.dtype('complex128').type
+        <class 'complex'>
+        """
+        kind = self._kind
+        if kind == 'b':
+            return bool
+        if kind == 'c':
+            return complex
+        if kind == 'f':
+            return float
+        if kind in ('i', 'u'):
+            return int
+        if kind == 'O':
+            return object
+        if kind == 'S':
+            return bytes
+        return str  # 'U' 与其余字符串类
+
+    @property
     def alignment(self):
         return self._alignment
 
     @property
     def byteorder(self):
         return self._byteorder
+
+    def newbyteorder(self, order='S'):
+        """Return a new dtype with a different byte order.
+
+        Parameters
+        ----------
+        order : str, optional
+            Byte order to force.  One of 'S', '<', '>', '=', '|',
+            'native', 'I', 'L', 'B'.  Defaults to swapping the current
+            byte order ('S').
+        """
+        if order == 'S' or order == 'native':
+            # Swap byte order
+            if self._byteorder == '<':
+                new_order = '>'
+            elif self._byteorder == '>':
+                new_order = '<'
+            else:
+                new_order = self._byteorder
+        elif order in ('<', '>', '|', '=', 'I', 'L', 'B', 'n'):
+            new_order = order
+        else:
+            raise ValueError(f"Invalid byte order: {order!r}")
+        new_dtype = DType()
+        new_dtype._copy_from(self)
+        new_dtype._byteorder = new_order
+        return new_dtype
 
     @property
     def names(self):

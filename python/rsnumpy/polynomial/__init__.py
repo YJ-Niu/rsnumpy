@@ -125,3 +125,7 @@ def polyroots(p):
     if isinstance(p, Poly):
         return p.roots()
     return Poly(p).roots()
+
+
+# Alias for NumPy compatibility
+Polynomial = Poly
