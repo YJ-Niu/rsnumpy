@@ -81,7 +81,26 @@ class ArrayFlags:
 
     @property
     def F_CONTIGUOUS(self):
-        return not getattr(self._arr, '_rs_strided', False)
+        # Compute from the real shape/byte-strides so a C-order array is
+        # (correctly) reported as NOT F-contiguous. The previous stub returned
+        # the same value as C_CONTIGUOUS, which made scipy's sparse ``toarray``
+        # take the Fortran scatter path on C-order buffers and scramble output.
+        shape = getattr(self._arr, 'shape', ())
+        strides = getattr(self._arr, 'strides', None)
+        itemsize = getattr(self._arr, 'itemsize', 8)
+        ndim = len(shape)
+        if ndim == 0:
+            return True
+        if strides is None:
+            # No stride info: rsnumpy arrays are C-order, so F-contiguous only
+            # when at most one dimension is non-trivial (0-d / 1-d / 1xN / Nx1).
+            return sum(1 for d in shape if d > 1) <= 1
+        expected = 1
+        for i in range(ndim):
+            if shape[i] != 1 and strides[i] != expected * itemsize:
+                return False
+            expected *= shape[i]
+        return True
 
     @property
     def OWNDATA(self):

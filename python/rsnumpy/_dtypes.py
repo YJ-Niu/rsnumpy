@@ -170,6 +170,16 @@ class DType:
     def byteorder(self):
         return self._byteorder
 
+    @property
+    def isnative(self):
+        """该 dtype 是否为原生字节序，对齐 `numpy.dtype.isnative`。"""
+        import sys
+        bo = self._byteorder
+        if bo in ('|', '=', '@', 'n', 'native'):
+            return True
+        native = '<' if sys.byteorder == 'little' else '>'
+        return bo == native
+
     def newbyteorder(self, order='S'):
         """Return a new dtype with a different byte order.
 
