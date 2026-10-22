@@ -3864,18 +3864,10 @@ def asarray(a, dtype=None, order=None):
         # ndarray (matching np.asarray semantics).
         return array(a, dtype=dtype, copy=False)
     if dtype is not None:
-        if isinstance(dtype, str):
-            dt_str = dtype
-        elif hasattr(dtype, '__name__'):
-            dt_str = dtype.__name__
-        elif hasattr(dtype, 'name'):
-            dt_str = dtype.name
-        else:
-            dt_str = str(dtype)
-        if dt_str in ("complex", "complex128", "complex64", "cfloat", "cdouble"):
-            _dtype = "complex128"
-        else:
-            _dtype = _resolve_dtype(dtype)
+        # 显式 dtype：委托给 array()。array() 里统一处理字符串 (S/U/V) 与结构化
+        # dtype；若在此处自行 _resolve_dtype + _coerce_dtype，字符串数据会被
+        # 错误地强制成 float64 数组（MATLAB 字符数组转换失败的根因）。
+        return array(a, dtype=dtype, copy=False)
     else:
         # 数值 list/tuple 快速路径：Rust 单次完成展平 + dtype 推断 + 构造。
         if isinstance(a, (list, tuple)):

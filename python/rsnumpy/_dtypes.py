@@ -517,6 +517,16 @@ def _parse_scalar_token(s):
         return _make_scalar(low, bo)
     if low in _CANON_FULL:
         return _make_scalar(_CANON_FULL[low], bo)
+    # 规范化名 str<N>/bytes<N>（见 DType.name）：<N> = itemsize*8。
+    # str: itemsize = width*4 → width = N//32；bytes: itemsize = width → width = N//8。
+    if low.startswith('str') and low[3:].isdigit():
+        n = int(low[3:])
+        if n % 32 == 0:
+            return _make_flexible('U', n // 32, bo)
+    if low.startswith('bytes') and low[5:].isdigit():
+        n = int(low[5:])
+        if n % 8 == 0:
+            return _make_flexible('S', n // 8, bo)
     if low in ('str', 'str_', 'unicode', 'unicode_'):
         return _make_flexible('U', 0, bo)
     if low in ('bytes', 'bytes_', 'string', 'string_'):
