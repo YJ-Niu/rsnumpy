@@ -300,6 +300,149 @@ def _solve_nested(a, b):
     return [_solve_nested(sa, sb) for sa, sb in zip(a, b)]
 
 
+def _svd_jacobi(mat, full_matrices=True, compute_uv=True):
+    """通用 SVD（单侧 Jacobi 旋转），支持任意 m×n、float/complex。
+
+    Rust 核心只覆盖 2×2，这里补齐一般形状，并实现 ``full_matrices`` /
+    ``compute_uv`` 语义（与 NumPy 一致：u 为 m×m（full）或 m×min（reduced），
+    vh 为 n×n（full）或 min×n（reduced），s 降序）。
+    """
+    import math
+
+    m = len(mat)
+    n = len(mat[0]) if m else 0
+    k = min(m, n)
+
+    if m == 0 or n == 0:
+        from ..__init__ import ndarray
+        if not compute_uv:
+            return ndarray([])
+        if full_matrices:
+            u = [[1.0 if i == j else 0.0 for j in range(m)] for i in range(m)]
+            vh = [[1.0 if i == j else 0.0 for j in range(n)] for i in range(n)]
+        else:
+            u = [[1.0 if i == j else 0.0 for j in range(k)] for i in range(m)]
+            vh = [[1.0 if i == j else 0.0 for j in range(n)] for i in range(k)]
+        return (ndarray(u), ndarray([]), ndarray(vh))
+
+    is_complex = any(isinstance(v, complex) for row in mat for v in row)
+    conj = (lambda z: z.conjugate()) if is_complex else (lambda z: z)
+
+    transposed = m < n
+    if transposed:
+        work = [[mat[i][j] for i in range(m)] for j in range(n)]
+        mm, nn = n, m
+    else:
+        work = [list(row) for row in mat]
+        mm, nn = m, n
+    # work: mm×nn, mm >= nn. Column rotations are accumulated in V (nn×nn).
+    V = [[1.0 if i == j else 0.0 for j in range(nn)] for i in range(nn)]
+
+    def col_dot(p, q):
+        return sum(conj(work[i][p]) * work[i][q] for i in range(mm))
+
+    for _sweep in range(100):
+        off = 0.0
+        diag = [abs(col_dot(p, p)) for p in range(nn)]
+        for p in range(nn):
+            for q in range(p + 1, nn):
+                g = col_dot(p, q)
+                off += abs(g) * abs(g)
+        if off <= 1e-28 * sum(d * d for d in diag) + 1e-300:
+            break
+        for p in range(nn):
+            for q in range(p + 1, nn):
+                alpha = abs(col_dot(p, p))
+                beta = abs(col_dot(q, q))
+                gamma = col_dot(p, q)
+                ag = abs(gamma)
+                if ag <= 1e-15 * math.sqrt(alpha * beta):
+                    continue
+                if is_complex and ag > 0.0:
+                    # rotate column q so the cross term becomes |gamma|
+                    phase = conj(gamma) / ag
+                    if abs(phase) > 0.0:
+                        for i in range(mm):
+                            work[i][q] *= phase
+                        for i in range(nn):
+                            V[i][q] *= phase
+                        gamma = abs(gamma)
+                z = (beta - alpha) / (2.0 * gamma)
+                # small-magnitude root of t^2 - 2*z*t - 1 = 0, matching the
+                # rotation convention [cp,cq] -> [c*cp+s*cq, -s*cp+c*cq]
+                t = (-1.0 if z >= 0 else 1.0) / (abs(z) + math.sqrt(1.0 + z * z))
+                c = 1.0 / math.sqrt(1.0 + t * t)
+                s = t * c
+                for i in range(mm):
+                    wp = work[i][p]
+                    wq = work[i][q]
+                    work[i][p] = c * wp + s * wq
+                    work[i][q] = -s * wp + c * wq
+                for i in range(nn):
+                    vp = V[i][p]
+                    vq = V[i][q]
+                    V[i][p] = c * vp + s * vq
+                    V[i][q] = -s * vp + c * vq
+
+    sig = [math.sqrt(abs(col_dot(p, p))) for p in range(nn)]
+    order = sorted(range(nn), key=lambda p: -sig[p])
+    sig = [sig[p] for p in order]
+    U = [[0.0] * nn for _ in range(mm)]
+    smax = sig[0] if sig else 0.0
+    for new_p, old_p in enumerate(order):
+        sp = sig[new_p]
+        if sp > 1e-15 * smax:
+            for i in range(mm):
+                U[i][new_p] = work[i][old_p] / sp
+    Vh = [[conj(V[j][order[i]]) for j in range(nn)] for i in range(nn)]
+
+    def _complete_orthonormal(cols, mm, ncols):
+        """把 ncols 个正交列扩展为 mm 列正交基（Gram-Schmidt on e_i）。"""
+        basis = [list(col) for col in cols]  # list of columns
+        for i in range(mm):
+            e = [1.0 if r == i else 0.0 for r in range(mm)]
+            for b in basis:
+                proj = sum(conj(b[r]) * e[r] for r in range(mm))
+                e = [e[r] - proj * b[r] for r in range(mm)]
+            ne = math.sqrt(sum(abs(x) ** 2 for x in e))
+            if ne < 1e-8:
+                continue
+            basis.append([x / ne for x in e])
+            if len(basis) == mm:
+                break
+        return basis
+
+    # rows are nn long; pad to mm so extra columns can be filled and the
+    # transposed branch can index U[j][i] for i in range(mm)
+    U = [row + [0.0] * (mm - len(row)) for row in U]
+    if full_matrices and mm > nn:
+        extra = _complete_orthonormal(
+            [[U[i][p] for i in range(mm)] for p in range(nn)], mm, nn)
+        for col_idx in range(nn, len(extra)):
+            col = extra[col_idx]
+            for i in range(mm):
+                U[i][col_idx] = col[i]
+
+    if transposed:
+        # B = A^T = U_b Σ Vh_b  =>  A = Vh_b^T Σ U_b^T (plain transposes)
+        u_out = [[Vh[i][j] for i in range(nn)] for j in range(nn)]
+        vh_out = [[U[j][i] for j in range(mm)] for i in range(mm)]
+    else:
+        u_out = U
+        vh_out = Vh
+
+    if not compute_uv:
+        from ..__init__ import ndarray
+        return ndarray(sig)
+
+    if not full_matrices:
+        u_out = [row[:k] for row in u_out]
+        vh_out = vh_out[:k]
+
+    from ..__init__ import ndarray
+    return (ndarray(u_out), ndarray(sig), ndarray(vh_out))
+
+
 class linalg_module:
     """线性代数模块 - 提供矩阵运算、求解、分解等功能。
 
@@ -523,7 +666,11 @@ class linalg_module:
         a_arr = a if hasattr(a, '_array') else ndarray(a)
         shape = a_arr.shape
         if len(shape) == 2 and not _is_complex_arr(a_arr):
-            return _wrap(_core.linalg.inv(_ensure(a_arr)))
+            # Rust core only handles 2x2/3x3; fall back to Gauss-Jordan for
+            # larger matrices.
+            if shape[0] <= 3 and shape[1] <= 3:
+                return _wrap(_core.linalg.inv(_ensure(a_arr)))
+            return ndarray(_gauss_jordan_inv(a_arr.tolist()))
 
         if len(shape) == 3:
             # (B, 2, 2) 批量求逆：直接调用 Rust 层 rayon 并行实现
@@ -565,6 +712,23 @@ class linalg_module:
         if hasattr(result, 'shape') and len(result.shape) == 0:
             return float(result.tolist())
         return result
+
+    @staticmethod
+    def vector_norm(x, /, *, ord=None, axis=None, keepdims=False):
+        """Array-API compatible vector norm (numpy.linalg.vector_norm)."""
+        import rsnumpy as _np
+        x_arr = x if hasattr(x, '_array') else _np.array(x)
+        absx = _np.abs(x_arr)
+        o = 2 if ord is None else ord
+        if o == 1:
+            return _np.sum(absx, axis=axis, keepdims=keepdims)
+        if o in (float('inf'), 'inf'):
+            return _np.max(absx, axis=axis, keepdims=keepdims)
+        if o in (float('-inf'), '-inf'):
+            return _np.min(absx, axis=axis, keepdims=keepdims)
+        if o in (2, 2.0, 'fro'):
+            return _np.sum(absx ** 2, axis=axis, keepdims=keepdims) ** 0.5
+        return _np.sum(absx ** o, axis=axis, keepdims=keepdims) ** (1.0 / o)
 
     @staticmethod
     def solve(a, b):
@@ -740,14 +904,40 @@ class linalg_module:
             return ndarray(evals)
 
     @staticmethod
-    def svd(a):
-        """计算奇异值分解。"""
-        u, s, vt = _core.linalg.svd(_ensure(a))
-        u = _round_array(u)
-        s = _round_array(s)
-        vt = _round_array(vt)
+    def svd(a, full_matrices=True, compute_uv=True, hermitian=False,
+            lapack_driver=None):
+        """计算奇异值分解 A = u @ diag(s) @ vh。
+
+        支持 NumPy 的 ``full_matrices`` / ``compute_uv`` 关键字；2×2 走 Rust
+        核心，其余形状用单侧 Jacobi（``_svd_jacobi``）。
+        """
         from ..__init__ import ndarray
-        return (ndarray._wrap(u), ndarray._wrap(s), ndarray._wrap(vt))
+
+        if hermitian:
+            evals = linalg_module.eigvals(a)
+            return ndarray([abs(v) for v in evals.tolist()]) \
+                if not compute_uv else linalg_module.eig(a)
+
+        a_arr = a if hasattr(a, '_array') else ndarray(a)
+        shape = tuple(a_arr.shape)
+        if len(shape) == 2 and shape == (2, 2) and compute_uv:
+            try:
+                u, s, vt = _core.linalg.svd(_ensure(a))
+                u = _round_array(u)
+                s = _round_array(s)
+                vt = _round_array(vt)
+                return (ndarray._wrap(u), ndarray._wrap(s), ndarray._wrap(vt))
+            except Exception:
+                pass
+        if len(shape) > 2:
+            # batched: loop over leading dims
+            results = [linalg_module.svd(a_arr[i], full_matrices, compute_uv)
+                       for i in range(shape[0])]
+            if not compute_uv:
+                return ndarray([r.tolist() for r in results])
+            return tuple(ndarray([r[j].tolist() for r in results])
+                         for j in range(3))
+        return _svd_jacobi(a_arr.tolist(), full_matrices, compute_uv)
 
     @staticmethod
     def qr(a, mode='reduced'):
@@ -863,7 +1053,7 @@ class linalg_module:
             return _wrap(_core.linalg.pinv(_ensure(a)))
         except ValueError:
             try:
-                u, s, vt = linalg_module.svd(a_arr)
+                u, s, vt = linalg_module.svd(a_arr, full_matrices=False)
                 tol = max(a_arr.shape) * max(s.tolist()) * 1e-15
                 s_inv = ndarray([1.0 / si if si > tol else 0.0 for si in s.tolist()])
                 return linalg_module.matmul(linalg_module.matmul(vt.T, _diag(s_inv)), u.T)

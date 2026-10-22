@@ -127,7 +127,14 @@ def sum(a, axis=None, dtype=None, out=None, keepdims=False, initial=None, where=
 def mean(a, axis=None, dtype=None, out=None, keepdims=False, where=True):
     """计算数组元素的平均值。"""
     _ = dtype, out, where
-    return _wrap(_core.mean(_ensure_raw(a), axis, keepdims))
+    raw_result = _core.mean(_ensure_raw(a), axis, keepdims)
+    if axis is not None:
+        # numpy semantics: reduction along an explicit axis returns an ndarray
+        # (0-d when all dimensions are reduced), never a Python scalar.
+        return _nd()(raw_result, _dtype='float64')
+    if hasattr(raw_result, 'ndim') and raw_result.ndim == 0:
+        return float(raw_result.tolist())
+    return _wrap(raw_result)
 
 
 def _needs_py_var_std(a, axis):

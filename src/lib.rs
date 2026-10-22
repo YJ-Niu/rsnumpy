@@ -961,7 +961,9 @@ impl NdArray {
 
     #[getter]
     fn flags<'a>(&self, py: Python<'a>) -> PyResult<Bound<'a, ArrayFlags>> {
-        Bound::new(py, ArrayFlags {})
+        let shape = self.data.shape().to_vec();
+        let strides = self.data.strides().to_vec();
+        Bound::new(py, ArrayFlags { shape, strides })
     }
 
     #[getter]
@@ -2680,21 +2682,57 @@ where
     })
 }
 
+/// C 连续判定：`strides`（元素步长）是否与 `shape` 的规范 C 序步长一致。
+/// 0 维与 1 维数组同时是 C 连续与 F 连续。
+fn is_c_contiguous(shape: &[usize], strides: &[isize]) -> bool {
+    let ndim = shape.len();
+    if ndim <= 1 {
+        return true;
+    }
+    let mut expected: isize = 1;
+    for i in (0..ndim).rev() {
+        if shape[i] != 1 && strides[i] != expected {
+            return false;
+        }
+        expected *= shape[i] as isize;
+    }
+    true
+}
+
+/// F 连续判定：`strides`（元素步长）是否与 `shape` 的规范 F 序步长一致。
+fn is_f_contiguous(shape: &[usize], strides: &[isize]) -> bool {
+    let ndim = shape.len();
+    if ndim <= 1 {
+        return true;
+    }
+    let mut expected: isize = 1;
+    for i in 0..ndim {
+        if shape[i] != 1 && strides[i] != expected {
+            return false;
+        }
+        expected *= shape[i] as isize;
+    }
+    true
+}
+
 /// ArrayFlags - 数组内存布局信息，与 NumPy 的 np.ndarray.flags 兼容
 #[pyclass(name = "ArrayFlags")]
-struct ArrayFlags {}
+struct ArrayFlags {
+    shape: Vec<usize>,
+    strides: Vec<isize>,
+}
 
 #[pymethods]
 #[allow(non_snake_case)]
 impl ArrayFlags {
     #[getter]
     fn C_CONTIGUOUS(&self) -> bool {
-        true
+        is_c_contiguous(&self.shape, &self.strides)
     }
 
     #[getter]
     fn F_CONTIGUOUS(&self) -> bool {
-        true
+        is_f_contiguous(&self.shape, &self.strides)
     }
 
     #[getter]

@@ -59,7 +59,21 @@ def loadtxt(fname, dtype=float, comments='#', delimiter=None, converters=None,
     """从文本文件加载数据。"""
     if delimiter is None:
         delimiter = ""
-    result = _wrap(_core.load_text(fname, delimiter, skiprows))
+    if hasattr(fname, 'read'):
+        # File-like object: parse in Python (Rust core only accepts paths).
+        text = fname.read()
+        if isinstance(text, bytes):
+            text = text.decode('utf-8', errors='replace')
+        rows = []
+        for line in text.splitlines()[skiprows:]:
+            line = line.strip()
+            if not line or (comments and line.startswith(comments)):
+                continue
+            parts = line.split(delimiter) if delimiter else line.split()
+            rows.append([float(p) for p in parts])
+        result = _get_ndarray()(rows)
+    else:
+        result = _wrap(_core.load_text(fname, delimiter, skiprows))
     if dtype == int:
         result = result.astype("int")
     elif dtype == float:
