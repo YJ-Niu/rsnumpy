@@ -7,7 +7,7 @@ from timeit import default_timer as timer
 from typing import TYPE_CHECKING, Any
 
 import rsnumpy as np
-import scipy
+import scicore as scipy
 
 # imports for type hinting
 if TYPE_CHECKING:

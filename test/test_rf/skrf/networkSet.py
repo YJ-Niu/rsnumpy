@@ -53,7 +53,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, TextIO
 
 import rsnumpy as np
-import scipy
+import scicore as scipy
 
 from . import mathFunctions as mf
 from .network import COMPONENT_FUNC_DICT, PRIMARY_PROPERTIES, Frequency, Network

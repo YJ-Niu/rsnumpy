@@ -30,7 +30,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from numbers import Number
 
-import scipy
+import rsnumpy as np
+import scicore as scipy
 from rsnumpy import arccosh, array, cosh, exp, heaviside, linspace, log, sqrt
 
 from .network import cascade_list

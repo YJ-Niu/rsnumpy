@@ -26,7 +26,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 import rsnumpy as np
-import scipy
+import scicore as scipy
 from rsnumpy.fft import fft, fftshift, ifft, ifftshift, irfft, rfft
 
 from .util import find_nearest_index

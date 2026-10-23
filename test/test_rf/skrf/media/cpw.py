@@ -13,7 +13,8 @@ from __future__ import annotations
 import warnings
 from typing import TYPE_CHECKING
 
-import scipy
+import rsnumpy as np
+import scicore as scipy
 from rsnumpy import any, exp, imag, log, pi, real, sinh, sqrt, tanh, zeros
 
 from .. import constants as _const

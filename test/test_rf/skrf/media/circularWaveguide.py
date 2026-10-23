@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import rsnumpy as np
-import scipy
+import scicore as scipy
 from rsnumpy import pi, sqrt, where
 
 from .. import constants as _const

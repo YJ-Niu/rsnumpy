@@ -62,7 +62,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Literal
 
 import rsnumpy as np
-import scipy
+import scicore as scipy
 from rsnumpy import angle, concatenate, conj, exp, flip, imag, ndarray, real, unwrap, zeros
 from rsnumpy.fft import fft, fftshift, ifftshift, irfft
 from rsnumpy.linalg import norm

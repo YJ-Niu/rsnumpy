@@ -15,9 +15,9 @@ from skrf import plotting
 from skrf.circuit import Circuit
 from skrf.calibration.deembedding import OpenShort
 from skrf.constants import to_meters
-from skrf.media import MLine, RectangularWaveguide
+from skrf.media import MLine, RectangularWaveguide 
 from skrf.media import Freespace
-from scipy.optimize import fmin
+from scicore.optimize import fmin
 from skrf.network import concat_ports, connect
 from skrf.constants import c
 

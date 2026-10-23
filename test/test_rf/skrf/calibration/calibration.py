@@ -120,7 +120,7 @@ from typing import Literal
 from warnings import warn
 
 import rsnumpy as np
-import scipy
+import scicore as scipy
 from rsnumpy import angle, einsum, exp, imag, invert, linalg, ones, poly1d, real, sqrt, zeros
 from rsnumpy.linalg import det
 
