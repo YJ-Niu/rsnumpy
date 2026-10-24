@@ -16,12 +16,18 @@ permissions:
 jobs:
   # ---------------- Linux: x86_64 + aarch64 ----------------
   # manylinux 容器内含全部 CPython，--find-interpreter 自动为每个版本各产出一个 wheel。
+  # aarch64 用原生 ARM runner 编译，免交叉编译开销；kache 编译缓存经 Actions cache
+  # 持久化（manylinux 容器内同样生效），后续 release 只重编改动的 crate。
   linux:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runs-on }}
     strategy:
       fail-fast: false
       matrix:
-        target: [x86_64, aarch64]
+        include:
+          - target: x86_64
+            runs-on: ubuntu-latest
+          - target: aarch64
+            runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 
@@ -30,6 +36,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
           manylinux: auto
+          kache: "true"
           args: --release --out dist --find-interpreter
 
       - uses: actions/upload-artifact@v4
@@ -43,7 +50,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
+        # 与 requires-python = ">=3.10" 对齐：cp39 wheel pip 装不上，不再构建。
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
     steps:
       - uses: actions/checkout@v4
 
@@ -57,6 +65,8 @@ jobs:
         with:
           # -i python 指向 setup-python 激活的解释器，确保为当前矩阵版本构建。
           args: --release --out dist -i python
+          # sccache 编译缓存跨矩阵 job、跨 run 共享，后续 release 只重编 rsnumpy 本身。
+          sccache: "true"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -71,7 +81,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
+        # 与 requires-python = ">=3.10" 对齐：cp39 wheel pip 装不上，不再构建。
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
     steps:
       - uses: actions/checkout@v4
 
@@ -84,6 +95,7 @@ jobs:
         with:
           target: universal2-apple-darwin
           args: --release --out dist -i python
+          sccache: "true"
 
       - uses: actions/upload-artifact@v4
         with:
