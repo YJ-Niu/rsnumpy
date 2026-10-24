@@ -1365,16 +1365,39 @@ impl NdArray {
     fn prod(&self, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray> {
         match axis {
             None => {
-                let val = self.data.iter().cloned().fold(1.0_f64, |a, b| a * b);
-                let shape = if keepdims {
-                    vec![1usize; self.data.ndim()]
+                if let Some(im) = &self.imag {
+                    // 复数乘积：(re + i·im) 逐元素相乘
+                    let re = &self.data;
+                    let n = re.len();
+                    let (mut pr, mut pi) = (1.0_f64, 0.0_f64);
+                    for i in 0..n {
+                        let ar = re[i];
+                        let ai = im[i];
+                        let nr = pr * ar - pi * ai;
+                        let ni = pr * ai + pi * ar;
+                        pr = nr;
+                        pi = ni;
+                    }
+                    let shape = if keepdims {
+                        vec![1usize; self.data.ndim()]
+                    } else {
+                        vec![]
+                    };
+                    let data = Array::from_elem(IxDyn(&shape), pr);
+                    let imag = Array::from_elem(IxDyn(&shape), pi);
+                    Ok(NdArray::from_complex(data, imag))
                 } else {
-                    vec![]
-                };
-                Ok(NdArray {
-                    imag: None,
-                    data: Array::from_elem(IxDyn(&shape), val),
-                })
+                    let val = self.data.iter().cloned().fold(1.0_f64, |a, b| a * b);
+                    let shape = if keepdims {
+                        vec![1usize; self.data.ndim()]
+                    } else {
+                        vec![]
+                    };
+                    Ok(NdArray {
+                        imag: None,
+                        data: Array::from_elem(IxDyn(&shape), val),
+                    })
+                }
             }
             Some(ax) => {
                 let ndim = self.data.ndim();
@@ -1714,16 +1737,35 @@ impl NdArray {
     fn sum(&self, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray> {
         match axis {
             None => {
-                let val = self.data.sum();
-                let shape = if keepdims {
-                    vec![1usize; self.data.ndim()]
+                if let Some(im) = &self.imag {
+                    // 复数求和：实部、虚部分别累加
+                    let re = &self.data;
+                    let n = re.len();
+                    let (mut sr, mut si) = (0.0_f64, 0.0_f64);
+                    for i in 0..n {
+                        sr += re[i];
+                        si += im[i];
+                    }
+                    let shape = if keepdims {
+                        vec![1usize; self.data.ndim()]
+                    } else {
+                        vec![]
+                    };
+                    let data = Array::from_elem(IxDyn(&shape), sr);
+                    let imag = Array::from_elem(IxDyn(&shape), si);
+                    Ok(NdArray::from_complex(data, imag))
                 } else {
-                    vec![]
-                };
-                Ok(NdArray {
-                    imag: None,
-                    data: Array::from_elem(IxDyn(&shape), val),
-                })
+                    let val = self.data.sum();
+                    let shape = if keepdims {
+                        vec![1usize; self.data.ndim()]
+                    } else {
+                        vec![]
+                    };
+                    Ok(NdArray {
+                        imag: None,
+                        data: Array::from_elem(IxDyn(&shape), val),
+                    })
+                }
             }
             Some(ax) => {
                 let ndim = self.data.ndim();
