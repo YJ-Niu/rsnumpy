@@ -123,7 +123,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import rsnumpy as np
-import scipy
+import scicore as scipy
 from rsnumpy import imag, pi, real, unwrap
 
 from .constants import ALMOST_ZERO, EIG_COND, EIG_MIN, INF, LOG_OF_NEG, NumberLike

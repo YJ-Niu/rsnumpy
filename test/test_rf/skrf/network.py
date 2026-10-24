@@ -203,7 +203,7 @@ from pathlib import Path
 from pickle import UnpicklingError
 
 import rsnumpy as np
-import scipy
+import scicore as scipy
 from rsnumpy import gradient, ndarray, shape
 from rsnumpy.linalg import inv as npy_inv
 

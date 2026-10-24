@@ -582,20 +582,63 @@ fn convolve_modes(x: &[f64], h: &[f64], mode: &str) -> Result<Vec<f64>, String> 
     }
 }
 
+/// 复数卷积：(x_re + i·x_im) * (h_re + i·h_im)，返回 (实部, 虚部)。
+fn convolve_complex(
+    x_re: &[f64],
+    x_im: &[f64],
+    h_re: &[f64],
+    h_im: &[f64],
+    mode: &str,
+) -> Result<(Vec<f64>, Vec<f64>), String> {
+    let rr = convolve_modes(x_re, h_re, mode)?;
+    let ri = convolve_modes(x_re, h_im, mode)?;
+    let ir = convolve_modes(x_im, h_re, mode)?;
+    let ii = convolve_modes(x_im, h_im, mode)?;
+    let n = rr.len();
+    let re = (0..n).map(|i| rr[i] - ii[i]).collect::<Vec<f64>>();
+    let im = (0..n).map(|i| ri[i] + ir[i]).collect::<Vec<f64>>();
+    Ok((re, im))
+}
+
 #[pyfunction]
 #[pyo3(signature = (a, v, mode="full"))]
 fn convolve(py: Python<'_>, a: &NdArray, v: &NdArray, mode: &str) -> PyResult<NdArray> {
-    let x: Vec<f64> = a.data.iter().copied().collect();
-    let h: Vec<f64> = v.data.iter().copied().collect();
-    let out = py
-        .detach(|| convolve_modes(&x, &h, mode))
-        .map_err(PyValueError::new_err)?;
-    let arr = Array::from_shape_vec(IxDyn(&[out.len()]), out)
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray {
-        imag: None,
-        data: arr,
-    })
+    let x_re: Vec<f64> = a.data.iter().copied().collect();
+    let h_re: Vec<f64> = v.data.iter().copied().collect();
+    if a.imag.is_none() && v.imag.is_none() {
+        // 纯实数卷积（原路径）
+        let out = py
+            .detach(|| convolve_modes(&x_re, &h_re, mode))
+            .map_err(PyValueError::new_err)?;
+        let arr = Array::from_shape_vec(IxDyn(&[out.len()]), out)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(NdArray {
+            imag: None,
+            data: arr,
+        })
+    } else {
+        // 复数卷积：(x_re + i·x_im) * (h_re + i·h_im)
+        //   real = conv(x_re, h_re) - conv(x_im, h_im)
+        //   imag = conv(x_re, h_im) + conv(x_im, h_re)
+        // 缺失的虚部补零到与实部等长（处理实/复混合输入）。
+        let x_im: Vec<f64> = match &a.imag {
+            Some(im) => im.iter().copied().collect(),
+            None => vec![0.0; x_re.len()],
+        };
+        let h_im: Vec<f64> = match &v.imag {
+            Some(im) => im.iter().copied().collect(),
+            None => vec![0.0; h_re.len()],
+        };
+        let out = py
+            .detach(|| convolve_complex(&x_re, &x_im, &h_re, &h_im, mode))
+            .map_err(PyValueError::new_err)?;
+        let (re, im) = out;
+        let re_arr = Array::from_shape_vec(IxDyn(&[re.len()]), re)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let im_arr = Array::from_shape_vec(IxDyn(&[im.len()]), im)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(NdArray::from_complex(re_arr, im_arr))
+    }
 }
 
 #[pyfunction]

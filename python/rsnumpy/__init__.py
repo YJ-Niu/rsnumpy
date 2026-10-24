@@ -58,7 +58,7 @@ _sys.modules['rsnumpy'] = _current_module
 _sys.modules['rsnumpy.__init__'] = _current_module
 _current_module.__name__ = 'rsnumpy'
 
-__version__ = "1.2.5"
+__version__ = "1.2.6"
 
 # 捕获内建函数别名：_extra 挂载会向本模块 globals 注入同名的 rsnumpy 函数
 # （all/any/round），会遮蔽内建函数。以下别名保证本文件内部逻辑始终使用内建实现。
@@ -4552,9 +4552,57 @@ def fromfunction(function, shape, *, dtype=None, **kwargs):
     return function(*grid, **kwargs)
 
 
+# dtype → struct (格式符, 字节宽)。rsnumpy 内部为 f64，缓冲区按 dtype 解成
+# float/complex 数值序列（整数也解为 float 值，与 numpy 数值比较语义一致）。
+_STRUCT_FOR_DTYPE = {
+    'bool': ('?', 1),
+    'int8': ('b', 1), 'int16': ('h', 2), 'int32': ('i', 4), 'int64': ('q', 8),
+    'uint8': ('B', 1), 'uint16': ('H', 2), 'uint32': ('I', 4), 'uint64': ('Q', 8),
+    'float16': ('e', 2), 'float32': ('f', 4), 'float64': ('d', 8),
+    'complex64': ('f', 4), 'complex128': ('d', 8),
+}
+# 带字节序前缀的 dtype 串（<i2、>f4、|u1、=i4 …）→ 归一化名
+_PREFIX_DTYPE_NAMES = {
+    'b1': 'int8', 'i1': 'int8', 'u1': 'uint8',
+    'b2': 'int16', 'i2': 'int16', 'u2': 'uint16',
+    'b4': 'int32', 'i4': 'int32', 'u4': 'uint32',
+    'b8': 'int64', 'i8': 'int64', 'u8': 'uint64',
+    'f2': 'float16', 'f4': 'float32', 'f8': 'float64',
+    'c8': 'complex64', 'c16': 'complex128',
+}
+
+
+def _decode_buffer_bytes(buffer, dtype, count):
+    """按 dtype 把字节缓冲解码为数值序列（支持小端/大端）。"""
+    import struct as _struct
+    dt = dtype
+    bo = '<'  # 文件缓冲（WAV/MAT 等）默认小端；目标平台均为小端
+    if isinstance(dt, str) and dt and dt[0] in '<>=':
+        bo = '<' if dt[0] == '<' else ('>' if dt[0] == '>' else '=')
+        name = _PREFIX_DTYPE_NAMES.get(dt[1:])
+    else:
+        name = _resolve_dtype(dt)
+    info = _STRUCT_FOR_DTYPE.get(name) if name else None
+    if info is None:
+        return list(np.bytes_to_floats(buffer, count).tolist())
+    char, size = info
+    n = len(buffer) // size
+    if count >= 0:
+        n = min(n, count)
+    if n == 0:
+        return []
+    if char == '?':
+        return [b != 0 for b in buffer[:n]]
+    if name.startswith('complex'):
+        flat = list(_struct.unpack(bo + char * (2 * n), buffer[:n * 2 * size]))
+        return [flat[i] + flat[i + 1] * 1j for i in range(0, len(flat), 2)]
+    return list(_struct.unpack(bo + char * n, buffer[:n * size]))
+
+
 def frombuffer(buffer, dtype=None, count=-1, offset=0, *, like=None):
-    """从缓冲区创建一维数组（使用 Rust 层实现）。"""
-    if isinstance(buffer, bytes):
+    """从缓冲区创建一维数组（按 dtype 解码字节）。"""
+    if isinstance(buffer, (bytes, bytearray, memoryview)):
+        buffer = bytes(buffer)
         if offset > 0:
             buffer = buffer[offset:]
         if isinstance(dtype, str) and len(dtype) > 1 and dtype[0] == 'S' and dtype[1:].isdigit():
@@ -4565,8 +4613,49 @@ def frombuffer(buffer, dtype=None, count=-1, offset=0, *, like=None):
                 total = min(total, count)
             raw = [buffer[i * elem_size:(i + 1) * elem_size] for i in range(total)]
             return ndarray(np.zeros((len(raw),)), _dtype=dtype, _raw_data=raw)
-        return ndarray(np.bytes_to_floats(buffer, count))
+        values = _decode_buffer_bytes(buffer, dtype, count)
+        return ndarray(values)
     return ndarray(list(buffer))
+
+
+def _dtype_itemsize(dtype):
+    """返回 dtype 的元素字节大小（complex 为对应 float 的两倍）。"""
+    dt = dtype
+    if isinstance(dt, str) and dt and dt[0] in '<>=':
+        name = _PREFIX_DTYPE_NAMES.get(dt[1:])
+    else:
+        name = _resolve_dtype(dt)
+    info = _STRUCT_FOR_DTYPE.get(name) if name else None
+    if info is None:
+        return 8  # 默认按 float64
+    _char, size = info
+    if name and name.startswith('complex'):
+        return size * 2
+    return size
+
+
+def fromfile(file, dtype=None, count=-1, offset=0, *, like=None):
+    """从文件名/文件对象读取一维数组（按 dtype 解码，offset/count 以元素计）。
+
+    与 numpy.fromfile 语义一致：offset 为跳过的元素数，count 为读取的元素数
+    （-1 表示读到结尾）。
+    """
+    import os as _os
+    elem_size = _dtype_itemsize(dtype)
+    skip = offset * elem_size
+    nbytes = count * elem_size if count >= 0 else None
+    if isinstance(file, (str, bytes, _os.PathLike)):
+        with open(file, 'rb') as f:
+            if skip:
+                f.seek(skip)
+            raw = f.read(nbytes)
+    elif hasattr(file, 'read'):
+        if skip:
+            file.read(skip)
+        raw = file.read(nbytes)
+    else:
+        raise TypeError("file must be a filename or a file-like object")
+    return frombuffer(raw, dtype=dtype)
 
 
 def fromiter(iterable, dtype=None, count=-1, *, like=None):

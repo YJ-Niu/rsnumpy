@@ -65,7 +65,7 @@ from numbers import Number
 from typing import Any, Literal, get_args
 
 import rsnumpy as np
-import scipy
+import scicore as scipy
 
 scipy_consts = ["c", "inch", "mil", "mu_0", "epsilon_0"]
 
