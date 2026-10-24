@@ -4618,6 +4618,46 @@ def frombuffer(buffer, dtype=None, count=-1, offset=0, *, like=None):
     return ndarray(list(buffer))
 
 
+def _dtype_itemsize(dtype):
+    """返回 dtype 的元素字节大小（complex 为对应 float 的两倍）。"""
+    dt = dtype
+    if isinstance(dt, str) and dt and dt[0] in '<>=':
+        name = _PREFIX_DTYPE_NAMES.get(dt[1:])
+    else:
+        name = _resolve_dtype(dt)
+    info = _STRUCT_FOR_DTYPE.get(name) if name else None
+    if info is None:
+        return 8  # 默认按 float64
+    _char, size = info
+    if name and name.startswith('complex'):
+        return size * 2
+    return size
+
+
+def fromfile(file, dtype=None, count=-1, offset=0, *, like=None):
+    """从文件名/文件对象读取一维数组（按 dtype 解码，offset/count 以元素计）。
+
+    与 numpy.fromfile 语义一致：offset 为跳过的元素数，count 为读取的元素数
+    （-1 表示读到结尾）。
+    """
+    import os as _os
+    elem_size = _dtype_itemsize(dtype)
+    skip = offset * elem_size
+    nbytes = count * elem_size if count >= 0 else None
+    if isinstance(file, (str, bytes, _os.PathLike)):
+        with open(file, 'rb') as f:
+            if skip:
+                f.seek(skip)
+            raw = f.read(nbytes)
+    elif hasattr(file, 'read'):
+        if skip:
+            file.read(skip)
+        raw = file.read(nbytes)
+    else:
+        raise TypeError("file must be a filename or a file-like object")
+    return frombuffer(raw, dtype=dtype)
+
+
 def fromiter(iterable, dtype=None, count=-1, *, like=None):
     """从可迭代对象创建一维数组。"""
     _dtype = _resolve_dtype(dtype)
