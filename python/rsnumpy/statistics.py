@@ -138,18 +138,23 @@ def mean(a, axis=None, dtype=None, out=None, keepdims=False, where=True):
 
 
 def _needs_py_var_std(a, axis):
-    """判断是否需要走原生实现：复数，或 Rust 端不支持的高维（ndim>=3）+ 指定 axis。"""
+    """判断是否需要走原生实现：复数，或任何指定 axis 的归约。
+
+    Rust 端 _core.std/_core.var 对指定 axis 的归约会 panic（1D/2D 亦如此），
+    而 _py_var_std 是完整且正确的实现，故凡指定 axis 一律走原生实现。
+    """
     if _is_complex_raw(a):
         return True
-    if axis is None:
-        return False
-    raw = a._array if hasattr(a, '_array') else None
-    return raw is not None and len(raw.shape) >= 3
+    return axis is not None
 
 
-def std(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False, where=True):
+def std(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False, where=True,
+        correction=None):
     """计算数组元素的标准差。"""
     _ = dtype, out, where
+    # numpy 兼容：correction 与 ddof 同义（correction 优先）
+    if correction is not None:
+        ddof = correction
     if _needs_py_var_std(a, axis):
         return _py_var_std(a, axis, ddof, want_std=True)
     raw_result = _core.std(_ensure_raw(a), axis, ddof, keepdims)
