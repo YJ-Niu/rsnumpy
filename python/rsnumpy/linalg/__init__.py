@@ -42,11 +42,13 @@ def _round_array(arr):
 
 def _wrap(x):
     """包装/转换数组，避免类身份不一致问题。"""
-    if getattr(x, '__class__', None) and x.__class__.__name__ == 'ndarray':
-        x = _round_array(x)
-        return x
     from ..__init__ import ndarray
-    if hasattr(x, 'tolist'):
+    # 注意：裸 Rust 绑定类型 (builtins.ndarray) 与 Python 包装类的类名都叫
+    # 'ndarray'，不能只靠类名判断"已包装"（旧逻辑把裸类型原样放行，导致
+    # cholesky/svd 等返回 builtins.ndarray，`wrapper @ raw` 直接 TypeError）。
+    # _round_array 对数组输入返回裸类型，所以这里统一 round 后用包装类重新构造。
+    if (getattr(x, '__class__', None) and x.__class__.__name__ == 'ndarray') \
+            or hasattr(x, 'tolist'):
         x = _round_array(x)
     return ndarray(x)
 

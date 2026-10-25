@@ -820,7 +820,12 @@ class ndarray:
                 return _wrap_result(np.linalg.matmul(self._array, other._array), self._dtype)
             except ValueError:
                 return _matmul_fallback(self, other)
-        return _wrap_result(np.linalg.matmul(self._array, other), self._dtype)
+        # Non-array operand (e.g. a sparse matrix): try to convert it; if
+        # that fails, return NotImplemented so other.__rmatmul__ can kick in.
+        try:
+            return _wrap_result(np.linalg.matmul(self._array, np.asarray(other)._array), self._dtype)
+        except (TypeError, ValueError, AttributeError):
+            return NotImplemented
 
     def __pow__(self, other):
         if _is_ndarray(other):
@@ -909,6 +914,18 @@ class ndarray:
     def __xor__(self, other):
         """按位异或（^ 运算符）。"""
         return bitwise_xor(self, other)
+
+    def __rand__(self, other):
+        """按位与（& 运算符）反向：标量 & ndarray。"""
+        return bitwise_and(other, self)
+
+    def __ror__(self, other):
+        """按位或（| 运算符）反向：标量 | ndarray。"""
+        return bitwise_or(other, self)
+
+    def __rxor__(self, other):
+        """按位异或（^ 运算符）反向：标量 ^ ndarray。"""
+        return bitwise_xor(other, self)
 
     def __lshift__(self, other):
         """左移（<< 运算符）。"""
@@ -4539,8 +4556,8 @@ def argwhere(a):
 
 
 def flatnonzero(a):
-    """返回扁平化数组中非零元素的索引。"""
-    return ndarray(np.flatnonzero(_ensure(a)))
+    """返回扁平化数组中非零元素的索引（numpy 语义：整数索引数组）。"""
+    return ndarray._wrap(np.flatnonzero(_ensure(a)), _dtype="int64")
 
 
 # ========== 缺失构造函数 ==========
@@ -4588,7 +4605,7 @@ def _decode_buffer_bytes(buffer, dtype, count):
     char, size = info
     n = len(buffer) // size
     if count >= 0:
-        n = min(n, count)
+        n = _py_min(n, count)
     if n == 0:
         return []
     if char == '?':
@@ -4610,7 +4627,7 @@ def frombuffer(buffer, dtype=None, count=-1, offset=0, *, like=None):
             elem_size = int(dtype[1:])
             total = len(buffer) // elem_size
             if count >= 0:
-                total = min(total, count)
+                total = _py_min(total, count)
             raw = [buffer[i * elem_size:(i + 1) * elem_size] for i in range(total)]
             return ndarray(np.zeros((len(raw),)), _dtype=dtype, _raw_data=raw)
         values = _decode_buffer_bytes(buffer, dtype, count)
@@ -5210,8 +5227,12 @@ def bitwise_xor(x1, x2):
 def bitwise_not(x):
     """按位取反（等效于 ~ 运算符，对布尔数组使用逻辑取反）"""
     r, dt = _to_raw(x)
-    if dt == 'bool':
-        r = np.invert(r)
+    # dtype 可能是字符串 'bool'，也可能是类对象（zeros_like(dtype=xp.bool)
+    # 产生的 rsnumpy.bool），两者都要识别为布尔并走逻辑取反。
+    if dt == 'bool' or 'bool' in getattr(dt, '__name__', str(dt)).lower():
+        # 布尔数组：逻辑取反（numpy 语义）。np.invert 是补码位取反，会把
+        # 0/1 表示的 bool 变成 -1/-2；对 0/1 值异或 1 才是逻辑非。
+        r = np.bitwise_xor(r, np.ndarray([1]))
     elif dt == 'uint8':
         raw = np.bitwise_not(r)
         r = np.bitwise_and(raw, np.ndarray([255]))
@@ -5470,13 +5491,15 @@ class _NamespaceInfo:
     version = '2024.12'
 
     def capabilities(self):
+        # array_api_compat convention: space-separated keys (scipy's vendored
+        # _external code indexes the dict with e.g. "boolean indexing").
         return {
-            'boolean_indexing': True,
-            'data_dependent_shapes': True,
-            'eager_execution': True,
-            'finite_only': False,
+            'boolean indexing': True,
+            'data-dependent shapes': True,
+            'eager execution': True,
+            'finite only': False,
             'linalg': True,
-            'integer_pow': True,
+            'integer pow': True,
             'searchsorted': True,
             'shape': True,
             'var': True,
