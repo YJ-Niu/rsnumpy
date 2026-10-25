@@ -10,6 +10,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+*.so.bak
 *.egg-info/
 dist/
 test_data/
