@@ -39,7 +39,7 @@ opt-level = 3
 # thin LTO：比 fat 显著加快每个 Python 版本的 release 编译，保留大部分优化
 # （wheel 体积仅 +10~15%，运行性能影响可忽略）。
 lto = "thin"
-codegen-units = 1
+codegen-units = 16
 strip = "symbols"
 panic = "abort"
 
