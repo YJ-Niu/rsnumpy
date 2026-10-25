@@ -24,18 +24,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # 固定 ubuntu-24.04：ubuntu-latest 自 2026-10 起迁移到 Ubuntu 26。
+        os: [ubuntu-24.04, windows-latest, macos-latest]
         python-version: ["3.10", "3.15"]
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             python-version: "3.10"
           - os: windows-latest
             python-version: "3.10"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Cache Rust build artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -45,7 +46,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -67,12 +68,12 @@ jobs:
 
   lint:
     name: Lint (rustfmt + clippy)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # pyo3 的 build script 需要一个 Python 解释器来探测 ABI。
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
 
