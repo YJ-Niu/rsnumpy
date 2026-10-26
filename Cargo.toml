@@ -21,7 +21,7 @@ num-traits = "0.2.19"
 rustfft = "6.4.1"
 # 仅用 Stored 写 + 读 .npz（含 np.savez_compressed 的 deflate）。
 # 关掉默认特性，避免链入 zstd(C)/lzma/bzip2/ppmd/xz/aes 等未用编解码器，显著减小 .so。
-zip = { version = "9.1.0", default-features = false, features = [
+zip = { version = "9.1.1", default-features = false, features = [
     "deflate-flate2-zlib-rs",
 ] }
 num-complex = "0.4.6"
