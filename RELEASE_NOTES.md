@@ -6,6 +6,100 @@
 
 ---
 
+## v1.2.9 (2026-10-26) — 平台支持收敛
+
+- **正式移除 Python 3.9 支持**：`requires-python >= 3.10`，不再为 3.9 构建与测试
+- `zip` 依赖更新至 9.1.1
+- CI 调整推送触发标签配置
+
+---
+
+## v1.2.8 (2026-10-25)
+
+- 修复 `__version__` 字符串未跟随发布版本的问题
+
+---
+
+## v1.2.7 (2026-10-25) — NumPy 兼容修复与流水线提速
+
+### 🐛 NumPy 兼容修复（6 组）
+
+- **`ndarray.__matmul__`**：非 ndarray 操作数转换失败时返回 `NotImplemented`，让 sparse 等第三方类型的 `__rmatmul__` 能正确路由回来（修复 kmeans2 的 `x @ cholesky` 调用链）
+- **`linalg._wrap`**：统一用包装类重构造结果，修复 `cholesky` / `svd` 之后 `.T` / `@` 操作链断裂的问题
+- **`flatnonzero`**：按 NumPy 语义返回 int64 索引数组
+- **`bitwise_not`**：正确识别 bool dtype——布尔数组走逻辑非（`xor 1`），而非补码位取反
+- **反向位运算**：新增标量 `&` / `|` / `^` ndarray 的 `__rand__` / `__ror__` / `__rxor__`
+- **`statistics.std`**：新增 NumPy 兼容的 `correction` 参数（优先于 `ddof`）；指定 `axis` 时改走 Python 归约，规避 Rust 侧归约 panic
+- **`frombuffer`**：修复 `min` 命名遮蔽问题（`_py_min`）
+- **`__capabilities__`**：键名改为 array_api_compat 约定的空格分隔格式（scipy vendored `_external` 以 `"boolean indexing"` 索引）
+
+### 🔧 构建与 CI
+
+- **release 流水线提速**：新增编译缓存、移除 Python 3.9 矩阵、改用 ARM runner、thin LTO；修正缓存方案（Node 24 action、固定 ubuntu-24.04）
+- `zip` 依赖更新至 9.1.0；Rust `codegen-units` 调整为 16
+- 清理误提交的 `.so.bak` 构建产物并补充 `.gitignore` 规则
+
+---
+
+## v1.2.6 (2026-10-24) — 复数运算与 buffer 解码
+
+### ✨ 新功能
+
+- **复数支持扩展**：`convolve`（卷积）、`prod`（乘积）、`sum`（求和）全面支持复数运算
+- **buffer 解码**：新增 `frombuffer` 底层字节解码能力
+- **`np.fromfile`**：从二进制文件读取数组，配套新增 `_dtype_itemsize` 辅助函数
+
+### 🔧 CI 与测试
+
+- GitHub Actions 测试矩阵更新至 Python 3.15
+- 测试代码中的 `scipy` 替换为 `scicore`
+
+---
+
+## v1.2.5 (2026-10-22) — 生态兼容层与子模块扩充
+
+### ✨ 新功能
+
+- **`lib.stride_tricks`**：新增 `as_strided` 等步长技巧函数
+- **`testing` 子模块**：兼容 `numpy.testing` 的核心断言（`assert_` / `assert_equal` / `assert_allclose`），纯 Python 实现、不依赖 NumPy
+- **`polynomial.Polynomial`**：新增 polynomial 子模块兼容层与 `Polynomial` 别名
+- **`_typing` 模块**：提供 `ArrayLike` 等类型别名
+- **`ndarray.device` 属性**：明确声明仅支持 CPU
+- **linalg 增强**：新增 `qr` 分解、`cond` 条件数、通用版本 SVD、`vector_norm`
+- **random 增强**：新增 `vonmises` / `multivariate_normal` 等分布，补充 Python 实现的回退生成器
+- **`ma.getmask`**：兼容 `numpy.ma` 接口
+- **`searchsorted`** 等数组操作函数
+- **`loadtxt`** 支持类文件对象
+
+### 🐛 关键修复
+
+- 字符串/字节类型 dtype 解析错误及 `asarray` 强制转换问题
+- 数组连续标志（C/F contiguity）判断及 macOS 编译问题
+- Rust 索引函数的边界与步长处理；`mean` 轴约简返回 Python 标量的问题
+- `result_type` 类型推导鲁棒性增强；`_ensure_raw` 处理嵌套数组与数组元素
+- 索引越界、广播等核心功能问题
+
+### 🧹 依赖
+
+- 移除 `scipy` 依赖
+
+---
+
+## v1.2.4 (2026-08-11) — 切片赋值重构
+
+### 🐛 关键修复
+
+- **`_set_slice` 切片赋值重构**：重写切片赋值逻辑，修复多场景（负步长、边界、多维）下的赋值错误
+- **`ndarray.__abs__`**：修复返回标量时的类型问题
+
+### 🧹 重构与清理
+
+- 优化数组处理与随机数生成逻辑
+- 移除废弃测试脚本（`test_rf` 中绘图/优化相关用例等）
+- 依赖版本更新
+
+---
+
 ## v1.2.3 (2026-07-29) — 内存与启动速度双优化
 
 本版本聚焦"让大型数组更轻、让首次导入更快"，同时沉淀了变长元素支持与线程池动态控制等基础设施。

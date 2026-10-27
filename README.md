@@ -17,7 +17,7 @@ rsnumpy 重新实现了 NumPy 的核心 API，**所有计算密集型逻辑（�
 
 - 🚀 **Rust 驱动的高性能** — `sin`/`exp` 比 NumPy 快 **5x**，`sort` 快 **32x**，逐元素运算快 **1.6–1.7x**
 - 🧵 **GIL-Free 并行** — 计算密集算子通过 `py.detach` 释放 GIL，多线程 Python 真正并行
-- 📊 **完整的 NumPy 兼容 API** — 涵盖数组、数学、统计、linalg、FFT、random、I/O、polynomial、datetime64、masked/structured array
+- 📊 **完整的 NumPy 兼容 API** — 涵盖数组、数学、统计、linalg、FFT、random、I/O、polynomial、datetime64、masked/structured array、stride_tricks、testing 等子模块
 - 🪟 **零拷贝缓冲协议** — 实现 PEP 3118（Rust 层 `__getbuffer__`）与 PEP 3118（Python 3.12+ `__buffer__`），可被 NumPy / rsplotlib 直接零拷贝消费
 - 🎯 **智能 dtype 推断** — 自动将字符串推断为 `U{n}`，避免不必要的 `object` dtype 性能陷阱
 - 🛠️ **大数组处理工具** — `chunked_apply` 分块接口、`mmap_array` 内存映射、`LazyArray` 惰性求值
@@ -36,7 +36,7 @@ pip install rsnumpy
 uv pip install rsnumpy
 ```
 
-预构建 wheel 覆盖 **Python 3.10–3.14**（Linux x86_64/aarch64、macOS Apple Silicon/Intel、Windows x64）。
+预构建 wheel 覆盖 **Python 3.10–3.15**（Linux x86_64/aarch64、macOS Apple Silicon/Intel、Windows x64）。
 
 ---
 
@@ -116,7 +116,7 @@ print(rng.random(5).tolist())
 
 ```
 rsnumpy/
-├── src/                       # Rust 源码（22,000+ 行）
+├── src/                       # Rust 源码（15,000+ 行）
 │   ├── lib.rs                 # 核心 ndarray 与通用函数
 │   ├── indexing.rs            # 多维索引与切片
 │   ├── fft.rs                 # 快速傅里叶变换
@@ -137,23 +137,28 @@ rsnumpy/
 │   ├── setops/                # 集合运算
 │   ├── sorting/               # 排序
 │   └── statistics/            # 统计
-├── python/rsnumpy/            # Python 薄包装（26,000+ 行）
+├── python/rsnumpy/            # Python 薄包装（16,000+ 行）
 │   ├── __init__.py            # 主模块，公开 API
+│   ├── _core/                 # Rust 扩展绑定包装
+│   ├── _dtypes.py             # dtype 定义
+│   ├── _typing.py             # ArrayLike 等类型别名
+│   ├── _extra.py              # 补充 API（~140 个 NumPy 兼容函数）
 │   ├── array_methods.py       # ndarray 对象方法
 │   ├── array_ops.py           # 数组操作函数
-│   ├── _extra.py              # 补充 API（~140 个 NumPy 兼容函数）
-│   ├── _dtypes.py             # dtype 定义
 │   ├── char.py                # 字符串数组
+│   ├── exceptions.py          # 异常类型（AxisError 等）
 │   ├── io.py                  # 文件 I/O
 │   ├── ma.py                  # 掩码数组
 │   ├── rec.py                 # 记录数组
 │   ├── math_functions.py      # 数学函数
+│   ├── matlib.py              # 矩阵库模块
 │   ├── statistics.py          # 统计函数
+│   ├── testing.py             # numpy.testing 兼容断言
 │   ├── linalg/                # 线性代数子模块
 │   ├── polynomial/            # 多项式子模块
 │   ├── random/                # 随机数子模块
 │   ├── fft/                   # FFT 子模块
-│   ├── lib/                   # recfunctions 等工具
+│   ├── lib/                   # recfunctions / stride_tricks 等工具
 │   └── typing/                # 类型定义
 ├── test/                      # 测试
 │   ├── run_test.py            # 主测试
