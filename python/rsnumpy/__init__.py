@@ -723,6 +723,10 @@ class ndarray:
         if _is_ndarray(other):
             # Rust core handles NumPy broadcasting (e.g. (4,4)*(4,)).
             return _wrap_result(self._array * other._array, dt)
+        if _is_raw_ndarray(other):
+            # 未包装的 raw ndarray：委托 Rust 逐元素（同 __add__/__sub__/__truediv__），
+            # 否则会被下面的 float(other) 误当标量（取首元素）广播。
+            return _wrap_result(self._array * other, dt)
         if isinstance(other, (tuple, list)):
             other_arr = ndarray(other)
             return _wrap_result(self._array * other_arr._array, dt)
@@ -2140,7 +2144,7 @@ _numpy_type_names = {}
 def _init_numpy_types():
     """尝试导入 rsnumpy 并注册其标量类型名称。"""
     try:
-        import rsnnumpy as np
+        import rsnumpy as np
     except ImportError:
         return
     for name in dir(np):

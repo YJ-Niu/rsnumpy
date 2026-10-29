@@ -1,0 +1,5 @@
+collecting from: ['test/numpy/test_array_coercion.py', 'test/numpy/test_indexing.py', 'test/numpy/test_numeric.py', 'test/numpy/test_scalarmath.py']
+collected 107 test nodeids
+  ...50/107
+  ...100/107
+  ...107/107

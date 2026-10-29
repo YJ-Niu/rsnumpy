@@ -841,9 +841,16 @@ impl NdArray {
         build_array_interface(py, &self.data, "<f8")
     }
 
-    // PEP 3118 缓冲协议：直接暴露底层连续 f64 内存（只读）及其 shape/strides，
+    // PEP 3118 缓冲协议：直接暴露底层连续 f64 内存及其 shape/strides，
     // 供 rsplotlib 等下游用 PyO3 `PyBuffer<f64>` 零拷贝读取，免去序列化为 bytes 的开销。
     // 消费方（如 PyBuffer::get）以 PyBUF_FULL_RO 请求，包含 shape/strides，故非连续数组亦可如实描述。
+    //
+    // 缓冲区**可写**（与 numpy 一致，见 numpy buffer.c array_getbuffer）：rsnumpy 每个
+    // `NdArray` 都自持数据（`data: Array<f64, IxDyn>` 为拥有型，所有切片/索引路径均
+    // `to_owned`/`from_shape_vec` 物化副本，无共享视图），故经缓冲写回不会破坏任何父数组。
+    // 这让 scicore 等下游把计算结果直接写进输出数组（零拷贝），免去
+    // Vec→list→asarray→bulk setitem 的往返开销。view.obj 持强引用，缓冲存活期间
+    // 数组（及其内存）不被回收；对复数数组仅暴露实部 f64（写回同样只触及实部）。
     unsafe fn __getbuffer__(
         slf: Bound<'_, Self>,
         view: *mut pyo3::ffi::Py_buffer,
@@ -851,10 +858,6 @@ impl NdArray {
     ) -> PyResult<()> {
         if view.is_null() {
             return Err(PyBufferError::new_err("View is null"));
-        }
-        // 仅导出只读视图：避免 Python 侧经缓冲写入而与 Rust 所有权产生别名。
-        if (flags & pyo3::ffi::PyBUF_WRITABLE) == pyo3::ffi::PyBUF_WRITABLE {
-            return Err(PyBufferError::new_err("Object is not writable"));
         }
 
         let itemsize = std::mem::size_of::<f64>() as pyo3::ffi::Py_ssize_t;
@@ -906,7 +909,8 @@ impl NdArray {
             (*view).obj = slf.into_any().into_ptr();
             (*view).buf = buf_ptr;
             (*view).len = (len_elems as pyo3::ffi::Py_ssize_t) * itemsize;
-            (*view).readonly = 1;
+            // 数据自持（拥有型数组、无共享视图）→ 可写，与 numpy 默认行为一致。
+            (*view).readonly = 0;
             (*view).itemsize = itemsize;
             // f64 的格式字符为 "d"；使用静态 C 字符串，CPython 不会释放它。
             (*view).format = if (flags & pyo3::ffi::PyBUF_FORMAT) == pyo3::ffi::PyBUF_FORMAT {
@@ -2346,6 +2350,37 @@ where
     F: Fn(f64, f64) -> f64 + Sync + Send,
 {
     let py = b.py();
+    // 常见情形：右操作数就是 ndarray —— 借用而非 extract（后者会整份克隆）。
+    if let Ok(other) = b.cast::<NdArray>() {
+        let other = other.borrow();
+        let a_data = &a.data;
+        let other_data = &other.data;
+        let out = py
+            .detach(|| broadcast_binary_compute(a_data, other_data, op))
+            .map_err(PyValueError::new_err)?;
+        return Ok(NdArray {
+            imag: None,
+            data: out,
+        });
+    }
+    // 包装后的 rsnumpy ndarray（带 `_array` 的 Python 对象）：解包后再广播。
+    // 必须在 f64 检查**之前**——包装对象会经 `__float__`（取首元素）被误读成标量，
+    // 导致 `raw op wrapper` 算成 `raw op wrapper[0]` 而非逐元素。
+    #[allow(clippy::collapsible_if)]
+    if let Ok(inner) = b.getattr("_array")
+        && let Ok(other) = inner.cast::<NdArray>()
+    {
+        let other = other.borrow();
+        let a_data = &a.data;
+        let other_data = &other.data;
+        let out = py
+            .detach(|| broadcast_binary_compute(a_data, other_data, op))
+            .map_err(PyValueError::new_err)?;
+        return Ok(NdArray {
+            imag: None,
+            data: out,
+        });
+    }
     if let Ok(scalar) = b.extract::<f64>() {
         let data = &a.data;
         // 纯计算，主动释放 GIL 让其它 Python 线程可并行推进。
@@ -2356,19 +2391,6 @@ where
                 data.mapv(|x| op(x, scalar))
             }
         });
-        return Ok(NdArray {
-            imag: None,
-            data: out,
-        });
-    }
-    // 常见情形：右操作数就是 ndarray —— 借用而非 extract（后者会整份克隆）。
-    if let Ok(other) = b.cast::<NdArray>() {
-        let other = other.borrow();
-        let a_data = &a.data;
-        let other_data = &other.data;
-        let out = py
-            .detach(|| broadcast_binary_compute(a_data, other_data, op))
-            .map_err(PyValueError::new_err)?;
         return Ok(NdArray {
             imag: None,
             data: out,

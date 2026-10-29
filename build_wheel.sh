@@ -133,6 +133,7 @@ fi
 
 # Locate the built wheel and install it into the local venv
 WHEEL=$(ls -t "$OUT_DIR"/*.whl 2>/dev/null | head -n1 || true)
+INSTALLED=0
 if [[ -n "$WHEEL" && -f "$WHEEL" ]]; then
   echo "Wheel built: $WHEEL"
   if [[ -f "$VENV_PY" ]]; then
@@ -145,11 +146,31 @@ if [[ -n "$WHEEL" && -f "$WHEEL" ]]; then
       "$VENV_PY" -m pip install --force-reinstall --no-deps "$WHEEL"
     fi
     echo "Installed into .venv successfully."
+    INSTALLED=1
   else
     echo "Warning: .venv not found; skip install. Wheels available in $OUT_DIR" >&2
   fi
 else
   echo "Warning: no .whl file found in $OUT_DIR; skip install." >&2
+fi
+
+# ========== 构建后全量核心测试（对本次构建的 wheel 把关） ==========
+# 每个成功安装的构建都必须通过 tests/ 下的核心 pytest 套件：buffer 协议、
+# 逐元素算术、构造、索引、归约、比较，并用 xfail 钉住已知缺口（修好后自动翻绿）。
+# SKIP_TESTS=1 可跳过（例如只要快速出 release wheel、不做验证时）。
+if [[ "$INSTALLED" -eq 1 && "${SKIP_TESTS:-0}" != "1" ]]; then
+  echo "Running core test suite against the installed wheel ..."
+  if command -v uv; then
+    uv pip install --python "$VENV_PY" --quiet pytest
+  else
+    "$VENV_PY" -m pip install --quiet pytest
+  fi
+  if "$VENV_PY" -m pytest tests/ -q; then
+    echo "  -> core test suite passed."
+  else
+    echo "Error: core test suite failed — the built wheel did not pass its tests." >&2
+    exit 1
+  fi
 fi
 
 echo "Done."
