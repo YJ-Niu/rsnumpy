@@ -136,7 +136,9 @@ def assert_equal(a, b, err_msg=""):
             raise AssertionError(f"{err_msg}\n x: {a_s}\n y: {b_s}")
 
 
-def assert_array_equal(a, b, err_msg=""):
+def assert_array_equal(a, b, err_msg="", *args, **kwargs):
+    # numpy's assert_array_equal also takes equal_nan/strict/period/...; the stub
+    # swallows them (the core comparison below is what rsnumpy must satisfy).
     sa, sb = _shape(a), _shape(b)
     if sa is not None and sb is not None and sa != sb:
         raise AssertionError(f"{err_msg}\n shape: {sa} != {sb}")

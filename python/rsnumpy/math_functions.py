@@ -1,5 +1,7 @@
 """数学函数模块 - 所有实现位于 Rust，这里仅保留薄包装。"""
 
+import math
+
 import rsnumpy.num_core as _core
 
 
@@ -336,9 +338,27 @@ def isclose(a, b, rtol=1e-05, atol=1e-08):
     return _wrap_bool(_core.isclose(_ensure_raw(a), _ensure_raw(b), rtol, atol))
 
 
-def allclose(a, b, rtol=1e-05, atol=1e-08):
-    """判断两个数组是否元素级接近。"""
-    return _core.allclose(_ensure_raw(a), _ensure_raw(b), rtol, atol)
+def allclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False, *args, **kwargs):
+    """判断两个数组是否元素级接近。
+
+    与 NumPy 对齐：``equal_nan=True`` 时同位置的 NaN 视为相等。``*args``/
+    ``**kwargs`` 吸收 NumPy 的其余兼容参数。
+    """
+    if not equal_nan:
+        return _core.allclose(_ensure_raw(a), _ensure_raw(b), rtol, atol)
+    # equal_nan=True：NaN 同位置视为相等（先取常规结果，再补齐 NaN 同位置）
+    if not _core.allclose(_ensure_raw(a), _ensure_raw(b), rtol, atol):
+        try:
+            fa, fb = a.tolist(), b.tolist()
+        except Exception:
+            return False
+        if len(fa) != len(fb):
+            return False
+        for x, y in zip(fa, fb):
+            if x != y and not (isinstance(x, float) and isinstance(y, float)
+                               and math.isnan(x) and math.isnan(y)):
+                return False
+    return True
 
 
 # 反双曲函数别名
