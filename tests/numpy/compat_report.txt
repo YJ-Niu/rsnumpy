@@ -1,0 +1,71 @@
+
+================ numpy-compatibility report ================
+  passed  : 396
+  failed  : 1586
+  skipped : 1452
+  crashed : 13
+  error(rc=-9): 1
+  total   : 3448
+  numpy-compatible (passed/total): 396/3448 = 11.5%
+=============================================================
+
+CRASHED tests (13) — rsnumpy C-ext robustness bugs:
+  test/numpy/test_array_coercion.py::TestArrayLikes::test_too_large_array_error_paths
+  test/numpy/test_indexing.py::TestIndexing::test_scalar_array_bool
+  test/numpy/test_indexing.py::TestIndexing::test_too_many_advanced_indices[1-64-True]
+  test/numpy/test_indexing.py::TestIndexing::test_too_many_advanced_indices[1-64-index2]
+  test/numpy/test_indexing.py::TestIndexing::test_too_many_advanced_indices[1-80-True]
+  test/numpy/test_indexing.py::TestIndexing::test_too_many_advanced_indices[1-80-index2]
+  test/numpy/test_indexing.py::TestIndexing::test_too_many_advanced_indices[64-80-True]
+  test/numpy/test_indexing.py::TestIndexing::test_too_many_advanced_indices[64-80-index2]
+  test/numpy/test_indexing.py::TestMultipleEllipsisError::test_basic
+  test/numpy/test_numeric.py::TestNonzero::test_count_nonzero_character_axis[S5]
+  test/numpy/test_numeric.py::TestNonzero::test_count_nonzero_character_axis[U5]
+  test/numpy/test_numeric.py::TestNonzero::test_count_nonzero_character_axis[T]
+  test/numpy/test_numeric.py::TestRoll::test_roll_empty
+
+ERRORS (1):
+  [error(rc=-9)] test/numpy/test_numeric.py::TestNonzero::test_nonzero_large_dtype[dtype0]
+
+FAILED tests (1586) — rsnumpy gaps (first 40 shown):
+  test/numpy/test_array_coercion.py::TestStringDiscovery::test_basic_stringlength[1.2]
+  test/numpy/test_array_coercion.py::TestStringDiscovery::test_nested_arrays_stringlength[1.2]
+  test/numpy/test_array_coercion.py::TestStringDiscovery::test_basic_stringlength[object]
+  test/numpy/test_array_coercion.py::TestStringDiscovery::test_nested_arrays_stringlength[10**43]
+  test/numpy/test_array_coercion.py::TestStringDiscovery::test_basic_stringlength[string]
+  test/numpy/test_array_coercion.py::TestStringDiscovery::test_basic_stringlength[10**43]
+  test/numpy/test_array_coercion.py::TestStringDiscovery::test_basic_stringlength[None]
+  test/numpy/test_array_coercion.py::TestStringDiscovery::test_nested_arrays_stringlength[object]
+  test/numpy/test_array_coercion.py::TestStringDiscovery::test_nested_arrays_stringlength[string]
+  test/numpy/test_array_coercion.py::TestStringDiscovery::test_unpack_first_level[memoryview]
+  test/numpy/test_array_coercion.py::TestStringDiscovery::test_nested_arrays_stringlength[None]
+  test/numpy/test_array_coercion.py::TestStringDiscovery::test_unpack_first_level[__array_interface__]
+  test/numpy/test_array_coercion.py::TestStringDiscovery::test_unpack_first_level[ndarray]
+  test/numpy/test_array_coercion.py::TestStringDiscovery::test_unpack_first_level[__array__]
+  test/numpy/test_array_coercion.py::TestStringDiscovery::test_unpack_first_level[subclass]
+  test/numpy/test_array_coercion.py::TestStringDiscovery::test_unpack_first_level[__array_struct__]
+  test/numpy/test_array_coercion.py::TestScalarDiscovery::test_void_special_case
+  test/numpy/test_array_coercion.py::TestScalarDiscovery::test_char_special_case
+  test/numpy/test_array_coercion.py::TestScalarDiscovery::test_unknown_object
+  test/numpy/test_array_coercion.py::TestScalarDiscovery::test_scalar[int8]
+  test/numpy/test_array_coercion.py::TestScalarDiscovery::test_scalar[int16]
+  test/numpy/test_array_coercion.py::TestScalarDiscovery::test_scalar[bool]
+  test/numpy/test_array_coercion.py::TestScalarDiscovery::test_scalar[int32]
+  test/numpy/test_array_coercion.py::TestScalarDiscovery::test_scalar[uint16]
+  test/numpy/test_array_coercion.py::TestScalarDiscovery::test_scalar[uint8]
+  test/numpy/test_array_coercion.py::TestScalarDiscovery::test_scalar[uint32]
+  test/numpy/test_array_coercion.py::TestScalarDiscovery::test_scalar[uint64]
+  test/numpy/test_array_coercion.py::TestScalarDiscovery::test_scalar[rational]
+  test/numpy/test_array_coercion.py::TestScalarDiscovery::test_scalar[timedelta64[ns]]
+  test/numpy/test_array_coercion.py::TestScalarDiscovery::test_scalar[timedelta64[s]]
+  test/numpy/test_array_coercion.py::TestScalarDiscovery::test_scalar[rational2]
+  test/numpy/test_array_coercion.py::TestScalarDiscovery::test_scalar[datetime64[ms]]
+  test/numpy/test_array_coercion.py::TestScalarDiscovery::test_scalar_promotion
+  test/numpy/test_array_coercion.py::TestScalarDiscovery::test_scalar[unstructured_void]
+  test/numpy/test_array_coercion.py::TestScalarDiscovery::test_scalar_coercion[float16]
+  test/numpy/test_array_coercion.py::TestScalarDiscovery::test_scalar_coercion[longdouble]
+  test/numpy/test_array_coercion.py::TestScalarDiscovery::test_scalar_coercion[complex64]
+  test/numpy/test_array_coercion.py::TestScalarDiscovery::test_scalar_coercion[float64]
+  test/numpy/test_array_coercion.py::TestScalarDiscovery::test_scalar_coercion[float32]
+  test/numpy/test_array_coercion.py::TestScalarDiscovery::test_scalar_coercion[complex128]
+  ... and 1546 more

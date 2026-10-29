@@ -119,16 +119,18 @@ if ! cargo clippy --all-targets -- -D warnings; then
 fi
 echo "  -> clippy checks passed."
 
-BUILD_ARGS=()
-if $RELEASE; then BUILD_ARGS+=(--release); else BUILD_ARGS+=(--debug); fi
+# maturin 无 --debug 标志：默认即 debug，--release 才是优化构建。用字符串（非数组）
+# 规避 bash 3.2 + set -u 下空数组 "${BUILD_ARGS[@]}" 的 unbound variable 问题。
+BUILD_ARGS=""
+if $RELEASE; then BUILD_ARGS="--release"; fi
 
 mkdir -p "$OUT_DIR"
 echo "Building wheel into $OUT_DIR using $PYTHON_EXEC (release=$RELEASE)"
 if [[ "$MATURIN_MODE" == "path" ]]; then
-  maturin build "${BUILD_ARGS[@]}" -o "$OUT_DIR" -i "$PYTHON_EXEC"
+  maturin build $BUILD_ARGS -o "$OUT_DIR" -i "$PYTHON_EXEC"
 else
   # run maturin as a module under the chosen Python
-  "$PYTHON_EXEC" -m maturin build "${BUILD_ARGS[@]}" -o "$OUT_DIR" -i "$PYTHON_EXEC"
+  "$PYTHON_EXEC" -m maturin build $BUILD_ARGS -o "$OUT_DIR" -i "$PYTHON_EXEC"
 fi
 
 # Locate the built wheel and install it into the local venv
@@ -170,6 +172,21 @@ if [[ "$INSTALLED" -eq 1 && "${SKIP_TESTS:-0}" != "1" ]]; then
   else
     echo "Error: core test suite failed — the built wheel did not pass its tests." >&2
     exit 1
+  fi
+
+  # ========== numpy 兼容套件（非门禁的兼容性报告） ==========
+  # 跑 numpy 官方 4 个核心测试文件（~3400 用例，./test/numpy/）度量 rsnumpy 的
+  # numpy 兼容性。大量 failed 属预期（rsnumpy 尚在补 gap），故只报告数字、不门禁。
+  # 构建模式跳过已知 C 扩展崩溃测试（RSNUMPY_COMPAT_SKIP_CRASHES=1）避免单进程
+  # pytest 被 crash 中断；完整 crash 清单由 ./test/numpy/run_compat.py 产出。
+  if [[ -d test/numpy ]]; then
+    echo "Running numpy-compatibility suite (non-gating report) ..."
+    set +e
+    COMPAT_OUT=$(RSNUMPY_COMPAT_SKIP_CRASHES=1 "$VENV_PY" -m pytest test/numpy/ -q -p no:cacheprovider 2>&1)
+    COMPAT_RC=$?
+    set -e
+    echo "$COMPAT_OUT" | tail -15
+    echo "  -> numpy-compatibility report above (failed = rsnumpy gaps to close; non-gating, rc=$COMPAT_RC)."
   fi
 fi
 
