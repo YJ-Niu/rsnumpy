@@ -66,20 +66,29 @@ jobs:
       - name: Run core test suite (pytest)
         # 每次构建的 wheel 都必须通过核心 pytest 套件（buffer 协议、逐元素算术、
         # 构造、索引、归约、比较；已知缺口用 xfail 钉住）。
+        # 显式枚举核心测试文件（不跑 `pytest tests/` 整目录）——tests/numpy/ 是
+        # 「NumPy 参照基准」harness，单独作为非门禁报告跑（见下一步），不并入门禁。
         run: |
           python -m pip install --quiet pytest
-          python -m pytest tests/ -q
+          python -m pytest \
+            tests/test_buffer.py tests/test_arithmetic.py tests/test_creation.py \
+            tests/test_indexing.py tests/test_reduction.py tests/test_comparison.py \
+            tests/test_known_gaps.py -q
 
-      - name: Run rsnumpy-vs-numpy compatibility check (non-gating report)
-        # 用 numpy 官方测试（./tests/numpy/，~3400 用例）作为参照基准验证 rsnumpy 的
-        # NumPy 兼容性——被测对象是 rsnumpy，numpy 测试只是 ground truth。大量 failed
-        # 属预期（rsnumpy 尚在补 gap），故 non-gating（continue-on-error），只报告
-        # pass/failed/skipped 摘要。构建模式跳过已知 C 扩展崩溃测试避免单进程中断。
+      - name: Run rsnumpy NumPy-compatibility check (non-gating report)
+        # 用 NumPy 官方测试（tests/test_rsnumpy_*.py，~3400 用例，numpy 改名为 rsnumpy）
+        # 作为参照基准验证 rsnumpy 的 NumPy 兼容性——被测对象是 rsnumpy，这些测试只是
+        # ground truth。failed = rsnumpy 待修的 bug 或待补的 API，故 non-gating
+        # （continue-on-error），只报告 pass/failed/skipped 摘要。构建模式跳过已知
+        # C 扩展崩溃测试避免单进程中断。
         continue-on-error: true
         env:
           RSNUMPY_COMPAT_SKIP_CRASHES: "1"
         run: |
-          python -m pytest tests/numpy/ -q -p no:cacheprovider > numpy_compat.log 2>&1 || true
+          python -m pytest \
+            tests/test_rsnumpy_array_coercion.py tests/test_rsnumpy_indexing.py \
+            tests/test_rsnumpy_numeric.py tests/test_rsnumpy_scalarmath.py \
+            -q -p no:cacheprovider > numpy_compat.log 2>&1 || true
           python -c "print(open('numpy_compat.log', encoding='utf-8', errors='replace').read().splitlines()[-10:])"
 
       - name: Run smoke test

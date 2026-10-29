@@ -156,10 +156,21 @@ else
   echo "Warning: no .whl file found in $OUT_DIR; skip install." >&2
 fi
 
-# ========== 构建后全量核心测试（对本次构建的 wheel 把关） ==========
+# ========== 构建后核心测试门禁（对本次构建的 wheel 把关） ==========
 # 每个成功安装的构建都必须通过 tests/ 下的核心 pytest 套件：buffer 协议、
 # 逐元素算术、构造、索引、归约、比较，并用 xfail 钉住已知缺口（修好后自动翻绿）。
+# 显式枚举核心测试文件（不跑 `pytest tests/` 整目录）——因为 tests/numpy/ 是
+# 「NumPy 参照基准」harness，单独作为非门禁报告跑（见下），不并入核心门禁。
 # SKIP_TESTS=1 可跳过（例如只要快速出 release wheel、不做验证时）。
+CORE_TEST_FILES=(
+  tests/test_buffer.py
+  tests/test_arithmetic.py
+  tests/test_creation.py
+  tests/test_indexing.py
+  tests/test_reduction.py
+  tests/test_comparison.py
+  tests/test_known_gaps.py
+)
 if [[ "$INSTALLED" -eq 1 && "${SKIP_TESTS:-0}" != "1" ]]; then
   echo "Running core test suite against the installed wheel ..."
   if command -v uv; then
@@ -167,7 +178,7 @@ if [[ "$INSTALLED" -eq 1 && "${SKIP_TESTS:-0}" != "1" ]]; then
   else
     "$VENV_PY" -m pip install --quiet pytest
   fi
-  if "$VENV_PY" -m pytest tests/ -q; then
+  if "$VENV_PY" -m pytest "${CORE_TEST_FILES[@]}" -q; then
     echo "  -> core test suite passed."
   else
     echo "Error: core test suite failed — the built wheel did not pass its tests." >&2
@@ -175,20 +186,25 @@ if [[ "$INSTALLED" -eq 1 && "${SKIP_TESTS:-0}" != "1" ]]; then
   fi
 
   # ========== NumPy 参照基准：验证 rsnumpy 兼容性（非门禁报告） ==========
-  # 用 numpy 官方测试（./tests/numpy/，~3400 用例）作为参照基准来验证 rsnumpy 的
-  # NumPy 兼容性——被测对象是 rsnumpy，numpy 测试只是 ground truth。大量 failed
-  # 属预期（rsnumpy 尚在补 gap），故只报告数字、不门禁。核心门禁是上面的 tests/。
-  # 构建模式跳过已知 C 扩展崩溃测试（RSNUMPY_COMPAT_SKIP_CRASHES=1）避免单进程
-  # pytest 被 crash 中断；完整 crash 清单由 ./tests/numpy/run_compat.py 产出。
-  if [[ -d tests/numpy ]]; then
-    echo "Running rsnumpy-vs-numpy compatibility check (non-gating report) ..."
-    set +e
-    COMPAT_OUT=$(RSNUMPY_COMPAT_SKIP_CRASHES=1 "$VENV_PY" -m pytest tests/numpy/ -q -p no:cacheprovider 2>&1)
-    COMPAT_RC=$?
-    set -e
-    echo "$COMPAT_OUT" | tail -15
-    echo "  -> rsnumpy compatibility report above (failed = rsnumpy gaps vs the numpy reference; non-gating, rc=$COMPAT_RC)."
-  fi
+  # 用 NumPy 官方测试（tests/test_rsnumpy_*.py，~3400 用例，numpy 改名为 rsnumpy）
+  # 作为参照基准验证 rsnumpy 的 NumPy 兼容性——被测对象是 rsnumpy，这些测试只是
+  # ground truth。failed = rsnumpy 待修的 bug 或待补的 API（见下），故只报告数字、
+  # 不门禁；核心门禁是上面的 7 个核心文件。构建模式跳过已知 C 扩展崩溃测试
+  # （RSNUMPY_COMPAT_SKIP_CRASHES=1）避免单进程 pytest 被 crash 中断；完整 crash
+  # 清单由 ./tests/run_compat.py 产出。
+  REFERENCE_TESTS=(
+    tests/test_rsnumpy_array_coercion.py
+    tests/test_rsnumpy_indexing.py
+    tests/test_rsnumpy_numeric.py
+    tests/test_rsnumpy_scalarmath.py
+  )
+  echo "Running rsnumpy NumPy-compatibility check (non-gating report) ..."
+  set +e
+  COMPAT_OUT=$(RSNUMPY_COMPAT_SKIP_CRASHES=1 "$VENV_PY" -m pytest "${REFERENCE_TESTS[@]}" -q -p no:cacheprovider 2>&1)
+  COMPAT_RC=$?
+  set -e
+  echo "$COMPAT_OUT" | tail -15
+  echo "  -> rsnumpy compatibility report above (failed = rsnumpy bugs/gaps vs the numpy reference; non-gating, rc=$COMPAT_RC)."
 fi
 
 echo "Done."

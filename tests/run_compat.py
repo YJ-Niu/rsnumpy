@@ -21,11 +21,11 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-# rsnumpy repo root (HERE is <root>/tests/numpy) — pytest nodeids are relative to
-# the rootdir (the repo root, where pyproject.toml lives), so run subprocesses
-# from there too, otherwise per-test nodeids don't resolve.
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
-RELPATH = "tests/numpy"
+# rsnumpy repo root.  HERE is <root>/tests (one dir below the root that holds
+# pyproject.toml), so peel one dir off.  pytest nodeids are relative to the
+# rootdir, so run subprocesses from there too, else per-test nodeids don't resolve.
+ROOT = os.path.dirname(HERE)
+RELPATH = "tests"
 PY = sys.executable
 WORKERS = int(os.environ.get("COMPAT_WORKERS", "8"))
 
@@ -75,8 +75,10 @@ def run_one(nodeid):
 
 def main(files):
     if not files:
+        # Only the NumPy-reference tests (test_rsnumpy_*.py) — the core suite
+        # (test_buffer.py etc.) lives here too but is the *gate*, not the survey.
         files = sorted(f for f in os.listdir(HERE)
-                       if f.startswith("test_") and f.endswith(".py"))
+                       if f.startswith("test_rsnumpy_") and f.endswith(".py"))
         files = [f"{RELPATH}/{f}" for f in files]
     else:
         files = [f if "/" in f else f"{RELPATH}/{f}" for f in files]

@@ -1,6 +1,12 @@
 """
-Conftest that lets numpy's own test suite (copied verbatim from
-``numpy/_core/tests``) run against **rsnumpy**.
+Conftest that lets NumPy's own test suite (copied from ``numpy/_core/tests`` and
+renamed ``test_rsnumpy_*.py``) validate **rsnumpy**.
+
+The subject under test is **rsnumpy**; the NumPy test cases are only the
+reference (ground truth). A test imports ``numpy``; this conftest aliases
+``numpy`` → ``rsnumpy`` so each case exercises rsnumpy's implementation of the
+corresponding NumPy behavior. Failures therefore point at rsnumpy bugs / missing
+APIs to fix in rsnumpy — not at the test.
 
 Strategy
 --------
