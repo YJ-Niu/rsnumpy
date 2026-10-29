@@ -33,7 +33,6 @@ Thumbs.db
 
 # Data / plots
 debug.txt
-test/
 test_old.txt
 run_test2.py
 out.txt
@@ -52,6 +51,7 @@ test2*.py
 map*.jpeg
 bench_extra.py
 debug/
+test/
 *.png
 runtest_matplotlib.py
 
