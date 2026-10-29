@@ -8,14 +8,14 @@ from decimal import Decimal
 
 import pytest
 
-import numpy as np
-from numpy import ma
-from numpy._core import sctypes
-from numpy._core._rational_tests import rational, rational2
-from numpy._core.numerictypes import obj2sctype
-from numpy.exceptions import AxisError
-from numpy.random import rand, randint, randn
-from numpy.testing import (
+import rsnumpy as np
+from rsnumpy import ma
+from rsnumpy._core import sctypes
+from rsnumpy._core._rational_tests import rational, rational2
+from rsnumpy._core.numerictypes import obj2sctype
+from rsnumpy.exceptions import AxisError
+from rsnumpy.random import rand, randint, randn
+from rsnumpy.testing import (
     HAS_REFCOUNT,
     IS_64BIT,
     IS_WASM,

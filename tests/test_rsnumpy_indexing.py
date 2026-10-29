@@ -7,10 +7,10 @@ from itertools import product
 
 import pytest
 
-import numpy as np
-from numpy._core._multiarray_tests import array_indexing
-from numpy.exceptions import ComplexWarning, VisibleDeprecationWarning
-from numpy.testing import (
+import rsnumpy as np
+from rsnumpy._core._multiarray_tests import array_indexing
+from rsnumpy.exceptions import ComplexWarning, VisibleDeprecationWarning
+from rsnumpy.testing import (
     HAS_REFCOUNT,
     assert_,
     assert_array_equal,

@@ -107,7 +107,7 @@ def main(files):
                 print(f"  ...{i}/{len(nodeids)}", file=sys.stderr)
 
     total = sum(tally.values())
-    print("\n================ numpy-compatibility report ================")
+    print("\n================ rsnumpy-compatibility report ================")
     for k in ("passed", "failed", "skipped", "crashed"):
         print(f"  {k:8}: {tally.get(k, 0)}")
     for k in tally:
@@ -115,7 +115,7 @@ def main(files):
             print(f"  {k:8}: {tally[k]}")
     print(f"  {'total':8}: {total}")
     if nodeids:
-        print(f"  numpy-compatible (passed/total): {tally.get('passed', 0)}/{total} "
+        print(f"  rsnumpy-compatible (passed/total): {tally.get('passed', 0)}/{total} "
               f"= {100.0 * tally.get('passed', 0) / total:.1f}%")
     print("=============================================================\n")
 

@@ -9,10 +9,10 @@ from itertools import permutations, product
 import pytest
 from pytest import param
 
-import numpy as np
-import numpy._core._multiarray_umath as ncu
-from numpy._core._rational_tests import rational, rational2
-from numpy.testing import IS_64BIT, assert_array_equal
+import rsnumpy as np
+import rsnumpy._core._multiarray_umath as ncu
+from rsnumpy._core._rational_tests import rational, rational2
+from rsnumpy.testing import IS_64BIT, assert_array_equal
 
 
 def arraylikes():

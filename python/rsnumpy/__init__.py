@@ -41,9 +41,9 @@ import sys as _sys
 from . import _extra as _extra_module
 from ._extra import chunked_apply, mmap_array, LazyArray
 # ---------- dtype 提升与浮点判定 ----------
-import rsnumpy.num_core as np
-from rsnumpy.num_core import ndarray_iter as NdArrayIter
-from rsnumpy.num_core import (
+import rsnumpy._core as np
+from rsnumpy._core import ndarray_iter as NdArrayIter
+from rsnumpy._core import (
     set_num_threads,
     get_num_threads,
     get_num_cpus,
@@ -4041,9 +4041,11 @@ def asarray(a, dtype=None, order=None):
             _dtype = _infer_int_dtype(flat)
         else:
             # 标量/其他：默认 float64（保持既有语义）。
-            # 注：asarray(complex)→complex128 的正确实现需 rsnumpy 核心的 dtype
-            # 提升一致化（array-array 与 array-scalar、复数路径目前不一致），
-            # 单独改这里会与其余路径产生新的不一致，故待核心提升修复后再启用。
+            # 注意：asarray(标量)→numpy 语义（int→int64/complex→complex128 等）是
+            # 「正确」方向，但 rsnumpy 整个代码体系围绕「标量默认 float64」设计，
+            # 逐点改为 numpy 语义会净负（破坏的比修好的多）。需配套的整体系列
+            # dtype 一致化重构（_promote_dtype / build_array / 各 ufunc 路径）才能
+            # 启用，单独改此处会与其余路径产生新不一致。故保持现状，待整体重构。
             _dtype = "float64"
     return _coerce_dtype(ndarray(a, _dtype=_dtype), _dtype)
 

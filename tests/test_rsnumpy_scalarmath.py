@@ -7,11 +7,11 @@ import warnings
 
 import pytest
 
-import numpy as np
-from numpy._core._rational_tests import rational, rational2
-from numpy._utils import _pep440
-from numpy.exceptions import ComplexWarning
-from numpy.testing import (
+import rsnumpy as np
+from rsnumpy._core._rational_tests import rational, rational2
+from rsnumpy._utils import _pep440
+from rsnumpy.exceptions import ComplexWarning
+from rsnumpy.testing import (
     _gen_alignment_data,
     assert_,
     assert_almost_equal,

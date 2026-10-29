@@ -57,7 +57,7 @@ def test_buffer_2d_write_back():
 
 def test_readonly_request_still_writable():
     # A read-only (PyBUF_FULL_RO) request on a writable array returns a
-    # writable buffer, per PEP 3118 / numpy's array_getbuffer behaviour.
+    # writable buffer, per PEP 3118 / rsnumpy's array_getbuffer behaviour.
     x = np.array([1.0, 2.0])
     mv = memoryview(x)
     assert mv.readonly is False

@@ -1,7 +1,8 @@
 """rsnumpy.random - 随机数生成模块"""
 
-import rsnumpy.num_core as _core
+from rsnumpy import _core
 import random as _py_random
+import rsnumpy as np
 
 
 # _core.random.Generator may be Python's built-in typing.Generator, not a
@@ -14,7 +15,6 @@ if not hasattr(_core.random.Generator, 'integers'):
             self._rng = _py_random.Random(seed)
 
         def integers(self, low, high=None, size=None, dtype=None, endpoint=False):
-            import rsnumpy as np
             if high is None:
                 low, high = 0, low
             if size is None:
