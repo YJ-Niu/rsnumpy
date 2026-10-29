@@ -655,3 +655,28 @@ class random_module:
         from ..__init__ import ndarray
         arr = ndarray(a)
         return ndarray(self._random.rand(*arr.shape))
+
+
+# ---------------------------------------------------------------------------
+# numpy 兼容的模块级 API：numpy 里 ``np.random`` 是模块，``from numpy.random
+# import rand`` 是合法用法。以下模块级函数绑定同一个默认实例，且
+# ``rsnumpy.random``（见 python/rsnumpy/__init__.py）指向本模块本身，
+# 两种访问形式共享同一份全局状态。
+# ---------------------------------------------------------------------------
+_default_rng = random_module()
+Generator = _default_rng.Generator
+RandomState = _default_rng.RandomState
+SeedSequence = _default_rng.SeedSequence
+BitGenerator = _default_rng.BitGenerator
+mtrand = _default_rng.mtrand
+default_rng = _default_rng.default_rng
+seed = _default_rng.seed
+rand = _default_rng.rand
+randn = _default_rng.randn
+randint = _default_rng.randint
+uniform = _default_rng.uniform
+random = _default_rng.random
+random_sample = _default_rng.random
+normal = _default_rng.normal
+randn_like = _default_rng.randn_like
+rand_like = _default_rng.rand_like

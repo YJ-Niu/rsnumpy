@@ -454,6 +454,24 @@ _real_core._rational_tests = _rat
 
 
 # ---------------------------------------------------------------------------
+# 5b. rsnumpy.* names — the copied tests import rsnumpy paths directly (not the
+#     numpy alias).  Dotted imports (`from rsnumpy._core._rational_tests
+#     import ...`, `from rsnumpy.testing import ...`) resolve via sys.modules,
+#     not via attribute attachment, so register the same stub objects under
+#     rsnumpy.* as well.  `rsnumpy.testing` must be the stub: the real
+#     python/rsnumpy/testing.py lacks most numpy.testing assert names.
+# ---------------------------------------------------------------------------
+sys.modules["rsnumpy.testing"] = _testing
+sys.modules["rsnumpy.exceptions"] = _ex
+sys.modules["rsnumpy._utils"] = _utils
+sys.modules["rsnumpy._utils._pep440"] = _pep440
+sys.modules["rsnumpy._core.numerictypes"] = _numtypes
+sys.modules["rsnumpy._core._multiarray_tests"] = _ma_tests
+sys.modules["rsnumpy._core._multiarray_umath"] = _ma_umath
+sys.modules["rsnumpy._core._rational_tests"] = _rat
+
+
+# ---------------------------------------------------------------------------
 # 6. numpy.testing._private.{hypothesis_helpers, utils}
 # ---------------------------------------------------------------------------
 _hyp = types.ModuleType("numpy.testing._private.hypothesis_helpers")
@@ -558,6 +576,13 @@ sys.modules["numpy.testing._private"] = _private
 sys.modules["numpy.testing._private.hypothesis_helpers"] = _hyp
 sys.modules["numpy.testing._private.utils"] = _priv_utils
 _testing._private = _private
+# The copied tests use both `numpy.testing._private.*` and
+# `rsnumpy.testing._private.*`; register the same stubs under rsnumpy.testing
+# (which is the stub module, not a package — the full dotted sys.modules
+# entries are what make those imports resolve).
+sys.modules["rsnumpy.testing._private"] = _private
+sys.modules["rsnumpy.testing._private.hypothesis_helpers"] = _hyp
+sys.modules["rsnumpy.testing._private.utils"] = _priv_utils
 
 
 # ---------------------------------------------------------------------------

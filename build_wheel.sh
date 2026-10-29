@@ -198,7 +198,7 @@ if [[ "$INSTALLED" -eq 1 && "${SKIP_TESTS:-0}" != "1" ]]; then
     tests/test_rsnumpy_numeric.py
     tests/test_rsnumpy_scalarmath.py
   )
-  echo "Running rsnumpy NumPy-compatibility check (non-gating report) ..."
+  echo "Running rsnumpy -compatibility check (non-gating report) ..."
   set +e
   COMPAT_OUT=$(RSNUMPY_COMPAT_SKIP_CRASHES=1 "$VENV_PY" -m pytest "${REFERENCE_TESTS[@]}" -q -p no:cacheprovider 2>&1)
   COMPAT_RC=$?

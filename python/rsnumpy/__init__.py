@@ -5376,7 +5376,7 @@ def cumprod(a, axis=None):
 
 
 linalg = _linalg_module()
-random = _random_module()
+from . import random  # np.random 指向 random 模块本身（numpy 中 np.random 是模块，from rsnumpy.random import rand 必须可用）
 matlib = _matlib_module
 
 dot = linalg.dot
