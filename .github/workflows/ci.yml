@@ -70,16 +70,16 @@ jobs:
           python -m pip install --quiet pytest
           python -m pytest tests/ -q
 
-      - name: Run numpy-compatibility suite (non-gating report)
-        # numpy 官方 4 个核心测试文件（~3400 用例，./test/numpy/）度量 rsnumpy 的
-        # numpy 兼容性。大量 failed 属预期（rsnumpy 尚在补 gap），故 non-gating
-        # （continue-on-error），只报告 pass/failed/skipped 摘要。构建模式跳过已知
-        # C 扩展崩溃测试（RSNUMPY_COMPAT_SKIP_CRASHES=1）避免单进程 pytest 中断。
+      - name: Run rsnumpy-vs-numpy compatibility check (non-gating report)
+        # 用 numpy 官方测试（./tests/numpy/，~3400 用例）作为参照基准验证 rsnumpy 的
+        # NumPy 兼容性——被测对象是 rsnumpy，numpy 测试只是 ground truth。大量 failed
+        # 属预期（rsnumpy 尚在补 gap），故 non-gating（continue-on-error），只报告
+        # pass/failed/skipped 摘要。构建模式跳过已知 C 扩展崩溃测试避免单进程中断。
         continue-on-error: true
         env:
           RSNUMPY_COMPAT_SKIP_CRASHES: "1"
         run: |
-          python -m pytest test/numpy/ -q -p no:cacheprovider > numpy_compat.log 2>&1 || true
+          python -m pytest tests/numpy/ -q -p no:cacheprovider > numpy_compat.log 2>&1 || true
           python -c "print(open('numpy_compat.log', encoding='utf-8', errors='replace').read().splitlines()[-10:])"
 
       - name: Run smoke test

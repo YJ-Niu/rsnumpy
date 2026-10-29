@@ -21,11 +21,11 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-# rsnumpy repo root (HERE is <root>/test/numpy) — pytest nodeids are relative to
+# rsnumpy repo root (HERE is <root>/tests/numpy) — pytest nodeids are relative to
 # the rootdir (the repo root, where pyproject.toml lives), so run subprocesses
 # from there too, otherwise per-test nodeids don't resolve.
-ROOT = os.path.dirname(os.path.dirname(HERE))
-RELPATH = "test/numpy"
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
+RELPATH = "tests/numpy"
 PY = sys.executable
 WORKERS = int(os.environ.get("COMPAT_WORKERS", "8"))
 

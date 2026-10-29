@@ -174,19 +174,20 @@ if [[ "$INSTALLED" -eq 1 && "${SKIP_TESTS:-0}" != "1" ]]; then
     exit 1
   fi
 
-  # ========== numpy 兼容套件（非门禁的兼容性报告） ==========
-  # 跑 numpy 官方 4 个核心测试文件（~3400 用例，./test/numpy/）度量 rsnumpy 的
-  # numpy 兼容性。大量 failed 属预期（rsnumpy 尚在补 gap），故只报告数字、不门禁。
+  # ========== NumPy 参照基准：验证 rsnumpy 兼容性（非门禁报告） ==========
+  # 用 numpy 官方测试（./tests/numpy/，~3400 用例）作为参照基准来验证 rsnumpy 的
+  # NumPy 兼容性——被测对象是 rsnumpy，numpy 测试只是 ground truth。大量 failed
+  # 属预期（rsnumpy 尚在补 gap），故只报告数字、不门禁。核心门禁是上面的 tests/。
   # 构建模式跳过已知 C 扩展崩溃测试（RSNUMPY_COMPAT_SKIP_CRASHES=1）避免单进程
-  # pytest 被 crash 中断；完整 crash 清单由 ./test/numpy/run_compat.py 产出。
-  if [[ -d test/numpy ]]; then
-    echo "Running numpy-compatibility suite (non-gating report) ..."
+  # pytest 被 crash 中断；完整 crash 清单由 ./tests/numpy/run_compat.py 产出。
+  if [[ -d tests/numpy ]]; then
+    echo "Running rsnumpy-vs-numpy compatibility check (non-gating report) ..."
     set +e
-    COMPAT_OUT=$(RSNUMPY_COMPAT_SKIP_CRASHES=1 "$VENV_PY" -m pytest test/numpy/ -q -p no:cacheprovider 2>&1)
+    COMPAT_OUT=$(RSNUMPY_COMPAT_SKIP_CRASHES=1 "$VENV_PY" -m pytest tests/numpy/ -q -p no:cacheprovider 2>&1)
     COMPAT_RC=$?
     set -e
     echo "$COMPAT_OUT" | tail -15
-    echo "  -> numpy-compatibility report above (failed = rsnumpy gaps to close; non-gating, rc=$COMPAT_RC)."
+    echo "  -> rsnumpy compatibility report above (failed = rsnumpy gaps vs the numpy reference; non-gating, rc=$COMPAT_RC)."
   fi
 fi
 
