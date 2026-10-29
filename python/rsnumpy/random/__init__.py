@@ -1,6 +1,6 @@
 """rsnumpy.random - 随机数生成模块"""
 
-from rsnumpy import _core
+import rsnumpy.num_core as _core
 import random as _py_random
 import rsnumpy as np
 

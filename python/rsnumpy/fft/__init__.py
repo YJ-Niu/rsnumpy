@@ -3,14 +3,14 @@
 与 numpy.fft 对齐：既支持 `import rsnumpy as np; np.fft.fftshift(...)`，
 也支持 `from rsnumpy.fft import fft, ifft, rfft, irfft, fftshift, ifftshift`。
 
-底层一维变换由 Rust (`rsnumpy._core`) 实现，复数结果以形状 ``[n, 2]``
+底层一维变换由 Rust (`rsnumpy.num_core`) 实现，复数结果以形状 ``[n, 2]``
 的实数数组表示（每行为 ``[实部, 虚部]``）。fftshift/ifftshift/fftfreq/rfftfreq
 则参考 numpy 的实现用纯 Python 组合现有原语完成。
 """
 
 import math as _math
 
-import rsnumpy._core as _core
+import rsnumpy.num_core as _core
 
 
 

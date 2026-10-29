@@ -2,7 +2,7 @@
 
 import math
 
-import rsnumpy._core as _core
+import rsnumpy.num_core as _core
 
 
 def _nd():

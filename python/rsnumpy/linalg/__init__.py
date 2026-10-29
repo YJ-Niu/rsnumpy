@@ -2,7 +2,7 @@
 
 import sys as _sys
 
-import rsnumpy._core as _core
+import rsnumpy.num_core as _core
 
 
 class LinAlgError(Exception):

@@ -1,6 +1,6 @@
 """rsnumpy.matlib - 矩阵库模块"""
 
-import rsnumpy._core as _core
+import rsnumpy.num_core as _core
 
 
 def empty(shape, dtype=None, order='C'):

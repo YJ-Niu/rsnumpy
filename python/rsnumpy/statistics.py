@@ -2,7 +2,7 @@
 
 import builtins as _builtins
 
-import rsnumpy._core as _core
+import rsnumpy.num_core as _core
 
 
 def _nd():

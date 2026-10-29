@@ -14,8 +14,6 @@ Examples:
 # ========== 子模块导入和函数挂载 ==========
 # 这些导入放在 ndarray 类和 _ensure/_wrap_result/_scalar 函数定义之后以避免循环导入
 import builtins
-import math
-import operator
 from . import array_methods
 from . import math_functions as _math_functions_module
 from . import statistics as _statistics_module
@@ -41,9 +39,9 @@ import sys as _sys
 from . import _extra as _extra_module
 from ._extra import chunked_apply, mmap_array, LazyArray
 # ---------- dtype 提升与浮点判定 ----------
-import rsnumpy._core as np
-from rsnumpy._core import ndarray_iter as NdArrayIter
-from rsnumpy._core import (
+import rsnumpy.num_core as np
+from rsnumpy.num_core import ndarray_iter as NdArrayIter
+from rsnumpy.num_core import (
     set_num_threads,
     get_num_threads,
     get_num_cpus,
@@ -725,10 +723,6 @@ class ndarray:
         if _is_ndarray(other):
             # Rust core handles NumPy broadcasting (e.g. (4,4)*(4,)).
             return _wrap_result(self._array * other._array, dt)
-        if _is_raw_ndarray(other):
-            # 未包装的 raw ndarray：委托 Rust 逐元素（同 __add__/__sub__/__truediv__），
-            # 否则会被下面的 float(other) 误当标量（取首元素）广播。
-            return _wrap_result(self._array * other, dt)
         if isinstance(other, (tuple, list)):
             other_arr = ndarray(other)
             return _wrap_result(self._array * other_arr._array, dt)
@@ -1242,32 +1236,6 @@ class ndarray:
         """用值填充数组。"""
         _ndarray_methods().fill(self, value)
 
-    def choose(self, choices, out=None, mode='raise'):
-        """按元素索引从一组数组中选取（NumPy ndarray.choose 语义）。
-
-        对每个位置 i，``result[i] = choices[self[i]][i]``。choice 可为标量
-        （0-d，广播）或与 self 同形状的数组。常用于实现 clip：
-        ``(a<m + 2*(a>M)).choose((a, m, M))``。
-        """
-        choices = [asarray(c) for c in choices]
-        size = self.size
-        flat_self = self.ravel().tolist()
-        flat_choices = []
-        for c in choices:
-            if getattr(c, 'ndim', 0) == 0:
-                flat_choices.append([c.item()] * size)  # 标量广播
-            else:
-                flat_choices.append(c.ravel().tolist())
-        result = []
-        for i in range(size):
-            k = int(flat_self[i])
-            result.append(flat_choices[k][i])
-        res = array(result).reshape(self.shape)
-        if out is not None:
-            out[...] = res
-            return out
-        return res
-
     def item(self, *args):
         """获取单个元素。"""
         return _ndarray_methods().item(self, *args)
@@ -1369,22 +1337,9 @@ class ndarray:
         """计算以2为底的对数。"""
         return _math_funcs().log2(self)
 
-    def clip(self, a_min=None, a_max=None, out=None, **kwargs):
-        """限制值范围。
-
-        与 NumPy 对齐：``a_min``/``a_max`` 可用位置参数或关键字；NumPy 也接受
-        ``min``/``max`` 作为边界的关键字别名，``out`` 接收原地写入目标。
-        """
-        if a_min is None:
-            a_min = kwargs.pop("min", None)
-        if a_max is None:
-            a_max = kwargs.pop("max", None)
-        kwargs.pop("out", None)  # 与 NumPy 签名兼容；原地写入见下
-        result = _math_funcs().clip(self, a_min, a_max)
-        if out is not None:
-            out[...] = result
-            return out
-        return result
+    def clip(self, a_min, a_max):
+        """限制值范围。"""
+        return _math_funcs().clip(self, a_min, a_max)
 
     def round(self, decimals=0):
         """四舍五入到指定小数位。"""
@@ -2185,7 +2140,7 @@ _numpy_type_names = {}
 def _init_numpy_types():
     """尝试导入 rsnumpy 并注册其标量类型名称。"""
     try:
-        import rsnumpy as np
+        import rsnnumpy as np
     except ImportError:
         return
     for name in dir(np):
@@ -3061,82 +3016,6 @@ class character(flexible):
     """字符标量的抽象基类。"""
 
 
-# ========== 标量算术 dunders ==========
-# 与 NumPy 对齐：标量运算返回带 dtype 的标量（而非 Python 内建 int/float/complex），
-# 且 dtype 与对应的数组运算一致（test_scalar_matches_array_op 校验这一点）。
-# 实现：用 0-d 数组运算取值与 dtype（复用 rsnumpy 既有的 dtype 提升），再包成标量。
-# rsnumpy 标量是 int/float/complex 的子类，Python 对子类的反射运算会优先调用子类
-# 的 __rX__，因此同时定义正向与反射 dunders 即可覆盖 `py_scalar op rsnumpy_scalar`。
-_SCALAR_TYPE_BY_NAME = {}  # 标量类型名 -> 标量类；在标量类定义后填充
-
-
-def _scalar_from(value, dtype):
-    """把 (值, dtype) 包成对应 dtype 的 rsnumpy 标量；无法映射时原样返回。"""
-    cls = _SCALAR_TYPE_BY_NAME.get(str(dtype))
-    if cls is None:
-        return value
-    try:
-        if isinstance(value, (list, tuple)):
-            value = value[0]
-        if value is None:
-            return value
-        return cls(value)
-    except Exception:
-        return value
-
-
-def _scalar_binop(op, reflected=False):
-    def _dunder(self, other):
-        # 与 NumPy 一致：标量运算的结果 dtype 应与「数组 运算 标量」一致
-        # （测试 test_scalar_matches_array_op 正是拿 asarray(self) op other 作参照）。
-        # 因此这里对 self 做 asarray、对 other 保持标量，而非把两者都 asarray——
-        # rsnumpy 的 array-array 与 array-scalar 提升规则不完全相同。
-        a = asarray(self)
-        res = op(other, a) if reflected else op(a, other)
-        try:
-            val = res.item()
-        except Exception:
-            try:
-                val = res[()]
-            except Exception:
-                val = res
-        return _scalar_from(val, res.dtype)
-
-    return _dunder
-
-
-def _scalar_unop(op):
-    def _dunder(self):
-        res = op(asarray(self))
-        try:
-            val = res.item()
-        except Exception:
-            try:
-                val = res[()]
-            except Exception:
-                val = res
-        return _scalar_from(val, res.dtype)
-
-    return _dunder
-
-
-_SCALAR_OPS = {
-    '__add__': (operator.add, False), '__radd__': (operator.add, True),
-    '__sub__': (operator.sub, False), '__rsub__': (operator.sub, True),
-    '__mul__': (operator.mul, False), '__rmul__': (operator.mul, True),
-    '__truediv__': (operator.truediv, False), '__rtruediv__': (operator.truediv, True),
-    '__floordiv__': (operator.floordiv, False), '__rfloordiv__': (operator.floordiv, True),
-    '__mod__': (operator.mod, False), '__rmod__': (operator.mod, True),
-    '__pow__': (operator.pow, False), '__rpow__': (operator.pow, True),
-    '__and__': (operator.and_, False), '__rand__': (operator.and_, True),
-    '__or__': (operator.or_, False), '__ror__': (operator.or_, True),
-    '__xor__': (operator.xor, False), '__rxor__': (operator.xor, True),
-}
-_UNARY_OPS = {
-    '__neg__': operator.neg, '__pos__': operator.pos, '__abs__': abs,
-}
-
-
 def _make_scalar_type(name, base, pybase, itemsize, zero):
     """Create a callable scalar type mirroring numpy's scalar classes.
 
@@ -3163,11 +3042,6 @@ def _make_scalar_type(name, base, pybase, itemsize, zero):
         'item': lambda self: pybase(self),
         'tolist': lambda self: pybase(self),
     }
-    # 算术 / 位运算 dunders：返回带 dtype 的标量（见上方 _SCALAR_OPS/_UNARY_OPS）。
-    for _on, (_op, _refl) in _SCALAR_OPS.items():
-        ns[_on] = _scalar_binop(_op, _refl)
-    for _on, _op in _UNARY_OPS.items():
-        ns[_on] = _scalar_unop(_op)
     return type(name, (base, pybase), ns)
 
 
@@ -3201,7 +3075,7 @@ string_ = type('string_', (character,), {})
 unicode_ = type('unicode_', (character,), {})
 bytes_ = string_  # rsnumpy 中 bytes_ 为字节字符串类型
 str_ = unicode_   # rsnumpy 中 str_ 为 unicode 字符串类型
-_bool_ns = {
+bool_ = type('bool', (generic, int), {
     '__new__': staticmethod(_bool_new),
     '__init__': lambda self, *a: None,
     'itemsize': 1,
@@ -3213,26 +3087,9 @@ _bool_ns = {
     'tolist': lambda self: builtins.bool(int(self)),
     '__repr__': lambda self: builtins.repr(builtins.bool(int(self))),
     '__str__': lambda self: builtins.str(builtins.bool(int(self))),
-}
-# bool_ 也走标量算术 dunders（位运算/逻辑运算返回带 dtype 的标量）
-for _on, (_op, _refl) in _SCALAR_OPS.items():
-    _bool_ns[_on] = _scalar_binop(_op, _refl)
-for _on, _op in _UNARY_OPS.items():
-    _bool_ns[_on] = _scalar_unop(_op)
-bool_ = type('bool', (generic, int), _bool_ns)
+})
 bool = bool_
 object_ = type('object_', (generic,), {})
-
-# 填充标量类型名 -> 标量类 映射（供 _scalar_from 把运算结果包成对应标量）。
-_SCALAR_TYPE_BY_NAME.update({
-    'int8': int8, 'int16': int16, 'int32': int32, 'int64': int64,
-    'uint8': uint8, 'uint16': uint16, 'uint32': uint32, 'uint64': uint64,
-    'float16': float16, 'float32': float32, 'float64': float64,
-    'complex64': complex64, 'complex128': complex128,
-    'bool': bool_,
-})
-for _alias in ('float', 'double', 'longdouble', 'single'):
-    _SCALAR_TYPE_BY_NAME.setdefault(_alias, float64)
 
 
 def _void_repr(bs):
@@ -4040,12 +3897,6 @@ def asarray(a, dtype=None, order=None):
             flat, _, _ = _flatten_check(a)
             _dtype = _infer_int_dtype(flat)
         else:
-            # 标量/其他：默认 float64（保持既有语义）。
-            # 注意：asarray(标量)→numpy 语义（int→int64/complex→complex128 等）是
-            # 「正确」方向，但 rsnumpy 整个代码体系围绕「标量默认 float64」设计，
-            # 逐点改为 numpy 语义会净负（破坏的比修好的多）。需配套的整体系列
-            # dtype 一致化重构（_promote_dtype / build_array / 各 ufunc 路径）才能
-            # 启用，单独改此处会与其余路径产生新不一致。故保持现状，待整体重构。
             _dtype = "float64"
     return _coerce_dtype(ndarray(a, _dtype=_dtype), _dtype)
 
@@ -4159,27 +4010,13 @@ def _to_ndarray(obj):
     return ndarray(obj)
 
 
-def array_equal(a, b, equal_nan=False, *args, **kwargs):
-    """判断两个数组是否形状和元素完全相同。
-
-    与 NumPy 对齐：``equal_nan=True`` 时位于相同位置的 NaN 视为相等（NaN != NaN
-    本是 IEEE 规则）。``*args``/``**kwargs`` 吸收 NumPy 的其余兼容参数
-    （``scalar_type`` 等）。
-    """
+def array_equal(a, b):
+    """判断两个数组是否形状和元素完全相同。"""
     a = _to_ndarray(a)
     b = _to_ndarray(b)
     if a.shape != b.shape:
         return False
-    if not equal_nan:
-        return builtins.bool(np.array_equal(a._array, b._array))
-    # equal_nan=True：NaN 同位置视为相等
-    fa, fb = a.ravel().tolist(), b.ravel().tolist()
-    for x, y in zip(fa, fb):
-        if x != y:
-            if isinstance(x, float) and isinstance(y, float) and math.isnan(x) and math.isnan(y):
-                continue
-            return False
-    return True
+    return builtins.bool(np.array_equal(a._array, b._array))
 
 
 def copy(a, order='K', thread_safe=False):
@@ -5014,28 +4851,6 @@ class _NdFlatIter:
         self._idx += 1
         return int(val) if self._is_int else float(val)
 
-    def __len__(self):
-        return self._size
-
-    def __getitem__(self, idx):
-        """支持 flat[i] 与 flat[slice]（NumPy 语义：切片返回一维数组）。"""
-        if isinstance(idx, slice):
-            conv = [int(self._flat[i]) if self._is_int else float(self._flat[i])
-                    for i in range(*idx.indices(self._size))]
-            return np.ndarray(conv)
-        val = self._flat[idx]
-        return int(val) if self._is_int else float(val)
-
-    def __setitem__(self, idx, value):
-        """支持 flat[i] = v 与 flat[slice] = seq（写回原数组）。"""
-        vals = [self._flat[i] for i in range(self._size)]
-        if isinstance(idx, slice):
-            for i, v in zip(range(*idx.indices(self._size)), value):
-                vals[i] = v
-        else:
-            vals[idx] = value
-        self._arr.flat = vals
-
 
 class _NdIterElement:
     """nditer 的可写元素包装，支持 op_flags=['readwrite'] 时修改原数组。"""
@@ -5479,16 +5294,8 @@ sign = _math_functions_module.sign
 reciprocal = _math_functions_module.reciprocal
 _clip_core = _math_functions_module.clip
 
-def clip(a, a_min=None, a_max=None, out=None, **kwargs):
-    """限制值范围。
-
-    与 NumPy 对齐：``a_min``/``a_max`` 可缺省（用数组 min/max）；NumPy 也接受
-    ``min``/``max`` 作为边界的关键字别名；``out`` 接收原地写入目标（多维广播）。
-    """
-    if a_min is None:
-        a_min = kwargs.pop("min", None)
-    if a_max is None:
-        a_max = kwargs.pop("max", None)
+def clip(a, a_min, a_max, out=None):
+    """限制值范围。"""
     a_arr = asarray(a)
     if a_min is None:
         a_min = a_arr.min()
@@ -5496,7 +5303,8 @@ def clip(a, a_min=None, a_max=None, out=None, **kwargs):
         a_max = a_arr.max()
     result = _clip_core(a, a_min, a_max)
     if out is not None:
-        out[...] = result
+        for i in range(len(result)):
+            out[i] = result[i]
         return out
     return result
 
