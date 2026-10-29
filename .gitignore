@@ -51,7 +51,7 @@ test2*.py
 map*.jpeg
 bench_extra.py
 debug/
-test/
+debug_test/
 *.png
 runtest_matplotlib.py
 
