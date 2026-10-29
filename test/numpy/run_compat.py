@@ -63,9 +63,12 @@ def classify(r):
 
 
 def run_one(nodeid):
+    # Force crash-skip OFF so the survey always catches (and reports) crashes,
+    # even if the parent environment has RSNUMPY_COMPAT_SKIP_CRASHES=1 (build).
+    env = {**os.environ, "RSNUMPY_COMPAT_SKIP_CRASHES": "0"}
     r = subprocess.run(
         [PY, "-m", "pytest", nodeid, "-q", "-p", "no:cacheprovider", "--no-header", "-x"],
-        capture_output=True, text=True, cwd=ROOT, timeout=180,
+        capture_output=True, text=True, cwd=ROOT, timeout=180, env=env,
     )
     return classify(r), nodeid
 

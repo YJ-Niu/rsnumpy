@@ -23,8 +23,10 @@ is a numpy case rsnumpy handles correctly; a failing one is a real gap; a crashi
 one (caught by the subprocess runner) is a C-extension robustness bug.
 """
 import faulthandler
+import functools
 import inspect
 import math
+import os
 import re
 import sys
 import types
@@ -46,6 +48,37 @@ for _sub in ("random", "ma", "exceptions", "linalg", "fft"):
     if hasattr(rsnumpy, _sub):
         sys.modules[f"numpy.{_sub}"] = getattr(rsnumpy, _sub)
 numpy = rsnumpy
+
+
+# numpy uses ``@np.errstate(...)`` as a decorator; rsnumpy's errstate result
+# isn't callable, so wrap it to be both a context manager and a decorator.
+class _ErrstateCM:
+    def __init__(self, cm):
+        self._cm = cm() if isinstance(cm, type) else cm
+
+    def __enter__(self):
+        return self._cm.__enter__()
+
+    def __exit__(self, *a):
+        return self._cm.__exit__(*a)
+
+    def __call__(self, func):
+        @functools.wraps(func)
+        def wrapper(*fa, **fk):
+            with self._cm:
+                return func(*fa, **fk)
+
+        return wrapper
+
+
+_orig_errstate = rsnumpy.errstate
+
+
+def _errstate(*a, **k):
+    return _ErrstateCM(_orig_errstate(*a, **k))
+
+
+rsnumpy.errstate = _errstate
 
 
 # ---------------------------------------------------------------------------
@@ -419,7 +452,20 @@ _hyp = types.ModuleType("numpy.testing._private.hypothesis_helpers")
 
 
 class _DummyStrategy:
-    pass
+    """Dummy hypothesis strategy; supports the combinator operators
+    (``|``, ``&``, ``~``, call) so strategy expressions parse at module load."""
+
+    def __or__(self, other):
+        return self
+
+    def __and__(self, other):
+        return self
+
+    def __invert__(self):
+        return self
+
+    def __call__(self, *a, **k):
+        return self
 
 
 class _Strategies:
@@ -442,8 +488,32 @@ def _hyp_given(*strategies, **kwargs):
 
 
 _hyp.HAS_HYPOTHESIS = False
-_hyp.given = _hyp_given
-_hyp.hynp = _hyp_given
+
+
+class _HypDecorator:
+    """Callable (like hypothesis's ``given``/``hynp``) AND a namespace
+    (``hynp.arrays(...)``, ``hynp.scalar_dtypes()``).  Every decorated test
+    skips at runtime since hypothesis isn't installed."""
+
+    def __call__(self, *a, **k):
+        def deco(f):
+            def wrapper(*aa, **kk):
+                pytest.skip("requires hypothesis (not installed under rsnumpy)")
+
+            wrapper.__name__ = getattr(f, "__name__", "hypothesis_test")
+            return wrapper
+
+        if len(a) == 1 and callable(a[0]) and not k:
+            return deco(a[0])  # bare ``@hynp`` / ``given(func)``
+        return deco  # ``@hynp(...)`` — returns a decorator
+
+    def __getattr__(self, name):
+        # hynp.arrays / hynp.scalar_dtypes / ... -> dummy strategy builders
+        return lambda *a, **k: _DummyStrategy()
+
+
+_hyp.given = _HypDecorator()
+_hyp.hynp = _HypDecorator()
 _hyp.st = _Strategies()
 _hyp.sampled_from = lambda *a, **k: _DummyStrategy()
 
@@ -501,11 +571,32 @@ def _uses_skipped_feature(item):
     return any(m in src for m in _SKIP_MARKERS)
 
 
+# Known tests that abort the rsnumpy C extension.  In "build mode"
+# (RSNUMPY_COMPAT_SKIP_CRASHES=1) they are skipped so a single in-process pytest
+# run doesn't die on the first crash; the per-test survey (run_compat.py) never
+# sets the var and reports them as crashed instead.
+_KNOWN_CRASH_SUBSTRINGS = (
+    "test_too_large_array_error_paths",
+    "test_scalar_array_bool",
+    "test_too_many_advanced_indices",
+    "TestMultipleEllipsisError",
+    "test_count_nonzero_character_axis",
+    "test_roll_empty",
+    "test_nonzero_large_dtype",
+)
+
+
 def pytest_collection_modifyitems(config, items):
+    skip_crashes = os.environ.get("RSNUMPY_COMPAT_SKIP_CRASHES") == "1"
     for item in items:
         if _uses_skipped_feature(item):
             item.add_marker(
                 pytest.mark.skip(reason="requires a numpy C-helper/feature not in rsnumpy")
+            )
+            continue
+        if skip_crashes and any(s in item.nodeid for s in _KNOWN_CRASH_SUBSTRINGS):
+            item.add_marker(
+                pytest.mark.skip(reason="rsnumpy C-ext abort (tracked; see compat report)")
             )
 
 
