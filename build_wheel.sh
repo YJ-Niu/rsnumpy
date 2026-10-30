@@ -205,6 +205,28 @@ if [[ "$INSTALLED" -eq 1 && "${SKIP_TESTS:-0}" != "1" ]]; then
   set -e
   echo "$COMPAT_OUT" | tail -15
   echo "  -> rsnumpy compatibility report above (failed = rsnumpy bugs/gaps vs the numpy reference; non-gating, rc=$COMPAT_RC)."
+
+  # ========== 冒烟测试：run_test.py / run_test2.py（非门禁报告） ==========
+  # 独立顺序执行脚本（非 pytest），验证 rsnumpy 核心功能无异常。
+  # failed = rsnumpy 存在未修复的 bug，故只报告、不门禁。
+  SMOKE_TESTS=(
+    tests/run_test.py
+    tests/run_test2.py
+  )
+  echo "Running rsnumpy smoke tests (non-gating report) ..."
+  mkdir -p debug_test
+  for SMOKE_TEST in "${SMOKE_TESTS[@]}"; do
+    set +e
+    SMOKE_OUT=$("$VENV_PY" "$SMOKE_TEST" 2>&1)
+    SMOKE_RC=$?
+    set -e
+    if [[ $SMOKE_RC -eq 0 ]]; then
+      echo "  -> $SMOKE_TEST passed."
+    else
+      echo "  -> $SMOKE_TEST FAILED (rc=$SMOKE_RC)"
+      echo "$SMOKE_OUT" | tail -20
+    fi
+  done
 fi
 
 echo "Done."

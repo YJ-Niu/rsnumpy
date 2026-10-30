@@ -1,0 +1,2428 @@
+import rsnumpy as np
+import time
+import math
+from io import StringIO
+from rsnumpy import array, argmin, sqrt, sum
+from rsnumpy.lib.recfunctions import repack_fields
+from rsnumpy.lib import recfunctions as rfn
+
+start_time = time.time()
+
+
+def mark_print():
+    print("\n++++++++++++++++++++++++\n")
+
+
+# 使用标量类型
+dt = np.dtype([('age', np.int8)])
+a = np.array([(10,), (20,), (30,)], dtype=dt)
+print(1, a['age'])
+
+student = np.dtype([('name', 'S20'), ('age', 'i1'), ('marks', 'f4')])
+print(2, student)
+
+a = np.array([('abc', 21, 50), ('xyz', 18, 75)], dtype=student)
+print(3, a)
+
+a = np.arange(15).reshape(3, 5)
+print(4, a)
+# print(b)
+# print(np.array_equal(a, b))  # True
+# print(a.shape == b.shape)    # True
+# print(a.dtype == b.dtype)    # True
+print(5, a.dtype)
+# print(b.dtype)
+
+a = np.arange(24)
+print(6, a.ndim)             # a 现只有一个维度
+# 现在调整其大小
+b = a.reshape(2, 4, 3)  # b 现在拥有三个维度
+print(7, b.ndim)
+a = np.array([[1, 2, 3], [4, 5, 6]])
+print(8, a.shape)
+
+a = np.array([[1, 2, 3], [4, 5, 6]])
+a.shape = (3, 2)
+print(9, a)
+
+a = np.array([[1, 2, 3], [4, 5, 6]])
+b = a.reshape(3, 2)
+print(10, b)
+
+# 数组的 dtype 为 int8（一个字节）
+x = np.array([1, 2, 3, 4, 5], dtype=np.int8)
+print(11, x.itemsize)
+
+# 数组的 dtype 现在为 float64（八个字节）
+y = np.array([1, 2, 3, 4, 5], dtype=np.float64)
+print(12, y.itemsize)
+
+x = np.array([1, 2, 3, 4, 5])
+print(13, x.flags)
+
+x3 = np.empty([2, 3], dtype=int)
+print(14, x3)
+print()
+
+x2 = np.zeros([2, 3], dtype=int)
+print(15, x2)
+print()
+
+x3 = np.zeros(shape=(2, 3), dtype=float, order='C')
+print(16, x3)
+
+print("+++++++++++++++++\n")
+# 默认为浮点数
+x = np.zeros(5)
+print(17, x)
+
+# 设置类型为整数
+y = np.zeros((5,), dtype=int)
+print(18, y)
+
+print("+++++++++++++++++\n")
+# 自定义类型
+z = np.zeros((2, 2), dtype=[('x', 'i4'), ('y', 'i4')])
+print(19, z)
+
+x = np.ones(5)
+print(20, x)
+
+# 自定义类型
+x = np.ones([2, 2], dtype=int)
+print(21, x)
+
+print("3. +++++++++++++++++\n")
+# 创建一个 3x3 的二维数组
+arr = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+
+# 创建一个与 arr 形状相同的，所有元素都为 0 的数组
+zeros_arr = np.zeros_like(arr)
+print(22, zeros_arr)
+
+print("4. +++++++++++++++++\n")
+# 创建一个 3x3 的二维数组
+arr = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+
+# 创建一个与 arr 形状相同的，所有元素都为 1 的数组
+ones_arr = np.ones_like(arr)
+print(23, ones_arr)
+
+print("5. +++++++++++++++++\n")
+x = [1, 2, 3]
+a = np.asarray(x)
+print(24, a, "\n==>\n", "[1  2  3]")
+
+x = (1, 2, 3)
+a = np.asarray(x)
+print(25, a, "\n==>\n", "[1  2  3]")
+
+x = [(1, 2, 3), (4, 5)]
+# a = np.asarray(x)
+print(a, "\n==>\n", "[[1  2  3]\n[4  5]]")
+
+x = [1, 2, 3]
+a = np.asarray(x, dtype=float)
+print(26, a, "\n==>\n", "[1.  2.  3.]")
+
+s = b'Hello World'
+a = np.frombuffer(s, dtype='S1')
+print(27, a)
+
+# 使用 range 函数创建列表对象
+list1 = list(range(5))
+it = iter(list1)
+
+# 使用迭代器创建 ndarray
+x = np.fromiter(it, dtype=float)
+print(28, x)
+
+x = np.arange(5)
+print(29, x)
+# 设置了 dtype
+x = np.arange(5, dtype=float)
+print(30, x)
+
+
+x = np.arange(10, 20, 2)
+print(31, x)
+
+a = np.linspace(1, 10, 10)
+print(32, a)
+
+a = np.linspace(1, 1, 10)
+print(33, a)
+
+a = np.linspace(10, 20, 5, endpoint=False)
+print(34, a)
+
+a = np.linspace(1, 10, 10, retstep=True)
+print(35, a)
+
+# 拓展例子
+b = np.linspace(1, 10, 10).reshape([10, 1])
+print(36, b)
+
+a = np.logspace(1.0, 2.0, num=10)
+print(37, a)
+
+a = np.logspace(0, 9, 10, base=2)
+print(38, a)
+
+a = np.arange(10)
+s = slice(2, 7, 2)   # 从索引 2 开始到索引 7 停止，间隔为2
+print(39, a[s])
+
+a = np.arange(10)  # [0 1 2 3 4 5 6 7 8 9]
+b = a[5]
+print(40, b)
+
+a = np.arange(10)
+print(41, a[2:])
+
+a = np.arange(10)  # [0 1 2 3 4 5 6 7 8 9]
+print(42, a[2:5])
+
+a = np.array([[1, 2, 3], [3, 4, 5], [4, 5, 6]])
+print(43, a)
+# 从某个索引处开始切割
+print('从数组索引 a[1:] 处开始切割')
+print(44, a[1:])
+
+print("+++++++++++++++++\n")
+a = np.array([[1, 2, 3], [3, 4, 5], [4, 5, 6]])
+print(45, a[..., 1])   # 第2列元素
+print(46, a[1, ...])   # 第2行元素
+print(47, a[..., 1:])  # 第2列及剩下的所有元素
+print("+++++++++++++++++\n")
+x = np.array([[1, 2], [3, 4], [5, 6]])
+y = x[[0, 1, 2], [0, 1, 0]]
+print(48, y)
+
+x = np.array([[0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10, 11]])
+print('我们的数组是：')
+print(49, x)
+print("\n")
+rows = np.array([[0, 0], [3, 3]])
+cols = np.array([[0, 2], [0, 2]])
+y = x[rows, cols]
+print('这个数组的四个角元素是：')
+print(50, y)
+
+a = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+b = a[1:3, 1:3]
+print(51, b)
+
+c = a[1:3, [1, 2]]
+print(52, c)
+
+d = a[..., 1:]
+print(53, d)
+
+x = np.array([[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 10, 11]])
+print('我们的数组是：')
+print(54, x)
+print("\n")
+# 大于 5 的元素
+print("大于 5 的元素是：")
+print(55, x[x > 5])
+
+a = np.array([np.nan, 1, 2, np.nan, 3, 4, 5])
+print(56, a[~np.isnan(a)])
+
+a = np.array([1, 2+6j, 5, 3.5+5j])
+print(57, a[np.iscomplex(a)])
+
+x = np.arange(9)
+print(58, x)
+# 一维数组读取指定下标对应的元素
+print("-------读取下标对应的元素-------")
+x2 = x[[0, 6]]  # 使用花式索引
+print(59, x2)
+
+print(60, x2[0])
+print(61, x2[1])
+
+x = np.arange(32).reshape((8, 4))
+print(62, x)
+# 二维数组读取指定下标对应的行
+print("-------读取下标对应的行-------")
+print(63, x[[4, 2, 1, 7]])
+
+x = np.arange(32).reshape((8, 4))
+print(64, x[[-4, -2, -1, -7]])
+
+x = np.arange(32).reshape((8, 4))
+print(65, x[np.ix_([1, 5, 7, 2], [0, 3, 1, 2])])
+
+a = np.array([1, 2, 3, 4])
+b = np.array([10, 20, 30, 40])
+c = a * b
+print(66, c)
+
+a = np.array([[0, 0, 0],
+             [10, 10, 10],
+             [20, 20, 20],
+             [30, 30, 30]])
+b = np.array([0, 1, 2])
+print(67, a + b)
+
+a = np.array([[0, 0, 0],
+             [10, 10, 10],
+             [20, 20, 20],
+             [30, 30, 30]])
+b = np.array([1, 2, 3])
+bb = np.tile(b, (4, 1))  # 重复 b 的各个维度
+print(68, a + bb)
+
+a = np.arange(6).reshape(2, 3)
+print('原始数组是：')
+print(69, a)
+print('\n')
+print('迭代输出元素：')
+for x in np.nditer(a):
+    print(70, x, end=", ")
+    print('\n')
+
+
+c = np.array([1.3, 2.4, 3.5])
+for x in np.nditer(c):
+    print(71, x, end=", ")
+    print('\n')
+
+# a = np.arange(6).reshape(2, 3)
+# for x in np.nditer(a.T):
+#     print(x, end=", ")
+# print('\n')
+
+# for x in np.nditer(a.T.copy(order='C')):
+#     print(x, end=", ")
+# print('\n')
+
+
+a = np.arange(0, 60, 5)
+a = a.reshape(3, 4)
+print('原始数组是：')
+print(72, a)
+print('\n')
+print('原始数组的转置是：')
+b = a.T
+print(73, b)
+print('\n')
+print('以 C 风格顺序排序：')
+c = b.copy(order='C')
+print(74, c)
+for x in np.nditer(c):
+    print(x, end=", ")
+    print('\n')
+print('以 F 风格顺序排序：')
+c = b.copy(order='F')
+print(75, c)
+for x in np.nditer(c, order='F'):
+    print(76, x, end=", ")
+    print()
+a = np.arange(6).reshape(2, 3)
+print('原始数组是：')
+print(77, a)
+print('\n')
+print(a.T)
+print('迭代输出元素：')
+for x in np.nditer(a.T):
+    print(78, x, end=", ")
+    print('\n')
+
+for x in np.nditer(a.T.copy(order='F')):
+    print(79, x, end=", ")
+    print('\n')
+
+print("+++++++++++++++++\n")
+a = np.arange(0, 60, 5)
+a = a.reshape(3, 4)
+print('原始数组是：')
+print(a)
+print('\n')
+print('以 C 风格顺序排序：')
+for x in np.nditer(a, order='C'):
+    print(80, x, end=", ")
+    print('\n')
+    print('以 F 风格顺序排序：')
+for x in np.nditer(a, order='F'):
+    print(81, x, end=", ")
+    print('\n')
+    print("+++++++++++++++++\n")
+
+a = np.arange(0, 60, 5)
+a = a.reshape(3, 4)
+print('原始数组是：')
+print(82, a)
+print('\n')
+for x in np.nditer(a, op_flags=['readwrite']):
+    x[...] = 2*x
+print('修改后的数组是：')
+print(a)
+
+print("+++++++++++++++++\n")
+a = np.arange(0, 60, 5)
+a = a.reshape(3, 4)
+print('原始数组是：')
+print(83, a)
+print('\n')
+print('修改后的数组是：')
+for x in np.nditer(a, flags=['multi_index'], order='F'):
+    print(84, x, end=", ")
+    print('')
+
+print("+++++++++++++++++\n")
+a = np.arange(0, 60, 5)
+a = a.reshape(3, 4)
+print('第一个数组为：')
+print(85, a)
+print('\n')
+print('第二个数组为：')
+b = np.array([1, 2, 3, 4], dtype=int)
+print(86, b)
+print('\n')
+print('修改后的数组为：')
+for x, y in np.nditer([a, b]):
+    print(87, "%d:%d" % (x, y), end=", ")
+    print('')
+print("+++++++++++++++++\n")
+a = np.arange(8)
+print('原始数组：')
+print(88, a)
+print('\n')
+
+b = a.reshape(4, 2)
+print('修改后的数组：')
+print(89, b)
+
+a = np.arange(9).reshape(3, 3)
+print('原始数组：')
+for row in a:
+    print(90, row)
+
+# 对数组中每个元素都进行处理，可以使用flat属性，该属性是一个数组元素迭代器：
+print('迭代后的数组：')
+for element in a.flat:
+    print(91, element)
+
+print('')
+print("+++++++++++++++++\n")
+a = np.arange(8).reshape(2, 4)
+
+print('原数组：')
+print(92, a)
+print('\n')
+# 默认按行
+
+print('展开的数组：')
+print(93, a.flatten())
+print('\n')
+
+print('以 F 风格顺序展开的数组：')
+print(94, a.flatten(order='F'))
+print('\n')
+
+print('')
+print("+++++++++++++++++\n")
+a = np.arange(8).reshape(2, 4)
+
+print('原数组：')
+print(95, a)
+print('\n')
+
+print('调用 ravel 函数之后：')
+print(96, a.ravel())
+print('\n')
+
+print('以 F 风格顺序调用 ravel 函数之后：')
+print(97, a.ravel(order='F'))
+print('\n')
+
+a = np.arange(12).reshape(3, 4)
+
+print('原数组：')
+print(98, a)
+print('\n')
+
+print('对换数组：')
+print(99, a.T)
+
+
+print("+++++++++++++++++\n")
+
+# 创建了三维的 ndarray
+a = np.arange(8).reshape(2, 2, 2)
+
+print('原数组：')
+print(100, a)
+print('获取数组中一个值：')
+print(101, np.where(a == 6))
+print(102, a[1, 1, 0])  # 为 6
+print('\n')
+
+
+# 将轴 2 滚动到轴 0（宽度到深度）
+
+print('调用 rollaxis 函数：')
+b = np.rollaxis(a, 2, 0)
+print(103, b)
+# 查看元素 a[1,1,0]，即 6 的坐标，变成 [0, 1, 1]
+# 最后一个 0 移动到最前面
+print(104, np.where(b == 6))
+print('\n')
+
+# 将轴 2 滚动到轴 1：（宽度到高度）
+
+print('调用 rollaxis 函数：')
+c = np.rollaxis(a, 2, 1)
+print(c)
+# 查看元素 a[1,1,0]，即 6 的坐标，变成 [1, 0, 1]
+# 最后的 0 和 它前面的 1 对换位置
+print(105, np.where(c == 6))
+print('\n')
+
+a = np.arange(8)
+print('原始数组：')
+print(106, a)
+print('\n')
+
+b = a.reshape(4, 2)
+print('修改后的数组：')
+print(107, b)
+
+a = np.arange(9).reshape(3, 3)
+print('原始数组：')
+for row in a:
+    print(108, row)
+
+# 对数组中每个元素都进行处理，可以使用flat属性，该属性是一个数组元素迭代器：
+print('迭代后的数组：')
+for element in a.flat:
+    print(109, element)
+a = np.arange(8).reshape(2, 4)
+
+print('原数组：')
+print(110, a)
+print('\n')
+# 默认按行
+
+print('展开的数组：')
+print(111, a.flatten())
+print('\n')
+
+print('以 F 风格顺序展开的数组：')
+print(112, a.flatten(order='F'))
+
+a = np.arange(8).reshape(2, 4)
+
+print('原数组：')
+print(113, a)
+print('\n')
+
+print('调用 ravel 函数之后：')
+print(114, a.ravel())
+print('\n')
+
+print('以 F 风格顺序调用 ravel 函数之后：')
+print(115, a.ravel(order='F'))
+
+a = np.arange(12).reshape(3, 4)
+
+print('原数组：')
+print(116, a)
+print('\n')
+
+print('对换数组：')
+print(np.transpose(a))
+a = np.arange(12).reshape(3, 4)
+
+print('原数组：')
+print(117, a)
+print('\n')
+
+print('转置数组：')
+print(118, a.T)
+
+# 创建了三维的 ndarray
+a = np.arange(8).reshape(2, 2, 2)
+
+print('原数组：')
+print(119, a)
+print('获取数组中一个值：')
+print(120, np.where(a == 6))
+print(121, a[1, 1, 0])  # 为 6
+print('\n')
+
+
+# 将轴 2 滚动到轴 0（宽度到深度）
+
+print('调用 rollaxis 函数：')
+b = np.rollaxis(a, 2, 0)
+print(122, b)
+# 查看元素 a[1,1,0]，即 6 的坐标，变成 [0, 1, 1]
+# 最后一个 0 移动到最前面
+print(123, np.where(b == 6))
+print('\n')
+
+# 将轴 2 滚动到轴 1：（宽度到高度）
+
+print('调用 rollaxis 函数：')
+c = np.rollaxis(a, 2, 1)
+print(124, c)
+# 查看元素 a[1,1,0]，即 6 的坐标，变成 [1, 0, 1]
+# 最后的 0 和 它前面的 1 对换位置
+print(125, np.where(c == 6))
+print('\n')
+
+# 创建了三维的 ndarray
+a = np.arange(8).reshape(2, 2, 2)
+
+print('原数组：')
+print(126, a)
+print('\n')
+# 现在交换轴 0（深度方向）到轴 2（宽度方向）
+
+print('调用 swapaxes 函数后的数组：')
+print(127, np.swapaxes(a, 2, 0))
+
+print('')
+print("++++++++++++++++++++++++++++++++++++++++++++\n")
+
+x = np.array([[1], [2], [3]])
+y = np.array([4, 5, 6])
+
+# 对 y 广播 x
+b = np.broadcast(x, y)
+# 它拥有 iterator 属性，基于自身组件的迭代器元组
+
+print('对 y 广播 x：')
+r, c = b.iters
+
+# Python3.x 为 next(context) ，Python2.x 为 context.next()
+print(128, next(r), next(c))
+print(129, next(r), next(c))
+print('\n')
+# shape 属性返回广播对象的形状
+
+print('广播对象的形状：')
+print(130, b.shape)
+print('\n')
+# 手动使用 broadcast 将 x 与 y 相加
+b = np.broadcast(x, y)
+c = np.empty(b.shape)
+
+print('手动使用 broadcast 将 x 与 y 相加：')
+print(131, c.shape)
+print('\n')
+c.flat = [u + v for (u, v) in b]
+
+print('调用 flat 函数：')
+print(132, c)
+print('\n')
+# 获得了和 NumPy 内建的广播支持相同的结果
+
+print('x 与 y 的和：')
+print(133, x + y)
+
+
+print('')
+print("+++++++++++++++++++++++++++++++++\n")
+a = np.arange(4).reshape(1, 4)
+
+print('原数组：')
+print(134, a)
+print('\n')
+
+print('调用 broadcast_to 函数之后：')
+print(135, np.broadcast_to(a, (4, 4)))
+
+print('\n')
+print("+++++++++++++++++++++++++++++++++\n")
+x = np.array(([1, 2], [3, 4]))
+
+print('数组 x：')
+print(136, x)
+print('\n')
+y = np.expand_dims(x, axis=0)
+
+print('数组 y：')
+print(137, y)
+print('\n')
+
+print('数组 x 和 y 的形状：')
+print(138, x.shape, y.shape)
+print('\n')
+# 在位置 1 插入轴
+y = np.expand_dims(x, axis=1)
+
+print('在位置 1 插入轴之后的数组 y：')
+print(139, y)
+print('\n')
+
+print('x.ndim 和 y.ndim：')
+print(140, x.ndim, y.ndim)
+print('\n')
+
+print('x.shape 和 y.shape：')
+print(141, x.shape, y.shape)
+mark_print()
+x = np.arange(9).reshape(1, 3, 3)
+
+print('数组 x：')
+print(142, x)
+print('\n')
+y = np.squeeze(x)
+
+print('数组 y：')
+print(143, y)
+print('\n')
+
+print('数组 x 和 y 的形状：')
+print(144, x.shape, y.shape)
+
+mark_print()
+a = np.array([[1, 2], [3, 4]])
+
+print('第一个数组：')
+print(145, a)
+print('\n')
+b = np.array([[5, 6], [7, 8]])
+
+print('第二个数组：')
+print(b)
+print('\n')
+# 两个数组的维度相同
+
+print('沿轴 0 连接两个数组：')
+print(np.concatenate((a, b)))
+print('\n')
+
+print('沿轴 1 连接两个数组：')
+print(147, np.concatenate((a, b), axis=1))
+mark_print()
+a = np.array([[1, 2], [3, 4]])
+
+print('第一个数组：')
+print(148, a)
+print('\n')
+b = np.array([[5, 6], [7, 8]])
+
+print('第二个数组：')
+print(b)
+print('\n')
+
+print('沿轴 0 堆叠两个数组：')
+print(149, np.stack((a, b), axis=0))
+print('\n')
+
+print('沿轴 1 堆叠两个数组：')
+print(150, np.stack((a, b), axis=1))
+
+mark_print()
+a = np.array([[1, 2], [3, 4]])
+
+print('第一个数组：')
+print(151, a)
+print('\n')
+b = np.array([[5, 6], [7, 8]])
+
+print('第二个数组：')
+print(b)
+print('\n')
+
+print('水平堆叠：')
+c = np.hstack((a, b))
+print(c)
+print('\n')
+
+mark_print()
+a = np.array([[1, 2], [3, 4]])
+
+print('第一个数组：')
+print(152, a)
+print('\n')
+b = np.array([[5, 6], [7, 8]])
+
+print('第二个数组：')
+print(b)
+print('\n')
+
+print('竖直堆叠：')
+c = np.vstack((a, b))
+print(c)
+
+mark_print()
+a = np.arange(9)
+
+print('第一个数组：')
+print(153, a)
+print('\n')
+
+print('将数组分为三个大小相等的子数组：')
+b = np.split(a, 3)
+print(b)
+print('\n')
+
+print('将数组在一维数组中表明的位置分割：')
+b = np.split(a, [4, 7])
+print(b)
+
+mark_print()
+a = np.arange(16).reshape(4, 4)
+print('第一个数组：')
+print(154, a)
+print('\n')
+print('默认分割（0轴）：')
+b = np.split(a, 2)
+print(155, b)
+print('\n')
+
+print('沿水平方向分割：')
+c = np.split(a, 2, axis=1)
+print(156, c)
+print('\n')
+
+print('沿水平方向分割：')
+d = np.hsplit(a, 2)
+print(157, d)
+
+mark_print()
+harr = np.floor(10 * np.random.random((2, 6)))
+print('原array：')
+print(harr)
+
+print('拆分后：')
+print(np.hsplit(harr, 3))
+
+mark_print()
+a = np.arange(16).reshape(4, 4)
+
+print('第一个数组：')
+print(158, a)
+print('\n')
+
+print('竖直分割：')
+b = np.vsplit(a, 2)
+print(b)
+
+mark_print()
+a = np.array([[1, 2, 3], [4, 5, 6]])
+
+print('第一个数组：')
+print(159, a)
+print('\n')
+
+print('第一个数组的形状：')
+print(160, a.shape)
+print('\n')
+b = np.resize(a, (3, 2))
+
+print('第二个数组：')
+print(b)
+print('\n')
+
+print('第二个数组的形状：')
+print(b.shape)
+print('\n')
+# 要注意 a 的第一行在 b 中重复出现，因为尺寸变大了
+
+print('修改第二个数组的大小：')
+b = np.resize(a, (3, 3))
+print(b)
+
+mark_print()
+a = np.array([[1, 2, 3], [4, 5, 6]])
+
+print('第一个数组：')
+print(161, a)
+print('\n')
+
+print('向数组添加元素：')
+print(162, np.append(a, [7, 8, 9]))
+print('\n')
+
+print('沿轴 0 添加元素：')
+print(163, np.append(a, [[7, 8, 9]], axis=0))
+print('\n')
+
+print('沿轴 1 添加元素：')
+print(164, np.append(a, [[5, 5, 5], [7, 8, 9]], axis=1))
+
+mark_print()
+a = np.array([[1, 2], [3, 4], [5, 6]])
+
+print('第一个数组：')
+print(165, a)
+print('\n')
+
+print('未传递 Axis 参数。 在删除之前输入数组会被展开。')
+print(166, np.insert(a, 3, [11, 12]))
+print('\n')
+print('传递了 Axis 参数。 会广播值数组来配输入数组。')
+
+print('沿轴 0 广播：')
+print(167, np.insert(a, 1, [11], axis=0))
+print('\n')
+
+print('沿轴 1 广播：')
+print(168, np.insert(a, 1, 11, axis=1))
+
+mark_print()
+a = np.arange(12).reshape(3, 4)
+
+print('第一个数组：')
+print(169, a)
+print('\n')
+
+print('未传递 Axis 参数。 在插入之前输入数组会被展开。')
+print(170, np.delete(a, 5))
+print('\n')
+
+print('删除第二列：')
+print(171, np.delete(a, 1, axis=1))
+print('\n')
+
+print('包含从数组中删除的替代值的切片：')
+a = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+print(172, np.delete(a, np.s_[::2]))
+
+mark_print()
+# 取第0~3行，列方向每隔一列
+idx = np.s_[0:3, ::2]
+print(idx)
+# 输出： (slice(0, 3, None), slice(None, None, 2))
+
+arr_2d = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12], [13, 14, 15, 16]])
+print(173, arr_2d[idx])
+
+mark_print()
+a = np.array([5, 2, 6, 2, 7, 5, 6, 8, 2, 9])
+
+print('第一个数组：')
+print(174, a)
+print('\n')
+
+print('第一个数组的去重值：')
+u = np.unique(a)
+print(175, u)
+print('\n')
+
+print('去重数组的索引数组：')
+u, indices = np.unique(a, return_index=True)
+print(indices)
+print('\n')
+
+print('我们可以看到每个和原数组下标对应的数值：')
+print(a)
+print('\n')
+
+print('去重数组的下标：')
+u, indices = np.unique(a, return_inverse=True)
+print(u)
+print('\n')
+
+print('下标为：')
+print(indices)
+print('\n')
+
+print('使用下标重构原数组：')
+print(u[indices])
+print('\n')
+
+print('返回去重元素的重复数量：')
+u, counts = np.unique(a, return_counts=True)
+print(u)
+print(counts)
+
+mark_print()
+arr1 = np.array([True, False, True], dtype=bool)
+arr2 = np.array([False, True, False], dtype=bool)
+
+result_and = np.bitwise_and(arr1, arr2)
+result_or = np.bitwise_or(arr1, arr2)
+result_xor = np.bitwise_xor(arr1, arr2)
+result_not = np.bitwise_not(arr1)
+
+print("AND:", result_and)  # [False, False, False]
+print("OR:", result_or)    # [True, True, True]
+print("XOR:", result_xor)  # [True, True, True]
+print("NOT:", result_not)  # [False, True, False]
+
+# 按位取反
+arr_invert = np.invert(np.array([1, 2], dtype=np.int8))
+print("Invert:", arr_invert)  # [-2, -3]
+
+# 左移位运算
+arr_left_shift = np.left_shift(5, 2)
+print("Left Shift:", arr_left_shift)  # 20
+
+# 右移位运算
+arr_right_shift = np.right_shift(10, 1)
+print("Right Shift:", arr_right_shift)  # 5
+
+mark_print()
+print('13 和 17 的二进制形式：')
+a, b = 13, 17
+print(bin(a), bin(b))
+print('\n')
+
+print('13 和 17 的位与：')
+print(np.bitwise_and(13, 17))
+
+mark_print()
+a, b = 13, 17
+print('13 和 17 的二进制形式：')
+print(bin(a), bin(b))
+
+print('13 和 17 的位或：')
+print(np.bitwise_or(13, 17))
+
+mark_print()
+print('13 的位反转，其中 ndarray 的 dtype 是 uint8：')
+print(np.invert(np.array([13], dtype=np.uint8)))
+print('\n')
+# 比较 13 和 242 的二进制表示，我们发现了位的反转
+
+print('13 的二进制表示：')
+print(np.binary_repr(13, width=8))
+print('\n')
+
+print('242 的二进制表示：')
+print(np.binary_repr(242, width=8))
+
+
+mark_print()
+print('将 10 左移两位：')
+print(np.left_shift(10, 2))
+print('\n')
+
+print('10 的二进制表示：')
+print(np.binary_repr(10, width=8))
+print('\n')
+
+print('40 的二进制表示：')
+print(np.binary_repr(40, width=8))
+#  '00001010' 中的两位移动到了左边，并在右边添加了两个 0。
+print('将 40 右移两位：')
+print(np.right_shift(40, 2))
+print('\n')
+
+print('40 的二进制表示：')
+print(np.binary_repr(40, width=8))
+print('\n')
+
+print('10 的二进制表示：')
+print(np.binary_repr(10, width=8))
+#  '00001010' 中的两位移动到了右边，并在左边添加了两个 0。
+
+mark_print()
+print('连接两个字符串：')
+print(np.char.add(['hello'], [' xyz']))
+print('\n')
+
+print('连接示例：')
+print(np.char.add(['hello', 'hi'], [' abc', ' xyz']))
+print(np.char.multiply('Runoob ', 3))
+
+print(np.char.center('Runoob', 20, fillchar='*'))
+print(np.char.capitalize('runoob'))
+print(np.char.title('i like runoob'))
+# 操作数组
+print(np.char.lower(['RUNOOB', 'GOOGLE']))
+
+# 操作字符串
+print(np.char.lower('RUNOOB'))
+# 操作数组
+print(np.char.upper(['runoob', 'google']))
+
+# 操作字符串
+print(np.char.upper('runoob'))
+
+# 分隔符默认为空格
+print(np.char.split('i like runoob?'))
+# 分隔符为 .
+print(np.char.split('www.runoob.com', sep='.'))
+# 换行符 \n
+print(np.char.splitlines('i\nlike runoob?'))
+print(np.char.splitlines('i\rlike runoob?'))
+# 移除字符串头尾的 a 字符
+print(np.char.strip('ashok arunooba', 'a'))
+
+# 移除数组元素头尾的 a 字符
+print(np.char.strip(['arunooba', 'admin', 'java'], 'a'))
+# 操作字符串
+print(np.char.join(':', 'runoob'))
+
+# 指定多个分隔符操作数组元素
+print(np.char.join([':', '-'], ['runoob', 'google']))
+
+print(np.char.replace('i like runoob', 'oo', 'cc'))
+a = np.char.encode('runoob', 'cp500')
+print(a)
+
+a = np.char.encode('runoob', 'cp500')
+print(a)
+print(np.char.decode(a, 'cp500'))
+
+a = np.array([0, 30, 45, 60, 90])
+print('不同角度的正弦值：')
+# 通过乘 pi/180 转化为弧度
+print(np.sin(a*np.pi/180))
+print('\n')
+print('数组中角度的余弦值：')
+print(np.cos(a*np.pi/180))
+print('\n')
+print('数组中角度的正切值：')
+print(np.tan(a*np.pi/180))
+
+mark_print()
+a = np.array([0, 30, 45, 60, 90])
+print('含有正弦值的数组：')
+sin = np.sin(a*np.pi/180)
+print(sin)
+print('\n')
+print('计算角度的反正弦，返回值以弧度为单位：')
+inv = np.arcsin(sin)
+print(inv)
+print('\n')
+print('通过转化为角度制来检查结果：')
+print(np.degrees(inv))
+print('\n')
+print('arccos 和 arctan 函数行为类似：')
+cos = np.cos(a*np.pi/180)
+print(cos)
+print('\n')
+print('反余弦：')
+inv = np.arccos(cos)
+print(inv)
+print('\n')
+print('角度制单位：')
+print(np.degrees(inv))
+print('\n')
+print('tan 函数：')
+tan = np.tan(a*np.pi/180)
+print(tan)
+print('\n')
+print('反正切：')
+inv = np.arctan(tan)
+print(inv)
+print('\n')
+print('角度制单位：')
+print(np.degrees(inv))
+
+mark_print()
+a = np.array([1.0, 5.55, 123, 0.567, 25.532])
+print('原数组：')
+print(a)
+print('\n')
+print('舍入后：')
+print(np.around(a))
+print(np.around(a, decimals=1))
+print(np.around(a, decimals=-1))
+
+mark_print()
+a = np.array([-1.7, 1.5, -0.2, 0.6, 10])
+print('提供的数组：')
+print(a)
+print('\n')
+print('修改后的数组：')
+print(np.floor(a))
+
+mark_print()
+a = np.array([-1.7, 1.5, -0.2, 0.6, 10])
+print('提供的数组：')
+print(a)
+print('\n')
+print('修改后的数组：')
+print(np.ceil(a))
+mark_print()
+a = np.arange(9, dtype=np.float64).reshape(3, 3)
+print('第一个数组：')
+print(a)
+print('\n')
+print('第二个数组：')
+b = np.array([10, 10, 10])
+print(b)
+print('\n')
+print('两个数组相加：')
+print(np.add(a, b))
+print('\n')
+print('两个数组相减：')
+print(np.subtract(a, b))
+print('\n')
+print('两个数组相乘：')
+print(np.multiply(a, b))
+print('\n')
+print('两个数组相除：')
+print(np.divide(a, b))
+
+mark_print()
+a = np.array([0.25, 1.33, 1, 100])
+print('我们的数组是：')
+print(a)
+print('\n')
+print('调用 reciprocal 函数：')
+print(np.reciprocal(a))
+mark_print()
+a = np.array([10, 100, 1000])
+print('我们的数组是；')
+print(a)
+print('\n')
+print('调用 power 函数：')
+print(np.power(a, 2))
+print('\n')
+print('第二个数组：')
+b = np.array([1, 2, 3])
+print(b)
+print('\n')
+print('再次调用 power 函数：')
+print(np.power(a, b))
+mark_print()
+a = np.array([10, 20, 30])
+b = np.array([3, 5, 7])
+print('第一个数组：')
+print(a)
+print('\n')
+print('第二个数组：')
+print(b)
+print('\n')
+print('调用 mod() 函数：')
+print(np.mod(a, b))
+print('\n')
+print('调用 remainder() 函数：')
+print(np.remainder(a, b))
+
+mark_print()
+a = np.array([[3, 7, 5], [8, 4, 3], [2, 4, 9]])
+print('我们的数组是：')
+print(a)
+print('\n')
+print('调用 amin() 函数：')
+print(np.amin(a, 1))
+print('\n')
+print('再次调用 amin() 函数：')
+print(np.amin(a, 0))
+print('\n')
+print('调用 amax() 函数：')
+print(np.amax(a))
+print('\n')
+print('再次调用 amax() 函数：')
+print(np.amax(a, axis=0))
+
+mark_print()
+a = np.array([[3, 7, 5], [8, 4, 3], [2, 4, 9]])
+print('我们的数组是：')
+print(a)
+print('\n')
+print('调用 ptp() 函数：')
+print(np.ptp(a))
+print('\n')
+print('沿轴 1 调用 ptp() 函数：')
+print(np.ptp(a, axis=1))
+print('\n')
+print('沿轴 0 调用 ptp() 函数：')
+print(np.ptp(a, axis=0))
+
+mark_print()
+a = np.array([[10, 7, 4], [3, 2, 1]])
+print('我们的数组是：')
+print(a)
+
+print('调用 percentile() 函数：')
+# 50% 的分位数，就是 a 里排序之后的中位数
+print(np.percentile(a, 50))
+
+# axis 为 0，在纵列上求
+print(np.percentile(a, 50, axis=0))
+
+# axis 为 1，在横行上求
+print(np.percentile(a, 50, axis=1))
+
+# 保持维度不变
+print(np.percentile(a, 50, axis=1, keepdims=True))
+
+mark_print()
+a = np.array([[30, 65, 70], [80, 95, 10], [50, 90, 60]])
+print('我们的数组是：')
+print(a)
+print('\n')
+print('调用 median() 函数：')
+print(np.median(a))
+print('\n')
+print('沿轴 0 调用 median() 函数：')
+print(np.median(a, axis=0))
+print('\n')
+print('沿轴 1 调用 median() 函数：')
+print(np.median(a, axis=1))
+
+mark_print()
+a = np.array([[1, 2, 3], [3, 4, 5], [4, 5, 6]])
+print('我们的数组是：')
+print(a)
+print('\n')
+print('调用 mean() 函数：')
+print(np.mean(a))
+print('\n')
+print('沿轴 0 调用 mean() 函数：')
+print(np.mean(a, axis=0))
+print('\n')
+print('沿轴 1 调用 mean() 函数：')
+print(np.mean(a, axis=1))
+
+mark_print()
+a = np.array([1, 2, 3, 4])
+print('我们的数组是：')
+print(a)
+print('\n')
+print('调用 average() 函数：')
+print(np.average(a))
+print('\n')
+# 不指定权重时相当于 mean 函数
+wts = np.array([4, 3, 2, 1])
+print('再次调用 average() 函数：')
+print(np.average(a, weights=wts))
+print('\n')
+# 如果 returned 参数设为 true，则返回权重的和
+print('权重的和：')
+print(np.average([1, 2, 3, 4], weights=wts, returned=True))
+print()
+
+mark_print()
+a = np.arange(6).reshape(3, 2)
+print('我们的数组是：')
+print(a)
+print('\n')
+print('修改后的数组：')
+wt = np.array([3, 5])
+print(np.average(a, axis=1, weights=wt))
+print('\n')
+print('修改后的数组：')
+print(np.average(a, axis=1, weights=wt, returned=True))
+print(np.std(a, axis=1))
+mark_print()
+print(np.var(a, axis=1))
+mark_print()
+a = np.array([[3, 7], [9, 1]])
+print('我们的数组是：')
+print(a)
+print('\n')
+print('调用 sort() 函数：')
+print(np.sort(a))
+print('\n')
+print('按列排序：')
+print(np.sort(a, axis=0))
+print('\n')
+# 在 sort 函数中排序字段
+dt = np.dtype([('name', 'S10'), ('age', int)])
+a = np.array([("raju", 21), ("anil", 25), ("ravi", 17), ("amar", 27)], dtype=dt)
+print('我们的数组是：')
+print(a)
+print('\n')
+print('按 name 排序：')
+print(np.sort(a, order='name'))
+
+mark_print()
+x = np.array([3, 1, 2])
+print('我们的数组是：')
+print(x)
+print('\n')
+print('对 x 调用 argsort() 函数：')
+y = np.argsort(x)
+print(y)
+print('\n')
+print('以排序后的顺序重构原数组：')
+print(x[y])
+print('\n')
+print('使用循环重构原数组：')
+for i in y:
+    print(x[i], end=" ")
+
+mark_print()
+nm = ['raju', 'anil', 'ravi', 'amar']
+dv = ['f.y.1', 's.y.2', 's.y.3', 'f.y.4']
+ind = np.lexsort((dv, nm))
+print('调用 lexsort() 函数：')
+print(ind)
+print('\n')
+print('使用这个索引来获取排序后的数据：')
+print([nm[i] + ", " + dv[i] for i in ind])
+
+mark_print()
+# 复数排序：
+a = np.sort_complex([5, 3, 6, 2, 1])
+print(a)
+b = np.sort_complex([1 + 2j, 2 - 1j, 3 - 2j, 3 - 3j, 3 + 5j])
+print(b)
+# partition() 分区排序：
+c = np.array([3, 4, 2, 1])
+print(np.partition(c, 3))
+d = np.partition(c, (1, 3))
+print(d)
+# 找到数组的第 3 小（index=2）的值和第 2 大（index=-2）的值
+arr = np.array([46, 57, 23, 39, 1, 10, 0, 120])
+print(arr[np.argpartition(arr, 2)[2]])
+e = arr[np.argpartition(arr, -2)[-2]]
+print(e)
+# 同时找到第 3 和第 4 小的值。注意这里，用 [2,3] 同时将第 3 和第 4 小的排序好，然后可以分别通过下标 [2] 和 [3] 取得。
+f = arr[np.argpartition(arr, [2, 3])[2]]
+print(f)
+g = arr[np.argpartition(arr, [2, 3])[3]]
+print(g)
+
+mark_print()
+a = np.array([[30, 40, 70], [80, 20, 10], [50, 90, 60]])
+print('我们的数组是：')
+print(a)
+print('\n')
+print('调用 argmax() 函数：')
+print(np.argmax(a))
+print('\n')
+print('展开数组：')
+print(a.flatten())
+print('\n')
+print('沿轴 0 的最大值索引：')
+maxindex = np.argmax(a, axis=0)
+print(maxindex)
+print('\n')
+print('沿轴 1 的最大值索引：')
+maxindex = np.argmax(a, axis=1)
+print(maxindex)
+print('\n')
+print('调用 argmin() 函数：')
+minindex = np.argmin(a)
+print(minindex)
+print('\n')
+print('展开数组中的最小值：')
+print(a.flatten()[minindex])
+print('\n')
+print('沿轴 0 的最小值索引：')
+minindex = np.argmin(a, axis=0)
+print(minindex)
+print('\n')
+print('沿轴 1 的最小值索引：')
+minindex = np.argmin(a, axis=1)
+print(minindex)
+
+mark_print()
+a = np.array([[30, 40, 0], [0, 20, 10], [50, 0, 60]])
+print('我们的数组是：')
+print(a)
+print('\n')
+print('调用 nonzero() 函数：')
+print(np.nonzero(a))
+mark_print()
+x = np.arange(9.).reshape(3, 3)
+print('我们的数组是：')
+print(x)
+print('大于 3 的元素的索引：')
+y = np.where(x > 3)
+print(y)
+print('使用这些索引来获取满足条件的元素：')
+print(x[y])
+
+mark_print()
+x = np.arange(9.).reshape(3, 3)
+print('我们的数组是：')
+print(x)
+# 定义条件, 选择偶数元素
+condition = np.mod(x, 2) == 0
+print('按元素的条件值：')
+print(condition)
+print('使用条件提取元素：')
+print(np.extract(condition, x))
+
+mark_print()
+a = np.array([1, 256, 8755], dtype=np.int16)
+print('我们的数组是：')
+print(a)
+print('以十六进制表示内存中的数据：')
+print(map(hex, a))
+print(map(hex, b))
+
+# byteswap() 函数通过传入 true 来原地交换
+print('调用 byteswap() 函数：')
+print(a.byteswap(True))
+print(b.byteswap(True))
+
+print('十六进制形式：')
+print(map(hex, a))
+print(map(hex, b))
+# 我们可以看到字节已经交换了
+mark_print()
+a = np.arange(6)
+print('我们的数组是：')
+print(a)
+print('调用 id() 函数：')
+print(id(a))
+print('a 赋值给 b：')
+b = a
+print(b)
+print('b 拥有相同 id()：')
+print(id(b))
+print('修改 b 的形状：')
+b.shape = 3, 2
+print(b)
+print('a 的形状也修改了：')
+print(a)
+
+mark_print()
+arr = np.arange(12)
+print('我们的数组：')
+print(arr)
+print('创建切片：')
+a = arr[3:]
+b = arr[3:]
+a[1] = 123
+b[2] = 234
+print(arr)
+print(id(a), id(b), id(arr[3:]))
+print(a)
+print(b)
+print(arr)
+arr[1] = 123
+arr[2] = 234
+print(arr)
+
+mark_print()
+# 最开始 a 是个 3X2 的数组
+a = np.arange(6).reshape(3, 2)
+print('数组 a：')
+print(a)
+print('创建 a 的视图：')
+b = a.view()
+print(b)
+print('两个数组的 id() 不同：')
+print('a 的 id()：')
+print(id(a))
+print('b 的 id()：')
+print(id(b))
+# 修改 b 的形状，并不会修改 a
+b.shape = 2, 3
+print('b 的形状：')
+print(b)
+print('a 的形状：')
+print(a)
+mark_print()
+a = np.array([[10, 10], [2, 3], [4, 5]])
+print('数组 a：')
+print(a)
+print('创建 a 的深层副本：')
+b = a.copy()
+print('数组 b：')
+print(b)
+# b 与 a 不共享任何内容
+print('我们能够写入 b 来写入 a 吗？')
+print(b is a)
+print('修改 b 的内容：')
+b[0, 0] = 100
+print('修改后的数组 b：')
+print(b)
+print('a 保持不变：')
+print(a)
+
+mark_print()
+a = np.arange(4)
+b = a
+# 改变a中第一个元素的值
+b[0] = 9
+print(a)
+print(b)
+
+mark_print()
+a = np.arange(12).reshape(3, 4)
+
+print('原数组：')
+print(a)
+print('\n')
+
+print('转置数组：')
+print(a.T)
+
+mark_print()
+
+# import rsnumpy.matlib
+print(np.matlib.empty((2, 2)))
+print()
+print(np.matlib.zeros((2, 2)))
+print()
+print(np.matlib.ones((2, 2)), "\n")
+print(np.matlib.eye(n=3, M=4, k=0, dtype=float), "\n")
+print(np.matlib.identity(5, dtype=float), "\n")
+print(np.matlib.rand(3, 3), "\n")
+i = np.matrix('1,2;3,4', dtype=int)
+print(i, "\n")
+j = np.asarray(i)
+print(j, "\n")
+k = np.asmatrix(j)
+print(k)
+
+mark_print()
+a = np.array([[1, 2], [3, 4]])
+b = np.array([[11, 12], [13, 14]])
+print("aaaa", np.dot(a, b))
+print()
+a = np.array([[1, 2], [3, 4]])
+b = np.array([[11, 12], [13, 14]])
+
+# vdot 将数组展开计算内积
+print(np.vdot(a, b), "\n")
+print(np.inner(np.array([1, 2, 3]), np.array([0, 1, 0])), "\n")
+
+a = np.array([[1, 2], [3, 4]])
+
+print('数组 a：')
+print(a)
+b = np.array([[11, 12], [13, 14]])
+
+print('数组 b：')
+print(b)
+
+print('内积：')
+print(np.inner(a, b))
+print()
+
+a = [[1, 0], [0, 1]]
+b = [[4, 1], [2, 2]]
+print(np.matmul(a, b))
+
+print()
+a = [[1, 0], [0, 1]]
+b = [1, 2]
+print(np.matmul(a, b))
+print(np.matmul(b, a))
+print()
+a = np.arange(8).reshape(2, 2, 2)
+b = np.arange(4).reshape(2, 2)
+print(np.matmul(a, b))
+
+a = np.array([[1, 2], [3, 4]])
+
+print(np.linalg.det(a), "\n")
+b = np.array([[6, 1, 1], [4, -2, 5], [2, 8, 7]])
+print(b)
+print(np.linalg.det(b))
+print(6*(-2*7 - 5*8) - 1*(4*7 - 5*2) + 1*(4*8 - -2*2))
+print()
+
+x = np.array([[1, 2], [3, 4]])
+y = np.linalg.inv(x)
+print(x)
+print(y)
+print()
+print(np.dot(x, y))
+
+mark_print()
+a = np.array([[1, 1, 1], [0, 2, 5], [2, 5, -1]])
+
+print('数组 a：')
+print(a)
+ainv = np.linalg.inv(a)
+
+print('a 的逆：')
+print(ainv)
+
+print('矩阵 b：')
+b = np.array([[6], [-4], [27]])
+print(b)
+
+print('计算：A^(-1)B：')
+x = np.linalg.solve(a, b)
+print(x)
+
+# 这就是线性方向 x = 5, y = 3, z = -2 的解
+
+mark_print()
+a = np.array([1, 2, 3, 4, 5])
+
+# 保存到 outfile.npy 文件上
+np.save('./tests/outfile.npy', a)
+np.save('./tests/outfile', a)
+b = np.load('./tests/outfile.npy')
+print(b)
+mark_print()
+a = np.array([[1, 2, 3], [4, 5, 6]])
+b = np.arange(0, 1.0, 0.1)
+c = np.sin(b)
+# c 使用了关键字参数 sin_array
+np.savez('./tests/runoob.npz', a, b, sin_array=c)
+r = np.load('./tests/runoob.npz')
+print(r.files)  # 查看各个数组名称
+print(r["arr_0"])  # 数组 a
+print(r["arr_1"])  # 数组 b
+print(r["sin_array"])  # 数组 c
+
+a = np.array([1, 2, 3, 4, 5])
+np.savetxt('./tests/out.txt', a)
+b = np.loadtxt('./tests/out.txt')
+
+print(b)
+mark_print()
+a = np.arange(0, 10, 0.5).reshape(4, -1)
+print(a)
+print()
+np.savetxt('./tests/out.txt', a, fmt="%d", delimiter=",")  # 改为保存为整数，以逗号分隔
+b = np.loadtxt('./tests/out.txt', delimiter=",")  # load 时也要指定为逗号分隔
+print(b)
+
+
+def run_test():
+    print("\n------------------------")
+
+
+run_test()
+a = np.array([[1, 2, 3],
+             [4, 5, 6]])
+print(a.shape)
+a = np.array([1, 2, 3, 4, 5, 6])
+a[0] = 10
+print("a: ", a)
+print("a[:3]: ", a[:3])
+b = a[3:]
+print("b: ", b)
+b[0] = 40
+print("a: ", a)
+print("b: ", b)
+a = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
+print("a.ndim: ", a.ndim)
+print("a[1, 3]: ", a[1, 3])
+print("a.shape: ", a.shape)
+print("len(a.shape) == a.ndim: ", len(a.shape) == a.ndim)
+print("a.size: ", a.size)
+print("a.size == math.prod(a.shape): ", a.size == math.prod(a.shape))
+print("a.dtype: ", a.dtype)
+print("np.zeros(2): ", np.zeros(2))
+print("np.ones(2): ", np.ones(2))
+print("np.empty(2): ", np.empty(2))
+print("np.arange(4): ", np.arange(4))
+print("np.arange(2, 9, 2): ", np.arange(2, 9, 2))
+print("np.linspace(0, 10, num=5): ", np.linspace(0, 10, num=5))
+x = np.ones(2, dtype=np.int64)
+print("x: ", x)
+arr = np.array([2, 1, 5, 3, 7, 4, 6, 8])
+ss = np.sort(arr)
+print("np.sort(arr): ", ss)
+a = np.array([1, 2, 3, 4])
+b = np.array([5, 6, 7, 8])
+np.concatenate((a, b))
+print("np.concatenate((a, b)): ", np.concatenate((a, b)))
+x = np.array([[1, 2], [3, 4]])
+y = np.array([[5, 6]])
+print("np.concatenate((x, y), axis=0): \n", np.concatenate((x, y), axis=0))
+array_example = np.array([[[0, 1, 2, 3],
+                         [4, 5, 6, 7]],
+                         [[0, 1, 2, 3],
+                          [4, 5, 6, 7]],
+                         [[0, 1, 2, 3],
+                          [4, 5, 6, 7]]])
+print("array_example.ndim: ", array_example.ndim)
+print("array_example.shape: ", array_example.shape)
+print("array_example.size: ", array_example.size)
+print("array_example.dtype: ", array_example.dtype)
+print("array_example: ", array_example)
+a = np.arange(6)
+print("a: ", a)
+b = a.reshape(3, 2)
+print("b: ", b)
+print("np.reshape(a, shape=(1, 6), order='C'): ", np.reshape(a, shape=(1, 6), order='C'))
+a = np.array([1, 2, 3, 4, 5, 6])
+print("a.shape: ", a.shape)
+a2 = a[np.newaxis, :]
+print("a2.shape: ", a2.shape)
+row_vector = a[np.newaxis, :]
+print("row_vector.shape: ", row_vector.shape)
+col_vector = a[:, np.newaxis]
+print("col_vector.shape: ", col_vector.shape)
+a = np.array([1, 2, 3, 4, 5, 6])
+print("a.shape: ", a.shape)
+b = np.expand_dims(a, axis=1)
+print("b.shape: ", b.shape)
+c = np.expand_dims(a, axis=0)
+print("c.shape: ", c.shape)
+data = np.array([1, 2, 3])
+print("data[1]: ", data[1])
+print("data[0:2]: ", data[0:2])
+print("data[1:]: ", data[1:])
+print("data[-2:]: ", data[-2:])
+a = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
+print("a[a < 5]: ", a[a < 5])
+five_up = (a >= 5)
+print("a[five_up]: ", a[five_up])
+divisible_by_2 = a[a % 2 == 0]
+print("divisible_by_2: ", divisible_by_2)
+c = a[(a > 2) & (a < 11)]
+print("c: ", c)
+five_up = (a > 5) | (a == 5)
+print("a[five_up]: ", a[five_up])
+print("five_up: ", five_up)
+a = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
+b = np.nonzero(a < 5)
+print(b)
+
+list_of_coordinates = list(zip(b[0], b[1]))
+
+for coord in list_of_coordinates:
+    print(coord)
+print(a[b])
+not_there = np.nonzero(a == 42)
+print(not_there)
+a = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+arr1 = a[3:8]
+print(arr1)
+a1 = np.array([[1, 1],
+              [2, 2]])
+
+a2 = np.array([[3, 3],
+              [4, 4]])
+print(np.vstack((a1, a2)))
+print(np.hstack((a1, a2)))
+x = np.arange(1, 25).reshape(2, 12)
+print(x)
+print(np.hsplit(x, 3))
+print(np.hsplit(x, (3, 4)))
+run_test()
+a = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
+b1 = a[0, :]
+print("b1: ", b1)
+b1[0] = 99
+print("b1: ", b1)
+print("a: ", a)
+a[0, :] = b1
+print("a: ", a)
+run_test()
+data = np.array([1, 2])
+ones = np.ones(2, dtype=np.int_)
+print("data + ones: ", data + ones)
+print("data - ones: ", data - ones)
+print("data * data: ", data * data)
+print("data / data: ", data / data)
+a = np.array([1, 2, 3, 4])
+print("a.sum(): ", a.sum())
+b = np.array([[1, 1], [2, 2]])
+print("b.sum(axis=0): ", b.sum(axis=0))
+print("b.sum(axis=1): ", b.sum(axis=1))
+run_test()
+data = np.array([1.0, 2.0])
+print("data: ", data)
+print("data * 1.6: ", data * 1.6)
+data = np.array([1, 2, 3])
+print("data.max(): ", data.max())
+print("data.min(): ", data.min())
+print("data.sum(): ", data.sum())
+a = np.array([[0.45053314, 0.17296777, 0.34376245, 0.5510652],
+             [0.54627315, 0.05093587, 0.40067661, 0.55645993],
+             [0.12697628, 0.82485143, 0.26590556, 0.56917101]])
+print("a.sum(): ", a.sum())
+print("a.min(): ", a.min())
+print("a.min(axis=0): ", a.min(axis=0))
+data = np.array([[1, 2], [3, 4], [5, 6]])
+print("data: ", data)
+print("data[0, 1]: ", data[0, 1])
+print("data[1:3]: ", data[1:3])
+print("data[0:2, 0]: ", data[0:2, 0])
+print("data.max(): ", data.max())
+print("data.min(): ", data.min())
+print("data.sum(): ", data.sum())
+data = np.array([[1, 2], [5, 3], [4, 6]])
+print("data: ", data)
+print("data.max(axis=0): ", data.max(axis=0))
+print("data.max(axis=1): ", data.max(axis=1))
+run_test()
+
+data = np.array([[1, 2], [3, 4]])
+ones = np.array([[1, 1], [1, 1]])
+print("data + ones: ", data + ones)
+data = np.array([[1, 2], [3, 4], [5, 6]])
+ones_row = np.array([[1, 1]])
+print("data + ones_row: ", data + ones_row)
+run_test()
+print(np.ones((4, 3, 2)))
+print(np.ones(3))
+print(np.zeros(3))
+rng = np.random.default_rng()  # the simplest way to generate random numbers
+print(rng.random(3))
+print(np.ones((3, 2)))
+print(np.zeros((3, 2)))
+print(rng.random((3, 2)))
+run_test()
+print(rng.integers(5, size=(2, 4)))
+a = np.array([11, 11, 12, 13, 14, 15, 16, 17, 12, 13, 11, 14, 18, 19, 20])
+unique_values = np.unique(a)
+print(unique_values)
+run_test()
+unique_values, indices_list = np.unique(a, return_index=True)
+print(indices_list)
+unique_values, occurrence_count = np.unique(a, return_counts=True)
+print(occurrence_count)
+a_2d = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12], [1, 2, 3, 4]])
+unique_values = np.unique(a_2d)
+print(unique_values)
+unique_rows = np.unique(a_2d, axis=0)
+print(unique_rows)
+unique_rows, indices, occurrence_count = np.unique(a_2d, axis=0, return_counts=True, return_index=True)
+print(unique_rows)
+print(indices)
+print(occurrence_count)
+run_test()
+print(data.reshape(2, 3))
+print(data.reshape(3, 2))
+arr = np.arange(6).reshape((2, 3))
+print(arr)
+print(arr.transpose())
+run_test()
+print(arr.T)
+arr = np.array([1, 2, 3, 4, 5, 6, 7, 8])
+reversed_arr = np.flip(arr)
+print('Reversed Array: ', reversed_arr)
+arr_2d = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
+reversed_arr = np.flip(arr_2d)
+print(reversed_arr)
+reversed_arr_rows = np.flip(arr_2d, axis=0)
+print(reversed_arr_rows)
+reversed_arr_columns = np.flip(arr_2d, axis=1)
+print(reversed_arr_columns)
+arr_2d[1] = np.flip(arr_2d[1])
+print(arr_2d)
+arr_2d[:, 1] = np.flip(arr_2d[:, 1])
+print(arr_2d)
+x = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
+print(x.flatten())
+a1 = x.flatten()
+a1[0] = 99
+print(x)  # Original array
+print(a1)  # New array
+a2 = x.ravel()
+a2[0] = 98
+print(x)  # Original array
+print(a2)  # New array
+run_test()
+a1D = np.array([1, 2, 3, 4])
+a2D = np.array([[1, 2], [3, 4]])
+a3D = np.array([[[1, 2], [3, 4]], [[5, 6], [7, 8]]])
+a4D = np.array([127, 128, 129], dtype=np.int32)
+print(a4D)
+print(a4D.dtype)
+
+a = np.array([2, 3, 4], dtype=np.uint32)
+b = np.array([5, 6, 7], dtype=np.uint32)
+c_unsigned32 = a - b
+print('unsigned c:', c_unsigned32, c_unsigned32.dtype)
+print(a)
+print(a.astype("int32"))
+c_signed32 = a.astype(np.int32) - b.astype(np.int32)
+print('signed c:', c_signed32, c_signed32.dtype)
+print(np.arange(10))
+print(np.arange(2, 10, dtype=np.float64), np.arange(2, 10, dtype=np.float64).dtype)
+print(np.arange(2, 3, 0.1))
+print(np.linspace(1., 4., 6))
+print(np.eye(3))
+print(np.eye(3, 5))
+print(np.diag([1, 2, 3]))
+print(np.diag([1, 2, 3], 1))
+a = np.array([[1, 2], [3, 4]])
+print(np.diag(a))
+print(np.vander(np.linspace(0, 2, 5), 2))
+print(np.vander([1, 2, 3, 4], 2))
+print(np.vander((1, 2, 3, 4), 4))
+print(np.zeros((2, 3)))
+print(np.zeros((2, 3, 2)))
+print(np.ones((2, 3)))
+print(np.ones((2, 3, 2)))
+print(np.random.default_rng(42).random((2, 3)))
+print(np.random.default_rng(42).random((2, 3, 2)))
+print(np.indices((3, 3)))
+a = np.array([1, 2, 3, 4, 5, 6])
+b = a[:2]
+b += 1
+
+print('a =', a, '; b =', b)
+
+A = np.ones((2, 2))
+B = np.eye(2, 2)
+C = np.zeros((2, 2))
+D = np.diag((-3, -4))
+print(np.block([[A, B], [C, D]]))
+
+ss = np.loadtxt('./tests/simple.csv', delimiter=',', skiprows=1)
+print(111, ss)
+x = np.arange(10)
+print(x[2])
+print(x[-2])
+x = x.reshape((2, 5))
+print(x[1, 3])
+print(x[1, -1])
+print(x[0])
+print(x[0][2])
+x = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+print(x[1:7:2])
+print(x[-2:10])
+print(1111111, x[-3:3:-1])
+print(x[5:])
+x = np.array([[[1], [2], [3]], [[4], [5], [6]]])
+print(x.shape)
+print(x[1:2])
+print(x[..., 0])
+print(x[:, np.newaxis, :, :].shape)
+print(x[:, None, :, :].shape)
+x = np.arange(5)
+print(x[:, np.newaxis] + x[np.newaxis, :])
+run_test()
+x = np.arange(10, 1, -1)
+print(x)
+print(x[np.array([3, 3, 1, 8])])
+print(x[np.array([3, 3, -3, 8])])
+x = np.array([[1, 2], [3, 4], [5, 6]])
+print(x[np.array([1, -1])])
+y = np.arange(35).reshape(5, 7)
+print(y)
+run_test()
+print(y[np.array([0, 2, 4]), np.array([0, 1, 2])])
+# print(y[np.array([0, 2, 4]), np.array([0, 1])])
+print(y[np.array([0, 2, 4]), 1])
+print(y[np.array([0, 2, 4])])
+run_test()
+x = np.array([[1, 2], [3, 4], [5, 6]])
+print(x[[0, 1, 2], [0, 1, 0]])
+run_test()
+x = np.array([[0, 1, 2],
+             [3, 4, 5],
+             [6, 7, 8],
+             [9, 10, 11]])
+rows = np.array([[0, 0],
+                 [3, 3]], dtype=np.intp)
+columns = np.array([[0, 2],
+                    [0, 2]], dtype=np.intp)
+print(x[rows, columns])
+rows = np.array([0, 3], dtype=np.intp)
+columns = np.array([0, 2], dtype=np.intp)
+rows[:, np.newaxis]
+print(x[rows[:, np.newaxis], columns])
+print(x[np.ix_(rows, columns)])
+
+print(x[rows, columns])
+x = np.array([[1., 2.], [np.nan, 3.], [np.nan, np.nan]])
+print(x[~np.isnan(x)])
+x = np.array([1., -1., -2., 3])
+x[x < 0] += 20
+print(x)
+x = np.arange(35).reshape(5, 7)
+b = x > 20
+print(b[:, 5])
+print(x[b[:, 5]])
+x = np.array([[0, 1], [1, 1], [2, 2]])
+rowsum = x.sum(-1)
+print(x[rowsum <= 2, :])
+x = np.array([[0, 1, 2],
+             [3, 4, 5],
+             [6, 7, 8],
+             [9, 10, 11]])
+rows = (x.sum(-1) % 2) == 0
+rows
+columns = [0, 2]
+print(x[np.ix_(rows, columns)])
+rows = rows.nonzero()[0]
+print(x[rows[:, np.newaxis], columns])
+x = np.arange(30).reshape(2, 3, 5)
+print(x)
+b = np.array([[True, True, False], [False, True, True]])
+print(x[b])
+y = np.arange(35).reshape(5, 7)
+print(y[np.array([0, 2, 4]), 1:3])
+x = np.array([[0, 1, 2],
+             [3, 4, 5],
+             [6, 7, 8],
+             [9, 10, 11]])
+print(x[1:2, 1:3])
+print(x[1:2, [1, 2]])
+x = np.arange(35).reshape(5, 7)
+b = x > 20
+print(b)
+print(x[b[:, 5], 1:3])
+x = np.zeros((2, 2), dtype=[('a', np.int32), ('b', np.float64, (3, 3))])
+print(x['a'].shape)
+print(x['a'].dtype)
+print(x['b'].shape)
+print(x['b'].dtype)
+run_test()
+x = np.arange(10)
+x[2:7] = 1
+x[2:7] = np.arange(5)
+x[1] = 1.2
+print(x[1])
+print(x)
+x = np.arange(0, 50, 10)
+print(x)
+x[np.array([1, 1, 3, 1])] += 1
+print(x)
+z = np.arange(81).reshape(3, 3, 3, 3)
+indices = (1, 1, 1, 1)
+print(z[indices])
+indices = (1, 1, 1, slice(0, 2))  # same as [1, 1, 1, 0:2]
+print(z[indices])
+indices = (1, Ellipsis, 1)  # same as [1, ..., 1]
+print(z[indices])
+run_test()
+print(z[[1, 1, 1, 1]])  # produces a large array
+print(z[(1, 1, 1, 1)])  # returns a single value
+data = "1, 2, 3\n4, 5, 6"
+print(np.genfromtxt(StringIO(data), delimiter=","))
+data = "  1  2  3\n  4  5 67\n890123  4"
+print(np.genfromtxt(StringIO(data), delimiter=3))
+data = "123456789\n   4  7 9\n   4567 9"
+print(np.genfromtxt(StringIO(data), delimiter=(4, 3, 2)))
+data = "1, abc , 2\n 3, xxx, 4"
+
+# Without autostrip
+print(np.genfromtxt(StringIO(data), delimiter=",", dtype="|U5"))
+# With autostrip
+print(np.genfromtxt(StringIO(data), delimiter=",", dtype="|U5", autostrip=True))
+data = """#
+# Skip me !
+# Skip me too !
+1, 2
+3, 4
+5, 6 #This is the third line of the data
+7, 8
+# And here comes the last line
+9, 0
+"""
+print(np.genfromtxt(StringIO(data), comments="#", delimiter=","))
+run_test()
+data = "\n".join(str(i) for i in range(10))
+print(np.genfromtxt(StringIO(data),))
+print(np.genfromtxt(StringIO(data), skip_header=3, skip_footer=5))
+data = "1 2 3\n4 5 6"
+print(np.genfromtxt(StringIO(data), usecols=(0, -1)))
+run_test()
+data = StringIO("1 2 3\n 4 5 6")
+print(np.genfromtxt(data, dtype=[(_, np.int_) for _ in "abc"]))
+data = StringIO("1 2 3\n 4 5 6")
+print(np.genfromtxt(data, names="A, B, C"))
+data = StringIO("So it goes\n#a b c\n1 2 3\n 4 5 6")
+print(np.genfromtxt(data, skip_header=1, names=True))
+data = StringIO("1 2 3\n 4 5 6")
+ndtype = [('a', np.int_), ('b', np.float64), ('c', np.int_)]
+names = ["A", "B", "C"]
+print(np.genfromtxt(data, names=names, dtype=ndtype))
+run_test()
+data = StringIO("1 2 3\n 4 5 6")
+print(np.genfromtxt(data, dtype=(np.int_, np.float64, np.int_)))
+data = StringIO("1 2 3\n 4 5 6")
+print(np.genfromtxt(data, dtype=(np.int_, np.float64, np.int_), names="a"))
+data = StringIO("1 2 3\n 4 5 6")
+print(np.genfromtxt(data, dtype=(np.int_, np.float64, np.int_), defaultfmt="var_%02i"))
+run_test()
+data = "1, 2.3%, 45.\n6, 78.9%, 0"
+names = ("i", "p", "n")
+print(np.genfromtxt(StringIO(data), delimiter=",", names=names))
+run_test()
+# General case .....
+print(np.genfromtxt(StringIO(data), delimiter=",", names=names, converters={"p": lambda x: float(x.strip("%"))/100}))
+run_test()
+# Converted case ...
+print(np.genfromtxt(StringIO(data), delimiter=",", names=names, converters={1: lambda x: float(x.strip("%"))/100}))
+run_test()
+data = "1, , 3\n 4, 5, 6"
+print(np.genfromtxt(StringIO(data), delimiter=",", converters={1: lambda x: float(x.strip() or -999)}))
+run_test()
+
+data = "1 2 3\n4 5 6"
+print(np.genfromtxt(StringIO(data), names="a, b, c", usecols=("a", "c")))
+print(np.genfromtxt(StringIO(data), names="a, b, c", usecols=("a", "c")))
+run_test()
+z = np.arange(3, dtype=np.uint8)
+print(z)
+print(z.dtype)
+print(np.array(["hello", "world!"]))
+np.array(["hello", "world!"], dtype="U5")
+print(np.array(["hello", "world!"], dtype="U7"))
+print(np.array(["hello", "world!"], dtype="U10"))
+print(np.array(["hello", "world!"], dtype="U10"))
+print(np.array(["hello", "world!"], dtype="U7"))
+run_test()
+print(np.array(["hello", "world"], dtype="S7").tobytes())
+x = [b"hello\0\0", b"world"]
+a = np.array(x, dtype="S7")
+print(a[0])
+print(a[0] == x[0])
+a = np.array(x, dtype="V7")
+print(a)
+print(a[0] == np.void(x[0]))
+run_test()
+print(np.power(100, 9, dtype=np.int64))
+print(np.power(100, 9, dtype=np.int32))
+print(np.iinfo(int))  # Bounds of the default integer on this system.
+print(np.iinfo(np.int32))  # Bounds of a 32-bit integer
+print(np.iinfo(np.int64))  # Bounds of a 64-bit integer
+run_test()
+np.power(100, 100, dtype=np.int64)  # Incorrect even with 64-bit int
+np.power(100, 100, dtype=np.float64)
+print(0.3 - 0.2 - 0.1)
+np.isclose(0.3 - 0.2 - 0.1, 0, rtol=1e-05)  # Check for closeness to 0
+run_test()
+
+
+def pprint(*args):
+    mark_print()
+    print(*args)
+
+
+a = np.array([1.0, 2.0, 3.0])
+b = np.array([2.0, 2.0, 2.0])
+print(a * b)
+a = np.array([1.0, 2.0, 3.0])
+b = 2.0
+print(a * b)
+mark_print()
+
+a = np.array([[0.0, 0.0, 0.0],
+             [10.0, 10.0, 10.0],
+             [20.0, 20.0, 20.0],
+             [30.0, 30.0, 30.0]])
+b = np.array([1.0, 2.0, 3.0])
+print(a + b)
+mark_print()
+a = np.array([0.0, 10.0, 20.0, 30.0])
+b = np.array([1.0, 2.0, 3.0])
+print(a[:, np.newaxis] + b)
+
+mark_print()
+observation = array([111.0, 188.0])
+codes = array([[102.0, 203.0],
+              [132.0, 193.0],
+              [45.0, 155.0],
+              [57.0, 173.0]])
+diff = codes - observation    # the broadcast happens here
+dist = sqrt(sum(diff**2, axis=-1))
+print(argmin(dist))
+x = np.arange(10)
+pprint(x)
+y = x[1:3]  # creates a view
+pprint(y)
+x[1:3] = [10, 11]
+pprint(x)
+pprint(y)
+
+x = np.arange(9).reshape(3, 3)
+pprint(x)
+y = x[[1, 2]]
+pprint(y)
+pprint(y.base is None)
+
+x = np.arange(9)
+pprint(x)
+y = x.reshape(3, 3)
+pprint(y)
+y.base  # .reshape() creates a view
+z = y[[2, 1]]
+pprint(z)
+pprint(z.base is None)  # advanced indexing creates a copy
+a = np.arange(6).reshape(3, 2)
+pprint(a)
+pprint(np.add(a, a))  # element-wise addition
+pprint(np.matmul(a, a.T))  # matrix multiplication (3x2) @ (2x3) -> (3x3)
+pprint(np.array([0, 2, 3, 4]) + np.array([1, 1, -1, 2]))
+# pprint(np.add.reduce([1, 2, 3]))  1111
+x = np.arange(9).reshape(3, 3)
+pprint(x)
+# pprint(np.add.reduce(x, 1))
+# pprint(np.add.reduce(x, (0, 1)))
+pprint(x.dtype)
+pprint(np.multiply.reduce(x, dtype=np.float64))
+y = np.zeros(3, dtype=np.int_)
+pprint(y)
+pprint(np.multiply.reduce(x, dtype=np.float64, out=y))
+mark = {False: ' -', True: ' Y'}
+
+
+def print_table(ntypes):
+    print('X ' + ' '.join(ntypes))
+    for row in ntypes:
+        print(row, end='')
+        for col in ntypes:
+            print(mark[np.can_cast(row, col)], end='')
+        print()
+
+
+print_table(np.typecodes['All'])
+
+
+x = np.array([('Rex', 9, 81.0), ('Fido', 3, 27.0)],
+             dtype=[('name', 'U10'), ('age', 'i4'), ('weight', 'f4')])
+pprint(x)
+
+pprint(x[1])
+
+pprint(x['age'])
+x['age'] = 5
+pprint(x)
+pprint(np.dtype([('x', 'f4'), ('y', np.float32), ('z', 'f4', (2, 2))]))
+pprint(np.dtype([('x', 'f4'), ('y', 'i4'), ('z', 'i8')]))
+pprint(np.dtype('i8, f4, S3'))
+pprint(np.dtype('3int8, float32, (2, 3)float64'))
+pprint(np.dtype({'names': ['col1', 'col2'], 'formats': ['i4', 'f4']}))
+pprint(np.dtype({'names': ['col1', 'col2'], 'formats': ['i4', 'f4'], 'offsets': [0, 4], 'itemsize': 12}))
+pprint(np.dtype({'col1': ('i1', 0), 'col2': ('f4', 1)}))
+d = np.dtype([('x', 'i8'), ('y', 'f4')])
+pprint(d.names)
+pprint(d['x'])
+pprint(d.fields)
+
+
+def print_offsets(d):
+    print("offsets:", [d.fields[name][1] for name in d.names])
+    print("itemsize:", d.itemsize)
+
+
+print_offsets(np.dtype('u1, u1, i4, u1, i8, u2'))
+
+print_offsets(np.dtype('u1, u1, i4, u1, i8, u2', align=True))
+pprint(np.dtype([(('my title', 'name'), 'f4')]))
+pprint(np.dtype({'name': ('i4', 0, 'my title')}))
+for name in d.names:
+    print(d.fields[name][:2])
+x = np.array([(1, 2, 3), (4, 5, 6)], dtype='i8, f4, f8')
+x[1] = (7, 8, 9)
+pprint(x)
+x = np.zeros(2, dtype='i8, f4, ?, S1')
+x[:] = 3
+pprint(x)
+x[:] = np.arange(2)
+pprint(x)
+a = np.zeros(3, dtype=[('a', 'i8'), ('b', 'f4'), ('c', 'S3')])
+b = np.ones(3, dtype=[('x', 'f4'), ('y', 'S3'), ('z', 'O')])
+b[:] = a
+pprint(b)
+x = np.array([(1, 2), (3, 4)], dtype=[('foo', 'i8'), ('bar', 'f4')])
+x['foo']
+x['foo'] = 10
+pprint(x)
+y = x['bar']
+y[:] = 11
+pprint(x)
+pprint(y.dtype, y.shape, y.strides)
+x = np.zeros((2, 2), dtype=[('a', np.int32), ('b', np.float64, (3, 3))])
+pprint(x['a'].shape)
+pprint(x['b'].shape)
+
+a = np.zeros(3, dtype=[('a', 'i4'), ('b', 'i4'), ('c', 'f4')])
+pprint(a[['a', 'c']])
+pprint(repack_fields(a[['a', 'c']]).view('i8'))  # supported in 1.16)
+
+a[['a', 'c']] = (2, 3)
+pprint(a)
+x = np.array([(1, 2., 3.)], dtype='i, f, f')
+scalar = x[0]
+pprint(scalar)
+pprint(type(scalar))
+
+x = np.array([(1, 2), (3, 4)], dtype=[('foo', 'i8'), ('bar', 'f4')])
+s = x[0]
+s['bar'] = 100
+pprint(x)
+
+scalar = np.array([(1, 2., 3.)], dtype='i, f, f')[0]
+pprint(scalar[0])
+pprint(scalar.item(), type(scalar.item()))
+
+a = np.array([(1, 1), (2, 2)], dtype=[('a', 'i4'), ('b', 'i4')])
+b = np.array([(1, 1), (2, 3)], dtype=[('a', 'i4'), ('b', 'i4')])
+pprint(a == b)
+b = np.array([(1.0, 1), (2.5, 2)], dtype=[("a", "f4"), ("b", "i4")])
+pprint(a == b)
+pprint(np.result_type(np.dtype("i,>i")))
+pprint(np.result_type(np.dtype("i,>i"), np.dtype("i,i")))
+
+dt = np.dtype("i1,V3,i4,V1")[["f0", "f2"]]
+pprint(dt)
+pprint(np.result_type(dt))
+
+dt = np.dtype("i1,V3,i4,V1", align=True)[["f0", "f2"]]
+pprint(dt)
+
+pprint(np.result_type(dt))
+pprint(np.result_type(dt).isalignedstruct)
+pprint(np.result_type(np.dtype("i,i"), np.dtype("i,i", align=True)))
+
+recordarr = np.rec.array([(1, 2., 'Hello'), (2, 3., "World")], dtype=[('foo', 'i4'), ('bar', 'f4'), ('baz', 'S10')])
+pprint(recordarr.bar)
+pprint(recordarr[1:2])
+pprint(recordarr[1:2].foo)
+pprint(recordarr.foo[1:2])
+pprint(recordarr[1].baz)
+
+b = np.array([(1, 2, 5), (4, 5, 7), (7, 8, 11), (10, 11, 12)],
+             dtype=[('x', 'i4'), ('y', 'f4'), ('z', 'f8')])
+pprint(rfn.apply_along_fields(np.mean, b))
+pprint(rfn.apply_along_fields(np.mean, b[['x', 'z']]))
+
+a = np.array([(1, (2, 3.0)), (4, (5, 6.0))], dtype=[('a', np.int64), ('b', [('ba', np.double), ('bb', np.int64)])])
+pprint(rfn.drop_fields(a, 'a'))
+pprint(rfn.drop_fields(a, 'ba'))
+pprint(rfn.drop_fields(a, ['ba', 'bb']))
+
+ndtype = [('a', int)]
+a = np.ma.array([1, 1, 1, 2, 2, 3, 3], mask=[0, 0, 1, 0, 0, 0, 1]).view(ndtype)
+pprint(rfn.find_duplicates(a, ignoremask=True, return_index=True))
+
+ndtype = np.dtype([('a', '<i4'), ('b', [('ba', '<f8'), ('bb', '<i4')])])
+pprint(rfn.flatten_descr(ndtype))
+
+ndtype = np.dtype([('A', int), ('B', [('BA', int), ('BB', [('BBA', int), ('BBB', int)])])])
+pprint(rfn.get_fieldstructure(ndtype))
+
+pprint(rfn.get_names(np.empty((1,), dtype=[('A', int)]).dtype))
+pprint(rfn.get_names(np.empty((1,), dtype=[('A', int), ('B', float)]).dtype))
+adtype = np.dtype([('a', int), ('b', [('ba', int), ('bb', int)])])
+pprint(rfn.get_names(adtype))
+
+rfn.get_names_flat(np.empty((1,), dtype=[('A', int)]).dtype) is None
+rfn.get_names_flat(np.empty((1,), dtype=[('A', int), ('B', str)]).dtype)
+adtype = np.dtype([('a', int), ('b', [('ba', int), ('bb', int)])])
+rfn.get_names_flat(adtype)
+
+pprint(rfn.merge_arrays((np.array([1, 2]), np.array([10., 20., 30.]))))
+pprint(rfn.merge_arrays((np.array([1, 2], dtype=np.int64), np.array([10., 20., 30.])), usemask=False))
+pprint(rfn.merge_arrays((np.array([1, 2]).view([('a', np.int64)]), np.array([10., 20., 30.])), usemask=False, asrecarray=True))
+
+a = np.array([(1, 10.), (2, 20.)], dtype=[('A', np.int64), ('B', np.float64)])
+b = np.zeros((3,), dtype=a.dtype)
+pprint(rfn.recursive_fill_fields(a, b))
+a = np.array([(1, (2, [3.0, 30.])), (4, (5, [6.0, 60.]))], dtype=[('a', int), ('b', [('ba', float), ('bb', (float, 2))])])
+pprint(rfn.rename_fields(a, {'a': 'A', 'bb': 'BB'}))
+
+
+def print_offsets(d):
+    print("offsets:", [d.fields[name][1] for name in d.names])
+    print("itemsize:", d.itemsize)
+
+
+dt = np.dtype('u1, <i8, <f8', align=True)
+dt
+print_offsets(dt)
+packed_dt = rfn.repack_fields(dt)
+packed_dt
+print_offsets(packed_dt)
+
+a = np.ones(4, dtype=[('a', 'i4'), ('b', 'f8'), ('c', 'u1')])
+pprint(rfn.require_fields(a, [('b', 'f4'), ('c', 'u1')]))
+pprint(rfn.require_fields(a, [('b', 'f4'), ('newf', 'u1')]))
+
+x = np.array([1, 2,])
+rfn.stack_arrays(x) is x
+z = np.array([('A', 1), ('B', 2)], dtype=[('A', '|S3'), ('B', float)])
+zz = np.array([('a', 10., 100.), ('b', 20., 200.), ('c', 30., 300.)], dtype=[('A', '|S3'), ('B', np.double), ('C', np.double)])
+test = rfn.stack_arrays((z, zz))
+pprint(test)
+
+a = np.zeros(4, dtype=[('a', 'i4'), ('b', 'f4,u2'), ('c', 'f4', 2)])
+pprint(a)
+pprint(rfn.structured_to_unstructured(a))
+
+dt = np.dtype([('a', 'i4'), ('b', 'f4,u2'), ('c', 'f4', 2)])
+a = np.arange(20).reshape((4, 5))
+pprint(a)
+pprint(rfn.unstructured_to_structured(a, dt))
+end_time = time.time()
+
+print("\n时间：", end_time - start_time)

@@ -3,9 +3,21 @@
 
 """
 
-import rsnumpy._core.umath as _umath
-from rsnumpy import ufunc as _ufunc
-from rsnumpy._core.overrides import ARRAY_FUNCTIONS as _array_functions
+try:
+    import rsnumpy._core.umath as _umath
+except ImportError:
+    import types as _types
+    _umath = _types.ModuleType("rsnumpy._core.umath")
+try:
+    from rsnumpy import ufunc as _ufunc
+except ImportError:
+    # rsnumpy has no ufunc type yet; nothing is overridable via
+    # __array_ufunc__ until one exists.
+    _ufunc = type("ufunc", (), {})
+try:
+    from rsnumpy._core.overrides import ARRAY_FUNCTIONS as _array_functions
+except ImportError:
+    _array_functions = frozenset()
 
 
 def get_overridable_numpy_ufuncs():

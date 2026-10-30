@@ -63,6 +63,16 @@ def _round_up(offset, align):
     return ((offset + align - 1) // align) * align
 
 
+# Hook：rsnumpy 包注册解析器后，DType.type 返回 rsnumpy 标量类（numpy 语义：
+# np.dtype('int64').type 即 int64 标量类型）。未注册时 .type 回退 Python builtin。
+_TYPE_HOOK = None
+
+
+def _set_type_hook(fn):
+    global _TYPE_HOOK
+    _TYPE_HOOK = fn
+
+
 class DType:
     """元素数据类型，兼容 numpy.dtype 的属性与 str/repr。
 
@@ -134,19 +144,24 @@ class DType:
 
     @property
     def type(self):
-        """该 dtype 对应的 Python 标量类型，对齐 `numpy.dtype.type`。
+        """该 dtype 对应的标量类型，对齐 `numpy.dtype.type`。
 
-        NumPy 通过它构造标量来嗅探类别，典型写法是
-        `np.iscomplexobj(dtype.type(1))`，所以要返回可调用的 builtin 类型，
-        而不是 rsnumpy 自己的标量包装。
+        rsnumpy 注册 hook 后返回 rsnumpy 标量类（numpy 语义；标量类仍是
+        builtin 子类型，`np.iscomplexobj(dtype.type(1))` 这类嗅探写法不受
+        影响）；未注册 hook 时回退到可调用的 Python builtin 类型。
 
         【使用示例】
         >>> import rsnumpy as np
         >>> np.dtype('float64').type
-        <class 'float'>
-        >>> np.dtype('complex128').type
-        <class 'complex'>
+        <class 'rsnumpy.float64'>
         """
+        if _TYPE_HOOK is not None:
+            try:
+                t = _TYPE_HOOK(self)
+            except Exception:
+                t = None
+            if t is not None:
+                return t
         kind = self._kind
         if kind == 'b':
             return bool
@@ -252,16 +267,36 @@ class DType:
     @property
     def name(self):
         if self._names is not None:
-            return 'void%d' % (self._itemsize * 8)
+            return 'void%d' % self._itemsize
         if self._subdtype is not None:
-            return 'void%d' % (self._itemsize * 8)
+            return 'void%d' % self._itemsize
         if self._kind == 'S':
-            return 'bytes%d' % (self._itemsize * 8)
+            return 'bytes%d' % self._itemsize
         if self._kind == 'U':
-            return 'str%d' % (self._itemsize * 8)
+            return 'str%d' % self._itemsize
         if self._kind == 'V':
-            return 'void%d' % (self._itemsize * 8)
+            return 'void%d' % self._itemsize
         return self._typename
+
+    @property
+    def char(self):
+        """单字符类型码（numpy dtype.char 兼容）。"""
+        mapping = {
+            'bool': '?', 'bool_': '?',
+            'int8': 'b', 'int16': 'h', 'int32': 'i', 'int64': 'l',
+            'uint8': 'B', 'uint16': 'H', 'uint32': 'I', 'uint64': 'L',
+            'float16': 'e', 'float32': 'f', 'float64': 'd', 'float128': 'g',
+            'complex64': 'F', 'complex128': 'D',
+        }
+        n = self.name
+        if n in mapping:
+            return mapping[n]
+        kind = self._kind
+        if kind in ('b', 'i', 'u', 'f', 'c', 'S', 'U', 'V', 'O', 'M', 'm'):
+            return kind
+        if n:
+            return n[0]
+        return '?'
 
     @property
     def descr(self):

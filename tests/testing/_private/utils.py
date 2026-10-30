@@ -26,9 +26,19 @@ from unittest.case import SkipTest
 from warnings import WarningMessage
 
 import rsnumpy as np
-import rsnumpy.linalg._umath_linalg
+try:
+    import rsnumpy.linalg._umath_linalg as _umath_linalg
+except ImportError:
+    import types as _types
+    _umath_linalg = _types.ModuleType("rsnumpy.linalg._umath_linalg")
+    _umath_linalg._ilp64 = False
 from rsnumpy import isfinite, isnan
-from rsnumpy._core import arange, array, array_repr, empty, float32, intp, isnat, ndarray
+try:
+    from rsnumpy._core import arange, array, array_repr, empty, float32, intp, isnat, ndarray
+except ImportError:
+    # rsnumpy._core is a small Python package; the real implementations live
+    # at the rsnumpy top level.
+    from rsnumpy import arange, array, array_repr, empty, float32, intp, isnat, ndarray
 
 __all__ = [
         'assert_equal', 'assert_almost_equal', 'assert_approx_equal',
@@ -112,9 +122,12 @@ HAS_SUBPROCESSES = getattr(subprocess, "_can_fork_exec", True) and sys.platform 
     # the app.
     "android"
 ]
-BLAS_SUPPORTS_FPE = np._core._multiarray_umath._blas_supports_fpe(None)
+try:
+    BLAS_SUPPORTS_FPE = np._core._multiarray_umath._blas_supports_fpe(None)
+except (AttributeError, TypeError):
+    BLAS_SUPPORTS_FPE = False
 
-HAS_LAPACK64 = rsnumpy.linalg._umath_linalg._ilp64
+HAS_LAPACK64 = _umath_linalg._ilp64
 
 IS_MUSL = False
 # alternate way is

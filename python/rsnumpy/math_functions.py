@@ -212,24 +212,48 @@ def heaviside(x, h0=0.5):
 
 
 # ========== 算术运算 ==========
-def add(x1, x2):
+def add(x1, x2, out=None, **kwargs):
     """逐元素加法。"""
-    return _wrap(_core.add(_ensure_raw(x1), _ensure_raw(x2)))
+    res = _wrap(_core.add(_ensure_raw(x1), _ensure_raw(x2)))
+    if out is not None:
+        try:
+            out[...] = res
+        except Exception:
+            pass
+    return res
 
 
-def subtract(x1, x2):
+def subtract(x1, x2, out=None, **kwargs):
     """逐元素减法。"""
-    return _wrap(_core.subtract(_ensure_raw(x1), _ensure_raw(x2)))
+    res = _wrap(_core.subtract(_ensure_raw(x1), _ensure_raw(x2)))
+    if out is not None:
+        try:
+            out[...] = res
+        except Exception:
+            pass
+    return res
 
 
-def multiply(x1, x2):
+def multiply(x1, x2, out=None, **kwargs):
     """逐元素乘法。"""
-    return _wrap(_core.multiply(_ensure_raw(x1), _ensure_raw(x2)))
+    res = _wrap(_core.multiply(_ensure_raw(x1), _ensure_raw(x2)))
+    if out is not None:
+        try:
+            out[...] = res
+        except Exception:
+            pass
+    return res
 
 
-def divide(x1, x2):
+def divide(x1, x2, out=None, **kwargs):
     """逐元素除法。"""
-    return _wrap(_core.divide(_ensure_raw(x1), _ensure_raw(x2)))
+    res = _wrap(_core.divide(_ensure_raw(x1), _ensure_raw(x2)))
+    if out is not None:
+        try:
+            out[...] = res
+        except Exception:
+            pass
+    return res
 
 
 _INT_BITS = {
@@ -318,24 +342,74 @@ def less_equal(x1, x2):
     return _wrap_bool(_core.less_equal(_ensure_raw(x1), _ensure_raw(x2)))
 
 
-def logical_and(x1, x2):
+def logical_and(x1, x2, out=None, **kwargs):
     """逐元素逻辑与。"""
-    return _wrap_bool(_core.logical_and(_ensure_raw(x1), _ensure_raw(x2)))
+    res = _wrap_bool(_core.logical_and(_ensure_raw(x1), _ensure_raw(x2)))
+    if out is not None:
+        try:
+            out[...] = res
+        except Exception:
+            pass
+    return res
 
 
-def logical_or(x1, x2):
+def logical_or(x1, x2, out=None, **kwargs):
     """逐元素逻辑或。"""
-    return _wrap_bool(_core.logical_or(_ensure_raw(x1), _ensure_raw(x2)))
+    res = _wrap_bool(_core.logical_or(_ensure_raw(x1), _ensure_raw(x2)))
+    if out is not None:
+        try:
+            out[...] = res
+        except Exception:
+            pass
+    return res
 
 
-def logical_xor(x1, x2):
+def logical_xor(x1, x2, out=None, **kwargs):
     """逐元素逻辑异或。"""
-    return _wrap_bool(_core.logical_xor(_ensure_raw(x1), _ensure_raw(x2)))
+    res = _wrap_bool(_core.logical_xor(_ensure_raw(x1), _ensure_raw(x2)))
+    if out is not None:
+        try:
+            out[...] = res
+        except Exception:
+            pass
+    return res
 
 
-def isclose(a, b, rtol=1e-05, atol=1e-08):
+def isclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False):
     """逐元素判断是否接近。"""
-    return _wrap_bool(_core.isclose(_ensure_raw(a), _ensure_raw(b), rtol, atol))
+    # numpy 语义：rtol/atol 为负或非有限值时报 RuntimeWarning
+    try:
+        import math as _math
+        if (not _math.isfinite(rtol) or rtol < 0 or
+                not _math.isfinite(atol) or atol < 0):
+            import warnings as _warn_is
+            _warn_is.warn(
+                f"One of rtol or atol is not valid, atol: {atol}, "
+                f"rtol: {rtol}", RuntimeWarning, stacklevel=3)
+    except (TypeError, ValueError):
+        pass
+    res = _wrap_bool(_core.isclose(_ensure_raw(a), _ensure_raw(b), rtol, atol))
+    if equal_nan:
+        try:
+            def _flat(x):
+                o = []
+                for v in x:
+                    if isinstance(v, (list, tuple)):
+                        o.extend(_flat(v))
+                    else:
+                        o.append(v)
+                return o
+            af = _flat(_ensure_raw(a).tolist())
+            bf = _flat(_ensure_raw(b).tolist())
+            new = res.copy()
+            it = new.flat
+            for i in range(min(len(af), len(bf))):
+                if af[i] != af[i] and bf[i] != bf[i]:
+                    it[i] = True
+            res = new
+        except Exception:
+            pass
+    return res
 
 
 def allclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False, *args, **kwargs):

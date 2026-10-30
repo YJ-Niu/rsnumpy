@@ -16,7 +16,11 @@ __all__ = (
     _private.utils.__all__ + ['TestCase', 'overrides']
 )
 
-from rsnumpy._pytesttester import PytestTester
+try:
+    from rsnumpy._pytesttester import PytestTester
 
-test = PytestTester(__name__)
-del PytestTester
+    test = PytestTester(__name__)
+    del PytestTester
+except ImportError:
+    # rsnumpy has no _pytesttester yet
+    test = None

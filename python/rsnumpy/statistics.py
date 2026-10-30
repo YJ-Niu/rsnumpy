@@ -126,15 +126,32 @@ def sum(a, axis=None, dtype=None, out=None, keepdims=False, initial=None, where=
 
 def mean(a, axis=None, dtype=None, out=None, keepdims=False, where=True):
     """计算数组元素的平均值。"""
-    _ = dtype, out, where
+    _ = dtype, where
+    # numpy 语义：空数组 → NaN + "Mean of empty slice" 告警
+    try:
+        if _ensure_raw(a).size == 0:
+            import warnings as _warn_mean
+            _warn_mean.warn("Mean of empty slice", RuntimeWarning, stacklevel=3)
+            return float('nan')
+    except Exception:
+        pass
     raw_result = _core.mean(_ensure_raw(a), axis, keepdims)
     if axis is not None:
         # numpy semantics: reduction along an explicit axis returns an ndarray
         # (0-d when all dimensions are reduced), never a Python scalar.
-        return _nd()(raw_result, _dtype='float64')
-    if hasattr(raw_result, 'ndim') and raw_result.ndim == 0:
-        return float(raw_result.tolist())
-    return _wrap(raw_result)
+        res = _nd()(raw_result, _dtype='float64')
+    elif hasattr(raw_result, 'ndim') and raw_result.ndim == 0:
+        res = float(raw_result.tolist())
+    else:
+        res = _wrap(raw_result)
+    # numpy 语义：out 被填充且被返回
+    if out is not None:
+        try:
+            out[...] = res
+        except Exception:
+            pass
+        return out
+    return res
 
 
 def _needs_py_var_std(a, axis):
@@ -148,28 +165,118 @@ def _needs_py_var_std(a, axis):
     return axis is not None
 
 
+def _flat_vals(x):
+    out = []
+    for v in x:
+        if isinstance(v, (list, tuple)):
+            out.extend(_flat_vals(v))
+        else:
+            out.append(v)
+    return out
+
+
+def _values_equal(a, b):
+    """逐元素比较（支持 0-d 标量与同形状数组）。"""
+    try:
+        la = _flat_vals(a.tolist())
+        lb = _flat_vals(b.tolist()) if hasattr(b, 'tolist') else _flat_vals([b])
+        if len(la) != len(lb):
+            return False
+        return builtins.all(x == y for x, y in zip(la, lb))
+    except Exception:
+        return False
+
+
 def std(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False, where=True,
-        correction=None):
+        correction=None, mean=None):
     """计算数组元素的标准差。"""
-    _ = dtype, out, where
+    _ = dtype, where
     # numpy 兼容：correction 与 ddof 同义（correction 优先）
     if correction is not None:
         ddof = correction
+    # numpy 语义：空数组 → NaN + "Mean of empty slice" 告警
+    try:
+        if _ensure_raw(a).size == 0:
+            import warnings as _warn_std
+            _warn_std.warn("Mean of empty slice", RuntimeWarning, stacklevel=3)
+            return _nd()(float('nan'), _dtype='float64')
+    except Exception:
+        pass
+    if mean is not None:
+        try:
+            m = mean(a, axis=axis, keepdims=True)
+            if not _values_equal(m, mean):
+                diff = a - mean
+                s = sum(diff * diff, axis=axis, keepdims=keepdims)
+                n = (a.size if axis is None else a.shape[axis]) - ddof
+                v = s / n
+                res = v ** 0.5
+                if out is not None:
+                    try:
+                        out[...] = res
+                    except Exception:
+                        pass
+                    return out
+                return res
+        except Exception:
+            pass
     if _needs_py_var_std(a, axis):
         return _py_var_std(a, axis, ddof, want_std=True)
     raw_result = _core.std(_ensure_raw(a), axis, ddof, keepdims)
     arr_dtype = getattr(a, '_dtype', 'float64') if hasattr(a, '_dtype') else 'float64'
-    return _nd()(raw_result, _dtype=arr_dtype)
+    res = _nd()(raw_result, _dtype=arr_dtype)
+    if out is not None:
+        try:
+            out[...] = res
+        except Exception:
+            pass
+        return out
+    return res
 
 
-def var(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False, where=True):
+def var(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False, where=True,
+        correction=None, mean=None):
     """计算数组元素的方差。"""
-    _ = dtype, out, where
+    _ = dtype, where
+    if correction is not None:
+        ddof = correction
+    # numpy 语义：空数组 → NaN + "Mean of empty slice" 告警
+    try:
+        if _ensure_raw(a).size == 0:
+            import warnings as _warn_var
+            _warn_var.warn("Mean of empty slice", RuntimeWarning, stacklevel=3)
+            return _nd()(float('nan'), _dtype='float64')
+    except Exception:
+        pass
+    if mean is not None:
+        try:
+            m = mean(a, axis=axis, keepdims=True)
+            if not _values_equal(m, mean):
+                diff = a - mean
+                s = sum(diff * diff, axis=axis, keepdims=keepdims)
+                n = (a.size if axis is None else a.shape[axis]) - ddof
+                res = s / n
+                if out is not None:
+                    try:
+                        out[...] = res
+                    except Exception:
+                        pass
+                    return out
+                return res
+        except Exception:
+            pass
     if _needs_py_var_std(a, axis):
         return _py_var_std(a, axis, ddof, want_std=False)
     raw_result = _core.var(_ensure_raw(a), axis, ddof, keepdims)
     arr_dtype = getattr(a, '_dtype', 'float64') if hasattr(a, '_dtype') else 'float64'
-    return _nd()(raw_result, _dtype=arr_dtype)
+    res = _nd()(raw_result, _dtype=arr_dtype)
+    if out is not None:
+        try:
+            out[...] = res
+        except Exception:
+            pass
+        return out
+    return res
 
 
 def min(a, axis=None, out=None, keepdims=False, initial=None, where=True):

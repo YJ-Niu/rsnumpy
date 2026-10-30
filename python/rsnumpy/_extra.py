@@ -400,11 +400,31 @@ def count_nonzero(a, axis=None, *, keepdims=False):
     """统计非零元素个数。"""
     _ = keepdims
     np = _np()
-    if axis is None:
-        return _core.count_nonzero(_asarray(a)._array)
     arr = _asarray(a)
+    if axis is None:
+        return _core.count_nonzero(arr._array)
+    # numpy 风格的 axis 校验：重复 axis 抛 ValueError，非整数抛 TypeError，
+    # 越界抛 AxisError
+    from rsnumpy.exceptions import AxisError as _AxisError
+    if isinstance(axis, (tuple, list)):
+        if len(set(axis)) != len(axis):
+            raise ValueError("repeated axis in input")
+        axis_list = list(axis)
+    elif isinstance(axis, int) and not isinstance(axis, bool):
+        axis_list = [axis]
+    else:
+        raise TypeError(f"axis must be an int or a tuple of ints, not {type(axis)}")
+    for v in axis_list:
+        if not isinstance(v, int) or isinstance(v, bool):
+            raise TypeError(f"axis must be an int, not {type(v)}")
+        if v < -arr.ndim or v >= arr.ndim:
+            raise _AxisError(f"axis {v} is out of bounds for array of dimension {arr.ndim}")
     mask = np.where(np.equal(arr, np.full(arr.shape, 0.0)), np.full(arr.shape, 0.0), np.full(arr.shape, 1.0))
-    return np.sum(mask, axis)
+    if len(axis_list) == 1:
+        return np.sum(mask, axis_list[0])
+    for v in sorted(axis_list, reverse=True):
+        mask = np.sum(mask, v)
+    return mask
 
 
 # ========== 集合运算 ==========
@@ -483,7 +503,22 @@ def size(a, axis=None):
 
 def isscalar(element):
     """判断是否为标量。"""
-    return isinstance(element, (int, float, complex, bool, bytes, str))
+    if isinstance(element, (int, float, complex, bool, bytes, str)):
+        return True
+    try:
+        from . import __init__ as _rn
+        if isinstance(element, _rn.generic):
+            return True
+    except Exception:
+        pass
+    try:
+        from fractions import Fraction as _Frac
+        from decimal import Decimal as _Dec
+        if isinstance(element, (_Frac, _Dec)):
+            return True
+    except Exception:
+        pass
+    return False
 
 
 def iterable(y):
@@ -942,7 +977,11 @@ def gradient(f, *varargs, axis=None, edge_order=1):
 def cross(a, b, axisa=-1, axisb=-1, axisc=-1, axis=None):
     """向量叉积。"""
     _ = axisa, axisb, axisc, axis
-    return _wrap(_core.cross(_asarray(a)._array, _asarray(b)._array))
+    A = _asarray(a)
+    B = _asarray(b)
+    if A.ndim == 0 or B.ndim == 0:
+        raise ValueError("Input arrays must be at least 1-dimensional")
+    return _wrap(_core.cross(A._array, B._array))
 
 
 def trapezoid(y, x=None, dx=1.0, axis=-1):
@@ -1335,12 +1374,24 @@ def kaiser(M, beta):
 
 def convolve(a, v, mode="full"):
     """一维离散卷积。"""
-    return _wrap(_core.convolve(_asarray(a)._array, _asarray(v)._array, mode))
+    A = _asarray(a)
+    V = _asarray(v)
+    if A.size == 0:
+        raise ValueError("a cannot be empty")
+    if V.size == 0:
+        raise ValueError("v cannot be empty")
+    return _wrap(_core.convolve(A._array, V._array, mode))
 
 
 def correlate(a, v, mode="valid"):
     """一维互相关。"""
-    return _wrap(_core.correlate(_asarray(a)._array, _asarray(v)._array, mode))
+    A = _asarray(a)
+    V = _asarray(v)
+    if A.size == 0:
+        raise ValueError("a cannot be empty")
+    if V.size == 0:
+        raise ValueError("v cannot be empty")
+    return _wrap(_core.correlate(A._array, V._array, mode))
 
 
 def interp(x, xp, fp, left=None, right=None, period=None):
@@ -1419,8 +1470,8 @@ round_ = round
 # ========== 类型转换 / 连续性 / 共享内存 ==========
 def astype(x, dtype, copy=True, casting="unsafe"):
     """将数组转换为指定类型。"""
-    _ = copy, casting
-    return _asarray(x).astype(dtype)
+    _ = casting
+    return _asarray(x).astype(dtype, copy=copy)
 
 
 def ascontiguousarray(a, dtype=None):
@@ -1461,11 +1512,29 @@ def isfortran(a):
 
 
 def shares_memory(a, b, max_work=None):
-    """判断两个数组是否共享底层内存。"""
+    """判断两个数组是否共享底层内存（含逻辑视图血缘，如 reshape）。"""
     _ = max_work
     ra = getattr(a, "_array", None)
     rb = getattr(b, "_array", None)
-    return ra is not None and ra is rb
+    if ra is not None and ra is rb:
+        return True
+    if a is b:
+        return True
+    da = getattr(a, "_raw_data", None)
+    db = getattr(b, "_raw_data", None)
+    if da is not None and da is db:
+        return True
+
+    def _chain(x):
+        seen = {id(x)}
+        while True:
+            p = getattr(x, "_rs_parent", None)
+            if p is None or id(p) in seen:
+                return seen
+            seen.add(id(p))
+            x = p
+
+    return bool(_chain(a) & _chain(b))
 
 
 def may_share_memory(a, b, max_work=None):
@@ -1493,10 +1562,31 @@ def array_equiv(a1, a2):
 
 # ========== 索引工具 ==========
 def indices(dimensions, dtype=None, sparse=False):
-    """返回网格索引数组。"""
+    """返回索引网格数组。"""
     np = _np()
+    if isinstance(dimensions, int) and not isinstance(dimensions, bool):
+        dimensions = (dimensions,)
     dims = tuple(int(d) for d in dimensions)
     n = len(dims)
+    if n == 0:
+        # numpy：np.indices(()) → 空 (0,) 数组（dense）/ 空元组（sparse）
+        if sparse:
+            return ()
+        return np.array([], dtype=dtype or "int64")
+    if 0 in dims:
+        # numpy：np.indices((0,)) → 空 (1, 0) 数组（dense）
+        _dt_i = dtype or "int64"
+
+        def _mk(_shape):
+            if not _shape:
+                return [0]
+            return [_mk(_shape[1:]) for _ in range(_shape[0])]
+
+        if sparse:
+            return tuple(
+                np.array(_mk((dims[i],) + (1,) * (n - 1)), dtype=_dt_i)
+                for i in range(n))
+        return np.array(_mk((n,) + dims), dtype=_dt_i)
     out = []
     for i in range(n):
         shp = tuple(dims[i] if j == i else 1 for j in range(n))
@@ -1778,9 +1868,76 @@ def _promote2(n1, n2):
     return 'float64' if t > 8 else _int_name('i', t)
 
 
+# numpy 语义：数值类型 + 无宽度字符串 → 该类型可表示值的最长字符串长度
+_STR_PROMO_WIDTH = {
+    'bool': 5,
+    'int8': 4, 'int16': 6, 'int32': 11, 'int64': 21,
+    'uint8': 3, 'uint16': 5, 'uint32': 10, 'uint64': 20,
+}
+
+
+def _str_kind_width(n):
+    """'str3'/'bytes5' → ('U', 3)/('S', 5)；无宽度 → 宽度 0；其他 → None。"""
+    if isinstance(n, str):
+        if n.startswith('str'):
+            try:
+                # U 的 itemsize = 宽度 × 4 字节
+                return 'U', int(n[3:]) // 4
+            except ValueError:
+                return None
+        if n.startswith('bytes'):
+            try:
+                return 'S', int(n[5:])
+            except ValueError:
+                return None
+    return None
+
+
+def _void_promo(d1, d2):
+    """void/结构化提升（numpy 语义）：兼容（同为 void 同尺寸、或同字段名）
+    → 返回 type1；否则 TypeError。"""
+    f1 = getattr(d1, 'fields', None)
+    f2 = getattr(d2, 'fields', None)
+    n1 = tuple(f1) if f1 is not None else None
+    n2 = tuple(f2) if f2 is not None else None
+    if n1 is None and n2 is None:
+        if d1.itemsize == d2.itemsize:
+            return d1
+        raise TypeError(
+            "promote_types with mismatching void sizes is not defined")
+    if n1 is not None and n2 is not None and n1 == n2:
+        return d1
+    raise TypeError(
+        "promote_types with mismatching field names is not defined")
+
+
 def promote_types(type1, type2):
     """返回可安全容纳两个类型的最小类型。"""
-    return _np().dtype(_promote2(_canon_dt_type(type1), _canon_dt_type(type2)))
+    np = _np()
+    a = _canon_dt_type(type1)
+    b = _canon_dt_type(type2)
+    d1 = np.dtype(type1)
+    d2 = np.dtype(type2)
+    # void/结构化：兼容 → type1，否则 TypeError
+    k1 = getattr(d1, '_kind', '')
+    k2 = getattr(d2, '_kind', '')
+    if k1 == 'V' or k2 == 'V':
+        return _void_promo(d1, d2)
+    # 字符串 dtype 提升
+    sa = _str_kind_width(a)
+    sb = _str_kind_width(b)
+    if sa or sb:
+        if sa and sb:
+            # 字符串 + 字符串：unicode 优先，宽度取最大
+            kind = 'U' if 'U' in (sa[0], sb[0]) else sa[0]
+            return np.dtype(f"{kind}{max(sa[1] or 1, sb[1] or 1)}")
+        num = b if sa else a
+        kind, w0 = (sa or sb)
+        if num in ('object', 'O'):
+            return np.dtype('O')
+        w = _STR_PROMO_WIDTH.get(num, 32)
+        return np.dtype(f"{kind}{max(w0, w)}")
+    return np.dtype(_promote2(a, b))
 
 
 def result_type(*arrays_and_dtypes):
@@ -1823,6 +1980,12 @@ def result_type(*arrays_and_dtypes):
 
 def can_cast(from_, to, casting='safe'):
     """判断能否按给定规则从一个类型转换到另一个类型。"""
+    # numpy (NEP50) 语义：裸 Python 标量不可参与 cast 判断
+    if isinstance(from_, (int, float, complex, str, bytes)) and \
+            not isinstance(from_, bool):
+        raise TypeError(
+            f"Cannot cast Python scalar {type(from_).__name__!r} to dtype "
+            f"{to!r} with casting rule {casting!r}")
     try:
         fn = _canon_dt(from_)
         tn = _canon_dt_type(to)

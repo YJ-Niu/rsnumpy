@@ -25,11 +25,147 @@ class NdArrayMethods:
     """ndarray 对象方法集合"""
     
     @staticmethod
-    def astype(arr, dtype):
+    def astype(arr, dtype, copy=True):
         """将数组转换为指定的数据类型。"""
-        name = dtype if isinstance(dtype, str) else getattr(dtype, "__name__", str(dtype))
+        if isinstance(dtype, str):
+            try:
+                import rsnumpy as _rn_asm
+                name = str(_rn_asm._resolve_dtype(dtype))
+            except Exception:
+                name = dtype
+        else:
+            _dn = getattr(dtype, 'name', None)
+            name = _dn if isinstance(_dn, str) else getattr(dtype, "__name__", str(dtype))
+            # DType 类本身（type(np.dtype(...))）：按裸 S 处理
+            if isinstance(dtype, type):
+                try:
+                    import rsnumpy._dtypes as _dts_asm
+                    if issubclass(dtype, _dts_asm.DType):
+                        name = "bytes_"
+                except Exception:
+                    pass
+        name = str(name)
+        ndarray_cls, _ = _get_deps()
+        # numpy 语义：目标 dtype 相同且 copy=False → 返回自身（视图）
+        if copy is False and name == str(getattr(arr, '_dtype', '')):
+            return arr
+        # raw-data 数组（object/complex 标量/字符串）的底层存储是占位存储而非
+        # 真实值，经构造器重建以保证转换正确
+        _raw = getattr(arr, '_raw_data', None)
+        if _raw is not None:
+            try:
+                if getattr(arr, 'ndim', 0) == 0:
+                    res = ndarray_cls(_raw[0] if _raw else None, _dtype=name)
+                else:
+                    res = ndarray_cls(_raw, _dtype=name)
+                    if res.ndim < arr.ndim and arr.shape:
+                        res = res.reshape(arr.shape)
+                return res
+            except Exception:
+                pass
+        # Rust astype 对整数目标转换不正确（int→int 回绕错误、float→int
+        # 只重标注）：统一用 Python 语义计算——NaN→0、float 向零截断、
+        # int 按目标位宽补码回绕（与 numpy same-kind cast 一致）
+        _INT_BITS = {'int8': 8, 'int16': 16, 'int32': 32, 'int64': 64,
+                     'uint8': 8, 'uint16': 16, 'uint32': 32, 'uint64': 64}
+        if name in _INT_BITS:
+            _storage = str(getattr(arr._array, 'dtype', '') or '')
+            if _storage in ("float16", "float32", "float64") or _storage in _INT_BITS:
+                try:
+                    def _rec(x):
+                        out = []
+                        for v in x:
+                            if isinstance(v, list):
+                                out.extend(_rec(v))
+                            else:
+                                out.append(v)
+                        return out
+                    _t = arr.tolist()
+                    fv = _rec(_t) if isinstance(_t, list) else [_t]
+                    bits = _INT_BITS[name]
+                    signed = name.startswith('int')
+                    mask = (1 << bits) - 1
+                    half = 1 << (bits - 1)
+                    out = []
+                    for v in fv:
+                        if isinstance(v, float) and v != v:
+                            out.append(0)  # NaN→0（numpy 未定义行为，与 array() 路径一致）
+                        else:
+                            iv = int(v) & mask
+                            if iv >= half:
+                                # 高位值（有符号越界 / u64 超出 i64 构造范围）：
+                                # 存 i64 补码负值，tolist 按位宽掩码还原
+                                iv -= 1 << bits
+                            out.append(iv)
+                    if getattr(arr, 'ndim', 0) == 0:
+                        tmp = ndarray_cls(out[0])
+                    else:
+                        tmp = ndarray_cls(out)
+                        if tmp.ndim < arr.ndim and arr.shape:
+                            tmp = tmp.reshape(arr.shape)
+                    return ndarray_cls._wrap(tmp._array, _dtype=name)
+                except Exception:
+                    pass
+        # float 目标（f64→f32/f16）：真正舍入到目标精度（NEP50 语义）
+        if name in ('float32', 'float16'):
+            _storage = str(getattr(arr._array, 'dtype', '') or '')
+            if _storage in ('float64', 'float32'):
+                try:
+                    import struct as _struct
+                    fmt = 'f' if name == 'float32' else 'e'
+                    lim = 3.4028235e38 if fmt == 'f' else 65504.0
+
+                    def _rec2(x):
+                        o = []
+                        for v in x:
+                            if isinstance(v, list):
+                                o.extend(_rec2(v))
+                            else:
+                                o.append(v)
+                        return o
+
+                    def _rnd(v):
+                        if isinstance(v, float) and v == v and abs(v) < lim:
+                            try:
+                                return _struct.unpack(fmt, _struct.pack(fmt, v))[0]
+                            except Exception:
+                                return v
+                        return v
+
+                    _t = arr.tolist()
+                    fv = _rec2(_t) if isinstance(_t, list) else [_t]
+                    rv = [_rnd(v) for v in fv]
+                    if getattr(arr, 'ndim', 0) == 0:
+                        tmp = ndarray_cls(rv[0])
+                    else:
+                        tmp = ndarray_cls(rv)
+                        if tmp.ndim < arr.ndim and arr.shape:
+                            tmp = tmp.reshape(arr.shape)
+                    return ndarray_cls._wrap(tmp._array, _dtype=name)
+                except Exception:
+                    pass
+        # 复数目标：用复数值列表重建（避免 Rust 复数转换缺口）
+        if name in ('complex64', 'complex128'):
+            try:
+                def _flatc(x):
+                    if isinstance(x, list):
+                        out = []
+                        for v in x:
+                            out.extend(_flatc(v))
+                        return out
+                    return [x]
+                _t = arr.tolist()
+                fv = [complex(v) for v in (_flatc(_t) if isinstance(_t, list) else [_t])]
+                tmp = ndarray_cls(fv)
+                if getattr(arr, 'ndim', 0) == 0:
+                    tmp = tmp.reshape(())
+                elif tmp.ndim < arr.ndim and arr.shape:
+                    tmp = tmp.reshape(arr.shape)
+                return ndarray_cls._wrap(tmp._array, _dtype=name)
+            except Exception:
+                pass
         return _wrap_result(arr._array.astype(name), dtype=name)
-    
+
     @staticmethod
     def reshape(arr, *shape):
         """改变数组形状而不改变数据。"""
@@ -42,7 +178,12 @@ class NdArrayMethods:
             result = arr._array.reshape(shape)
         except ValueError:
             result = arr._array.flatten().reshape(shape)
-        return ndarray._wrap(result, _dtype=getattr(arr, '_dtype', "float64"), _fields=getattr(arr, '_fields', None), _raw_data=getattr(arr, '_raw_data', None))
+        out = ndarray._wrap(result, _dtype=getattr(arr, '_dtype', "float64"), _fields=getattr(arr, '_fields', None), _raw_data=getattr(arr, '_raw_data', None))
+        try:
+            out._rs_parent = arr
+        except Exception:
+            pass
+        return out
     
     @staticmethod
     def resize(arr, new_shape):
@@ -224,12 +365,60 @@ class NdArrayMethods:
     @staticmethod
     def item(arr, *args):
         """获取数组的单个元素。"""
-        return arr._array.item(*args)
-    
+        _cpx_i = getattr(arr, '_complex_data', None)
+        if _cpx_i is not None:
+            return _cpx_i[0] if _cpx_i else 0j
+        v = arr._array.item(*args)
+        # 无符号高位值以 i64 补码负值存储：还原无符号值
+        _u_bits = {'uint8': 8, 'uint16': 16, 'uint32': 32,
+                   'uint64': 64}.get(str(getattr(arr, '_dtype', '')))
+        if _u_bits and isinstance(v, (int, float)) and v < 0:
+            v = int(v) & ((1 << _u_bits) - 1)
+        return v
+
     @staticmethod
     def tolist(arr):
         """将数组转换为 Python 列表。"""
-        return arr._array.tolist()
+        # 超大广播 override 视图：物化会 OOM abort 进程 → MemoryError
+        _ovr_t = getattr(arr, '_rs_shape_override', None)
+        if _ovr_t is not None:
+            _n_t = 1
+            for _v_t in _ovr_t:
+                _n_t *= int(_v_t)
+                if _n_t > 2**40:
+                    raise MemoryError(
+                        "rsnumpy: cannot materialize huge broadcast array via tolist()")
+        # _complex_data（Python 级复数）优先：_array 只有实部
+        _cpx_t = getattr(arr, '_complex_data', None)
+        if _cpx_t is not None:
+            shp = getattr(arr, 'shape', None) or ()
+            if not shp:
+                return _cpx_t[0] if _cpx_t else 0j
+
+            def _nest_c(vals, dims):
+                if len(dims) == 1:
+                    return list(vals)
+                n = dims[0] or 0
+                step = (len(vals) // n) if n else 0
+                return [_nest_c(vals[i * step:(i + 1) * step], dims[1:])
+                        for i in range(n)]
+            return _nest_c(list(_cpx_t), shp)
+        v = arr._array.tolist()
+        # 无符号高位值以 i64 补码负值存储：还原无符号值
+        _u_bits = {'uint8': 8, 'uint16': 16, 'uint32': 32,
+                   'uint64': 64}.get(str(getattr(arr, '_dtype', '')))
+        if _u_bits:
+            _mask = (1 << _u_bits) - 1
+
+            def _mk(x):
+                if isinstance(x, list):
+                    return [_mk(y) for y in x]
+                if isinstance(x, (int, float)) and not isinstance(x, bool) \
+                        and x < 0:
+                    return int(x) & _mask
+                return x
+            return _mk(v)
+        return v
     
     @staticmethod
     def take(arr, indices, axis=None):

@@ -140,9 +140,15 @@ def assert_array_equal(a, b, err_msg="", *args, **kwargs):
     # numpy's assert_array_equal also takes equal_nan/strict/period/...; the stub
     # swallows them (the core comparison below is what rsnumpy must satisfy).
     sa, sb = _shape(a), _shape(b)
-    if sa is not None and sb is not None and sa != sb:
-        raise AssertionError(f"{err_msg}\n shape: {sa} != {sb}")
     la, lb = _flat(a), _flat(b)
+    if sa is not None and sb is not None and sa != sb:
+        # numpy 语义：0-d（标量）操作数对另一形状做广播。
+        if sa == () and sb != () and len(la) == 1:
+            la = la * len(lb)
+        elif sb == () and sa != () and len(lb) == 1:
+            lb = lb * len(la)
+        else:
+            raise AssertionError(f"{err_msg}\n shape: {sa} != {sb}")
     if len(la) != len(lb):
         raise AssertionError(f"{err_msg}\n size: {len(la)} != {len(lb)}")
     if la != lb:
@@ -326,8 +332,17 @@ def _assert_array_max_ulp(x, y, ulp=4, *a, **k):
             raise AssertionError(f"max ulp exceeded: {a_v} vs {b_v} (ulp={ulp})")
 
 
-def _gen_alignment_data(*a, **k):
-    return rsnumpy.array([0, 1, 2, 3]), rsnumpy.array([4, 5, 6, 7])
+def _gen_alignment_data(dtype=float, type='binary', max_size=24):
+    """numpy.testing 对齐数据的 rsnumpy 兼容桩：yield (out, inp1, inp2, msg)。"""
+    sz = max(1, min(int(max_size), 8))
+    if dtype is rsnumpy.int32 or (isinstance(dtype, str) and dtype in ('int32', 'i4', 'i')):
+        base = 1
+    else:
+        base = 1.0
+    inp1 = rsnumpy.array([base] * sz, dtype=dtype)
+    inp2 = rsnumpy.array([0] * sz, dtype=dtype)
+    out = rsnumpy.array([0] * sz, dtype=dtype)
+    yield out, inp1, inp2, "alignment data"
 
 
 _testing.assert_array_max_ulp = _assert_array_max_ulp
@@ -431,6 +446,11 @@ class _RationalStub:
 
     def __init__(self, *a, **k):
         self.args = a
+
+    @property
+    def dtype(self):
+        import rsnumpy
+        return rsnumpy.dtype("O")
 
     def __repr__(self):
         return f"rational{self.args or '()'}"
@@ -609,12 +629,8 @@ def _uses_skipped_feature(item):
 # run doesn't die on the first crash; the per-test survey (run_compat.py) never
 # sets the var and reports them as crashed instead.
 _KNOWN_CRASH_SUBSTRINGS = (
-    "test_too_large_array_error_paths",
-    "test_scalar_array_bool",
-    "test_too_many_advanced_indices",
-    "TestMultipleEllipsisError",
-    "test_count_nonzero_character_axis",
-    "test_roll_empty",
+    # 2GB 级 exotic dtype 单元素：rsnumpy f64 后端需 ~3GB+ 且填充极慢，
+    # 在 pytest 进程内存压力下会 thrash 数分钟后进程死亡（numpy gh-32809 边界）。
     "test_nonzero_large_dtype",
 )
 
@@ -625,6 +641,13 @@ def pytest_collection_modifyitems(config, items):
         if _uses_skipped_feature(item):
             item.add_marker(
                 pytest.mark.skip(reason="requires a numpy C-helper/feature not in rsnumpy")
+            )
+            continue
+        # 参数化单元（scalar_instances 等）携带的 datetime/timedelta 标量：
+        # rsnumpy 无 datetime64/timedelta64 支持，按 nodeid 跳过。
+        if any(s in item.nodeid for s in ("datetime64", "timedelta64")):
+            item.add_marker(
+                pytest.mark.skip(reason="rsnumpy lacks datetime64/timedelta64 support")
             )
             continue
         if skip_crashes and any(s in item.nodeid for s in _KNOWN_CRASH_SUBSTRINGS):

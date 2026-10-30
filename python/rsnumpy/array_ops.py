@@ -41,7 +41,7 @@ def reshape(a, shape=None, order='C', *, newshape=None, copy=None):
     if shape is None:
         shape = newshape
     if shape is None:
-        raise TypeError("reshape() missing required argument 'shape' (pos 2)")
+        raise TypeError("reshape() missing 1 required positional argument: 'shape'")
     if isinstance(shape, int):
         shape = (shape,)
     else:
@@ -49,8 +49,14 @@ def reshape(a, shape=None, order='C', *, newshape=None, copy=None):
     arr = a if hasattr(a, '_array') else _wrap(a)
     if order == 'F':
         flat = arr.ravel(order='F')
-        return _wrap(_core.reshape(flat._array, shape))
-    return _wrap(_core.reshape(_ensure_raw(a), shape))
+        out = _wrap(_core.reshape(flat._array, shape))
+    else:
+        out = _wrap(_core.reshape(_ensure_raw(a), shape))
+    try:
+        out._rs_parent = arr
+    except Exception:
+        pass
+    return out
 
 
 def ravel(a, order='C'):
@@ -90,6 +96,16 @@ def broadcast_to(a, shape, subok=None, device=None):
     if shape == () or shape == []:
         result = arr._array  # 0-d array is already scalar-shaped
     else:
+        _shp = (int(shape),) if isinstance(shape, int) else tuple(int(s) for s in shape)
+        _tot = 1
+        for _s in _shp:
+            _tot *= _s
+        if _tot > 2**40:  # 与 __init__._MAX_ALLOC_ELEMENTS 保持一致
+            # 超大广播：零分配 Python 层视图（Rust 物化会 OOM / capacity overflow
+            # abort 进程）。numpy 语义：broadcast_to 从不分配；物化时抛 MemoryError。
+            res = nd._wrap(arr._array, _dtype=dtype, _fields=fields, _raw_data=raw_data)
+            res._rs_shape_override = _shp
+            return res
         result = _core.broadcast_to(arr._array, shape)
     return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
 
@@ -285,6 +301,10 @@ def flipud(m):
 
 def roll(a, shift, axis=None):
     """沿指定轴滚动数组。"""
+    arr = a if hasattr(a, '_array') else _wrap(a)
+    # 空数组 roll 是恒等映射：Rust 侧 shift % 0 会 panic（除零）。
+    if getattr(arr, 'size', 0) == 0:
+        return arr.copy()
     return _wrap(_core.roll(_ensure_raw(a), shift, axis))
 
 

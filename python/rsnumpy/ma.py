@@ -179,3 +179,29 @@ class _MaskedConstant:
 
 masked = _MaskedConstant()
 nomask = False
+
+
+def zeros(shape, dtype=float, **kwargs):
+    """全零掩码数组（numpy.ma.zeros 兼容）。"""
+    return MaskedArray(np.zeros(shape, dtype=dtype))
+
+
+def ones(shape, dtype=float, **kwargs):
+    """全一掩码数组（numpy.ma.ones 兼容）。"""
+    return MaskedArray(np.ones(shape, dtype=dtype))
+
+
+def empty(shape, dtype=float, **kwargs):
+    """未初始化掩码数组（numpy.ma.empty 兼容）。"""
+    return MaskedArray(np.empty(shape, dtype=dtype))
+
+
+def full(shape, fill_value, dtype=None, **kwargs):
+    """定值掩码数组（numpy.ma.full 兼容）。"""
+    return MaskedArray(np.full(shape, fill_value, dtype=dtype))
+
+
+def masked_where(condition, a, **kwargs):
+    """按条件生成掩码数组（numpy.ma.masked_where 兼容）。"""
+    cond = np.array(condition, dtype=bool) if not hasattr(condition, '_array') else condition
+    return MaskedArray(a, mask=cond)
