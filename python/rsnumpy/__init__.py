@@ -133,6 +133,17 @@ class ArrayFlags:
     def UPDATEIFCOPY(self):
         return False
 
+    def __eq__(self, other):
+        if not isinstance(other, ArrayFlags):
+            return NotImplemented
+        return (self.C_CONTIGUOUS == other.C_CONTIGUOUS and
+                self.F_CONTIGUOUS == other.F_CONTIGUOUS and
+                self.OWNDATA == other.OWNDATA and
+                self.WRITEABLE == other.WRITEABLE and
+                self.ALIGNED == other.ALIGNED and
+                self.WRITEBACKIFCOPY == other.WRITEBACKIFCOPY and
+                self.UPDATEIFCOPY == other.UPDATEIFCOPY)
+
     # numpy lowercase aliases
     c_contiguous = property(lambda self: self.C_CONTIGUOUS)
     f_contiguous = property(lambda self: self.F_CONTIGUOUS)
@@ -160,6 +171,10 @@ class ArrayFlags:
             'c_contiguous': self.C_CONTIGUOUS, 'f_contiguous': self.F_CONTIGUOUS,
             'writeable': self.WRITEABLE, 'aligned': self.ALIGNED,
             'owndata': self.OWNDATA,
+            'C_CONTIGUOUS': self.C_CONTIGUOUS, 'F_CONTIGUOUS': self.F_CONTIGUOUS,
+            'OWNDATA': self.OWNDATA, 'WRITEABLE': self.WRITEABLE,
+            'ALIGNED': self.ALIGNED, 'WRITEBACKIFCOPY': self.WRITEBACKIFCOPY,
+            'UPDATEIFCOPY': self.UPDATEIFCOPY,
         }
         if key in mapping:
             return mapping[key]
@@ -248,6 +263,11 @@ class ndarray:
             self._fields = _fields
             self._raw_data = _raw_data
         else:
+            # rsnumpy 整型/bool 标量不再是 int 子类：先转 Python 原生值，
+            # Rust 构造只认原生数值/列表。object dtype 保留标量对象身份。
+            if (isinstance(data, generic) and hasattr(data, 'tolist')
+                    and str(_dtype) not in ('object', 'O')):
+                data = data.tolist()
             self._raw_data = _raw_data
             if _raw_data is not None:
                 # 原始数据存储：用一个虚拟 Rust 数组占位
@@ -642,6 +662,14 @@ class ndarray:
             # 必须用身份检查（`is`）扫描：`in`/`==` 会触发 ndarray.__eq__；
             # 且不能用 any(...)——模块级 `any` 被 rsnumpy ufunc 遮蔽，
             # 对生成器恒返回 True（曾把 (0,1) 错误展开成 4 元 key 致 Rust panic）。
+            _ell_c = 0
+            for _k in key:
+                if _k is Ellipsis:
+                    _ell_c += 1
+            if _ell_c > 1:
+                # numpy 语义：多个省略号非法
+                raise IndexError(
+                    "an index can only have a single ellipsis ('...')")
             _e_i = _py_index(key, lambda k: k is Ellipsis)
             if _e_i >= 0:
                 _e_n = self.ndim - (len(key) - 1)
@@ -660,6 +688,12 @@ class ndarray:
             if _bflag is not None:
                 _v0 = self.item()
                 return ndarray([_v0] if _bflag else [], _dtype=self._dtype)
+        # 0-d 布尔数组索引（任意维度数组）：numpy 语义等价 a[None] 的选择
+        if _is_ndarray(key) and getattr(key, 'ndim', 0) == 0 and \
+                str(getattr(key, '_dtype', '')) == 'bool':
+            _v0b = builtins.bool(key.item())
+            _base_b = self[None]
+            return _base_b[:1] if _v0b else _base_b[:0]
         # 标量布尔值作为索引：转换为 0-d rsnumpy 数组
         if isinstance(key, bool):
             key = ndarray([key], _dtype='bool')
@@ -699,6 +733,15 @@ class ndarray:
             mask_shape = tuple(key.shape)
             self_shape = tuple(self.shape)
             k = len(mask_shape)
+            if mask_shape != self_shape[:k] and k <= len(self_shape):
+                # numpy 语义：布尔掩码维度必须与数组前若干轴严格一致
+                for _bi in range(builtins.min(k, len(self_shape))):
+                    if mask_shape[_bi] != self_shape[_bi]:
+                        raise IndexError(
+                            f"boolean index did not match indexed array along "
+                            f"axis {_bi}; size of axis is {self_shape[_bi]} "
+                            f"but size of corresponding boolean axis is "
+                            f"{mask_shape[_bi]}")
             if mask_shape == self_shape[:k]:
                 rest = self_shape[k:]
                 block = 1
@@ -778,6 +821,111 @@ class ndarray:
             raise IndexError(
                 f"too many indices for array: array is {self.ndim}-dimensional, "
                 f"but {len(key)} were indexed")
+        # 浮点数索引校验（numpy 语义）：
+        # 1) float 作为整数索引 → IndexError（优先于切片边界检查）
+        # 2) float 作为切片边界 → TypeError
+        _k_seq = key if isinstance(key, tuple) else (key,)
+        for _k in _k_seq:
+            if isinstance(_k, float) and not isinstance(_k, builtins.bool):
+                raise IndexError(
+                    "only integers, slices (`:`), ellipsis (`...`) and "
+                    "integer or boolean arrays are valid indices")
+            if _is_ndarray(_k) and str(getattr(_k, '_dtype', '')) \
+                    .startswith('float'):
+                # numpy 语义：浮点数组不可作索引
+                raise IndexError(
+                    "arrays used as indices must be of integer (or boolean) "
+                    "type")
+        for _k in _k_seq:
+            if isinstance(_k, slice):
+                for _sb in (_k.start, _k.stop, _k.step):
+                    if isinstance(_sb, float) and \
+                            not isinstance(_sb, builtins.bool):
+                        raise TypeError(
+                            "slice indices must be integers or None or have "
+                            "an __index__ method")
+        # 高级索引校验（numpy 语义）：
+        # 1) 列表索引含非法元素（切片/None/字符串等）→ IndexError
+        # 2) 多个高级索引形状不可广播 → IndexError
+        # 3) 高级索引（列表/ndarray/布尔标量）个数 > 32（numpy NPY_MAXARGS）→ IndexError
+        if isinstance(key, tuple):
+            _adv_n = 0
+            for _k in key:
+                if isinstance(_k, list) or _is_ndarray(_k) or \
+                        isinstance(_k, builtins.bool):
+                    _adv_n += 1
+            if _adv_n > 32:
+                raise IndexError("too many indices for array")
+            _adv_shapes = []
+            for _k in key:
+                if isinstance(_k, list):
+                    _fl = _NdFlatIter._flat_list(_k)
+                    for _v in _fl:
+                        if isinstance(_v, (slice, str, bytes)) or \
+                                _v is None or _v is Ellipsis:
+                            raise IndexError(
+                                "only integers, slices (`:`), ellipsis (`...`) "
+                                "and integer or boolean arrays are valid "
+                                "indices")
+                        if isinstance(_v, float) and \
+                                not isinstance(_v, builtins.bool):
+                            # numpy 语义：浮点列表元素不可作索引
+                            raise IndexError(
+                                "arrays used as indices must be of integer "
+                                "(or boolean) type")
+                    if _fl:
+                        _adv_shapes.append(_NdFlatIter._list_shape(_k))
+                elif isinstance(_k, tuple):
+                    # numpy 语义：元组键内不允许嵌套元组
+                    raise IndexError(
+                        "too many indices for array: arrays used as indices "
+                        "must be of integer (or boolean) type")
+                elif _is_ndarray(_k):
+                    if str(getattr(_k, '_dtype', '')) != 'bool':
+                        _adv_shapes.append(tuple(_k.shape))
+            if len(_adv_shapes) >= 2:
+                _bshape = _adv_shapes[0]
+                for _s in _adv_shapes[1:]:
+                    for _a, _b in zip(reversed(_bshape), reversed(_s)):
+                        if _a != _b and _a != 1 and _b != 1:
+                            raise IndexError(
+                                "shape mismatch: indexing arrays could not "
+                                f"be broadcast together with shapes {_bshape} "
+                                f"{_s}")
+            # 元组内布尔掩码：形状必须与对应轴严格一致（numpy 语义）。
+            # 注意 bool ndarray 此时可能已被转为（嵌套）bool 列表，需同查。
+            _ax_pos = 0
+            for _k in key:
+                if _k is None:
+                    continue
+                _mask_shape = None
+                if _is_ndarray(_k) and \
+                        str(getattr(_k, '_dtype', '')) == 'bool' and \
+                        getattr(_k, 'ndim', 0) >= 1:
+                    _mask_shape = tuple(_k.shape)
+                elif isinstance(_k, list) and _k:
+                    _fl_m = _NdFlatIter._flat_list(_k)
+                    if _fl_m and _py_all(isinstance(x, builtins.bool)
+                                         for x in _fl_m):
+                        _mask_shape = _NdFlatIter._list_shape(_k)
+                if _mask_shape is not None:
+                    _ms = _mask_shape
+                    _ss = tuple(self.shape)
+                    if _ax_pos + len(_ms) <= len(_ss) and \
+                            _ms != _ss[_ax_pos:_ax_pos + len(_ms)]:
+                        for _bi in range(len(_ms)):
+                            if _ms[_bi] != _ss[_ax_pos + _bi]:
+                                raise IndexError(
+                                    "boolean index did not match indexed "
+                                    f"array along axis {_ax_pos + _bi}; size "
+                                    f"of axis is {_ss[_ax_pos + _bi]} but "
+                                    f"size of corresponding boolean axis is "
+                                    f"{_ms[_bi]}")
+                    _ax_pos += len(_ms)
+                elif isinstance(_k, slice) or (
+                        isinstance(_k, int) and
+                        not isinstance(_k, builtins.bool)):
+                    _ax_pos += 1
         # 委托给 Rust getitem_multi 处理所有索引逻辑
         result = np.getitem_multi(self._array, key, list(self.shape))
         result = _wrap_result(result, self._dtype)
@@ -800,6 +948,49 @@ class ndarray:
         if key is Ellipsis:
             key = (slice(None),) * self.ndim
         elif isinstance(key, tuple):
+            _ell_c = 0
+            for _k in key:
+                if _k is Ellipsis:
+                    _ell_c += 1
+            if _ell_c > 1:
+                # numpy 语义：多个省略号非法
+                raise IndexError(
+                    "an index can only have a single ellipsis ('...')")
+            _adv_n = 0
+            for _k in key:
+                if isinstance(_k, list) or _is_ndarray(_k) or \
+                        isinstance(_k, builtins.bool):
+                    _adv_n += 1
+            if _adv_n > 32:
+                # numpy NPY_MAXARGS 限制
+                raise IndexError("too many indices for array")
+            # 多个高级索引形状不可广播 → IndexError（numpy 语义，避免
+            # 形状不匹配直达 Rust setitem_multi 触发 panic abort）
+            _adv_shapes = []
+            for _k in key:
+                if isinstance(_k, list):
+                    _fl = _NdFlatIter._flat_list(_k)
+                    for _v in _fl:
+                        if isinstance(_v, (slice, str, bytes)) or \
+                                _v is None or _v is Ellipsis:
+                            raise IndexError(
+                                "only integers, slices (`:`), ellipsis (`...`) "
+                                "and integer or boolean arrays are valid "
+                                "indices")
+                    if _fl:
+                        _adv_shapes.append(_NdFlatIter._list_shape(_k))
+                elif _is_ndarray(_k):
+                    if str(getattr(_k, '_dtype', '')) != 'bool':
+                        _adv_shapes.append(tuple(_k.shape))
+            if len(_adv_shapes) >= 2:
+                _bshape = _adv_shapes[0]
+                for _s in _adv_shapes[1:]:
+                    for _a, _b in zip(reversed(_bshape), reversed(_s)):
+                        if _a != _b and _a != 1 and _b != 1:
+                            raise IndexError(
+                                "shape mismatch: indexing arrays could not "
+                                f"be broadcast together with shapes {_bshape} "
+                                f"{_s}")
             _e_i = _py_index(key, lambda k: k is Ellipsis)
             if _e_i >= 0:
                 _e_n = self.ndim - (len(key) - 1)
@@ -851,7 +1042,7 @@ class ndarray:
             if not _is_ndarray(_vv) and not isinstance(_vv, (list, tuple)):
                 if isinstance(_vv, float) and _vv != _vv:
                     raise ValueError("cannot convert float NaN to integer")
-                if isinstance(_vv, (int, float)) and not isinstance(_vv, builtins.bool):
+                if isinstance(_vv, (int, float, generic)) and not isinstance(_vv, builtins.bool):
                     _lo_i, _hi_i = _INT_RANGES[_dt_si]
                     if int(_vv) < _lo_i or int(_vv) > _hi_i:
                         raise OverflowError(f"Python int too large to convert to {_dt_si}")
@@ -876,6 +1067,41 @@ class ndarray:
             raise IndexError(
                 f"too many indices for array: array is {self.ndim}-dimensional, "
                 f"but {len(key)} were indexed")
+        # 越界整数索引：numpy 语义 IndexError（与 getitem 一致）
+        if isinstance(key, tuple):
+            for _ax_i, _vi in builtins.enumerate(key):
+                if _ax_i >= len(self.shape):
+                    break
+                _ns_i = self.shape[_ax_i]
+                if isinstance(_vi, int) and not isinstance(_vi, builtins.bool):
+                    if _vi < -_ns_i or _vi >= _ns_i:
+                        raise IndexError(
+                            f"index {_vi} is out of bounds for axis {_ax_i} "
+                            f"with size {_ns_i}")
+                elif isinstance(_vi, list):
+                    for _vj in _vi:
+                        if isinstance(_vj, int) and \
+                                not isinstance(_vj, builtins.bool) and \
+                                (_vj < -_ns_i or _vj >= _ns_i):
+                            raise IndexError(
+                                f"index {_vj} is out of bounds for axis "
+                                f"{_ax_i} with size {_ns_i}")
+        elif isinstance(key, list) and self.ndim >= 1:
+            _ns_0 = self.shape[0]
+            for _vj in key:
+                if isinstance(_vj, int) and not isinstance(_vj, builtins.bool) \
+                        and (_vj < -_ns_0 or _vj >= _ns_0):
+                    raise IndexError(
+                        f"index {_vj} is out of bounds for axis 0 with size {_ns_0}")
+        elif _is_ndarray(key) and self.ndim >= 1 and \
+                str(getattr(key, '_dtype', '')) != 'bool':
+            _ns_0 = self.shape[0]
+            _kl = key.flatten().tolist()
+            for _vj in _kl:
+                if isinstance(_vj, int) and not isinstance(_vj, builtins.bool) \
+                        and (_vj < -_ns_0 or _vj >= _ns_0):
+                    raise IndexError(
+                        f"index {_vj} is out of bounds for axis 0 with size {_ns_0}")
         if isinstance(key, tuple):
             # 将 Python ndarray 索引展平为 list。一维布尔掩码（选择 axis-0）
             # 转成 bool 列表，由 Rust 的 PyList-bool 分支映射为 True 位置；
@@ -1619,6 +1845,7 @@ class ndarray:
         result._str_dtype = getattr(self, '_str_dtype', None)
         result._fields = getattr(self, '_fields', None)
         result._complex_data = getattr(self, '_complex_data', None)
+        result._dtype_obj = getattr(self, '_dtype_obj', None)
         if thread_safe:
             # 标记为线程安全副本（文档性标记）
             result._thread_safe = True
@@ -1819,20 +2046,70 @@ class ndarray:
             a_max = kwargs.pop('max')
         kwargs.pop('like', None)
         casting = kwargs.get('casting')
+        if casting is not None and casting not in ('no', 'same_kind', 'unsafe'):
+            raise ValueError("casting must be one of no, same_kind, unsafe")
+        if a_min is None and a_max is None:
+            # numpy 2.x 语义：无界 = 不裁剪（模块级 clip 统一处理）
+            res = self.copy()
+            if out is not None:
+                try:
+                    out[...] = res
+                except Exception:
+                    pass
+                return out
+            return res
+        _sdt = str(self._dtype)
+        _complex_arr = _sdt.startswith('complex')
+        # 复数界：实数数组先提升为 complex128（numpy 语义：结果按复数处理）
+        if not _complex_arr and \
+                builtins.any(_clip_bound_is_complex(b) for b in (a_min, a_max)):
+            self = self + builtins.complex(0, 0)
+            _complex_arr = True
+        # numpy 语义：nan 界经 maximum/minimum 传播 → 结果全 nan
+        if _clip_bound_is_nan(a_min) or _clip_bound_is_nan(a_max):
+            _n = float('nan')
+            if _complex_arr:
+                res = ndarray([complex(_n, 0.0)] * self.size, _dtype='complex128')
+            else:
+                res = ndarray([_n] * self.size, _dtype='float64')
+            if self.ndim > 1:
+                res = res.reshape(self.shape)
+            if out is not None:
+                try:
+                    out[...] = res
+                except Exception:
+                    pass
+                return out
+            return res
+        # 复数：numpy 语义为 (实部, 虚部) 词典序比较，越界元素被界值整体
+        # 替换（不保留原虚部）。Rust __lt__/__gt__ 不支持复数，故用模块级
+        # less/greater ufunc（与测试参考实现同一语义）。
+        if _complex_arr:
+            _amin = self.min() if a_min is None else a_min
+            _amax = self.max() if a_max is None else a_max
+            _sel = less(self, _amin) + 2 * greater(self, _amax)
+            res = _sel.choose([self, _amin, _amax])
+            if out is not None:
+                try:
+                    out[...] = res
+                except Exception:
+                    pass
+                return out
+            return res
         # numpy 语义：casting=None/'same_kind' 时，结果 dtype 必须可安全写回 out
         if out is not None and casting in (None, 'same_kind'):
-            _sdt = str(self._dtype)
             _res_dt = _sdt
+            _FW = {'float16': 2, 'float32': 4, 'float64': 8,
+                   'complex64': 8, 'complex128': 16}
             for _b in (a_min, a_max):
                 _bdt = _operand_dtype_name(_b)
                 if _bdt is None:
                     continue
-                # 浮点/复数操作数主导结果 dtype（_promote_dtype 的位宽规则
-                # 不适用于 int×float 混合）
-                if ('float' in _res_dt or 'complex' in _res_dt or
-                        'float' in _bdt or 'complex' in _bdt):
-                    _res_dt = ('complex128' if 'complex' in (_res_dt, _bdt)
-                               else 'float64')
+                # 浮点/复数界按实际位宽决定结果 dtype（int×float 混合不做
+                # _promote_dtype 的 int 位宽提升）
+                if (_FW.get(_bdt, 0) > _FW.get(_res_dt, 0) or
+                        'complex' in _bdt):
+                    _res_dt = _bdt
                 elif _bdt in _INT_DTYPES and _res_dt in _INT_DTYPES:
                     if (_INT_ITEMSIZES.get(_bdt, 0) >
                             _INT_ITEMSIZES.get(_res_dt, 0)):
@@ -1842,12 +2119,14 @@ class ndarray:
                 raise TypeError(
                     f"Cannot cast ufunc 'clip' output from {_res_dt} to "
                     f"{_odt} with casting rule 'same_kind'")
-        res = _math_funcs().clip(self, a_min, a_max)
+        # 界为 None 时由模块级 clip 归一化（用数组自身 min/max）
+        res = clip(self, a_min, a_max)
         if out is not None:
             try:
                 out[...] = res
             except Exception:
                 pass
+            return out
         return res
 
     def choose(self, choices, out=None, mode='raise'):
@@ -3780,16 +4059,35 @@ def _scalar_dunder_ns(pybase, is_int=False):
 def _make_scalar_type(name, base, pybase, itemsize, zero):
     """Create a callable scalar type mirroring numpy's scalar classes.
 
-    ``int64(5)`` returns a scalar instance (subclass of ``int``);
-    ``int64(array)`` with size > 1 returns the array cast to this dtype.
+    ``int64(5)`` returns a scalar instance; ``int64(array)`` with size > 1
+    returns the array cast to this dtype.
+
+    整型标量（pybase is int）**不**再继承 Python ``int``——对齐真实 numpy 的
+    MRO。若继承 int，CPython 内置算子（``float.__add__``/``complex.__add__``
+    等，对 int 子类返回 NotImplemented 前就会成功）会直接吃掉标量并返回裸
+    Python 数值，rsnumpy 的 ``__radd__`` 等反射方法永远轮不到，结果丢失
+    dtype（``test_scalar_matches_array_op_with_pyscalar[True-...]`` 簇的根因）。
+    值改存 ``_value`` 属性，``__int__``/``__float__``/``__index__`` 等协议
+    dunders 显式提供（CPython/PyO3 的抽取均会走这些协议）。
+    浮点/复数标量保持继承 float/complex（其失败方向已被反射优先规则覆盖）。
     """
+    is_int_scalar = pybase is int
+
     def _new(cls, val=zero, *args):
         if isinstance(val, ndarray):
             if val.size == 1:
+                if is_int_scalar:
+                    inst = base.__new__(cls)
+                    inst._value = pybase(val.ravel().tolist()[0])
+                    return inst
                 return pybase.__new__(cls, pybase(val.ravel().tolist()[0]))
             return val.astype(name)
         if isinstance(val, (list, tuple)):
             return ndarray(val).astype(name)
+        if is_int_scalar:
+            inst = base.__new__(cls)
+            inst._value = pybase(val)
+            return inst
         return pybase.__new__(cls, pybase(val))
 
     ns = {
@@ -3801,11 +4099,27 @@ def _make_scalar_type(name, base, pybase, itemsize, zero):
         'ndim': 0,
         'shape': (),
         'size': 1,
-        'item': lambda self: pybase(self),
-        'tolist': lambda self: pybase(self),
     }
+    if is_int_scalar:
+        ns.update({
+            'item': lambda self: self._value,
+            'tolist': lambda self: self._value,
+            '__int__': lambda self: builtins.int(self._value),
+            '__float__': lambda self: builtins.float(self._value),
+            '__complex__': lambda self: builtins.complex(self._value),
+            '__bool__': lambda self: builtins.bool(self._value),
+            '__index__': lambda self: builtins.int(self._value),
+            '__repr__': lambda self: builtins.repr(self._value),
+            '__str__': lambda self: builtins.str(self._value),
+            '__format__': lambda self, fmt: format(self._value, fmt),
+        })
+    else:
+        ns.update({
+            'item': lambda self: pybase(self),
+            'tolist': lambda self: pybase(self),
+        })
     ns.update(_scalar_dunder_ns(pybase, pybase is int))
-    return type(name, (base, pybase), ns)
+    return type(name, (base,) if is_int_scalar else (base, pybase), ns)
 
 
 int8 = _make_scalar_type('int8', signedinteger, int, 1, 0)
@@ -3827,11 +4141,15 @@ complex128 = _make_scalar_type('complex128', complexfloating, complex, 16, 0j)
 def _bool_new(cls, val=False, *args):
     if isinstance(val, ndarray):
         if val.size == 1:
-            return int.__new__(cls, 1 if builtins.bool(val.ravel().tolist()[0]) else 0)
+            inst = generic.__new__(cls)
+            inst._value = 1 if builtins.bool(val.ravel().tolist()[0]) else 0
+            return inst
         return val.astype('bool')
     if isinstance(val, (list, tuple)):
         return ndarray(val).astype('bool')
-    return int.__new__(cls, 1 if builtins.bool(val) else 0)
+    inst = generic.__new__(cls)
+    inst._value = 1 if builtins.bool(val) else 0
+    return inst
 
 
 string_ = type('string_', (character,), {})
@@ -3847,13 +4165,20 @@ _bool_ns = {
     'ndim': 0,
     'shape': (),
     'size': 1,
+    '__int__': lambda self: self._value,
+    '__float__': lambda self: builtins.float(self._value),
+    '__complex__': lambda self: builtins.complex(self._value),
+    '__bool__': lambda self: builtins.bool(self._value),
+    '__index__': lambda self: self._value,
+    '__format__': lambda self, fmt: format(self._value, fmt),
     'item': lambda self: builtins.bool(int(self)),
     'tolist': lambda self: builtins.bool(int(self)),
     '__repr__': lambda self: builtins.repr(builtins.bool(int(self))),
     '__str__': lambda self: builtins.str(builtins.bool(int(self))),
 }
 _bool_ns.update(_scalar_dunder_ns(int))
-bool_ = type('bool', (generic, int), _bool_ns)
+# 与整型标量同理：不继承 Python int（否则 CPython 内置算子会先吃掉标量）。
+bool_ = type('bool', (generic,), _bool_ns)
 bool = bool_
 # numpy 语义：bool_ 标量按值单例化（np.bool_(False) is np.bool_(False)）
 _bool_cache = {}
@@ -3977,6 +4302,29 @@ def _same_kind_cast_ok(src, dst):
             dst in ('float16', 'float32', 'float64', 'complex64', 'complex128'):
         return True
     return False
+
+
+def _clip_bound_is_nan(b):
+    """clip 界（标量/0-d 数组）是否为 NaN。numpy 语义：nan 界经
+    maximum/minimum 传播，clip 结果全为 nan。"""
+    try:
+        if _is_ndarray(b):
+            b = b.item()
+        if isinstance(b, complex):
+            return b.real != b.real or b.imag != b.imag
+        return builtins.float(b) != builtins.float(b)
+    except Exception:
+        return False
+
+
+def _clip_bound_is_complex(b):
+    """clip 界是否为复数（Python complex / 复数标量 / 复数数组）。"""
+    try:
+        if _is_ndarray(b):
+            return str(getattr(b, '_dtype', '')).startswith('complex')
+        return isinstance(b, builtins.complex)
+    except Exception:
+        return False
 
 
 def _overflow_guard(r, opname):
@@ -4620,6 +4968,10 @@ def _setitem_value(value):
     """规范化赋值右值供 Rust setitem_multi 使用：
     标量原样返回；ndarray 或嵌套列表展平为 C 序浮点列表（逐元素赋值）。
     复数右值原样透传，交由 Rust coerce_value_to_nd 保留虚部。"""
+    if (isinstance(value, generic) and not _is_ndarray(value)
+            and hasattr(value, 'tolist')):
+        # rsnumpy 整型/bool 标量（非 int 子类）→ Python 原生值
+        value = value.tolist()
     if _is_ndarray(value):
         rust = value._array
         if getattr(rust, 'is_complex', False):
@@ -4768,7 +5120,8 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
         # numpy 语义：带 __getitem__/__len__ 的序列对象先 list()（错误向上传播）
         if (not _is_ndarray(data)
                 and not isinstance(data, (list, tuple, str, bytes, dict, set,
-                                          frozenset, int, float, complex, bool))
+                                          frozenset, int, float, complex, bool,
+                                          generic))
                 and not hasattr(data, '__array_interface__')
                 and not hasattr(data, '__array__')
                 and hasattr(data, '__getitem__') and hasattr(data, '__len__')
@@ -4783,8 +5136,11 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
             _scalar_dt = _uniform_scalar_dtype(data)
             if _scalar_dt is not None:
                 # 全 rsnumpy 标量列表：保留标量自身 dtype（值推断无法区分 int8/int64 等）。
-                # Rust 构造不接受标量子类元素：叶子先转 Python 原生值。
+                # Rust 构造不接受标量叶子元素：叶子先转 Python 原生值。
                 return array(_scalar_leaves_to_py(data), dtype=_scalar_dt)
+            if _has_rscalar_leaf(data):
+                # 混合列表含 rsnumpy 标量叶子：同样先转 Python 原生值
+                data = _scalar_leaves_to_py(data)
             try:
                 raw, code = np.build_array(data)
             except (ValueError, TypeError):
@@ -4799,6 +5155,8 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
         # build_array 不支持 ndarray 元素：递归展平嵌套列表中的 ndarray 再重试
         if _contains_ndarray(data):
             converted = _convert_ndarray_deep(data)
+            if _has_rscalar_leaf(converted):
+                converted = _scalar_leaves_to_py(converted)
             try:
                 raw, code = np.build_array(converted)
             except (ValueError, TypeError):
@@ -4856,8 +5214,10 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
         # OverflowError（0-d 标量例外，允许 cast）
         if isinstance(data, (list, tuple)):
             _check_int_coerce(data, _dtype)
-        elif (isinstance(data, int) and not isinstance(data, bool)
-              and _dtype in _INT_DTYPES):
+        elif _dtype in _INT_DTYPES and (
+                (isinstance(data, int) and not isinstance(data, bool))
+                or (isinstance(data, generic)
+                    and str(getattr(data, 'dtype', '')) in _INT_DTYPES)):
             if isinstance(data, generic):
                 # rsnumpy 标量：same-kind cast 语义——按目标位宽补码回绕，不报错
                 try:
@@ -5004,7 +5364,7 @@ def _uniform_scalar_dtype(f):
             return False
         if isinstance(x, (list, tuple)):
             return builtins.all(rec(v) for v in x)
-        if (isinstance(x, (int, float, complex))
+        if ((isinstance(x, (int, float, complex)) or isinstance(x, generic))
                 and not isinstance(x, builtins.bool)
                 and getattr(x, 'dtype', None) is not None):
             try:
@@ -5022,7 +5382,7 @@ def _uniform_scalar_dtype(f):
 
 
 def _scalar_leaves_to_py(x):
-    """嵌套结构中 rsnumpy 标量叶子 → Python 原生值（Rust 构造不接受标量子类元素）。"""
+    """嵌套结构中 rsnumpy 标量叶子 → Python 原生值（Rust 构造不接受标量叶子元素）。"""
     if isinstance(x, (list, tuple)):
         return [_scalar_leaves_to_py(v) for v in x]
     if isinstance(x, bool_):
@@ -5033,7 +5393,17 @@ def _scalar_leaves_to_py(x):
         return float(x)
     if isinstance(x, int):
         return int(x)
+    if isinstance(x, generic) and hasattr(x, 'tolist'):
+        return x.tolist()
     return x
+
+
+def _has_rscalar_leaf(x):
+    """嵌套 list/tuple 中是否含 rsnumpy 标量叶子（非 ndarray）。"""
+    if isinstance(x, (list, tuple)):
+        return builtins.any(_has_rscalar_leaf(v) for v in x)
+    return (isinstance(x, generic) and not _is_ndarray(x)
+            and hasattr(x, 'tolist'))
 
 
 def asarray(a, dtype=None, order=None):
@@ -5083,7 +5453,7 @@ def _check_int_coerce(data, dt):
     for v in vals:
         if isinstance(v, float) and v != v:
             raise ValueError("cannot convert float NaN to integer")
-        if isinstance(v, (int, float)) and not isinstance(v, builtins.bool):
+        if isinstance(v, (int, float, generic)) and not isinstance(v, builtins.bool):
             if int(v) < lo or int(v) > hi:
                 raise OverflowError(f"Python int too large to convert to {dt}")
 
@@ -6220,6 +6590,10 @@ class _NdFlatIter:
     def _val(self, v):
         return int(v) if self._is_int else float(v)
 
+    def __len__(self):
+        """numpy flatiter 兼容：len() 返回扁平元素数。"""
+        return self._size
+
     def copy(self, /):
         """numpy 兼容：返回底层数组的副本（numpy 中已弃用）。"""
         import warnings as _w_flat
@@ -6234,29 +6608,146 @@ class _NdFlatIter:
             return self._arr
         return self._arr.astype(dtype)
 
-    def __getitem__(self, idx):
-        """numpy flatiter 兼容：支持整数索引与切片。"""
-        if not isinstance(idx, (int, slice, list, tuple, bool)) and \
-                not _is_ndarray(idx):
+    # ---------- flatiter 索引辅助 ----------
+    def _norm_flat(self, i):
+        """归一化扁平索引并做越界检查（numpy 消息格式）。"""
+        i = builtins.int(i)
+        if i < 0:
+            i += self._size
+        if i < 0 or i >= self._size:
             raise IndexError(
-                "only integers, slices (`:`), ellipsis (`...`) and "
-                "integer or boolean arrays are valid indices")
+                f"index {i} is out of bounds for flat iterator with size "
+                f"{self._size}")
+        return i
+
+    def _sel_vals(self, idxs):
+        vals = [self._val(self._flat[self._norm_flat(i)]) for i in idxs]
+        return ndarray(vals).astype('int64') if self._is_int else ndarray(vals)
+
+    def _take_all(self):
+        return self._sel_vals(range(self._size))
+
+    @staticmethod
+    def _flat_list(l):
+        out = []
+        for v in l:
+            if isinstance(v, list):
+                out.extend(_NdFlatIter._flat_list(v))
+            else:
+                out.append(v)
+        return out
+
+    @staticmethod
+    def _list_shape(l):
+        s = []
+        cur = l
+        while isinstance(cur, list) and cur:
+            s.append(builtins.len(cur))
+            cur = cur[0]
+        return builtins.tuple(s)
+
+    @staticmethod
+    def _raise_invalid_idx():
+        raise IndexError(
+            "only integers, slices (`:`), ellipsis (`...`) and "
+            "integer or boolean arrays are valid indices")
+
+    def __getitem__(self, idx):
+        """numpy flatiter 兼容：整数/切片/布尔掩码/花式索引。"""
+        import warnings as _w
+        if idx is None:
+            self._raise_invalid_idx()
+        if idx is Ellipsis:
+            return self._take_all()
+        if isinstance(idx, tuple):
+            if builtins.len(idx) == 0:
+                return self._take_all()
+            if builtins.len(idx) > 1:
+                raise IndexError(
+                    f"too many indices for flat iterator: flat iterator "
+                    f"is 1-dimensional, but {builtins.len(idx)} were indexed")
+            return self.__getitem__(idx[0])
+        if isinstance(idx, builtins.bool):
+            _w.warn("0-dimensional boolean index", DeprecationWarning,
+                    stacklevel=2)
+            if idx:
+                return self._val(self._flat[0])
+            return ndarray([]).astype('int64') if self._is_int else ndarray([])
         if isinstance(idx, slice):
-            idxs = range(*idx.indices(self._size))
-            vals = [self._val(self._flat[i]) for i in idxs]
-            return ndarray(vals).astype('int64') if self._is_int else ndarray(vals)
-        if isinstance(idx, (list, tuple)):
-            idx = [i + self._size if i < 0 else i for i in idx]
-            vals = [self._val(self._flat[i]) for i in idx]
-            return ndarray(vals).astype('int64') if self._is_int else ndarray(vals)
-        if idx < 0:
-            idx += self._size
-        if idx < 0 or idx >= self._size:
-            raise IndexError("flat index out of range")
-        return self._val(self._flat[idx])
+            return self._sel_vals(range(*idx.indices(self._size)))
+        if _is_ndarray(idx):
+            _t = idx.tolist()
+            _fi = _NdFlatIter._flat_list(_t) if isinstance(_t, list) else [_t]
+            if getattr(idx, '_dtype', '') == 'bool':
+                if builtins.len(_fi) != self._size:
+                    raise IndexError(
+                        "boolean index did not match indexed flat iterator")
+                return self._sel_vals(
+                    [i for i, m in builtins.enumerate(_fi) if m])
+            _res = self._sel_vals(_fi)
+            _shp = getattr(idx, 'shape', None)
+            if _shp is not None and _res.ndim == 1 and builtins.len(_shp) > 1:
+                _res = _res.reshape(_shp)
+            return _res
+        if isinstance(idx, _NdFlatIter):
+            if idx._size > 0 and \
+                    getattr(idx._arr, '_str_dtype', None) is not None:
+                self._raise_invalid_idx()
+            items = [idx[i] for i in range(idx._size)]
+            for it in items:
+                if isinstance(it, (str, bytes)):
+                    self._raise_invalid_idx()
+            return self._sel_vals(items)
+        if isinstance(idx, list):
+            if builtins.len(idx) == 0:
+                return ndarray([]).astype('int64') if self._is_int \
+                    else ndarray([])
+            _fi = _NdFlatIter._flat_list(idx)
+            if builtins.all(isinstance(v, builtins.bool) for v in _fi):
+                raise IndexError(
+                    "boolean indices for iterators are not supported")
+            for v in _fi:
+                if not isinstance(v, (builtins.int, builtins.float,
+                                      builtins.bool)):
+                    self._raise_invalid_idx()
+            if builtins.any(isinstance(v, builtins.float) and
+                            not isinstance(v, builtins.bool) for v in _fi):
+                _w.warn("Invalid non-array indices for iterator objects are "
+                        "deprecated", DeprecationWarning, stacklevel=2)
+            res = self._sel_vals(
+                [1 if isinstance(v, builtins.bool) else builtins.int(v)
+                 for v in _fi])
+            shape = _NdFlatIter._list_shape(idx)
+            if builtins.len(shape) > 1:
+                res = res.reshape(shape)
+            return res
+        return self._val(self._flat[self._norm_flat(idx)])
 
     def __setitem__(self, idx, val):
-        """numpy flatiter 兼容：支持整数/切片赋值。"""
+        """numpy flatiter 兼容：整数/切片/布尔掩码/花式赋值。"""
+        import warnings as _w
+        if idx is None:
+            self._raise_invalid_idx()
+        if idx is Ellipsis:
+            for i in range(self._size):
+                self._set(i, val)
+            return
+        if isinstance(idx, tuple):
+            if builtins.len(idx) == 0:
+                raise IndexError(
+                    "Assigning to a flat iterator with a 0-D index")
+            if builtins.len(idx) > 1:
+                raise IndexError(
+                    f"too many indices for flat iterator: flat iterator "
+                    f"is 1-dimensional, but {builtins.len(idx)} were indexed")
+            self.__setitem__(idx[0], val)
+            return
+        if isinstance(idx, builtins.bool):
+            _w.warn("0-dimensional boolean index", DeprecationWarning,
+                    stacklevel=2)
+            if idx:
+                self._set(0, val)
+            return
         if isinstance(idx, slice):
             idxs = list(range(*idx.indices(self._size)))
             if isinstance(val, (list, tuple)):
@@ -6264,15 +6755,66 @@ class _NdFlatIter:
             elif hasattr(val, 'tolist'):
                 vals = _flatten_vals(val.tolist())
             else:
-                vals = [val] * len(idxs)
+                vals = [val] * builtins.len(idxs)
             for i, v in zip(idxs, vals):
                 self._set(i, v)
             return
-        if idx < 0:
-            idx += self._size
-        if idx < 0 or idx >= self._size:
-            raise IndexError("flat index out of range")
-        self._set(idx, val)
+        if _is_ndarray(idx):
+            _t = idx.tolist()
+            _fi = _NdFlatIter._flat_list(_t) if isinstance(_t, list) else [_t]
+            if getattr(idx, '_dtype', '') == 'bool':
+                if builtins.len(_fi) != self._size:
+                    raise IndexError(
+                        "boolean index did not match indexed flat iterator")
+                for i, m in builtins.enumerate(_fi):
+                    if m:
+                        self._set(i, val)
+                return
+            for i in _fi:
+                self._set(self._norm_flat(i), val)
+            return
+        if isinstance(idx, _NdFlatIter):
+            if idx._size > 0 and \
+                    getattr(idx._arr, '_str_dtype', None) is not None:
+                self._raise_invalid_idx()
+            items = [idx[i] for i in range(idx._size)]
+            for it in items:
+                if isinstance(it, (str, bytes)):
+                    self._raise_invalid_idx()
+            for i in items:
+                self._set(self._norm_flat(i), val)
+            return
+        if isinstance(idx, list):
+            if builtins.len(idx) == 0:
+                return
+            _fi = _NdFlatIter._flat_list(idx)
+            if builtins.all(isinstance(v, builtins.bool) for v in _fi):
+                raise IndexError(
+                    "boolean indices for iterators are not supported")
+            for v in _fi:
+                if not isinstance(v, (builtins.int, builtins.float,
+                                      builtins.bool)):
+                    self._raise_invalid_idx()
+            if builtins.any(isinstance(v, builtins.float) and
+                            not isinstance(v, builtins.bool) for v in _fi):
+                _w.warn("Invalid non-array indices for iterator objects are "
+                        "deprecated", DeprecationWarning, stacklevel=2)
+            positions = [
+                self._norm_flat(1 if isinstance(v, builtins.bool)
+                                else builtins.int(v))
+                for v in _fi]
+            if isinstance(val, (list, tuple)):
+                vals = list(val)
+            elif hasattr(val, 'tolist'):
+                vals = _flatten_vals(val.tolist())
+            else:
+                vals = [val] * builtins.len(positions)
+            if builtins.len(vals) != builtins.len(positions):
+                vals = [val] * builtins.len(positions)
+            for i, v in zip(positions, vals):
+                self._set(i, v)
+            return
+        self._set(self._norm_flat(idx), val)
 
     def _set(self, idx, val):
         try:
@@ -6887,16 +7429,39 @@ sign = _math_functions_module.sign
 reciprocal = _math_functions_module.reciprocal
 _clip_core = _math_functions_module.clip
 
-def clip(a, a_min=None, a_max=None, out=None, min=None, max=None):
+_CLIP_NOVALUE = object()
+
+
+def clip(a, a_min=_CLIP_NOVALUE, a_max=_CLIP_NOVALUE, out=None,
+         min=_CLIP_NOVALUE, max=_CLIP_NOVALUE):
     """限制值范围。
 
-    支持 numpy 的 min=/max= 关键字别名。
+    支持 numpy 的 min=/max= 关键字别名；None 界表示该侧不裁剪。
+    显式 None（位置或别名）与"未提供"用哨兵区分。
     """
-    if min is not None:
+    # numpy 语义：min/max 别名与 a_min/a_max 不可混用
+    if (min is not _CLIP_NOVALUE or max is not _CLIP_NOVALUE) and \
+            (a_min is not _CLIP_NOVALUE or a_max is not _CLIP_NOVALUE):
+        raise ValueError(
+            "Passing `min` or `max` keyword argument when `a_min` and "
+            "`a_max` are provided is forbidden.")
+    if min is not _CLIP_NOVALUE:
         a_min = min
-    if max is not None:
+    if max is not _CLIP_NOVALUE:
         a_max = max
     a_arr = asarray(a)
+    if a_min is _CLIP_NOVALUE and a_max is _CLIP_NOVALUE:
+        # 无界：不裁剪（numpy 2.x 语义，等价于返回副本）
+        result = a_arr.copy()
+        if out is not None:
+            for i in range(len(result)):
+                out[i] = result[i]
+            return out
+        return result
+    if a_min is _CLIP_NOVALUE:
+        raise TypeError("clip() missing 1 required positional argument: 'a_min'")
+    if a_max is _CLIP_NOVALUE:
+        raise TypeError("clip() missing 1 required positional argument: 'a_max'")
     if a_min is None:
         a_min = a_arr.min()
     if a_max is None:

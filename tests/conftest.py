@@ -136,6 +136,19 @@ def assert_equal(a, b, err_msg=""):
             raise AssertionError(f"{err_msg}\n x: {a_s}\n y: {b_s}")
 
 
+def _flat_values_equal(la, lb):
+    """逐元素相等（numpy equal_nan 默认语义：NaN == NaN）。"""
+    for x, y in zip(la, lb):
+        try:
+            if isinstance(x, float) and x != x and isinstance(y, float) and y != y:
+                continue
+        except Exception:
+            pass
+        if x != y:
+            return False
+    return True
+
+
 def assert_array_equal(a, b, err_msg="", *args, **kwargs):
     # numpy's assert_array_equal also takes equal_nan/strict/period/...; the stub
     # swallows them (the core comparison below is what rsnumpy must satisfy).
@@ -149,9 +162,15 @@ def assert_array_equal(a, b, err_msg="", *args, **kwargs):
             lb = lb * len(la)
         else:
             raise AssertionError(f"{err_msg}\n shape: {sa} != {sb}")
+    # numpy 语义：无 shape 的标量操作数对数组广播。
+    if (sa is None) != (sb is None) and len(la) != len(lb):
+        if sa is not None and len(lb) == 1:
+            lb = lb * len(la)
+        elif sb is not None and len(la) == 1:
+            la = la * len(lb)
     if len(la) != len(lb):
         raise AssertionError(f"{err_msg}\n size: {len(la)} != {len(lb)}")
-    if la != lb:
+    if not _flat_values_equal(la, lb):
         raise AssertionError(f"{err_msg}\n x: {la}\n y: {lb}")
 
 

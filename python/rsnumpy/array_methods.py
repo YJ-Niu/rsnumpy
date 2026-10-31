@@ -45,10 +45,33 @@ class NdArrayMethods:
                 except Exception:
                     pass
         name = str(name)
+        # 提取目标 dtype 的字节序（保留非 native 标记，结果上还原）
+        _bo = None
+        try:
+            if isinstance(dtype, str):
+                if dtype and dtype[0] in '<>':
+                    _bo = dtype[0]
+            else:
+                _dbo = getattr(dtype, 'byteorder', None)
+                if isinstance(_dbo, str) and _dbo not in ('|', '=', '@', 'n', 'native'):
+                    _bo = _dbo
+        except Exception:
+            _bo = None
         ndarray_cls, _ = _get_deps()
+
+        def _fin(res):
+            if _bo is not None and res is not None:
+                try:
+                    import rsnumpy._dtypes as _dts_bo
+                    _d = _dts_bo.DType(name)
+                    _d._byteorder = _bo
+                    res._dtype_obj = _d
+                except Exception:
+                    pass
+            return res
         # numpy 语义：目标 dtype 相同且 copy=False → 返回自身（视图）
         if copy is False and name == str(getattr(arr, '_dtype', '')):
-            return arr
+            return _fin(arr)
         # raw-data 数组（object/complex 标量/字符串）的底层存储是占位存储而非
         # 真实值，经构造器重建以保证转换正确
         _raw = getattr(arr, '_raw_data', None)
@@ -60,7 +83,7 @@ class NdArrayMethods:
                     res = ndarray_cls(_raw, _dtype=name)
                     if res.ndim < arr.ndim and arr.shape:
                         res = res.reshape(arr.shape)
-                return res
+                return _fin(res)
             except Exception:
                 pass
         # Rust astype 对整数目标转换不正确（int→int 回绕错误、float→int
@@ -103,7 +126,7 @@ class NdArrayMethods:
                         tmp = ndarray_cls(out)
                         if tmp.ndim < arr.ndim and arr.shape:
                             tmp = tmp.reshape(arr.shape)
-                    return ndarray_cls._wrap(tmp._array, _dtype=name)
+                    return _fin(ndarray_cls._wrap(tmp._array, _dtype=name))
                 except Exception:
                     pass
         # float 目标（f64→f32/f16）：真正舍入到目标精度（NEP50 语义）
@@ -141,7 +164,7 @@ class NdArrayMethods:
                         tmp = ndarray_cls(rv)
                         if tmp.ndim < arr.ndim and arr.shape:
                             tmp = tmp.reshape(arr.shape)
-                    return ndarray_cls._wrap(tmp._array, _dtype=name)
+                    return _fin(ndarray_cls._wrap(tmp._array, _dtype=name))
                 except Exception:
                     pass
         # 复数目标：用复数值列表重建（避免 Rust 复数转换缺口）
@@ -164,7 +187,7 @@ class NdArrayMethods:
                 return ndarray_cls._wrap(tmp._array, _dtype=name)
             except Exception:
                 pass
-        return _wrap_result(arr._array.astype(name), dtype=name)
+        return _fin(_wrap_result(arr._array.astype(name), dtype=name))
 
     @staticmethod
     def reshape(arr, *shape):

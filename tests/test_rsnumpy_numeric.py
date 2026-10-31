@@ -247,9 +247,7 @@ class TestNonarrayArgs:
         assert_equal(round(s, ndigits=None), 1)
 
     @pytest.mark.parametrize('val, ndigits', [
-        pytest.param(2**31 - 1, -1,
-            marks=pytest.mark.skip(reason="Out of range of int32")
-        ),
+        pytest.param(2**31 - 1, -1, marks=pytest.mark.skip(reason="Out of range of int32")),
         (2**31 - 1, 1 - math.ceil(math.log10(2**31 - 1))),
         (2**31 - 1, -math.ceil(math.log10(2**31 - 1)))
     ])
@@ -610,8 +608,8 @@ class TestNonarrayArgs:
 
         B = ma.array([[100., 3., 104., 5.],
                       [101., 2., 103., 4.]],
-                      mask=[[True, False, True, False],
-                            [True, False, True, False]])
+                     mask=[[True, False, True, False],
+                           [True, False, True, False]])
 
         mean_out = ma.array([[0., 0., 0., 0.]],
                             mask=[[False, False, False, False]])
@@ -657,8 +655,8 @@ class TestNonarrayArgs:
 
         B = ma.array([[100., 3., 104., 5.],
                       [101., 2., 103., 4.]],
-                      mask=[[True, False, True, False],
-                            [True, False, True, False]])
+                     mask=[[True, False, True, False],
+                           [True, False, True, False]])
 
         mean_out = ma.array([[0., 0., 0., 0.]],
                             mask=[[False, False, False, False]])
@@ -932,9 +930,9 @@ class TestSeterr:
         err = np.geterr()
         assert_equal(err,
                      {'divide': 'warn',
-                          'invalid': 'warn',
-                          'over': 'warn',
-                          'under': 'ignore'}
+                      'invalid': 'warn',
+                      'over': 'warn',
+                      'under': 'ignore'}
                      )
 
     def test_set(self):
@@ -1021,12 +1019,9 @@ class TestFloatExceptions:
             # The value of tiny for double double is NaN, so we need to
             # pass the assert
             if not np.isnan(ft_tiny):
-                self.assert_raises_fpe(underflow,
-                                    lambda a, b: a / b, ft_tiny, ft_max)
-                self.assert_raises_fpe(underflow,
-                                    lambda a, b: a * b, ft_tiny, ft_tiny)
-            self.assert_raises_fpe(overflow,
-                                   lambda a, b: a * b, ft_max, ftype(2))
+                self.assert_raises_fpe(underflow, lambda a, b: a / b, ft_tiny, ft_max)
+                self.assert_raises_fpe(underflow, lambda a, b: a * b, ft_tiny, ft_tiny)
+            self.assert_raises_fpe(overflow, lambda a, b: a * b, ft_max, ftype(2))
             self.assert_raises_fpe(overflow,
                                    lambda a, b: a / b, ft_max, ftype(0.5))
             self.assert_raises_fpe(overflow,
@@ -1252,7 +1247,8 @@ class TestTypes:
     @pytest.mark.parametrize("string_dtype", ["U", "S"])
     def test_promote_types_strings(self, swap, string_dtype):
         if swap == "swap":
-            promote_types = lambda a, b: np.promote_types(b, a)
+            def promote_types(a, b):
+                return np.promote_types(b, a)
         else:
             promote_types = np.promote_types
 
@@ -1285,29 +1281,20 @@ class TestTypes:
         # Promote with object:
         assert_equal(promote_types('O', S + '30'), np.dtype('O'))
 
-    @pytest.mark.parametrize(["dtype1", "dtype2"],
-            [[np.dtype("V6"), np.dtype("V10")],  # mismatch shape
-             # Mismatching names:
-             [np.dtype([("name1", "i8")]), np.dtype([("name2", "i8")])],
-            ])
+    @pytest.mark.parametrize(["dtype1", "dtype2"], [[np.dtype("V6"), np.dtype("V10")], [np.dtype([("name1", "i8")]), np.dtype([("name2", "i8")])],])
     def test_invalid_void_promotion(self, dtype1, dtype2):
         with pytest.raises(TypeError):
             np.promote_types(dtype1, dtype2)
 
     @pytest.mark.parametrize(["dtype1", "dtype2"],
-            [[np.dtype("V10"), np.dtype("V10")],
-             [np.dtype([("name1", "i8")]),
-              np.dtype([("name1", np.dtype("i8").newbyteorder())])],
-             [np.dtype("i8,i8"), np.dtype("i8,>i8")],
-             [np.dtype("i8,i8"), np.dtype("i4,i4")],
-            ])
+                             [[np.dtype("V10"), np.dtype("V10")],
+                             [np.dtype([("name1", "i8")]), np.dtype([("name1", np.dtype("i8").newbyteorder())])],
+                             [np.dtype("i8,i8"), np.dtype("i8,>i8")],
+                             [np.dtype("i8,i8"), np.dtype("i4,i4")]])
     def test_valid_void_promotion(self, dtype1, dtype2):
         assert np.promote_types(dtype1, dtype2) == dtype1
 
-    @pytest.mark.parametrize("dtype",
-            list(np.typecodes["All"]) +
-            ["i,i", "10i", "S3", "S100", "U3", "U100",
-             rational, rational2])
+    @pytest.mark.parametrize("dtype", list(np.typecodes["All"]) + ["i,i", "10i", "S3", "S100", "U3", "U100", rational, rational2])
     def test_promote_identical_types_metadata(self, dtype):
         # The same type passed in twice to promote types always
         # preserves metadata
@@ -1517,8 +1504,7 @@ class TestTypes:
         with pytest.raises(TypeError):
             np.can_cast(4j, "complex128", casting="unsafe")
 
-    @pytest.mark.parametrize("dtype",
-            list("?bhilqBHILQefdgFDG") + [rational, rational2])
+    @pytest.mark.parametrize("dtype", list("?bhilqBHILQefdgFDG") + [rational, rational2])
     def test_can_cast_scalars(self, dtype):
         # Basic test to ensure that scalars are supported in can-cast
         # (does not check behavior exhaustively).
@@ -1552,8 +1538,8 @@ class TestFromiter:
         a20 = np.fromiter(self.makegen(), int, 20)
         assert_(len(a) == len(expected))
         assert_(len(a20) == 20)
-        assert_raises(ValueError, np.fromiter,
-                          self.makegen(), int, len(expected) + 10)
+        with pytest.raises(ValueError):
+            np.fromiter(self.makegen(), int, len(expected) + 10)
 
     def test_values(self):
         expected = np.array(list(self.makegen()))
@@ -1586,9 +1572,8 @@ class TestFromiter:
         with pytest.raises(ValueError, match="Must specify length"):
             np.fromiter([], dtype=dtype)
 
-    @pytest.mark.parametrize(["dtype", "data"],
-            [("d", [1, 2, 3, 4, 5, 6, 7, 8, 9]),
-             ("O", [1, 2, 3, 4, 5, 6, 7, 8, 9]),
+    @pytest.mark.parametrize(["dtype", "data"], [("d", [1, 2, 3, 4, 5, 6, 7, 8, 9]),
+                             ("O", [1, 2, 3, 4, 5, 6, 7, 8, 9]),
              ("i,O", [(1, 2), (5, 4), (2, 3), (9, 8), (6, 7)]),
              # subarray dtypes (important because their dimensions end up
              # in the result arrays dimension:
@@ -1678,8 +1663,7 @@ class TestNonzero:
     @pytest.mark.skipif(not IS_64BIT, reason="test requires 64-bit system")
     @requires_memory(free_bytes=2.2e9)
     @pytest.mark.parametrize("dtype", [
-        [("x", "u1", 2**31 + 2)],
-         "V2147483650",
+        [("x", "u1", 2**31 + 2)], "V2147483650",
         ])
     def test_nonzero_large_dtype(self, dtype):
         # gh-32809
@@ -1742,8 +1726,8 @@ class TestNonzero:
         assert_equal(np.nonzero(x), ([0, 1, 2], [0, 1, 2]))
 
         x = np.array([[(0, 1), (0, 0), (1, 11)],
-                   [(1, 1), (1, 0), (0, 0)],
-                   [(0, 0), (1, 5), (0, 1)]], dtype=[('a', 'f4'), ('b', 'u1')])
+                     [(1, 1), (1, 0), (0, 0)],
+                     [(0, 0), (1, 5), (0, 1)]], dtype=[('a', 'f4'), ('b', 'u1')])
         assert_equal(np.count_nonzero(x['a']), 4)
         assert_equal(np.count_nonzero(x['b']), 5)
         assert_equal(np.nonzero(x['a']), ([0, 1, 1, 2], [2, 0, 1, 1]))
@@ -2183,8 +2167,8 @@ def _test_array_equal_parametrizations():
 
     aS1 = np.array(["a"], dtype="S1")
     aS1b = aS1.copy()
-    aS1u4 = np.array([("a", 1)], dtype="S1,u4")
-    aS1u4b = aS1u4.copy()
+    # aS1u4 = np.array([("a", 1)], dtype="S1,u4")
+    # aS1u4b = aS1u4.copy()
 
     yield (a12, a12b, None, True)
     yield (a12, a12, None, True)
@@ -2956,10 +2940,8 @@ class TestClip:
         # Scalar `nan` is deprecated due to the differing behaviour it shows.
         s = numeric_dtypes.flatmap(
             lambda x: hynp.from_dtype(x, allow_nan=False))
-        amin = data.draw(s | hynp.arrays(dtype=numeric_dtypes,
-            shape=in_shapes[0], elements={"allow_nan": False}))
-        amax = data.draw(s | hynp.arrays(dtype=numeric_dtypes,
-            shape=in_shapes[1], elements={"allow_nan": False}))
+        amin = data.draw(s | hynp.arrays(dtype=numeric_dtypes, shape=in_shapes[0], elements={"allow_nan": False}))
+        amax = data.draw(s | hynp.arrays(dtype=numeric_dtypes, shape=in_shapes[1], elements={"allow_nan": False}))
 
         # Then calculate our result and expected result and check that they're
         # equal!  See gh-12519 and gh-19457 for discussion deciding on this
@@ -3285,7 +3267,7 @@ class TestIsclose:
         assert np.allclose(a, a, atol=np.timedelta64(1, "ns"), equal_nan=True)
 
     def test_tol_warnings(self):
-        a = np.array([1, 2, 3])
+        # a = np.array([1, 2, 3])
         b = np.array([np.inf, np.nan, 1])
 
         for i in b:
@@ -3298,7 +3280,7 @@ class TestIsclose:
                 with warnings.catch_warnings(record=True) as w:
 
                     warnings.simplefilter("always")
-                    c = np.isclose(a, a, atol=i, rtol=j)
+                    # c = np.isclose(a, a, atol=i, rtol=j)
                     assert len(w) == 1
                     assert issubclass(w[-1].category, RuntimeWarning)
                     expected = f"One of rtol or atol is not valid, atol: {i}, rtol: {j}"
@@ -3380,12 +3362,12 @@ class TestStdVarComplex:
 class TestCreationFuncs:
     def check_function(self, func, fill_value=None):
         dtypes_info = {np.dtype(tp) for tp in itertools.chain(*sctypes.values())}
-        keyfunc = lambda dtype: dtype.str
+
+        def keyfunc(dtype):
+            return dtype.str
         variable_sized = {tp for tp in dtypes_info if tp.str.endswith('0')}
         dtypes = sorted(dtypes_info - variable_sized |
-                             {np.dtype(tp.str.replace("0", str(i)))
-                              for tp in variable_sized for i in range(1, 10)},
-                             key=keyfunc)
+                        {np.dtype(tp.str.replace("0", str(i))) for tp in variable_sized for i in range(1, 10)}, key=keyfunc)
         dtypes += [type(dt) for dt in sorted(dtypes_info, key=keyfunc)]
         orders = {'C': 'c_contiguous', 'F': 'f_contiguous'}
         ndims = 10
@@ -3717,7 +3699,7 @@ class TestCorrelate:
     def test_mode(self):
         d = np.ones(100)
         k = np.ones(3)
-        default_mode = np.correlate(d, k, mode='valid')
+        # default_mode = np.correlate(d, k, mode='valid')
         with assert_raises(ValueError):
             np.correlate(d, k, mode='v')
         # integer mode
@@ -3766,6 +3748,7 @@ class TestConvolve:
 
         with pytest.raises(ValueError, match="v cannot be empty"):
             np.convolve(np.array([1, 2]), np.array([]))
+
 
 class TestArgwhere:
 

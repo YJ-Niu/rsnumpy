@@ -31,6 +31,15 @@ def _ensure_raw(a):
     return _core.ndarray(a)
 
 
+def _scalar_idx(x):
+    """标量下标/形状参数：Python int/bool 或 rsnumpy 整数标量（非序列/数组）。
+    rsnumpy 整型标量不再是 int 子类，需用 __index__ 协议识别。"""
+    if isinstance(x, int):
+        return True
+    return (hasattr(x, '__index__') and not hasattr(x, '__iter__')
+            and not hasattr(x, '_array'))
+
+
 def reshape(a, shape=None, order='C', *, newshape=None, copy=None):
     """改变数组形状而不改变数据。
 
@@ -42,8 +51,8 @@ def reshape(a, shape=None, order='C', *, newshape=None, copy=None):
         shape = newshape
     if shape is None:
         raise TypeError("reshape() missing 1 required positional argument: 'shape'")
-    if isinstance(shape, int):
-        shape = (shape,)
+    if isinstance(shape, int) or _scalar_idx(shape):
+        shape = (int(shape),)
     else:
         shape = tuple(shape)
     arr = a if hasattr(a, '_array') else _wrap(a)
@@ -72,10 +81,10 @@ def moveaxis(a, source, destination):
     dtype = getattr(arr, '_dtype', "float64")
     fields = getattr(arr, '_fields', None)
     raw_data = getattr(arr, '_raw_data', None)
-    if isinstance(source, int):
-        source = [source]
-    if isinstance(destination, int):
-        destination = [destination]
+    if isinstance(source, int) or _scalar_idx(source):
+        source = [int(source)]
+    if isinstance(destination, int) or _scalar_idx(destination):
+        destination = [int(destination)]
     result = _core.moveaxis(arr._array, list(source), list(destination))
     return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
 
@@ -96,7 +105,8 @@ def broadcast_to(a, shape, subok=None, device=None):
     if shape == () or shape == []:
         result = arr._array  # 0-d array is already scalar-shaped
     else:
-        _shp = (int(shape),) if isinstance(shape, int) else tuple(int(s) for s in shape)
+        _shp = ((int(shape),) if (isinstance(shape, int) or _scalar_idx(shape))
+                else tuple(int(s) for s in shape))
         _tot = 1
         for _s in _shp:
             _tot *= _s
@@ -272,8 +282,8 @@ def dsplit(ary, indices_or_sections):
 
 def tile(A, reps):
     """重复数组。"""
-    if isinstance(reps, int):
-        reps = [reps]
+    if isinstance(reps, int) or _scalar_idx(reps):
+        reps = [int(reps)]
     return _wrap(_core.tile(_ensure_raw(A), reps))
 
 
@@ -321,8 +331,8 @@ def resize(a, new_shape):
     fields = getattr(arr, '_fields', None)
     raw_data = getattr(arr, '_raw_data', None)
 
-    if isinstance(new_shape, int):
-        new_shape = (new_shape,)
+    if isinstance(new_shape, int) or _scalar_idx(new_shape):
+        new_shape = (int(new_shape),)
     
     result = _core.resize_rs(arr._array, list(new_shape))
     return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
@@ -356,8 +366,8 @@ def delete(arr, obj, axis=None):
     if isinstance(obj, slice):
         start, stop, step = obj.indices(arr.size if axis is None else arr.shape[axis])
         obj = list(range(start, stop, step))
-    elif isinstance(obj, int):
-        obj = [obj]
+    elif isinstance(obj, int) or _scalar_idx(obj):
+        obj = [int(obj)]
     obj = sorted(set(obj))
     
     result = _core.delete_rs(arr._array, obj, axis)

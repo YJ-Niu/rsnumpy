@@ -1980,8 +1980,16 @@ def result_type(*arrays_and_dtypes):
 
 def can_cast(from_, to, casting='safe'):
     """判断能否按给定规则从一个类型转换到另一个类型。"""
-    # numpy (NEP50) 语义：裸 Python 标量不可参与 cast 判断
-    if isinstance(from_, (int, float, complex, str, bytes)) and \
+    # numpy (NEP50) 语义：裸 Python 数值标量不可参与 cast 判断；
+    # 字符串参数（typecode / dtype spec）按 dtype 解析（numpy 语义）
+    if isinstance(from_, (str, bytes)):
+        try:
+            _canon_dt(from_)
+        except Exception:
+            raise TypeError(
+                f"Cannot cast Python scalar {type(from_).__name__!r} to dtype "
+                f"{to!r} with casting rule {casting!r}")
+    elif isinstance(from_, (int, float, complex)) and \
             not isinstance(from_, bool):
         raise TypeError(
             f"Cannot cast Python scalar {type(from_).__name__!r} to dtype "

@@ -105,8 +105,9 @@ class DType:
     __slots__ = ('_kind', '_itemsize', '_byteorder', '_alignment', '_typename',
                  '_names', '_fields', '_aligned', '_subdtype', '_titles')
 
-    def __init__(self, name=None, fields=None):
+    def __init__(self, name=None, fields=None, align=False):
         # 向后兼容：DType('int64') / DType(<其他>) 构造标量。
+        # align=True：numpy 语义的对齐结构体（字段偏移按对齐要求填充）。
         self._kind = None
         self._itemsize = 0
         self._byteorder = '|'
@@ -120,6 +121,8 @@ class DType:
         if name is not None:
             src = _parse_any_dtype(name, False)
             self._copy_from(src)
+        if align:
+            self._aligned = True
 
     def _copy_from(self, o):
         self._kind = o._kind
