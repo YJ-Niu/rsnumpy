@@ -2247,10 +2247,22 @@ class ndarray:
             if isinstance(dtype, builtins.type) and issubclass(dtype, ndarray):
                 # numpy 的 view(子类)：返回共享数据的该子类实例
                 return dtype._wrap(self._array, _dtype=self._dtype)
+            if isinstance(dtype, builtins.type):
+                # 组合包装类（如 char.chararray）：接受 ndarray 构造
+                try:
+                    return dtype(self)
+                except Exception:
+                    pass
             return _view_dtype(self, dtype)
         if type is not None:
             if isinstance(type, builtins.type) and issubclass(type, ndarray):
                 return type._wrap(self._array, _dtype=self._dtype)
+            if isinstance(type, builtins.type):
+                # 组合包装类（如 char.array 的 chararray）：接受 ndarray 构造
+                try:
+                    return type(self)
+                except Exception:
+                    pass
             return _view_dtype(self, type)
         return ndarray(self._array, _dtype=getattr(self, '_dtype', 'float64'))
 
@@ -6924,6 +6936,7 @@ class _DTypeNamespace:
     Complex64DType = type('Complex64DType', (), {})
     Complex128DType = type('Complex128DType', (), {})
     StrDType = type('StrDType', (), {})
+    StringDType = StrDType  # numpy 2.x 变长字符串 dtype 别名
     BytesDType = type('BytesDType', (), {})
     ObjectDType = type('ObjectDType', (), {})
     DatetimeDType = type('DatetimeDType', (), {})

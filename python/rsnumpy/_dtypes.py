@@ -177,8 +177,16 @@ class DType:
         if kind == 'O':
             return object
         if kind == 'S':
-            return bytes
-        return str  # 'U' 与其余字符串类
+            try:
+                from .__init__ import bytes_ as _bytes_t
+                return _bytes_t
+            except Exception:
+                return bytes
+        try:
+            from .__init__ import str_ as _str_t
+            return _str_t
+        except Exception:
+            return str  # 'U' 与其余字符串类
 
     @property
     def alignment(self):

@@ -431,7 +431,8 @@ def _c_helper_skip(*a, **k):
     pytest.skip("requires a numpy C helper not available in rsnumpy")
 
 
-# numpy._core.sctypes — dict kind-char -> set of scalar types
+# numpy._core.sctypes — dict kind-char -> LIST of scalar types（numpy 语义：
+# 列表，测试里有 sctypes["int"] + sctypes["uint"] 的拼接用法）
 _sctypes = {}
 for _kind, _names in (
     ("int", ("int8", "int16", "int32", "int64")),
@@ -439,7 +440,7 @@ for _kind, _names in (
     ("float", ("float16", "float32", "float64", "longdouble")),
     ("complex", ("complex64", "complex128", "clongdouble")),
 ):
-    _sctypes[_kind] = {getattr(rsnumpy, n) for n in _names if hasattr(rsnumpy, n)}
+    _sctypes[_kind] = [getattr(rsnumpy, n) for n in _names if hasattr(rsnumpy, n)]
 _real_core.sctypes = _sctypes
 
 # numpy._core.numerictypes — obj2sctype
@@ -457,6 +458,85 @@ _numtypes.obj2sctype = _obj2sctype
 _numtypes.sctypes = _sctypes
 sys.modules["numpy._core.numerictypes"] = _numtypes
 _real_core.numerictypes = _numtypes
+
+# numpy._core.function_base — add_newdoc（文档工具，no-op）
+_function_base = types.ModuleType("numpy._core.function_base")
+_function_base.add_newdoc = lambda *a, **k: None
+sys.modules["numpy._core.function_base"] = _function_base
+sys.modules["rsnumpy._core.function_base"] = _function_base
+_real_core.function_base = _function_base
+
+# numpy._core.multiarray — _vec_string（char 测试用；rsnumpy 无实现 → skip）
+_multiarray = types.ModuleType("numpy._core.multiarray")
+_multiarray._vec_string = _c_helper_skip
+_multiarray._get_madvise_hugepage = lambda *a, **k: False
+sys.modules["numpy._core.multiarray"] = _multiarray
+sys.modules["rsnumpy._core.multiarray"] = _multiarray
+_real_core.multiarray = _multiarray
+
+# numpy._core.shape_base — block 内部机制辅助（rsnumpy 无 → skip 触发）
+_shape_base = types.ModuleType("numpy._core.shape_base")
+for _n in ("_block_setup", "_block_slicing", "_block_dispatcher",
+           "_block_concatenate"):
+    setattr(_shape_base, _n, _c_helper_skip)
+sys.modules["numpy._core.shape_base"] = _shape_base
+sys.modules["rsnumpy._core.shape_base"] = _shape_base
+_real_core.shape_base = _shape_base
+
+# numerictypes 补 issctype（真实现：标量类型类判定）
+def _issctype(rep):
+    if not isinstance(rep, type) or isinstance(rep, type):
+        try:
+            return isinstance(rep, type) and issubclass(rep, rsnumpy.generic)
+        except Exception:
+            return False
+    return False
+
+
+_numtypes.issctype = _issctype
+try:
+    _numtypes.sctype2char = lambda s: rsnumpy.dtype(s).char
+except Exception:
+    pass
+
+# testing 补 temppath/tempdir/requires_memory（records 等移植测试用）
+import contextlib as _ctxlib
+import tempfile as _tempfile
+
+
+@_ctxlib.contextmanager
+def temppath(*a, **k):
+    import os as _os
+    _fd, _p = _tempfile.mkstemp()
+    _os.close(_fd)
+    try:
+        yield _p
+    finally:
+        try:
+            _os.unlink(_p)
+        except OSError:
+            pass
+
+
+@_ctxlib.contextmanager
+def tempdir(*a, **k):
+    _d = _tempfile.mkdtemp()
+    try:
+        yield _d
+    finally:
+        import shutil as _shutil
+        _shutil.rmtree(_d, ignore_errors=True)
+
+
+def requires_memory(min_bytes):
+    def deco(f):
+        return f
+    return deco
+
+
+_testing.temppath = temppath
+_testing.tempdir = tempdir
+_testing.requires_memory = requires_memory
 
 # numpy._core._multiarray_tests / _multiarray_umath / _rational_tests
 _ma_tests = types.ModuleType("numpy._core._multiarray_tests")

@@ -197,6 +197,11 @@ if [[ "$INSTALLED" -eq 1 && "${SKIP_TESTS:-0}" != "1" ]]; then
     tests/test_rsnumpy_indexing.py
     tests/test_rsnumpy_numeric.py
     tests/test_rsnumpy_scalarmath.py
+    tests/test_rsnumpy_defchararray.py
+    tests/test_rsnumpy_function_base.py
+    tests/test_rsnumpy_numerictypes.py
+    tests/test_rsnumpy_records.py
+    tests/test_rsnumpy_shape_base.py
   )
   echo "Running rsnumpy -compatibility check (non-gating report) ..."
   set +e

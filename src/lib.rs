@@ -15,6 +15,7 @@ use blas_src as _;
 mod arithmetic;
 mod bitwise;
 mod buffer;
+mod char_op;
 mod creation;
 mod fft;
 mod formatting;
@@ -2935,6 +2936,7 @@ fn num_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<NdArrayIter>()?;
 
     creation::register(m)?;
+    char_op::register(m)?;
     mathematics::register(m)?;
     arithmetic::register(m)?;
     logic::register(m)?;

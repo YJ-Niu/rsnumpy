@@ -1,3 +1,5 @@
+import builtins
+
 """数组操作模块 - 所有实现位于 Rust，这里仅保留薄包装。"""
 
 import rsnumpy.num_core as _core
@@ -187,64 +189,167 @@ def squeeze(a, axis=None):
                     _raw_data=raw_data)
 
 
-def concatenate(arrays, axis=0):
-    """沿着指定轴连接数组。"""
+_CASTING_VALUES = ("no", "equiv", "safe", "same_kind", "unsafe")
+
+
+def _check_casting(casting):
+    """numpy 语义：casting 合法值校验（非法值抛 ValueError）。"""
+    if casting is not None and casting not in _CASTING_VALUES:
+        raise ValueError(
+            "casting must be one of 'no', 'equiv', 'safe', 'same_kind', or "
+            f"'unsafe'; got {casting!r}")
+
+
+def _check_cast_allowed(first, dtype, casting):
+    """numpy casting 语义：non-unsafe 转换需 can_cast 许可，否则 TypeError。"""
+    if casting == "unsafe" or casting is None:
+        return
+    try:
+        from .__init__ import dtype as _dtype_fn, can_cast as _can_cast
+        _src = getattr(first, '_dtype', 'float64')
+        _dst = _dtype_fn(dtype).name
+        if not _can_cast(_src, _dst, casting=casting):
+            raise TypeError(
+                f"Cannot cast array data from dtype('{_src}') to "
+                f"dtype('{_dst}') according to the rule '{casting}'")
+    except TypeError:
+        raise
+    except Exception:
+        pass
+
+
+def _dtype_name(dtype):
+    """把 dtype 参数解析为 dtype 名字符串（np.float32 类/DType 实例/字符串）。"""
+    from .__init__ import dtype as _dtype_fn
+    try:
+        return _dtype_fn(dtype).name
+    except Exception:
+        return builtins.str(dtype)
+
+
+def concatenate(arrays, axis=0, out=None, dtype=None, casting="same_kind"):
+    """沿着指定轴连接数组（支持 numpy 的 out/dtype 参数）。"""
+    _check_casting(casting)
     arr_list = list(arrays)
     if not arr_list:
         raise ValueError("concatenate requires at least one array")
     first = arr_list[0] if hasattr(arr_list[0], '_array') else _wrap(arr_list[0])
     nd = _nd()
-    dtype = getattr(first, '_dtype', "float64")
+    _dt = dtype if dtype is not None else getattr(first, '_dtype', "float64")
     fields = getattr(first, '_fields', None)
     raw_data = getattr(first, '_raw_data', None)
     raw_list = [_ensure_raw(a) for a in arr_list]
-    result = _core.concatenate(raw_list, axis)
-    return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
+    if axis is None:
+        # numpy 语义：axis=None 时各数组展平后做一维拼接
+        flat_list = []
+        for a in arr_list:
+            arr = a if hasattr(a, '_array') else _wrap(a)
+            flat_list.append(_ensure_raw(arr.reshape((arr.size,))))
+        result = _core.concatenate(flat_list, 0)
+    else:
+        result = _core.concatenate(raw_list, axis)
+    res = nd._wrap(result, _dtype=getattr(first, '_dtype', "float64"),
+                   _fields=fields, _raw_data=raw_data)
+    if dtype is not None:
+        _check_cast_allowed(first, dtype, casting)
+        res = res.astype(_dtype_name(dtype))
+    if out is not None:
+        try:
+            out[...] = res
+        except Exception:
+            pass
+        return out
+    return res
 
 
-def stack(arrays, axis=0):
-    """沿着新轴堆叠数组。"""
+def stack(arrays, axis=0, out=None, dtype=None, casting="same_kind"):
+    """沿着新轴堆叠数组（支持 numpy 的 out/dtype 参数）。"""
+    _check_casting(casting)
+    if not isinstance(arrays, (builtins.list, builtins.tuple)):
+        raise TypeError(
+            f"arrays to stack must be array_like sequences, not "
+            f"{builtins.type(arrays).__name__}")
     arr_list = list(arrays)
     if not arr_list:
         raise ValueError("stack requires at least one array")
     first = arr_list[0] if hasattr(arr_list[0], '_array') else _wrap(arr_list[0])
     nd = _nd()
-    dtype = getattr(first, '_dtype', "float64")
+    _dt0 = getattr(first, '_dtype', "float64")
     fields = getattr(first, '_fields', None)
     raw_data = getattr(first, '_raw_data', None)
     raw_list = [_ensure_raw(a) for a in arr_list]
     result = _core.stack(raw_list, axis)
-    return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
+    res = nd._wrap(result, _dtype=_dt0, _fields=fields, _raw_data=raw_data)
+    if dtype is not None:
+        _check_cast_allowed(first, dtype, casting)
+        res = res.astype(_dtype_name(dtype))
+    if out is not None:
+        try:
+            out[...] = res
+        except Exception:
+            pass
+        return out
+    return res
 
 
-def vstack(arrays):
+def vstack(arrays, out=None, dtype=None, casting="same_kind"):
     """垂直堆叠数组（沿行）。"""
+    _check_casting(casting)
+    if not isinstance(arrays, (builtins.list, builtins.tuple)):
+        raise TypeError(
+            f"arrays to stack must be array_like sequences, not "
+            f"{builtins.type(arrays).__name__}")
     arr_list = list(arrays)
     if not arr_list:
         raise ValueError("vstack requires at least one array")
     first = arr_list[0] if hasattr(arr_list[0], '_array') else _wrap(arr_list[0])
     nd = _nd()
-    dtype = getattr(first, '_dtype', "float64")
+    dtype0 = getattr(first, '_dtype', "float64")
     fields = getattr(first, '_fields', None)
     raw_data = getattr(first, '_raw_data', None)
     raw_list = [_ensure_raw(a) for a in arr_list]
     result = _core.vstack(raw_list)
-    return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
+    res = nd._wrap(result, _dtype=dtype0, _fields=fields, _raw_data=raw_data)
+    if dtype is not None:
+        _check_cast_allowed(first, dtype, casting)
+        res = res.astype(_dtype_name(dtype))
+    if out is not None:
+        try:
+            out[...] = res
+        except Exception:
+            pass
+        return out
+    return res
 
 
-def hstack(arrays):
+def hstack(arrays, out=None, dtype=None, casting="same_kind"):
     """水平堆叠数组（沿列）。"""
+    _check_casting(casting)
+    if not isinstance(arrays, (builtins.list, builtins.tuple)):
+        raise TypeError(
+            f"arrays to stack must be array_like sequences, not "
+            f"{builtins.type(arrays).__name__}")
     arr_list = list(arrays)
     if not arr_list:
         raise ValueError("hstack requires at least one array")
     first = arr_list[0] if hasattr(arr_list[0], '_array') else _wrap(arr_list[0])
     nd = _nd()
-    dtype = getattr(first, '_dtype', "float64")
+    dtype0 = getattr(first, '_dtype', "float64")
     fields = getattr(first, '_fields', None)
     raw_data = getattr(first, '_raw_data', None)
     raw_list = [_ensure_raw(a) for a in arr_list]
     result = _core.hstack(raw_list)
-    return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
+    res = nd._wrap(result, _dtype=dtype0, _fields=fields, _raw_data=raw_data)
+    if dtype is not None:
+        _check_cast_allowed(first, dtype, casting)
+        res = res.astype(_dtype_name(dtype))
+    if out is not None:
+        try:
+            out[...] = res
+        except Exception:
+            pass
+        return out
+    return res
 
 
 def dstack(arrays):
