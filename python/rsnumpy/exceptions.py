@@ -1,5 +1,9 @@
 class AxisError(ValueError):
-    def __init__(self, axis, ndim, msg_prefix=None):
+    def __init__(self, axis, ndim=None, msg_prefix=None):
+        if ndim is None and msg_prefix is None:
+            # numpy 语义：单参数调用时 axis 就是完整消息
+            super().__init__(axis)
+            return
         if msg_prefix is not None:
             super().__init__(f"{msg_prefix}: axis {axis} is out of bounds for array of dimension {ndim}")
         else:

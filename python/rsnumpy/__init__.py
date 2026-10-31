@@ -304,11 +304,19 @@ class ndarray:
                 else:
                     # 单次遍历同时获取扁平数据与复数/字符串标记
                     flat, has_c, has_s = _flatten_check(data)
-                    if _dtype in ('object', 'O') and not isinstance(data, (list, tuple)):
-                        # 0-d object 标量（str/complex/Fraction 等）：Rust 构造不接受任意
-                        # Python 对象，原值存入 _raw_data，形状 ()。
-                        self._array = np.zeros(())
-                        self._raw_data = [data]
+                    if _dtype in ('object', 'O'):
+                        if not isinstance(data, (list, tuple)):
+                            # 0-d object 标量（str/complex/Fraction 等）：Rust 构造不接受任意
+                            # Python 对象，原值存入 _raw_data，形状 ()。
+                            self._array = np.zeros(())
+                            self._raw_data = [data]
+                        else:
+                            # 显式 object dtype：原始数据原样保留（元素可为任意
+                            # Python 对象/ndarray，嵌套形状保持），不下沉 Rust
+                            # （np.ndarray(list) 会把 ndarray 元素错误展平）。
+                            self._array = np.zeros(_nested_shape(data))
+                            self._raw_data = list(data)
+                            _dtype = 'object'
                     elif has_s or str(_dtype) in ('bytes_', 'string_', 'S', 'U'):
                         # 字符串数据或请求字符串 dtype → 存储为原始 Python 数据
                         # （标量 → 0-d）。非字符串元素按 numpy 语义 str() 转换。
@@ -335,8 +343,11 @@ class ndarray:
                                 self._str_dtype = ('U', _py_max(
                                     (len(v) for v in _vals), default=0))
                         self._raw_data = _vals
-                        self._array = (np.zeros(()) if _scalar_in
-                                       else np.zeros((len(self._raw_data),)))
+                        # 保留嵌套形状（flat 值数 == 嵌套元素数）：
+                        # np.array([["a","b"],["c","d"]], dtype='U') → (2, 2)
+                        self._array = (np.zeros(())
+                                       if _scalar_in
+                                       else np.zeros(_nested_shape(data)))
                         _dtype = "string_"
                     elif has_c:
                         # 包含复数 → 交由 Rust 原生复数解析（保留形状与虚部）
@@ -4015,6 +4026,7 @@ def _scalar_dunder_ns(pybase, is_int=False):
         _round_impl = lambda self, ndigits=None: round(float(self), ndigits)
     d = {
         "__round__": _round_impl,
+        "round": _round_impl,
         "__add__": lambda self, other: _binop(self, other, _operator.add),
         "__radd__": lambda self, other: _rbinop(self, other, _operator.add),
         "__sub__": lambda self, other: _binop(self, other, _operator.sub),
@@ -4052,6 +4064,18 @@ def _scalar_dunder_ns(pybase, is_int=False):
             "__lshift__": lambda self, other: _binop(self, other, _operator.lshift),
             "__rshift__": lambda self, other: _binop(self, other, _operator.rshift),
             "__invert__": lambda self: _unary(self, _operator.invert),
+        })
+    if pybase is bool:
+        # numpy 语义：bool 标量位运算返回 True_/False_ 模块单例
+        # （np.True_ | np.True_ is np.True_ 等）
+        d.update({
+            "__and__": lambda self, other: True_ if builtins.bool(self) and builtins.bool(other) else False_,
+            "__rand__": lambda self, other: True_ if builtins.bool(self) and builtins.bool(other) else False_,
+            "__or__": lambda self, other: True_ if builtins.bool(self) or builtins.bool(other) else False_,
+            "__ror__": lambda self, other: True_ if builtins.bool(self) or builtins.bool(other) else False_,
+            "__xor__": lambda self, other: True_ if builtins.bool(self) != builtins.bool(other) else False_,
+            "__rxor__": lambda self, other: True_ if builtins.bool(self) != builtins.bool(other) else False_,
+            "__invert__": lambda self: False_ if builtins.bool(self) else True_,
         })
     return d
 
@@ -4177,6 +4201,17 @@ _bool_ns = {
     '__str__': lambda self: builtins.str(builtins.bool(int(self))),
 }
 _bool_ns.update(_scalar_dunder_ns(int))
+# numpy 语义：bool 标量位运算返回 True_/False_ 模块单例
+# （np.True_ | np.True_ is np.True_ 等）
+_bool_ns.update({
+    '__and__': lambda self, other: True_ if builtins.bool(self) and builtins.bool(other) else False_,
+    '__rand__': lambda self, other: True_ if builtins.bool(self) and builtins.bool(other) else False_,
+    '__or__': lambda self, other: True_ if builtins.bool(self) or builtins.bool(other) else False_,
+    '__ror__': lambda self, other: True_ if builtins.bool(self) or builtins.bool(other) else False_,
+    '__xor__': lambda self, other: True_ if builtins.bool(self) != builtins.bool(other) else False_,
+    '__rxor__': lambda self, other: True_ if builtins.bool(self) != builtins.bool(other) else False_,
+    '__invert__': lambda self: False_ if builtins.bool(self) else True_,
+})
 # 与整型标量同理：不继承 Python int（否则 CPython 内置算子会先吃掉标量）。
 bool_ = type('bool', (generic,), _bool_ns)
 bool = bool_
@@ -4445,8 +4480,8 @@ cdouble = complex128
 clongdouble = complex128
 
 # 布尔常量与其他特殊常量
-True_ = True
-False_ = False
+True_ = bool_(True)
+False_ = bool_(False)
 little_endian = (_sys.byteorder == 'little')
 
 # 标量类型名 → 类型对象 映射（供 issubdtype / result_type 等使用）
@@ -5829,6 +5864,9 @@ def _resolve_dtype(dtype):
         return "bytes_"
     if dt_str in ("U", "str", "string"):
         return "string_"
+    if dt_str in ("T", "StringDType"):
+        # numpy 2.x StringDType（变长字符串）→ rsnumpy 变长字符串
+        return "string_"
     return "float64"
 
 
@@ -6247,6 +6285,29 @@ def nonzero(a):
     if a.size == 0:
         _empty_raw = np.zeros((0,))
         return tuple(ndarray._wrap(_empty_raw, _dtype="int64") for _ in range(a.ndim))
+    # object 数组：Python 层逐元素实现（numpy gh-13631/13930 语义）。
+    # 两遍 bool 收集：结果不一致 → RuntimeError；__bool__ 异常 → 原样传播
+    if str(getattr(a, '_dtype', '')) == 'object' and \
+            getattr(a, '_raw_data', None) is not None:
+        _shape_nz = tuple(a.shape)
+        _flat_nz = _flatten_data(getattr(a, '_raw_data'))
+        _b1 = [builtins.bool(x) for x in _flat_nz]
+        _b2 = [builtins.bool(x) for x in _flat_nz]
+        if _b1 != _b2:
+            raise RuntimeError(
+                "boolean value of object changed between passes")
+        _nd_nz = len(_shape_nz)
+        _per_axis = [[] for _ in range(_nd_nz)]
+        for _fi, _b in builtins.enumerate(_b1):
+            if not _b:
+                continue
+            _r = _fi
+            for _d in range(_nd_nz - 1, -1, -1):
+                _per_axis[_d].append(_r % _shape_nz[_d])
+                _r //= _shape_nz[_d]
+        return builtins.tuple(
+            ndarray([float(x) for x in _per_axis[_d]], _dtype='int64')
+            for _d in range(_nd_nz))
     try:
         raw = np.nonzero_arrs(a._array)
     except TypeError:

@@ -117,6 +117,100 @@ def _py_var_std(a, axis, ddof, want_std):
     return _nd()(nested)
 
 
+def _f64_scalar(v):
+    """把 Python float 包装为 rsnumpy float64 标量（带 shape/itemsize 语义）。"""
+    try:
+        from .__init__ import _SCALAR_CLASS_BY_DTYPE
+        _cls = _SCALAR_CLASS_BY_DTYPE.get('float64')
+        if _cls is not None:
+            return _cls(v)
+    except Exception:
+        pass
+    return v
+
+
+def _insert_keepdims(res, nd0, axes):
+    """在归约轴位置为 res 插入 size-1 轴（numpy keepdims=True 语义）。"""
+    _axset = set(axes)
+    _new_shape = []
+    _si = 0
+    for d in range(nd0):
+        if d in _axset:
+            _new_shape.append(1)
+        else:
+            _new_shape.append(res.shape[_si])
+            _si += 1
+    return res.reshape(tuple(_new_shape))
+
+
+def _reduce_given_mean(a, mean, axis, keepdims, ddof, want_std, out):
+    """基于预计算 mean 的 var/std（numpy mean= 语义）。
+
+    直接信任传入 mean（不重算）：var = sum(|x-mean|^2)/n_eff，
+    std = sqrt(var)。支持 axis=None/int/tuple；keepdims 恢复 size-1 轴；
+    out 被填充并原样返回（numpy 语义）。
+    """
+    _m = mean
+    try:
+        if hasattr(_m, 'ndim') and getattr(_m, 'ndim', 0) == 0:
+            _m = _m.item()
+    except Exception:
+        pass
+    if not hasattr(a, '_array'):
+        # list/tuple 输入（numpy 非 array 参数包装语义）
+        a = _nd()(a)
+    diff = a - _m
+    nd = diff.ndim
+    if axis is None:
+        _axes = tuple(range(nd))
+    elif isinstance(axis, (tuple, list)):
+        _axes = tuple(_ax % nd for _ax in axis)
+    else:
+        _axes = (axis % nd,)
+    _n = 1
+    for _ax in _axes:
+        _n *= diff.shape[_ax]
+    _n -= ddof
+    _axset = set(_axes)
+    # 元素级 |x-mean|^2（实数即 (x-mean)^2，复数取模平方——numpy 语义）
+    _s = abs(diff) ** 2
+    if _axset == set(range(nd)):
+        # 全归约：展平后直接求和；返回 float64 标量（numpy 语义带 .shape==()）
+        _vals = _flatten_c(_s.tolist())
+        _v = _builtins.sum(_vals) / _n
+        res = _f64_scalar((_v ** 0.5) if want_std else _v)
+        if out is not None:
+            try:
+                out[...] = res
+            except Exception:
+                pass
+            return out
+        return res
+    # 部分轴归约：降序逐轴求和（高轴先减，低轴号不变；等价联合归约）
+    for _ax in sorted(_axes, reverse=True):
+        _s = sum(_s, axis=_ax)
+    _v = _s / _n
+    if want_std:
+        _v = _v ** 0.5
+    if keepdims:
+        _new_shape = []
+        _si = 0
+        for d in range(nd):
+            if d in _axset:
+                _new_shape.append(1)
+            else:
+                _new_shape.append(_s.shape[_si])
+                _si += 1
+        _v = _v.reshape(tuple(_new_shape))
+    if out is not None:
+        try:
+            out[...] = _v
+        except Exception:
+            pass
+        return out
+    return _v
+
+
 def sum(a, axis=None, dtype=None, out=None, keepdims=False, initial=None, where=True):
     """计算数组元素之和。"""
     _ = dtype, out, initial, where
@@ -135,6 +229,23 @@ def mean(a, axis=None, dtype=None, out=None, keepdims=False, where=True):
             return float('nan')
     except Exception:
         pass
+    if isinstance(axis, (tuple, list)) and len(axis) > 0:
+        # 元组 axis：降序逐轴归约（高轴先减，低轴号不变；等价联合归约），
+        # keepdims 恢复 size-1 轴
+        nd0 = getattr(a, 'ndim', 0)
+        _axes = tuple(_ax % nd0 for _ax in axis)
+        _cur = a
+        for _ax in sorted(_axes, reverse=True):
+            _cur = mean(_cur, axis=_ax)
+        if keepdims:
+            _cur = _insert_keepdims(_cur, nd0, _axes)
+        if out is not None:
+            try:
+                out[...] = _cur
+            except Exception:
+                pass
+            return out
+        return _cur
     raw_result = _core.mean(_ensure_raw(a), axis, keepdims)
     if axis is not None:
         # numpy semantics: reduction along an explicit axis returns an ndarray
@@ -161,6 +272,11 @@ def _needs_py_var_std(a, axis):
     而 _py_var_std 是完整且正确的实现，故凡指定 axis 一律走原生实现。
     """
     if _is_complex_raw(a):
+        return True
+    if str(getattr(a, '_dtype', '')) == 'object' and \
+            getattr(a, '_raw_data', None) is not None:
+        # object 数组：底层 f64 存储是占位值（真实值在 _raw_data，
+        # 可能是复数等），必须走 Python 路径
         return True
     return axis is not None
 
@@ -203,24 +319,17 @@ def std(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False, where=True,
     except Exception:
         pass
     if mean is not None:
-        try:
-            m = mean(a, axis=axis, keepdims=True)
-            if not _values_equal(m, mean):
-                diff = a - mean
-                s = sum(diff * diff, axis=axis, keepdims=keepdims)
-                n = (a.size if axis is None else a.shape[axis]) - ddof
-                v = s / n
-                res = v ** 0.5
-                if out is not None:
-                    try:
-                        out[...] = res
-                    except Exception:
-                        pass
-                    return out
-                return res
-        except Exception:
-            pass
+        # numpy mean= 语义：信任预计算 mean（参数名遮蔽模块级 mean，
+        # 旧实现误将其当函数调用致整个分支被 except 跳过）
+        return _reduce_given_mean(a, mean, axis, keepdims, ddof, True, out)
+    if axis is not None:
+        # 数值路径统一：std() 与 std(mean=np.mean(...)) 走同一实现，
+        # 保证 assert_equal 级别的逐位一致（元组 axis 由内部统一处理）。
+        # 注意：参数名 mean 遮蔽模块级 mean 函数，须经 globals() 取用。
+        _m = globals()['mean'](a, axis=axis, keepdims=True)
+        return _reduce_given_mean(a, _m, axis, keepdims, ddof, True, out)
     if _needs_py_var_std(a, axis):
+        # axis=None 的复数/object 数组：|x-m|^2 语义
         return _py_var_std(a, axis, ddof, want_std=True)
     raw_result = _core.std(_ensure_raw(a), axis, ddof, keepdims)
     arr_dtype = getattr(a, '_dtype', 'float64') if hasattr(a, '_dtype') else 'float64'
@@ -249,23 +358,16 @@ def var(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False, where=True,
     except Exception:
         pass
     if mean is not None:
-        try:
-            m = mean(a, axis=axis, keepdims=True)
-            if not _values_equal(m, mean):
-                diff = a - mean
-                s = sum(diff * diff, axis=axis, keepdims=keepdims)
-                n = (a.size if axis is None else a.shape[axis]) - ddof
-                res = s / n
-                if out is not None:
-                    try:
-                        out[...] = res
-                    except Exception:
-                        pass
-                    return out
-                return res
-        except Exception:
-            pass
+        # numpy mean= 语义：信任预计算 mean（参数名遮蔽模块级 mean）
+        return _reduce_given_mean(a, mean, axis, keepdims, ddof, False, out)
+    if axis is not None:
+        # 数值路径统一：var() 与 var(mean=np.mean(...)) 走同一实现，
+        # 保证 assert_equal 级别的逐位一致。
+        # 注意：参数名 mean 遮蔽模块级 mean 函数，须经 globals() 取用。
+        _m = globals()['mean'](a, axis=axis, keepdims=True)
+        return _reduce_given_mean(a, _m, axis, keepdims, ddof, False, out)
     if _needs_py_var_std(a, axis):
+        # axis=None 的复数/object 数组：|x-m|^2 语义
         return _py_var_std(a, axis, ddof, want_std=False)
     raw_result = _core.var(_ensure_raw(a), axis, ddof, keepdims)
     arr_dtype = getattr(a, '_dtype', 'float64') if hasattr(a, '_dtype') else 'float64'

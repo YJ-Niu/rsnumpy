@@ -1,5 +1,6 @@
 """数学函数模块 - 所有实现位于 Rust，这里仅保留薄包装。"""
 
+import builtins
 import math
 
 import rsnumpy.num_core as _core
@@ -138,9 +139,46 @@ def log1p(x):
 
 # ========== 舍入函数 ==========
 def around(a, decimals=0):
-    """四舍五入到指定小数位（使用 Rust round）。"""
+    """四舍六入五成双（numpy 语义：rint(x*10^d)/10^d 的 half-even）。
+
+    与 Python round 的十进制正确舍入算法不同：6.35*10 恰好二进制舍入到
+    63.5 → rint half-even → 64 → 6.4（numpy 行为）。
+    """
+    import builtins as _b
     arr = a if hasattr(a, '_array') else _nd()(a)
-    return arr.round(decimals)
+    _dt = str(getattr(arr, '_dtype', 'float64'))
+    if _dt in ('int8', 'int16', 'int32', 'int64', 'uint8', 'uint16',
+               'uint32', 'uint64', 'bool') and decimals >= 0:
+        # numpy 语义：整数数组 decimals>=0 时 around 为无操作
+        return arr.copy()
+
+    def _rnd(v):
+        if decimals >= 0:
+            _f = 10 ** decimals
+            return _b.round(v * _f) / _f
+        _f = 10 ** (-decimals)
+        return _b.round(v / _f) * _f
+
+    def _rec(x):
+        out = []
+        for v in x:
+            if isinstance(v, list):
+                out.append(_rec(v))
+            else:
+                out.append(_rnd(v))
+        return out
+
+    try:
+        tl = arr.tolist()
+        if not isinstance(tl, list):
+            tl = [tl]
+        res = _nd()(_rec(tl))
+        if getattr(arr, 'ndim', 0) == 0:
+            res = res.reshape(())
+            return res.astype(_dt) if _dt != 'float64' else res
+        return res.astype(_dt) if _dt != 'float64' else res
+    except Exception:
+        return arr.round(decimals)
 
 
 def floor(x):
@@ -375,64 +413,237 @@ def logical_xor(x1, x2, out=None, **kwargs):
     return res
 
 
-def isclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False):
-    """逐元素判断是否接近。"""
-    # numpy 语义：rtol/atol 为负或非有限值时报 RuntimeWarning
+def _isclose_arrays(arr_a, arr_b, rtol, atol, equal_nan):
+    """isclose 的数值核心（numpy 语义，Python 逐元素实现）。
+
+    底层 Rust 数组比较对非有限值有缺口（inf==inf → False、
+    nan != nan → False），故展平后用 Python 原生浮点语义逐元素判断：
+    两者皆有限 → |a-b| <= atol + rtol*|b|；非有限 → 仅 a == b 时 True；
+    双 NaN → equal_nan。atol/rtol 支持 list/tuple 数组。
+    形状不可广播 → ValueError（numpy 语义，避免直达 Rust panic）。
+    """
+    import builtins as _b
+    import math as _m
+    nd = _nd()
+
+    def _num(x):
+        if isinstance(x, (list, tuple)):
+            return nd(list(x))
+        return x
+
+    def _flat(x):
+        if not isinstance(x, (list, tuple)):
+            # 0-d 数组 tolist() 返回标量
+            return [x]
+        o = []
+        for v in x:
+            if isinstance(v, list):
+                o.extend(_flat(v))
+            else:
+                o.append(v)
+        return o
+
+    _rt, _at = _num(rtol), _num(atol)
+    # 广播前置校验（形状不匹配 → ValueError）
     try:
-        import math as _math
-        if (not _math.isfinite(rtol) or rtol < 0 or
-                not _math.isfinite(atol) or atol < 0):
+        _sa = builtins.tuple(arr_a.shape)
+    except Exception:
+        _sa = ()
+    for _x in (arr_b, _at, _rt):
+        try:
+            _sx = builtins.tuple(_x.shape)
+        except Exception:
+            _sx = ()
+        for _da, _db in zip(builtins.reversed(_sa), builtins.reversed(_sx)):
+            if _da != _db and _da != 1 and _db != 1:
+                raise ValueError(
+                    "operands could not be broadcast together with shapes "
+                    f"{_sa} {_sx}")
+    # 0-d 数组提升为 1-d：Rust 广播对 0-d 参与运算会静默降维
+    # （0d - (3,) → 0-d），先 reshape 成 (1,) 让 (1,) 广播语义生效
+    if getattr(arr_a, 'shape', None) == () and hasattr(arr_a, 'reshape'):
+        arr_a = arr_a.reshape((1,))
+    if getattr(arr_b, 'shape', None) == () and hasattr(arr_b, 'reshape'):
+        arr_b = arr_b.reshape((1,))
+    # 全 Python 广播 + 逐元素计算：Rust 广播算术对 (1,) vs (N,) 也会
+    # 静默产出 size-1 结果，不可信
+    def _shp(x):
+        try:
+            return builtins.tuple(x.shape)
+        except Exception:
+            return ()
+
+    def _flat(x):
+        if not isinstance(x, (list, tuple)):
+            # 0-d 数组 tolist() 返回标量
+            return [x]
+        o = []
+        for v in x:
+            if isinstance(v, list):
+                o.extend(_flat(v))
+            else:
+                o.append(v)
+        return o
+
+    _sa, _sb = _shp(arr_a), _shp(arr_b)
+    _at_is_arr = hasattr(_at, 'shape')
+    _rt_is_arr = hasattr(_rt, 'shape')
+    _st = _shp(_at) if _at_is_arr else ()
+    _sr = _shp(_rt) if _rt_is_arr else ()
+    _ndim = builtins.max(len(_sa), len(_sb), len(_st), len(_sr))
+    _out_shape = []
+    for _d in range(_ndim):
+        _dims = []
+        for _s in (_sa, _sb, _st, _sr):
+            _l = len(_s)
+            _dims.append(_s[_l - _ndim + _d] if _d >= _ndim - _l else 1)
+        _mx = builtins.max(_dims)
+        if builtins.any(x != 1 and x != _mx for x in _dims):
+            raise ValueError(
+                "operands could not be broadcast together with shapes "
+                f"{_sa} {_sb} {_st} {_sr}")
+        _out_shape.append(_mx)
+    _total = 1
+    for _s in _out_shape:
+        _total *= _s
+
+    def _bcast(flat, shp):
+        """把 flat 值按 shp 广播到 _out_shape，返回展平列表。"""
+        shp = (1,) * (_ndim - len(shp)) + tuple(shp)
+        _strides = [1] * _ndim
+        for _i in range(_ndim - 2, -1, -1):
+            _strides[_i] = _strides[_i + 1] * _out_shape[_i + 1]
+        _ost = [0 if shp[_i] == 1 else _strides[_i] for _i in range(_ndim)]
+        _res = []
+        _idx = [0] * _ndim
+        for _ in range(_total):
+            _off = builtins.sum(_idx[_k] * _ost[_k] for _k in range(_ndim))
+            _res.append(flat[_off])
+            for _k in range(_ndim - 1, -1, -1):
+                _idx[_k] += 1
+                if _idx[_k] < _out_shape[_k]:
+                    break
+                _idx[_k] = 0
+        return _res
+
+    _bva = _bcast(_flat(arr_a.tolist()), _sa)
+    _bvb = _bcast(_flat(arr_b.tolist()), _sb)
+    _bat = _bcast(_flat(_at.tolist()), _st) if _at_is_arr else None
+    _brt = _bcast(_flat(_rt.tolist()), _sr) if _rt_is_arr else None
+    _out = []
+    for _i in range(_total):
+        _av, _bv = _bva[_i], _bvb[_i]
+        _atv = _bat[_i] if _bat is not None else atol
+        _rtv = _brt[_i] if _brt is not None else rtol
+        if _av != _av and _bv != _bv:
+            # 双 NaN
+            _out.append(builtins.bool(equal_nan))
+        elif _av == _bv:
+            # 相等值（含 inf==inf / -inf==-inf）恒 close
+            _out.append(True)
+        elif _m.isfinite(_av) and _m.isfinite(_bv):
+            _out.append(builtins.bool(abs(_av - _bv) <=
+                                      _atv + _rtv * abs(_bv)))
+        else:
+            # 非有限对（inf/-inf 不相等）→ False
+            _out.append(False)
+    _shape = builtins.tuple(_out_shape)
+    res = nd([1.0 if v else 0.0 for v in _out])
+    if _shape:
+        res = res.reshape(_shape)
+    res._dtype = 'bool'
+    return res
+
+
+def isclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False):
+    """逐元素判断是否接近（numpy 语义，Python 层实现）。
+
+    |a-b| <= atol + rtol*|b|；相等值（含 inf==inf）恒 close；
+    NaN 默认 False，equal_nan=True 时同位 NaN 为 True。
+    标量输入返回 np.bool 标量单例（np.True_/np.False_）。
+    """
+    import math as _m
+    try:
+        if (not _m.isfinite(rtol) or rtol < 0 or
+                not _m.isfinite(atol) or atol < 0):
             import warnings as _warn_is
             _warn_is.warn(
                 f"One of rtol or atol is not valid, atol: {atol}, "
                 f"rtol: {rtol}", RuntimeWarning, stacklevel=3)
     except (TypeError, ValueError):
         pass
-    res = _wrap_bool(_core.isclose(_ensure_raw(a), _ensure_raw(b), rtol, atol))
-    if equal_nan:
+    nd = _nd()
+    _a_arr = hasattr(a, '_array')
+    _b_arr = hasattr(b, '_array')
+    if not _a_arr and not _b_arr and \
+            not isinstance(a, (list, tuple)) and \
+            not isinstance(b, (list, tuple)):
+        # 标量 × 标量：纯 Python 计算（绕开 0-d 数组 item/bool 缺口），
+        # 返回 np.bool 标量单例（numpy 语义）
         try:
-            def _flat(x):
-                o = []
-                for v in x:
-                    if isinstance(v, (list, tuple)):
-                        o.extend(_flat(v))
-                    else:
-                        o.append(v)
-                return o
-            af = _flat(_ensure_raw(a).tolist())
-            bf = _flat(_ensure_raw(b).tolist())
-            new = res.copy()
-            it = new.flat
-            for i in range(min(len(af), len(bf))):
-                if af[i] != af[i] and bf[i] != bf[i]:
-                    it[i] = True
-            res = new
+            _va, _vb = a, b
+            if isinstance(_va, builtins.bool) or isinstance(_vb, builtins.bool):
+                _va, _vb = builtins.bool(_va), builtins.bool(_vb)
+            else:
+                _va, _vb = builtins.complex(_va), builtins.complex(_vb)
+            if _va != _va and _vb != _vb:
+                _val = builtins.bool(equal_nan)
+            elif _va == _vb:
+                # 相等值（含 inf==inf / -inf==-inf）恒 close
+                _val = True
+            else:
+                # numpy 语义：非有限对（含 inf/-inf）仅在相等时 close
+                _va_f = builtins.bool(_va == _va and
+                                      abs(_va) != builtins.float('inf'))
+                _vb_f = builtins.bool(_vb == _vb and
+                                      abs(_vb) != builtins.float('inf'))
+                if _va_f and _vb_f:
+                    _val = builtins.bool(abs(_va - _vb) <=
+                                         atol + rtol * abs(_vb))
+                else:
+                    _val = False
+        except Exception:
+            _val = False
+        try:
+            from .__init__ import True_ as _t_one, False_ as _f_one
+        except Exception:
+            return _val
+        return _t_one if _val else _f_one
+    arr_a = a if _a_arr else nd(a)
+    arr_b = b if _b_arr else nd(b)
+    # NEP50 弱类型：f32/f16 数组与 Python float（type 精确匹配；float64/
+    # float32 标量为强类型不降级）比较 → float 降到数组精度
+    _dt_a = getattr(arr_a, '_dtype', '')
+    if _dt_a in ('float32', 'float16'):
+        try:
+            from .__init__ import _round_scalar_to_f
+            if not _b_arr and type(b) is float:
+                b = _round_scalar_to_f(_dt_a, b)
+                arr_b = nd(b)
+            if type(atol) is float:
+                atol = _round_scalar_to_f(_dt_a, atol)
+            if type(rtol) is float:
+                rtol = _round_scalar_to_f(_dt_a, rtol)
         except Exception:
             pass
+    res = _isclose_arrays(arr_a, arr_b, rtol, atol, equal_nan)
     return res
 
 
 def allclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False, *args, **kwargs):
-    """判断两个数组是否元素级接近。
+    """判断两个数组是否全部元素级接近（numpy 语义）。
 
-    与 NumPy 对齐：``equal_nan=True`` 时同位置的 NaN 视为相等。``*args``/
-    ``**kwargs`` 吸收 NumPy 的其余兼容参数。
+    与 NumPy 对齐：``equal_nan=True`` 时同位置的 NaN 视为相等。
+    标量输入返回 Python bool。
     """
-    if not equal_nan:
-        return _core.allclose(_ensure_raw(a), _ensure_raw(b), rtol, atol)
-    # equal_nan=True：NaN 同位置视为相等（先取常规结果，再补齐 NaN 同位置）
-    if not _core.allclose(_ensure_raw(a), _ensure_raw(b), rtol, atol):
-        try:
-            fa, fb = a.tolist(), b.tolist()
-        except Exception:
-            return False
-        if len(fa) != len(fb):
-            return False
-        for x, y in zip(fa, fb):
-            if x != y and not (isinstance(x, float) and isinstance(y, float)
-                               and math.isnan(x) and math.isnan(y)):
-                return False
-    return True
+    _ = args, kwargs
+    res = isclose(a, b, rtol=rtol, atol=atol, equal_nan=equal_nan)
+    try:
+        if hasattr(res, 'all'):
+            return builtins.bool(res.all())
+        return builtins.bool(res)
+    except Exception:
+        return False
 
 
 # 反双曲函数别名

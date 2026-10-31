@@ -445,10 +445,10 @@ class NdArrayMethods:
     
     @staticmethod
     def take(arr, indices, axis=None):
-        """根据索引获取元素。"""
+        """根据索引获取元素（保留输入数组 dtype）。"""
         _, _ensure = _get_deps()
         result = arr._array.take(_ensure(indices), axis)
-        return _wrap_result(result)
+        return _wrap_result(result, getattr(arr, '_dtype', 'float64'))
     
     @staticmethod
     def put(arr, indices, values):

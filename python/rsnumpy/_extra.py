@@ -401,6 +401,26 @@ def count_nonzero(a, axis=None, *, keepdims=False):
     _ = keepdims
     np = _np()
     arr = _asarray(a)
+    # 字符串数组（S/U）：非空元素为真（"" / b"" 为假）→ 转 0/1 掩码
+    # 后走数值路径（numpy 语义）
+    if getattr(arr, '_str_dtype', None) is not None or \
+            str(getattr(arr, '_dtype', '')) in ('string_', 'bytes_'):
+        _vals_c = []
+
+        def _fs_c(x):
+            if isinstance(x, list):
+                for v in x:
+                    _fs_c(v)
+            else:
+                _vals_c.append(x)
+
+        _fs_c(arr.tolist())
+        _shape_c = tuple(arr.shape)
+        _bools_c = [0.0 if v in (b'', '', None) else 1.0 for v in _vals_c]
+        if _shape_c:
+            arr = np.array(_bools_c).reshape(_shape_c)
+        else:
+            arr = np.array([_bools_c[0] if _bools_c else 0.0])
     if axis is None:
         return _core.count_nonzero(arr._array)
     # numpy 风格的 axis 校验：重复 axis 抛 ValueError，非整数抛 TypeError，
@@ -498,6 +518,14 @@ def size(a, axis=None):
     arr = _asarray(a)
     if axis is None:
         return arr.size
+    if isinstance(axis, (tuple, list)):
+        # numpy 语义：元组 axis → 对应轴大小乘积；空元组 → 1
+        if len(axis) == 0:
+            return 1
+        n = 1
+        for _ax in axis:
+            n *= arr.shape[_ax]
+        return n
     return arr.shape[axis]
 
 
@@ -506,7 +534,7 @@ def isscalar(element):
     if isinstance(element, (int, float, complex, bool, bytes, str)):
         return True
     try:
-        from . import __init__ as _rn
+        import rsnumpy as _rn
         if isinstance(element, _rn.generic):
             return True
     except Exception:

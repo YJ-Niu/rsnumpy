@@ -154,14 +154,37 @@ def expand_dims(a, axis):
 
 
 def squeeze(a, axis=None):
-    """从数组形状中删除单维度条目。"""
-    arr = a if hasattr(a, '_array') else _wrap(a)
+    """从数组形状中删除单维度条目（axis 指定时只删除指定轴）。"""
+    # list 输入（可能含 ndarray 元素）：先递归转纯嵌套列表再构造，
+    # 使 np.squeeze([np.zeros((3, 1))]) 得到 (1, 3, 1) 而非 object 数组
+    arr = a if hasattr(a, '_array') else _nd()(_nested_to_list(a))
     nd = _nd()
     dtype = getattr(arr, '_dtype', "float64")
     fields = getattr(arr, '_fields', None)
     raw_data = getattr(arr, '_raw_data', None)
-    result = _core.squeeze(arr._array)
-    return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
+    if axis is None:
+        result = _core.squeeze(arr._array)
+        return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
+    # numpy 语义：只删除指定轴（该轴大小须为 1）
+    shape = tuple(arr.shape)
+    ndim = len(shape)
+    if isinstance(axis, int):
+        _axes = (axis,)
+    else:
+        _axes = tuple(axis)
+    _axes = tuple(_x % ndim for _x in _axes)
+    new_shape = []
+    for _i, _s in enumerate(shape):
+        if _i in _axes:
+            if _s != 1:
+                raise ValueError(
+                    "cannot select an axis to squeeze out which has size "
+                    "not equal to one")
+        else:
+            new_shape.append(_s)
+    result = arr.reshape(tuple(new_shape))
+    return nd._wrap(result._array, _dtype=dtype, _fields=fields,
+                    _raw_data=raw_data)
 
 
 def concatenate(arrays, axis=0):

@@ -126,6 +126,14 @@ def assert_(cond, msg=""):
 
 
 def assert_equal(a, b, err_msg=""):
+    a_seq = isinstance(a, (tuple, list)) and not isinstance(a, bytes)
+    b_seq = isinstance(b, (tuple, list)) and not isinstance(b, bytes)
+    if a_seq and b_seq and len(a) == len(b):
+        # numpy 语义：序列输入递归逐项比较（如 nonzero() 返回 (rows, cols)
+        # 元组对嵌套列表、top_k 返回 (values, indices)）
+        for _xa, _xb in zip(a, b):
+            assert_equal(_xa, _xb, err_msg=err_msg)
+        return
     if _shape(a) is not None or _shape(b) is not None:
         assert_array_equal(a, b, err_msg=err_msg)
     else:
