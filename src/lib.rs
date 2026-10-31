@@ -1349,19 +1349,14 @@ impl NdArray {
     }
 
     fn __eq__(&self, other: &Bound<'_, PyAny>) -> PyResult<NdArray> {
-        binary_op_lr(
-            self,
-            other,
-            |a, b| if (a - b).abs() < 1e-12 { 1.0 } else { 0.0 },
-        )
+        // 精确 IEEE 比较（numpy 语义）：inf==inf 为 True、nan==nan 为 False；
+        // 不得用 |a-b|<eps 容差（inf-inf=nan 会误判）。
+        binary_op_lr(self, other, |a, b| if a == b { 1.0 } else { 0.0 })
     }
 
     fn __ne__(&self, other: &Bound<'_, PyAny>) -> PyResult<NdArray> {
-        binary_op_lr(
-            self,
-            other,
-            |a, b| if (a - b).abs() >= 1e-12 { 1.0 } else { 0.0 },
-        )
+        // 与 __eq__ 对偶：nan!=nan 为 True（IEEE 不等）。
+        binary_op_lr(self, other, |a, b| if a != b { 1.0 } else { 0.0 })
     }
 
     // ========== 新增缺失方法 ==========
