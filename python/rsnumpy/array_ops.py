@@ -200,6 +200,40 @@ def _check_casting(casting):
             f"'unsafe'; got {casting!r}")
 
 
+def _apply_dtype(res, dtype):
+    """显式 dtype 转换；非 native 字节序经 _dtype_obj 保留（astype 同款）。"""
+    _name = _dtype_name(dtype)
+    # S/U 类目标：astype 不支持字符串存储，经 array 构造重建
+    _kind = None
+    try:
+        from .__init__ import dtype as _dtype_fn
+        _kind = getattr(_dtype_fn(dtype), 'kind', None)
+    except Exception:
+        pass
+    if _kind in ('S', 'U'):
+        from .__init__ import array as _array_fn
+        try:
+            _spec = str(_dtype_fn(dtype))
+        except Exception:
+            _spec = _name
+        return _array_fn(res.tolist(), dtype=_spec)
+    res = res.astype(_name)
+    try:
+        from .__init__ import dtype as _dtype_fn
+        import rsnumpy._dtypes as _dts
+        _dbo = getattr(_dtype_fn(dtype), 'byteorder', None)
+        if isinstance(_dbo, str) and _dbo not in ('|', '=', '@', 'n', 'native'):
+            _d = _dts.DType(_name)
+            _d._byteorder = _dbo
+            res._dtype_obj = _d
+        elif _name == 'complex64' and str(getattr(res, '_dtype', '')) != 'complex64':
+            # astype 复数路径强制 complex128 标签；按 np.array 语义重挂 complex64
+            res._dtype = 'complex64'
+    except Exception:
+        pass
+    return res
+
+
 def _check_cast_allowed(first, dtype, casting):
     """numpy casting 语义：non-unsafe 转换需 can_cast 许可，否则 TypeError。"""
     if casting == "unsafe" or casting is None:
@@ -230,6 +264,10 @@ def _dtype_name(dtype):
 def concatenate(arrays, axis=0, out=None, dtype=None, casting="same_kind"):
     """沿着指定轴连接数组（支持 numpy 的 out/dtype 参数）。"""
     _check_casting(casting)
+    if out is not None and dtype is not None:
+        raise TypeError(
+            "concatenate() only takes `out` or `dtype` as an argument, "
+            "not both")
     arr_list = list(arrays)
     if not arr_list:
         raise ValueError("concatenate requires at least one array")
@@ -252,12 +290,34 @@ def concatenate(arrays, axis=0, out=None, dtype=None, casting="same_kind"):
                    _fields=fields, _raw_data=raw_data)
     if dtype is not None:
         _check_cast_allowed(first, dtype, casting)
-        res = res.astype(_dtype_name(dtype))
+        res = _apply_dtype(res, dtype)
     if out is not None:
+        _out_dt = getattr(out, '_dtype_obj', None)
+        if _out_dt is None:
+            _out_dt = getattr(out, '_dtype', 'float64')
+        _check_cast_allowed(first, _out_dt, casting)
+        # numpy 语义：写入 out 前按 out.dtype 精度转换（如 f32 舍入）
         try:
-            out[...] = res
+            res = _apply_dtype(res, _out_dt)
         except Exception:
             pass
+        _handled = False
+        try:
+            from .__init__ import dtype as _dtype_fn
+            if getattr(_dtype_fn(_out_dt), 'kind', None) in ('S', 'U'):
+                # 字符串数组存 _raw_data 占位存储，浮点 setitem 写不进去 → 直搬
+                _vals = getattr(res, '_raw_data', None)
+                if _vals is not None:
+                    out._raw_data = list(_vals)
+                    out._str_dtype = getattr(res, '_str_dtype', None)
+                    _handled = True
+        except Exception:
+            _handled = False
+        if not _handled:
+            try:
+                out[...] = res
+            except Exception:
+                pass
         return out
     return res
 
@@ -282,7 +342,7 @@ def stack(arrays, axis=0, out=None, dtype=None, casting="same_kind"):
     res = nd._wrap(result, _dtype=_dt0, _fields=fields, _raw_data=raw_data)
     if dtype is not None:
         _check_cast_allowed(first, dtype, casting)
-        res = res.astype(_dtype_name(dtype))
+        res = _apply_dtype(res, dtype)
     if out is not None:
         try:
             out[...] = res
@@ -312,7 +372,7 @@ def vstack(arrays, out=None, dtype=None, casting="same_kind"):
     res = nd._wrap(result, _dtype=dtype0, _fields=fields, _raw_data=raw_data)
     if dtype is not None:
         _check_cast_allowed(first, dtype, casting)
-        res = res.astype(_dtype_name(dtype))
+        res = _apply_dtype(res, dtype)
     if out is not None:
         try:
             out[...] = res
@@ -342,7 +402,7 @@ def hstack(arrays, out=None, dtype=None, casting="same_kind"):
     res = nd._wrap(result, _dtype=dtype0, _fields=fields, _raw_data=raw_data)
     if dtype is not None:
         _check_cast_allowed(first, dtype, casting)
-        res = res.astype(_dtype_name(dtype))
+        res = _apply_dtype(res, dtype)
     if out is not None:
         try:
             out[...] = res

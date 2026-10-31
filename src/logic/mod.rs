@@ -93,9 +93,9 @@ fn less(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
 
 #[pyfunction]
 fn equal(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
-    let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| {
-        if (a - b).abs() < 1e-12 { 1.0 } else { 0.0 }
-    })?;
+    // numpy 语义：== 为精确 IEEE 比较——inf==inf 为 True、nan==nan 为 False。
+    // 不得用 |a-b|<eps 容差：inf-inf=nan 会使 inf==inf 误判为 False。
+    let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| if a == b { 1.0 } else { 0.0 })?;
     Ok(NdArray {
         imag: None,
         data: result,
@@ -104,9 +104,8 @@ fn equal(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
 
 #[pyfunction]
 fn not_equal(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
-    let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| {
-        if (a - b).abs() >= 1e-12 { 1.0 } else { 0.0 }
-    })?;
+    // 与 equal 对偶：nan!=nan 为 True（IEEE 不等），inf!=inf 为 False。
+    let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| if a != b { 1.0 } else { 0.0 })?;
     Ok(NdArray {
         imag: None,
         data: result,

@@ -257,7 +257,8 @@ class ndarray:
         elif hasattr(data, '__class__') and data.__class__.__name__ == 'ndarray':
             self._array = data
             if getattr(data, 'is_complex', False):
-                self._dtype = "complex128"
+                # complex64 标签（如 np.zeros(4, dtype='c8')）优先于强制提升
+                self._dtype = _dtype if _dtype == "complex64" else "complex128"
             else:
                 self._dtype = _dtype
             self._fields = _fields
@@ -4997,6 +4998,23 @@ def _contains_ndarray(data):
     return False
 
 
+def _contains_complex_leaf(data):
+    """递归检查嵌套列表/元组的叶子是否含 Python/rs 标量复数值。"""
+    if isinstance(data, builtins.complex):
+        return True
+    if isinstance(data, generic) and not _is_ndarray(data):
+        try:
+            v = complex(data)
+        except Exception:
+            return False
+        return v.imag != 0.0
+    if isinstance(data, (list, tuple)):
+        for x in data:
+            if _contains_complex_leaf(x):
+                return True
+    return False
+
+
 def _convert_ndarray_deep(data):
     """递归将嵌套列表/元组中的 ndarray（含底层 Rust 绑定）转为 Python 原生数据（tolist）。
 
@@ -5472,6 +5490,10 @@ def asarray(a, dtype=None, order=None):
             _scalar_dt = _uniform_scalar_dtype(a)
             if _scalar_dt is not None:
                 return asarray(_scalar_leaves_to_py(a), dtype=_scalar_dt)
+            # 复数叶子：build_array 的 dtype 推断只认 float → 静默丢虚部，
+            # 与 array() 一致改走 complex128 构造。
+            if _contains_complex_leaf(a):
+                return _coerce_dtype(ndarray(a, _dtype='complex128'), 'complex128')
             try:
                 raw, code = np.build_array(a)
             except (ValueError, TypeError):
@@ -6034,13 +6056,34 @@ def _maybe_native_complex(raw, _dtype):
     return raw
 
 
+def _attach_byteorder(arr, dtype):
+    """构造函数的 dtype 富化：非 native 字节序（'>f8'）或字符串宽度（'S4'）
+    经 _dtype_obj 挂载（与 astype 同款机制），否则 np.empty(4, dtype='>f8')
+    会静默降级为 native 存储。"""
+    try:
+        if isinstance(dtype, str):
+            dtype = DType(dtype)
+        if isinstance(dtype, DType):
+            bo = getattr(dtype, 'byteorder', None)
+            nonnative = isinstance(bo, str) and bo not in ('|', '=', '@', 'n', 'native')
+            kind = getattr(dtype, 'kind', None)
+            if nonnative or (kind in ('S', 'U') and str(getattr(dtype, 'name', '')) != str(getattr(arr, '_dtype', ''))):
+                arr._dtype_obj = dtype
+    except Exception:
+        pass
+    return arr
+
+
 def zeros(shape, dtype=None, order='C', buffer=None, *, device=None, like=None):
     """返回指定形状的零数组。"""
     dt_obj = _as_struct_dtype(dtype)
     if dt_obj is not None:
         return _wrap_structured(dt_obj, _make_struct_filled(shape, dt_obj, _zero_scalar_for))
     _dtype = _resolve_dtype(dtype)
-    return ndarray(_maybe_native_complex(np.zeros(shape), _dtype), _dtype=_dtype)
+    raw = _maybe_native_complex(np.zeros(shape), _dtype)
+    return _attach_byteorder(
+        ndarray(raw._array if hasattr(raw, '_array') else raw, _dtype=_dtype),
+        dtype)
 
 
 def ones(shape, dtype=None, order='C', buffer=None, *, device=None, like=None):
@@ -6049,7 +6092,10 @@ def ones(shape, dtype=None, order='C', buffer=None, *, device=None, like=None):
     if dt_obj is not None:
         return _wrap_structured(dt_obj, _make_struct_filled(shape, dt_obj, _one_scalar_for))
     _dtype = _resolve_dtype(dtype)
-    return ndarray(_maybe_native_complex(np.ones(shape), _dtype), _dtype=_dtype)
+    raw = _maybe_native_complex(np.ones(shape), _dtype)
+    return _attach_byteorder(
+        ndarray(raw._array if hasattr(raw, '_array') else raw, _dtype=_dtype),
+        dtype)
 
 
 def empty(shape, dtype=None, order='C', buffer=None, *, device=None, like=None):
@@ -6058,9 +6104,10 @@ def empty(shape, dtype=None, order='C', buffer=None, *, device=None, like=None):
     if dt_obj is not None:
         return _wrap_structured(dt_obj, _make_struct_filled(shape, dt_obj, _zero_scalar_for))
     _dtype = _resolve_dtype(dtype)
-    arr = ndarray(_maybe_native_complex(np.empty(shape), _dtype), _dtype=_dtype)
+    raw = _maybe_native_complex(np.empty(shape), _dtype)
+    arr = ndarray(raw._array if hasattr(raw, '_array') else raw, _dtype=_dtype)
     arr._is_empty = True
-    return arr
+    return _attach_byteorder(arr, dtype)
 
 
 def full(shape, fill_value, dtype=None, order='C', *, device=None, like=None):
