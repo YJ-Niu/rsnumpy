@@ -216,7 +216,26 @@ def _apply_dtype(res, dtype):
             _spec = str(_dtype_fn(dtype))
         except Exception:
             _spec = _name
-        return _array_fn(res.tolist(), dtype=_spec)
+        # 值先字符串化：rsnumpy 的 S-dtype 数组对数值输入保留数值占位存储，
+        # 不转会让 out 路径与 dtype 路径（真字符串）不一致
+        try:
+            _flat = res.tolist()
+            if not isinstance(_flat, list):
+                _flat = [_flat]
+
+            def _flatten_all(x):
+                out = []
+                for v in x:
+                    if isinstance(v, list):
+                        out.extend(_flatten_all(v))
+                    else:
+                        out.append(v)
+                return out
+
+            _flat = _flatten_all(_flat)
+            return _array_fn([str(v) for v in _flat], dtype=_spec)
+        except Exception:
+            return _array_fn(res.tolist(), dtype=_spec)
     res = res.astype(_name)
     try:
         from .__init__ import dtype as _dtype_fn
@@ -234,18 +253,30 @@ def _apply_dtype(res, dtype):
     return res
 
 
-def _check_cast_allowed(first, dtype, casting):
-    """numpy casting 语义：non-unsafe 转换需 can_cast 许可，否则 TypeError。"""
+def _check_cast_allowed(arr_list, dtype, casting):
+    """numpy casting 语义：non-unsafe 转换需 can_cast 许可，否则 TypeError。
+
+    numpy 检查**所有**输入数组（不止第一个）——如 stack((int, float),
+    dtype=int64, casting='safe') 必须因 float→int64 被拒。arr_list 可传单个
+    数组或数组列表。"""
     if casting == "unsafe" or casting is None:
         return
     try:
         from .__init__ import dtype as _dtype_fn, can_cast as _can_cast
-        _src = getattr(first, '_dtype', 'float64')
         _dst = _dtype_fn(dtype).name
-        if not _can_cast(_src, _dst, casting=casting):
-            raise TypeError(
-                f"Cannot cast array data from dtype('{_src}') to "
-                f"dtype('{_dst}') according to the rule '{casting}'")
+        _srcs = arr_list if isinstance(arr_list, (builtins.list, builtins.tuple)) \
+            else [arr_list]
+        # 纯 Python 标量走 copyto 标量语义（pyscalar casting），不参与 can_cast
+        for _arr in _srcs:
+            if not hasattr(_arr, '_dtype'):
+                continue
+            _src = getattr(_arr, '_dtype', 'float64')
+            if _src in ('object', 'O'):
+                continue  # object 数组可自由转换（numpy 语义）
+            if not _can_cast(_src, _dst, casting=casting):
+                raise TypeError(
+                    f"Cannot cast array data from dtype('{_src}') to "
+                    f"dtype('{_dst}') according to the rule '{casting}'")
     except TypeError:
         raise
     except Exception:
@@ -261,6 +292,44 @@ def _dtype_name(dtype):
         return builtins.str(dtype)
 
 
+def _out_dtype_of(out):
+    """取 out 数组的富 dtype（_dtype_obj 优先，否则存储标签）。"""
+    dt = getattr(out, '_dtype_obj', None)
+    if dt is None:
+        dt = getattr(out, '_dtype', 'float64')
+    return dt
+
+
+def _finalize_out(res, out, arr_list, casting):
+    """stack 家族与 concatenate 共用的 out= 收尾：
+    ① casting 许可检查（TypeError）；② 写入前按 out.dtype 精度转换
+    （如 f32 舍入）；③ S/U 类字符串 out 经 _raw_data 直搬（浮点 setitem
+    写不进字符串占位存储）；④ out 与 dtype 同传由调用方先行抛 TypeError。"""
+    _out_dt = _out_dtype_of(out)
+    _check_cast_allowed(arr_list, _out_dt, casting)
+    try:
+        res = _apply_dtype(res, _out_dt)
+    except Exception:
+        pass
+    _handled = False
+    try:
+        from .__init__ import dtype as _dtype_fn
+        if getattr(_dtype_fn(_out_dt), 'kind', None) in ('S', 'U'):
+            _vals = getattr(res, '_raw_data', None)
+            if _vals is not None:
+                out._raw_data = list(_vals)
+                out._str_dtype = getattr(res, '_str_dtype', None)
+                _handled = True
+    except Exception:
+        _handled = False
+    if not _handled:
+        try:
+            out[...] = res
+        except Exception:
+            pass
+    return out
+
+
 def concatenate(arrays, axis=0, out=None, dtype=None, casting="same_kind"):
     """沿着指定轴连接数组（支持 numpy 的 out/dtype 参数）。"""
     _check_casting(casting)
@@ -268,10 +337,57 @@ def concatenate(arrays, axis=0, out=None, dtype=None, casting="same_kind"):
         raise TypeError(
             "concatenate() only takes `out` or `dtype` as an argument, "
             "not both")
+    # 子数组 dtype（如 '(2,)i'，DType 解析为 kind 'V' + shape）不支持拼接
+    if dtype is not None:
+        try:
+            from .__init__ import dtype as _dtype_fn
+            _pdt = _dtype_fn(dtype)
+            if getattr(_pdt, 'kind', None) == 'V' \
+                    and builtins.tuple(getattr(_pdt, 'shape', ()) or ()):
+                raise TypeError(
+                    f"concatenate() does not support subarray dtype "
+                    f"{builtins.str(dtype)!r}")
+        except TypeError:
+            raise
+        except Exception:
+            pass
     arr_list = list(arrays)
     if not arr_list:
         raise ValueError("concatenate requires at least one array")
     first = arr_list[0] if hasattr(arr_list[0], '_array') else _wrap(arr_list[0])
+    # S/U 目标 dtype：Rust concatenate 不支持字符串存储，改走 Python
+    # 字符串重建。numpy 语义：裸 'S'/'U' 的宽度 = double 转字符串的宽度
+    # （测试注释 "identical to a cast (of a double array)" → 'S3'），
+    # 显式宽度（'S0'/'S4'）直接用（np.array 自带截断）。
+    _su_spec = None
+    if dtype is not None:
+        try:
+            from .__init__ import dtype as _dtype_fn
+            if getattr(_dtype_fn(dtype), 'kind', None) in ('S', 'U'):
+                _su_spec = str(dtype)
+                # 裸 'S'/'U' 与零宽度 'S0'/'U0' 同规：宽度 = double 转字符串
+                # 的宽度（numpy 测试语义 "identical to a cast of a double
+                # array" → 'S3'），而非按数据推断
+                if _su_spec.lstrip('<>|=')[1:] in ('', '0'):
+                    from .__init__ import array as _array_fn
+                    _probe = _array_fn([1.0], dtype=_su_spec)
+                    _su_spec = str(_probe.dtype)
+        except Exception:
+            _su_spec = None
+    if _su_spec is not None:
+        from .__init__ import array as _array_fn
+        # casting 检查先行（如 no/equiv/safe 下 float64→S4 必须 TypeError）
+        _check_cast_allowed(arr_list, dtype, casting)
+        _vals = []
+        for a in arr_list:
+            arr = a if hasattr(a, '_array') else _wrap(a)
+            _vals.extend(arr.tolist())
+        # numpy 语义：dtype='S' 不检查/字符串化 None → TypeError
+        if builtins.any(v is None for v in _vals):
+            raise TypeError(
+                "cannot concatenate None values with a string dtype")
+        _strs = [str(v) for v in _vals]
+        return _array_fn(_strs, dtype=_su_spec)
     nd = _nd()
     _dt = dtype if dtype is not None else getattr(first, '_dtype', "float64")
     fields = getattr(first, '_fields', None)
@@ -289,73 +405,62 @@ def concatenate(arrays, axis=0, out=None, dtype=None, casting="same_kind"):
     res = nd._wrap(result, _dtype=getattr(first, '_dtype', "float64"),
                    _fields=fields, _raw_data=raw_data)
     if dtype is not None:
-        _check_cast_allowed(first, dtype, casting)
+        _check_cast_allowed(arr_list, dtype, casting)
         res = _apply_dtype(res, dtype)
     if out is not None:
-        _out_dt = getattr(out, '_dtype_obj', None)
-        if _out_dt is None:
-            _out_dt = getattr(out, '_dtype', 'float64')
-        _check_cast_allowed(first, _out_dt, casting)
-        # numpy 语义：写入 out 前按 out.dtype 精度转换（如 f32 舍入）
-        try:
-            res = _apply_dtype(res, _out_dt)
-        except Exception:
-            pass
-        _handled = False
-        try:
-            from .__init__ import dtype as _dtype_fn
-            if getattr(_dtype_fn(_out_dt), 'kind', None) in ('S', 'U'):
-                # 字符串数组存 _raw_data 占位存储，浮点 setitem 写不进去 → 直搬
-                _vals = getattr(res, '_raw_data', None)
-                if _vals is not None:
-                    out._raw_data = list(_vals)
-                    out._str_dtype = getattr(res, '_str_dtype', None)
-                    _handled = True
-        except Exception:
-            _handled = False
-        if not _handled:
-            try:
-                out[...] = res
-            except Exception:
-                pass
-        return out
+        return _finalize_out(res, out, arr_list, casting)
     return res
 
 
 def stack(arrays, axis=0, out=None, dtype=None, casting="same_kind"):
     """沿着新轴堆叠数组（支持 numpy 的 out/dtype 参数）。"""
     _check_casting(casting)
-    if not isinstance(arrays, (builtins.list, builtins.tuple)):
+    if out is not None and dtype is not None:
+        raise TypeError(
+            "stack() only takes `out` or `dtype` as an argument, not both")
+    # numpy 语义：ndarray 本身是合法序列（按其元素堆叠）；标量/生成器拒绝
+    if not isinstance(arrays, (builtins.list, builtins.tuple)) \
+            and not hasattr(arrays, '_array'):
         raise TypeError(
             f"arrays to stack must be array_like sequences, not "
             f"{builtins.type(arrays).__name__}")
     arr_list = list(arrays)
     if not arr_list:
-        raise ValueError("stack requires at least one array")
+        raise ValueError("need at least one array to stack")
     first = arr_list[0] if hasattr(arr_list[0], '_array') else _wrap(arr_list[0])
     nd = _nd()
     _dt0 = getattr(first, '_dtype', "float64")
     fields = getattr(first, '_fields', None)
     raw_data = getattr(first, '_raw_data', None)
     raw_list = [_ensure_raw(a) for a in arr_list]
+    # axis 归一化与越界校验（越界直接传 Rust 会 abort，不可捕获）：
+    # numpy 允许 axis ∈ [-(nd+1), nd]，结果 ndim = 输入 nd+1
+    from .exceptions import AxisError
+    _in_ndim = getattr(first, 'ndim', 0)
+    if axis < 0:
+        axis += _in_ndim + 1
+    if not 0 <= axis <= _in_ndim:
+        raise AxisError(f'axis {axis} is out of bounds for array of '
+                        f'dimension {_in_ndim + 1}')
     result = _core.stack(raw_list, axis)
     res = nd._wrap(result, _dtype=_dt0, _fields=fields, _raw_data=raw_data)
     if dtype is not None:
-        _check_cast_allowed(first, dtype, casting)
+        _check_cast_allowed(arr_list, dtype, casting)
         res = _apply_dtype(res, dtype)
     if out is not None:
-        try:
-            out[...] = res
-        except Exception:
-            pass
-        return out
+        return _finalize_out(res, out, arr_list, casting)
     return res
 
 
 def vstack(arrays, out=None, dtype=None, casting="same_kind"):
     """垂直堆叠数组（沿行）。"""
     _check_casting(casting)
-    if not isinstance(arrays, (builtins.list, builtins.tuple)):
+    if out is not None and dtype is not None:
+        raise TypeError(
+            "vstack() only takes `out` or `dtype` as an argument, not both")
+    # numpy 语义：ndarray 本身是合法序列；标量/生成器拒绝
+    if not isinstance(arrays, (builtins.list, builtins.tuple)) \
+            and not hasattr(arrays, '_array'):
         raise TypeError(
             f"arrays to stack must be array_like sequences, not "
             f"{builtins.type(arrays).__name__}")
@@ -371,21 +476,22 @@ def vstack(arrays, out=None, dtype=None, casting="same_kind"):
     result = _core.vstack(raw_list)
     res = nd._wrap(result, _dtype=dtype0, _fields=fields, _raw_data=raw_data)
     if dtype is not None:
-        _check_cast_allowed(first, dtype, casting)
+        _check_cast_allowed(arr_list, dtype, casting)
         res = _apply_dtype(res, dtype)
     if out is not None:
-        try:
-            out[...] = res
-        except Exception:
-            pass
-        return out
+        return _finalize_out(res, out, arr_list, casting)
     return res
 
 
 def hstack(arrays, out=None, dtype=None, casting="same_kind"):
     """水平堆叠数组（沿列）。"""
     _check_casting(casting)
-    if not isinstance(arrays, (builtins.list, builtins.tuple)):
+    if out is not None and dtype is not None:
+        raise TypeError(
+            "hstack() only takes `out` or `dtype` as an argument, not both")
+    # numpy 语义：ndarray 本身是合法序列；标量/生成器拒绝
+    if not isinstance(arrays, (builtins.list, builtins.tuple)) \
+            and not hasattr(arrays, '_array'):
         raise TypeError(
             f"arrays to stack must be array_like sequences, not "
             f"{builtins.type(arrays).__name__}")
@@ -401,14 +507,10 @@ def hstack(arrays, out=None, dtype=None, casting="same_kind"):
     result = _core.hstack(raw_list)
     res = nd._wrap(result, _dtype=dtype0, _fields=fields, _raw_data=raw_data)
     if dtype is not None:
-        _check_cast_allowed(first, dtype, casting)
+        _check_cast_allowed(arr_list, dtype, casting)
         res = _apply_dtype(res, dtype)
     if out is not None:
-        try:
-            out[...] = res
-        except Exception:
-            pass
-        return out
+        return _finalize_out(res, out, arr_list, casting)
     return res
 
 

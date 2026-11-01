@@ -4,6 +4,8 @@ ndarray 对象方法模块
 此模块包含 rsnumpy.ndarray 类的所有对象方法和属性。
 """
 
+import builtins
+
 import rsnumpy.num_core as _core
 
 
@@ -185,6 +187,49 @@ class NdArrayMethods:
                 elif tmp.ndim < arr.ndim and arr.shape:
                     tmp = tmp.reshape(arr.shape)
                 return ndarray_cls._wrap(tmp._array, _dtype=name)
+            except Exception:
+                pass
+        # S/U 字符串目标：Rust astype 不支持字符串存储。numpy 语义：
+        # 值转字符串后取最小宽度；裸 'S'/'U' 按数据推断（astype('S')→'S3'），
+        # 显式宽度（'S4'）直接用（np.array 自带截断）。
+        _su_kind = None
+        _su_width = None
+        if isinstance(dtype, str):
+            _core = dtype[1:] if dtype and dtype[0] in '<>|=' else dtype
+            if _core and _core[0] in 'SU':
+                _su_kind = _core[0]
+                _tail = _core[1:]
+                _su_width = builtins.int(_tail) if _tail.isdigit() else None
+        elif name in ('bytes_', 'string_'):
+            _su_kind = 'S' if name == 'bytes_' else 'U'
+        if _su_kind is not None:
+            try:
+                import rsnumpy as _rn_su
+
+                def _flats(x):
+                    if isinstance(x, list):
+                        out = []
+                        for v in x:
+                            out.extend(_flats(v))
+                        return out
+                    return [x]
+
+                _t = arr.tolist()
+                _vals = _flats(_t) if isinstance(_t, list) else [_t]
+                _strs = [str(v) for v in _vals]
+                if _su_width is None:
+                    if _su_kind == 'S':
+                        _w = builtins.max(
+                            (len(s.encode('utf-8')) for s in _strs), default=0)
+                    else:
+                        _w = builtins.max((len(s) for s in _strs), default=0)
+                    _su_width = _w
+                _spec = f'{_su_kind}{_su_width}'
+                if getattr(arr, 'ndim', 0) == 0:
+                    # 0-d 直接标量构造：reshape(()) 会抹掉字符串宽度
+                    return _fin(_rn_su.array(_strs[0], dtype=_spec))
+                _res = _rn_su.array(_strs, dtype=_spec)
+                return _fin(_res)
             except Exception:
                 pass
         return _fin(_wrap_result(arr._array.astype(name), dtype=name))

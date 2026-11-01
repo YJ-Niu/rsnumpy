@@ -780,7 +780,12 @@ def broadcast_arrays(*args):
 
 
 def block(arrays):
-    """按嵌套列表组装数组块。"""
+    """按嵌套列表组装数组块（numpy 语义）。
+
+    校验与 numpy _block 一致：顶层 tuple 拒绝（TypeError）、空列表
+    ValueError（消息含 'empty'）、嵌套深度不匹配 ValueError（消息含
+    'depths are mismatched'）、单数组/标量输入返回副本（list_ndim==0）。
+    """
     np = _np()
 
     def _depth(x):
@@ -793,8 +798,45 @@ def block(arrays):
             return max((_leaf_ndim(e) for e in x), default=0)
         return _asarray(x).ndim
 
+    def _depths_match(x, depth):
+        """numpy _block_check_depths_match：所有叶子索引长度一致才算匹配。
+
+        空 list 返回 depth+1 并带 None 标记（参与深度比较——如 [1, []] 应先报
+        深度不匹配）；tuple 在任意层级拒绝（numpy 同款 TypeError）。"""
+        if isinstance(x, tuple):
+            raise TypeError(
+                "arrays is a tuple. Only lists can be used to arrange "
+                "blocks, and np.block does not allow implicit conversion "
+                "from tuple to ndarray.")
+        if isinstance(x, list):
+            if len(x) == 0:
+                return (depth + 1, True)  # (索引长度, 空 None 标记)
+            child_results = [_depths_match(e, depth + 1) for e in x]
+            first_len = child_results[0][0]
+            for cd, _ in child_results[1:]:
+                if cd != first_len:
+                    raise ValueError(
+                        "List depths are mismatched. First element was at "
+                        "depth %d, but there is an element at depth %d"
+                        % (first_len - 1, cd - 1))
+            has_empty = builtin_any(m for _, m in child_results)
+            return (first_len, has_empty)
+        return (depth, False)
+
+    if isinstance(arrays, tuple):
+        raise TypeError(
+            "arrays is a tuple. Only lists can be used to arrange blocks, "
+            "and np.block does not allow implicit conversion from tuple to "
+            "ndarray.")
+
     list_depth = _depth(arrays)
     result_ndim = builtin_max(_leaf_ndim(arrays), list_depth)
+
+    if isinstance(arrays, list):
+        _bottom_len, _has_empty = _depths_match(arrays, 0)
+        if _has_empty:
+            raise ValueError(
+                "List at depth %d cannot be empty" % (_bottom_len - 1))
 
     def _atleast(arr):
         if arr.ndim >= result_ndim:
@@ -808,7 +850,11 @@ def block(arrays):
         axis = result_ndim - list_depth + depth
         return np.concatenate(parts, axis=axis)
 
-    return _build(arrays, 0)
+    result = _build(arrays, 0)
+    if list_depth == 0:
+        # numpy 语义：单数组/标量输入返回副本（_block_concatenate 的边缘处理）
+        result = result.copy()
+    return result
 
 
 def array_split(ary, indices_or_sections, axis=0):
@@ -838,9 +884,18 @@ def array_split(ary, indices_or_sections, axis=0):
 
 
 def unstack(x, axis=0):
-    """沿指定轴拆成子数组元组（NumPy 2.1）。"""
+    """沿指定轴拆成子数组元组（NumPy 2.1）。
+
+    numpy 语义：负 axis 归一化；越界（正向未归一化前 |axis| 超出 ndim）
+    抛 ValueError 而非 IndexError。"""
     np = _np()
     arr = _asarray(x)
+    ndim = len(arr.shape)
+    if axis < 0:
+        axis += ndim
+    if not 0 <= axis < ndim:
+        raise ValueError(
+            f'axis {axis} is out of bounds for array of dimension {ndim}')
     n = arr.shape[axis]
     out = []
     for i in range(n):

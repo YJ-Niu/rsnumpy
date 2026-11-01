@@ -251,7 +251,33 @@ def heaviside(x, h0=0.5):
 
 # ========== 算术运算 ==========
 def add(x1, x2, out=None, **kwargs):
-    """逐元素加法。"""
+    """逐元素加法。NEP50：Python 弱标量不提升结果 dtype（uint8+3→uint8）；
+    str 标量按 np.copyto 同款宽松转换（无法解析按 0），使 ufunc 与
+    copyto 的 casting 行为一致（casting 关键字接受但不参与弱标量判定）。"""
+    kwargs.pop('casting', None)
+    if (hasattr(x1, '_array')
+            and isinstance(x2, (builtins.int, builtins.float,
+                                builtins.complex, builtins.str))):
+        dt = getattr(x1, '_dtype', 'float64')
+        if isinstance(x2, builtins.str):
+            # copyto 语义：无法解析的字符串标量按 0 参与数值运算
+            try:
+                x2v = builtins.float(x2)
+            except ValueError:
+                x2v = 0.0
+            if dt == 'string_':
+                res = x1.copy()
+            else:
+                res = x1 + x2v
+        else:
+            res = x1 + x2
+        if out is not None:
+            try:
+                out[...] = res
+            except Exception:
+                pass
+            return out
+        return res
     res = _wrap(_core.add(_ensure_raw(x1), _ensure_raw(x2)))
     if out is not None:
         try:

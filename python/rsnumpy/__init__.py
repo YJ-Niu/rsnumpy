@@ -2491,6 +2491,12 @@ def _promote_dtype(self_dtype, other):
         return 'int64'
     if self_dtype == 'complex128':
         return 'complex128'
+    if self_dtype == 'complex64':
+        # NEP50：Python 弱复数标量不提升（complex64+3j→complex64）；
+        # complex128 数组操作数仍提升
+        if _operand_is_complex(other):
+            return 'complex64' if not hasattr(other, '_array') else 'complex128'
+        return 'complex64'
     if _operand_is_complex(other):
         return 'complex128'
     if _is_float_dtype(self_dtype):

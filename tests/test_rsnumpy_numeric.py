@@ -267,8 +267,9 @@ class TestNonarrayArgs:
         assert_(isinstance(round(i, ndigits=-2), np.int64))
         assert_array_max_ulp(round(i, ndigits=-2), 500)
 
-    @pytest.mark.xfail(raises=AssertionError, reason="gh-15896")
     def test_round_py_consistency(self):
+        # gh-15896（numpy 侧 bug）：rsnumpy 的标量 round 本就与 Python 一致，
+        # 原 xfail 标记已过时（XPASS）。
         f = 5.1 * 10**73
         assert_equal(round(np.float64(f), -73), round(f, -73))
 
