@@ -244,9 +244,106 @@ def lcm(x1, x2):
     return _wrap(_core.lcm(_asarray(x1)._array, _asarray(x2)._array), "int64")
 
 
+_NA_STRUCT = {
+    # struct 格式 / 位宽 / 无符号位型：C 库做精确 IEEE 往返（round-half-even）
+    'float32': (__import__('struct').Struct('<f'), 32, 'I'),
+    'float16': (__import__('struct').Struct('<e'), 16, 'H'),
+}
+
+
+def _nextafter_prec(a, b, st, width, ufmt):
+    """在给定精度（f16/f32）下计算 a 朝 b 方向的下一 ULP（a、b 为该精度可表示值）。"""
+    import struct as _struct
+    if a != a or b != b:
+        return float('nan')
+    if a < b:
+        step = 1
+    elif a > b:
+        step = -1
+    else:
+        return b
+    bits = _struct.unpack(ufmt, st.pack(a))[0]
+    sign = 1 << (width - 1)
+    # 单调映射：非负保持位型，负值翻转（-0.0 与 +最小次正规相邻）
+    mono = bits if bits < sign else (2 * sign - 1) - bits
+    mono += step
+    bits = mono if mono < sign else (2 * sign - 1) - mono
+    return st.unpack(_struct.pack(ufmt, bits))[0]
+
+
 def nextafter(x1, x2):
-    """逐元素返回 x1 朝 x2 方向的下一个可表示浮点数。"""
-    return _wrap(_core.nextafter(_asarray(x1)._array, _asarray(x2)._array))
+    """逐元素返回 x1 朝 x2 方向的下一个可表示浮点数。
+
+    numpy 语义：结果 dtype 跟随输入提升，next-ULP 按该精度计算
+    （f16/f32/f64 各自的相邻可表示值）。Rust 核心统一以 f64 存储，
+    f16/f32 结果在 Python 层按 IEEE 位级 next-ULP 计算（struct 'e'/'f'
+    的 C 转换保证 round-half-even），f64 结果走 Rust 快速路径。
+    """
+    a1 = _asarray(x1)
+    a2 = _asarray(x2)
+    dt_name = str(getattr(result_type(a1, a2), 'name', 'float64'))
+    if dt_name not in _NA_STRUCT:
+        return _wrap(_core.nextafter(a1._array, a2._array))
+    st, width, ufmt = _NA_STRUCT[dt_name]
+
+    def _flat(x):
+        out = []
+
+        def _r(v):
+            if isinstance(v, list):
+                for e in v:
+                    _r(e)
+            else:
+                out.append(v)
+        _r(x)
+        return out
+
+    sv = _flat(a1.tolist())
+    tv = _flat(a2.tolist())
+    if a1.ndim == 0 and a2.ndim == 0:
+        pairs = [(sv[0], tv[0])]
+        shape = ()
+    elif a1.ndim == 0:
+        pairs = [(sv[0], t) for t in tv]
+        shape = tuple(a2.shape)
+    elif a2.ndim == 0:
+        pairs = [(s, tv[0]) for s in sv]
+        shape = tuple(a1.shape)
+    elif tuple(a1.shape) == tuple(a2.shape):
+        pairs = list(zip(sv, tv))
+        shape = tuple(a1.shape)
+    else:
+        # 尾维对齐广播
+        nd = builtin_max(a1.ndim, a2.ndim)
+        ss = (1,) * (nd - a1.ndim) + tuple(a1.shape)
+        ts = (1,) * (nd - a2.ndim) + tuple(a2.shape)
+        if any(x != y and x != 1 and y != 1 for x, y in zip(ss, ts)):
+            return _wrap(_core.nextafter(a1._array, a2._array))
+        shape = tuple(builtin_max(x, y) for x, y in zip(ss, ts))
+
+        def _strides(sh):
+            out = [1]
+            for d in reversed(sh[:-1]):
+                out.append(out[-1] * d)
+            return list(reversed(out))
+
+        sst, tst, ostr = _strides(ss), _strides(ts), _strides(shape)
+        n = 1
+        for d in shape:
+            n *= d
+        pairs = []
+        for p in range(n):
+            si = ti = 0
+            for ax in range(nd):
+                idx = (p // ostr[ax]) % shape[ax]
+                si += (0 if ss[ax] == 1 else idx) * sst[ax]
+                ti += (0 if ts[ax] == 1 else idx) * tst[ax]
+            pairs.append((sv[si], tv[ti]))
+    vals = [_nextafter_prec(s, t, st, width, ufmt) for s, t in pairs]
+    np_ = _np()
+    if not shape:
+        return np_.ndarray([vals[0]] if vals else []).reshape(())
+    return np_.ndarray(vals).reshape(shape)
 
 
 def spacing(x):
@@ -2049,14 +2146,27 @@ def promote_types(type1, type2):
 
 
 def result_type(*arrays_and_dtypes):
-    """按 NumPy 提升规则返回结果类型。"""
-    import sys as _sys
-    names = []
+    """按 NumPy (NEP 50) 提升规则返回结果类型。
+
+    裸 Python 标量（int/float/complex，非 bool）是"弱标量"：不做值基提升——
+    存在强操作数（数组/dtype/类型）时跟随其类别（float 标量把整数/bool 数组
+    提到 float64，complex 标量把浮点数组提到同宽度复数、整数数组提到
+    complex128）；纯弱标量时按 Python 语义取 int64/float64/complex128。
+    """
+    weak = []
+    strong = []
     for x in arrays_and_dtypes:
+        if isinstance(x, bool):
+            strong.append(x)
+        elif isinstance(x, (int, float, complex)):
+            weak.append(x)
+        else:
+            strong.append(x)
+    names = []
+    for x in strong:
         try:
             n = _canon_dt(x)
-        except Exception as e:
-            print(f"result_type: _canon_dt({type(x).__name__}) raised {e}", file=_sys.stderr)
+        except Exception:
             n = 'float64'
         if not isinstance(n, str):
             n = str(n)
@@ -2076,13 +2186,32 @@ def result_type(*arrays_and_dtypes):
             except Exception:
                 valid_names.append('float64')
     if not valid_names:
-        return _np().dtype('float64')
+        # 纯 Python 标量：complex → complex128，float → float64，int → int64
+        if any(isinstance(w, complex) for w in weak):
+            return _np().dtype('complex128')
+        if any(isinstance(w, float) for w in weak):
+            return _np().dtype('float64')
+        return _np().dtype('int64')
     acc = valid_names[0]
     for n in valid_names[1:]:
         try:
             acc = _promote2(acc, n)
         except Exception:
             acc = 'float64'
+    # 弱标量提升（NEP 50）：不改变浮点/复数强操作数的类型
+    for w in weak:
+        try:
+            k, s = _DT_INFO[acc]
+        except Exception:
+            k, s = 'f', 8
+        if isinstance(w, complex):
+            if k == 'f':
+                acc = 'complex64' if s <= 4 else 'complex128'
+            elif k in ('i', 'u', 'b'):
+                acc = 'complex128'
+        elif isinstance(w, float):
+            if k in ('i', 'u', 'b'):
+                acc = 'float64'
     return _np().dtype(acc)
 
 

@@ -390,10 +390,17 @@ class ndarray:
             self._dtype = _dtype
             self._fields = _fields
 
-    @staticmethod
-    def _wrap(raw_array, _dtype="float64", _fields=None, _raw_data=None):
-        """包装原始 Rust ndarray 到 Python 类。"""
-        obj = ndarray.__new__(ndarray)
+    @classmethod
+    def _wrap(cls, raw_array, _dtype="float64", _fields=None, _raw_data=None):
+        """包装原始 Rust ndarray 到 Python 类。
+
+        classmethod：view(SUBCLS) 时 cls 为子类型，构造出的即该子类实例
+        （numpy 子类语义）。用 ndarray.__new__(cls)（ndarray 无自定义
+        __new__，等价 object.__new__）绕过子类 __new__（可能带必选参数
+        或特殊语义，如 numpy 测试里 Foo.__new__ 调 np.array(*args)），
+        与 numpy 的 view 不经子类 __new__ 的 C 层行为一致。
+        """
+        obj = ndarray.__new__(cls)
         obj._array = raw_array
         obj._dtype = _dtype
         obj._fields = _fields
@@ -5116,6 +5123,36 @@ _DTYPE_TO_TYPESTR = {
 }
 
 
+# 数组接口 typestr → struct 格式码（小端）：无缓冲区协议对象的回退打包
+_ARRAY_INTERFACE_PACK = {
+    ('b', 1): '?', ('i', 1): 'b', ('i', 2): 'h', ('i', 4): 'i', ('i', 8): 'q',
+    ('u', 1): 'B', ('u', 2): 'H', ('u', 4): 'I', ('u', 8): 'Q',
+    ('f', 2): 'e', ('f', 4): 'f', ('f', 8): 'd',
+}
+
+
+def _pack_interface_bytes(values, kind, itemsize):
+    """把 tolist() 值按 typestr 打包为小端字节（无缓冲区协议的回退路径）。"""
+    import struct as _struct
+    code = _ARRAY_INTERFACE_PACK.get((kind, itemsize))
+    if code is None:
+        return None
+    flat = []
+
+    def _r(v):
+        if isinstance(v, list):
+            for e in v:
+                _r(e)
+        elif kind in ('i', 'u'):
+            flat.append(int(v))
+        elif kind == 'f':
+            flat.append(float(v))
+        else:
+            flat.append(bool(v))
+    _r(values)
+    return _struct.pack('<' + code * len(flat), *flat)
+
+
 def _from_array_interface(obj):
     """将实现数组接口协议的对象（如 PIL 图像）解码为 (Rust 数组, dtype)。
 
@@ -5125,15 +5162,36 @@ def _from_array_interface(obj):
     shape = tuple(ai['shape'])
     typestr = ai['typestr']
     data = ai['data']
-    if isinstance(data, tuple):
-        # (指针, 只读标志) 形式，无法直接读取 → 退回到 tobytes()
-        data = obj.tobytes()
-    elif not isinstance(data, (bytes, bytearray)):
-        data = bytes(data)
     kind, itemsize = typestr[1], int(typestr[2:])
     dtype = _ARRAY_INTERFACE_DTYPE.get((kind, itemsize))
     if dtype is None:
         raise TypeError(f"Unsupported array interface type: {typestr}")
+    if isinstance(data, tuple):
+        # (指针, 只读标志) 形式，无法直接读取 → 退回到 tobytes()
+        data = obj.tobytes()
+    elif not isinstance(data, (bytes, bytearray)):
+        _buf = None
+        try:
+            _mv = memoryview(data)
+            if _mv.nbytes:
+                _buf = _mv.tobytes()
+        except (TypeError, BufferError):
+            _buf = None
+        # 校验字节数与 shape×itemsize 一致：缓冲协议暴露的底层存储可能与
+        # 声明的 typestr 不符（如 int32 标签 + f64 存储 → 8 字节），不一致时
+        # 改按值打包重建
+        _expect = itemsize
+        for _d in shape:
+            _expect *= _d
+        if _buf is not None and len(_buf) != _expect:
+            _buf = None
+        if _buf is None and hasattr(data, 'tolist'):
+            # 无（或不可信）缓冲区协议的数组对象：按值打包重建缓冲
+            _buf = _pack_interface_bytes(data.tolist(), kind, itemsize)
+        if _buf is None:
+            data = bytes(data)
+        else:
+            data = _buf
     arr = np.from_buffer_typed(bytes(data), typestr, list(shape))
     return arr, dtype
 
@@ -6286,30 +6344,364 @@ def _datetime_arange(start, stop, step):
     return ndarray(raw, _dtype='datetime64[%s]' % unit)
 
 
+# ========== linspace / logspace / geomspace（numpy 2.x 语义移植） ==========
+
+_LSPACE_INT_DTYPES = frozenset(
+    ('int8', 'int16', 'int32', 'int64', 'uint8', 'uint16', 'uint32', 'uint64'))
+
+
+def _fp_new_nan_count(before, after):
+    """统计运算新产生的 NaN（输入中本就不存在的个数）。
+
+    rsnumpy 的 Rust 算术不自动告警；linspace 等需要按 numpy 语义对
+    "无效运算产生 NaN"（如 0*inf、inf+(-inf)）发出 RuntimeWarning。
+    复数按 numpy 语义处理（实部或虚部为 NaN 即该元素为 NaN）。
+    """
+    import math as _math
+    try:
+        bl = before.tolist() if hasattr(before, 'tolist') else before
+        al = after.tolist() if hasattr(after, 'tolist') else after
+    except Exception:
+        return 0
+    _cnt = 0
+
+    def _is_nan(v):
+        try:
+            if isinstance(v, complex):
+                return _math.isnan(v.real) or _math.isnan(v.imag)
+            return _math.isnan(float(v))
+        except Exception:
+            return False
+
+    def _rec(b, a):
+        nonlocal _cnt
+        if isinstance(b, list) and isinstance(a, list):
+            for x, y in zip(b, a):
+                _rec(x, y)
+        elif not _is_nan(b) and _is_nan(a):
+            _cnt += 1
+
+    _rec(bl, al)
+    return _cnt
+
+
+def _linspace_convert(start, stop):
+    """linspace 端点转换（numpy ``_array_converter`` 的 rsnumpy 等价简化）。
+
+    返回 (start_a, stop_a, dt_name, wrap_type)：端点转基类 ndarray
+    （asanyarray 自动剥离子类——子类无 ``__array_ufunc__``，运算必须在
+    基类上进行），dt_name 为 inexact 结果 dtype 名，wrap_type 为需要
+    回包的 ndarray 子类型（numpy 子类语义）。
+    """
+    wrap_type = None
+    for c in (start, stop):
+        if isinstance(c, ndarray) and type(c) is not ndarray:
+            wrap_type = type(c)
+    start_a = asanyarray(start)
+    stop_a = asanyarray(stop)
+    from . import _extra as _ex
+    dt = _ex.result_type(start_a, stop_a, float)
+    dt_name = str(getattr(dt, 'name', dt))
+    return start_a, stop_a, dt_name, wrap_type
+
+
 def linspace(start, stop, num=50, endpoint=True, retstep=False, dtype=None, axis=0, device=None):
-    """返回指定间隔内均匀间隔的数字。"""
-    start_val = _scalar(_ensure(start))
-    stop_val = _scalar(_ensure(stop))
-    _dtype = _resolve_dtype(dtype)
-    result = ndarray(np.linspace(start_val, stop_val, num, endpoint=endpoint), _dtype=_dtype)
+    """返回指定间隔内均匀间隔的数字。
+
+    numpy 2.x 语义移植：端点可为数组/标量混合（含广播）、复数端点、
+    任意 axis、retstep；integer dtype 先 floor 再截断；相等无穷端点
+    产生 step=0 且不触发虚假告警，混合无穷端点产生 NaN 并告警；
+    输入为 ndarray 子类时结果保留子类类型。
+    """
+    import operator as _op
+    import warnings as _wn
+    num = _op.index(num)
+    if num < 0:
+        raise ValueError(f"Number of samples, {num}, must be non-negative.")
+    div = (num - 1) if endpoint else num
+
+    start_a, stop_a, dt_name, wrap_type = _linspace_convert(start, stop)
+    if dtype is None:
+        out_dtype = dt_name
+        integer_dtype = False
+    else:
+        out_dtype = _resolve_dtype(dtype)
+        integer_dtype = out_dtype in _LSPACE_INT_DTYPES
+
+    # 端点转到 inexact 结果 dtype 后求差（numpy 以 dtype=dt 计算 delta）
+    start_f = start_a.astype(dt_name, copy=False)
+    stop_f = stop_a.astype(dt_name, copy=False)
+
+    # 相等端点（含相等无穷）跳过减法：inf-inf 会产生虚假 NaN 与
+    # "invalid value" 告警；真正非法的组合（混合符号无穷等）仍产生 NaN
+    sub = stop_f - start_f
+    equal = start_f == stop_f
+    if sub.ndim == 0:
+        delta = zeros((), dt_name) if start_f.tolist() == stop_f.tolist() else sub
+    else:
+        delta = sub
+        if bool(equal.any()):
+            delta = sub.copy()
+            delta[equal] = 0.0
+
+    y = arange(0, num, dtype='float64').reshape((-1,) + (1,) * equal.ndim)
+    if dt_name != 'float64':
+        y = y.astype(dt_name, copy=False)
+
+    if div > 0:
+        step = delta / div
+        if bool((step == 0).any()):
+            # 亚正规数特判（gh-5437）：拆成 y/div*delta 保持精度
+            _b = y
+            y = y / div
+            _b2 = y
+            y = y * delta
+            if _fp_new_nan_count(_b, y) or _fp_new_nan_count(_b2, y):
+                _wn.warn("invalid value encountered in multiply", RuntimeWarning)
+        else:
+            _b = y
+            y = y * step
+            if _fp_new_nan_count(_b, y):
+                _wn.warn("invalid value encountered in multiply", RuntimeWarning)
+    else:
+        # 0 个元素或 endpoint=True 且 1 个元素：step 未定义
+        step = float('nan')
+        _b = y
+        y = y * delta
+        if _fp_new_nan_count(_b, y):
+            _wn.warn("invalid value encountered in multiply", RuntimeWarning)
+
+    # 用转换后的 start_f/stop_f（而非原始 start_a/stop_a）：object 端点的
+    # float64+object 运算与 object→float setitem 在 rsnumpy 中不可靠，
+    # 而 start_f/stop_f 已按 inexact 结果 dtype 转换，数值与 numpy 一致
+    _b = y
+    y = y + start_f
+    if _fp_new_nan_count(_b, y):
+        _wn.warn("invalid value encountered in add", RuntimeWarning)
+
+    if endpoint and num > 1:
+        y[-1, ...] = stop_f
+
+    if axis != 0:
+        from . import array_ops as _ao
+        y = _ao.moveaxis(y, 0, axis)
+
+    if integer_dtype:
+        from . import math_functions as _mf
+        y = _mf.floor(y)
+
+    y = y.astype(out_dtype, copy=False)
+    if wrap_type is not None:
+        y = y.view(wrap_type)
     if retstep:
-        step = (stop_val - start_val) / (num - 1) if endpoint else (stop_val - start_val) / num
-        return result, _float64(step)
-    return result
+        return y, step
+    return y
 
 
 def logspace(start, stop, num=50, endpoint=True, base=10.0, dtype=None, axis=0, device=None):
-    """返回对数刻度上均匀间隔的数字。"""
-    _dtype = _resolve_dtype(dtype) if dtype else "float64"
-    return ndarray(np.logspace(float(start), float(stop), num, float(base)), _dtype=_dtype)
+    """返回对数刻度上均匀间隔的数字。
+
+    numpy 2.x 语义移植：支持数组端点与非标量 base（base 沿 axis 展开）。
+    """
+    from . import _extra as _ex
+    from . import math_functions as _mf
+    from . import array_ops as _ao
+
+    if not isinstance(base, (int, float)) and _ex.ndim(base) > 0:
+        # builtins.max：模块级 max 被 rsnumpy ufunc 遮蔽（对裸 int 会 abort）
+        ndmax = builtins.max(_ex.ndim(start), _ex.ndim(stop), _ex.ndim(base))
+
+        def _to_ndmin(a, n):
+            a = asanyarray(a)
+            while a.ndim < n:
+                a = a.reshape((1,) + tuple(a.shape))
+            return a
+
+        start, stop, base = (_to_ndmin(start, ndmax),
+                             _to_ndmin(stop, ndmax),
+                             _to_ndmin(base, ndmax))
+        base = _ao.expand_dims(base, axis=axis)
+
+    # 子类回包（numpy 子类语义）：power 的结果是基类数组，需在此包回
+    _wrap_type = None
+    for _c in (start, stop):
+        if isinstance(_c, ndarray) and type(_c) is not ndarray:
+            _wrap_type = type(_c)
+    y = linspace(start, stop, num=num, endpoint=endpoint, axis=axis)
+    base_a = asanyarray(base)
+    _bdt = str(getattr(_ex.result_type(base_a, y), 'name', 'float64'))
+    res = _mf.power(base_a.astype(_bdt, copy=False), y)
+    if dtype is not None:
+        res = res.astype(_resolve_dtype(dtype), copy=False)
+    if _wrap_type is not None:
+        res = res.view(_wrap_type)
+    return res
+
+
+def _geomspace_complex(start_c, stop_c, num, endpoint):
+    """复数 geomspace：按元素计算最短对数螺旋（numpy gh-25644 语义）。
+
+    rsnumpy 的向量化复数 power 不保证主值分支（短路径）语义，故按元素
+    用 cmath 计算：将 start 旋转到正实轴、在对数域线性插值、再旋转回。
+    返回 complex128 ndarray，形状 (num,) + 广播形状。
+    """
+    import cmath as _cmath
+    import math as _math
+
+    shape = tuple(broadcast(start_c, stop_c).shape)
+
+    def _flat(x):
+        out = []
+
+        def _r(v):
+            if isinstance(v, list):
+                for e in v:
+                    _r(e)
+            else:
+                out.append(v)
+        _r(x)
+        return out
+
+    sv = _flat(start_c.tolist())
+    tv = _flat(stop_c.tolist())
+    if start_c.ndim == 0 and stop_c.ndim == 0:
+        pairs = [(sv[0], tv[0])]
+    elif start_c.ndim == 0:
+        pairs = [(sv[0], t) for t in tv]
+    elif stop_c.ndim == 0:
+        pairs = [(s, tv[0]) for s in sv]
+    elif tuple(start_c.shape) == tuple(stop_c.shape):
+        pairs = list(zip(sv, tv))
+    else:
+        # 一般 numpy 广播（尾维对齐）
+        nd = builtins.max(start_c.ndim, stop_c.ndim)
+        ss = (1,) * (nd - start_c.ndim) + tuple(start_c.shape)
+        ts = (1,) * (nd - stop_c.ndim) + tuple(stop_c.shape)
+        for a, b in zip(ss, ts):
+            if a != b and a != 1 and b != 1:
+                raise ValueError(
+                    'operands could not be broadcast together with shapes '
+                    f'{start_c.shape} {stop_c.shape}')
+        out_shape = tuple(max(a, b) for a, b in zip(ss, ts))
+
+        def _strides(sh):
+            st = [1]
+            for d in reversed(sh[:-1]):
+                st.append(st[-1] * d)
+            return list(reversed(st))
+
+        sst, tst, ostr = _strides(ss), _strides(ts), _strides(out_shape)
+        n = 1
+        for d in out_shape:
+            n *= d
+        pairs = []
+        for p in range(n):
+            si = ti = 0
+            for ax in range(nd):
+                idx = (p // ostr[ax]) % out_shape[ax]
+                si += (0 if ss[ax] == 1 else idx) * sst[ax]
+                ti += (0 if ts[ax] == 1 else idx) * tst[ax]
+            pairs.append((sv[si], tv[ti]))
+
+    div = (num - 1) if endpoint else num
+    per_pair = []
+    for s, t in pairs:
+        s = complex(s)
+        t = complex(t)
+        m = builtins.abs(s)  # builtins：模块级 abs 被 rsnumpy ufunc 遮蔽
+        sg = s / m          # 单位复数：把 start 旋转到正实轴
+        sp = m              # 旋转后的 start（正实）
+        tp = t / sg         # 旋转后的 stop
+        if div > 0:
+            ls = _math.log10(sp)
+            lt = _cmath.log10(tp)
+            vals = [complex(10 ** (ls + (lt - ls) * (i / div))) for i in range(num)]
+        else:
+            vals = [complex(sp)]
+        # exp(log(x)) 未必恰等于 x：端点显式取 start/stop（旋转域）
+        vals[0] = complex(sp)
+        if num > 1 and endpoint:
+            vals[-1] = tp
+        per_pair.append([v * sg for v in vals])
+
+    if num == 0:
+        if shape:
+            return ndarray([]).reshape((0,) + shape).astype('complex128')
+        return ndarray([]).astype('complex128')
+    if shape:
+        # 结果形状 (num,) + 广播形状：按 row-major 逐行（每行取各对的第 i 个值）
+        e_n = len(per_pair)
+        rows = [[per_pair[e][i] for e in range(e_n)] for i in range(num)]
+        return ndarray(rows, _dtype='complex128')
+    return ndarray(per_pair[0], _dtype='complex128')
 
 
 def geomspace(start, stop, num=50, endpoint=True, dtype=None, axis=0, device=None):
-    """返回几何级数上均匀间隔的数字。"""
-    if start <= 0 or stop <= 0:
-        raise ValueError("geomspace requires positive start and stop values")
-    _dtype = _resolve_dtype(dtype) if dtype else "float64"
-    return ndarray(np.geomspace(float(start), float(stop), num), _dtype=_dtype)
+    """返回几何级数上均匀间隔的数字。
+
+    numpy 2.x 语义移植：允许负实数与复数端点（复数走最短对数螺旋），
+    零端点抛 ValueError；输入为 ndarray 子类时结果保留子类类型。
+    """
+    import operator as _op
+    from . import _extra as _ex
+    from . import math_functions as _mf
+    from . import array_ops as _ao
+
+    wrap_type = None
+    for c in (start, stop):
+        if isinstance(c, ndarray) and type(c) is not ndarray:
+            wrap_type = type(c)
+    start_a = asanyarray(start)
+    stop_a = asanyarray(stop)
+
+    def _has_zero(a):
+        _found = [False]
+
+        def _rec(x):
+            if _found[0]:
+                return
+            if isinstance(x, list):
+                for e in x:
+                    _rec(e)
+            elif x == 0:
+                _found[0] = True
+        _rec(a.tolist())
+        return _found[0]
+
+    if _has_zero(start_a) or _has_zero(stop_a):
+        raise ValueError('Geometric sequence cannot include zero')
+
+    num = _op.index(num)
+    # numpy：result_type(start, stop, float(num), zeros((), dtype))——裸标量
+    # 为弱标量（NEP 50），dtype= 指定的 zeros 是决定计算精度的强操作数
+    dt = _ex.result_type(start, stop, float(num), zeros((), dtype))
+    dt_name = str(getattr(dt, 'name', dt))
+    out_dtype = dt_name if dtype is None else _resolve_dtype(dtype)
+
+    start_c = start_a.astype(dt_name, copy=True)
+    stop_c = stop_a.astype(dt_name, copy=True)
+
+    if dt_name.startswith('complex'):
+        result = _geomspace_complex(start_c, stop_c, num, endpoint)
+    else:
+        # 允许负实数：旋转到正实轴（sign ±1）计算后旋转回
+        out_sign = _mf.sign(start_c)
+        start_r = start_c / out_sign
+        stop_r = stop_c / out_sign
+        result = logspace(_mf.log10(start_r), _mf.log10(stop_r), num=num,
+                          endpoint=endpoint, base=10.0, dtype=dt_name)
+        if num > 0:
+            result[0] = start_r
+            if num > 1 and endpoint:
+                result[-1] = stop_r
+        result = result * out_sign
+
+    if axis != 0:
+        result = _ao.moveaxis(result, 0, axis)
+    result = result.astype(out_dtype, copy=False)
+    if wrap_type is not None:
+        result = result.view(wrap_type)
+    return result
 
 
 # ========== 索引函数 ==========
