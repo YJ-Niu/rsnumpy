@@ -944,10 +944,35 @@ def compress(condition, a, axis=None):
     return _wrap(_core.compress(_asarray(condition)._array, _asarray(a)._array, axis))
 
 
+_INT_WRAP_BITS = {'int8': 8, 'int16': 16, 'int32': 32, 'int64': 64,
+                  'uint8': 8, 'uint16': 16, 'uint32': 32, 'uint64': 64}
+
+
 def copyto(dst, src, casting="same_kind", where=True):
-    """将 src 的值复制到 dst（就地，Rust 实现）。"""
+    """将 src 的值复制到 dst（就地，Rust 实现）。
+
+    标量 src 按目标 dtype 语义预转换：整数 dtype 按位宽回绕（numpy wrap
+    语义，300→int8=44）；字符串标量无法解析按 0；字符串 dtype 数组直接
+    写 _raw_data（Rust copyto 会把字符串写成 None 占位）。"""
     _ = casting, where
-    _core.copyto(_asarray(dst)._array, _asarray(src)._array)
+    d = _asarray(dst)
+    dt = getattr(d, '_dtype', 'float64')
+    if isinstance(src, str):
+        if dt in ('string_', 'bytes_') or getattr(d, '_str_dtype', None):
+            n = d.size if d.size else 1
+            d._raw_data = [src] * n
+            return None
+        try:
+            src = float(src)
+        except ValueError:
+            src = 0.0
+    if isinstance(src, int) and not isinstance(src, bool) \
+            and dt in _INT_WRAP_BITS:
+        bits = _INT_WRAP_BITS[dt]
+        src = src & ((1 << bits) - 1)
+        if dt.startswith('int') and src >= (1 << (bits - 1)):
+            src -= (1 << bits)
+    _core.copyto(d._array, _asarray(src)._array)
     return None
 
 

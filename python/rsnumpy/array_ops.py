@@ -273,6 +273,12 @@ def _check_cast_allowed(arr_list, dtype, casting):
             _src = getattr(_arr, '_dtype', 'float64')
             if _src in ('object', 'O'):
                 continue  # object 数组可自由转换（numpy 语义）
+            try:
+                _src_kind = getattr(_dtype_fn(_src), 'kind', None)
+            except Exception:
+                _src_kind = None
+            if _src_kind in ('S', 'U') and getattr(_dtype_fn(dtype), 'kind', None) in ('S', 'U'):
+                continue  # 字符串类别间转换自由（string_→U5 等名称差异不算降级）
             if not _can_cast(_src, _dst, casting=casting):
                 raise TypeError(
                     f"Cannot cast array data from dtype('{_src}') to "
@@ -292,6 +298,15 @@ def _dtype_name(dtype):
         return builtins.str(dtype)
 
 
+def _str_parses(s):
+    """字符串能否解析为数值（copyto 宽松转换的前置判定）。"""
+    try:
+        builtins.float(s)
+        return True
+    except Exception:
+        return False
+
+
 def _out_dtype_of(out):
     """取 out 数组的富 dtype（_dtype_obj 优先，否则存储标签）。"""
     dt = getattr(out, '_dtype_obj', None)
@@ -306,7 +321,23 @@ def _finalize_out(res, out, arr_list, casting):
     （如 f32 舍入）；③ S/U 类字符串 out 经 _raw_data 直搬（浮点 setitem
     写不进字符串占位存储）；④ out 与 dtype 同传由调用方先行抛 TypeError。"""
     _out_dt = _out_dtype_of(out)
+    if not hasattr(_out_dt, 'kind') and _out_dt in ('string_', 'bytes_'):
+        # 字符串数组构造（_string_filled）只带 _str_dtype 宽度信息：
+        # 还原显式 spec（('S',4)→'S4'），避免裸 'string_' 探出 S3
+        _sd = getattr(out, '_str_dtype', None)
+        if _sd and _sd[0] in ('S', 'U') and isinstance(_sd[1], int):
+            _out_dt = f'{_sd[0]}{_sd[1]}'
     _check_cast_allowed(arr_list, _out_dt, casting)
+    # numpy 语义：out 形状与结果不一致 → ValueError（不可静默吞掉）
+    try:
+        _res_shape = builtins.tuple(res.shape)
+    except Exception:
+        _res_shape = None
+    if _res_shape is not None \
+            and builtins.tuple(out.shape) != _res_shape:
+        raise ValueError(
+            f"output array is not the expected shape "
+            f"{_res_shape}, got {builtins.tuple(out.shape)}")
     try:
         res = _apply_dtype(res, _out_dt)
     except Exception:
@@ -351,6 +382,18 @@ def concatenate(arrays, axis=0, out=None, dtype=None, casting="same_kind"):
             raise
         except Exception:
             pass
+    # numpy 语义：len 超过 intc 上限须在迭代（访问任何元素）之前抛
+    try:
+        _max_intc = (1 << 31) - 1
+        _arr_len = builtins.len(arrays)
+        if _arr_len > _max_intc:
+            raise ValueError(
+                f"concatenate() only supports up to {_max_intc} arrays "
+                f"but got {_arr_len}.")
+    except ValueError:
+        raise
+    except Exception:
+        pass
     arr_list = list(arrays)
     if not arr_list:
         raise ValueError("concatenate requires at least one array")
@@ -360,15 +403,27 @@ def concatenate(arrays, axis=0, out=None, dtype=None, casting="same_kind"):
     # （测试注释 "identical to a cast (of a double array)" → 'S3'），
     # 显式宽度（'S0'/'S4'）直接用（np.array 自带截断）。
     _su_spec = None
+    _su_zero_width = False
     if dtype is not None:
         try:
             from .__init__ import dtype as _dtype_fn
-            if getattr(_dtype_fn(dtype), 'kind', None) in ('S', 'U'):
+            _pd = _dtype_fn(dtype)
+            if getattr(_pd, 'kind', None) in ('S', 'U'):
                 _su_spec = str(dtype)
+                _kind = getattr(_pd, 'kind', None)
+                _its = getattr(_pd, 'itemsize', None)
+                # DType 实例带宽度（S4 itemsize=4 / U5 itemsize=20=5×4）→
+                # 还原显式宽度 spec，避免裸 'string_' 语义探出 S3
+                if isinstance(_its, int) and _its > 0:
+                    if _kind == 'S':
+                        _su_spec = f'S{_its}'
+                    elif _kind == 'U' and _its % 4 == 0:
+                        _su_spec = f'U{_its // 4}'
                 # 裸 'S'/'U' 与零宽度 'S0'/'U0' 同规：宽度 = double 转字符串
                 # 的宽度（numpy 测试语义 "identical to a cast of a double
                 # array" → 'S3'），而非按数据推断
                 if _su_spec.lstrip('<>|=')[1:] in ('', '0'):
+                    _su_zero_width = True
                     from .__init__ import array as _array_fn
                     _probe = _array_fn([1.0], dtype=_su_spec)
                     _su_spec = str(_probe.dtype)
@@ -376,12 +431,29 @@ def concatenate(arrays, axis=0, out=None, dtype=None, casting="same_kind"):
             _su_spec = None
     if _su_spec is not None:
         from .__init__ import array as _array_fn
-        # casting 检查先行（如 no/equiv/safe 下 float64→S4 必须 TypeError）
-        _check_cast_allowed(arr_list, dtype, casting)
+        # casting 检查先行（如 no/equiv/safe 下 float64→S4 必须 TypeError）；
+        # 零宽度目标豁免——numpy 对裸 'U'/'S' 的数值→字符串转换按 safe 对待
+        if not _su_zero_width:
+            _check_cast_allowed(arr_list, dtype, casting)
         _vals = []
+
+        def _flatten_all(x):
+            out = []
+            for v in x:
+                if isinstance(v, list):
+                    out.extend(_flatten_all(v))
+                else:
+                    out.append(v)
+            return out
+
         for a in arr_list:
+            if isinstance(a, (builtins.list, builtins.tuple)):
+                # Python list 元素保留原始值（int 0 → '0' 而非数值化 '0.0'）
+                _vals.extend(_flatten_all(builtins.list(a)))
+                continue
             arr = a if hasattr(a, '_array') else _wrap(a)
-            _vals.extend(arr.tolist())
+            _t = arr.tolist()
+            _vals.extend(_flatten_all(_t) if isinstance(_t, list) else [_t])
         # numpy 语义：dtype='S' 不检查/字符串化 None → TypeError
         if builtins.any(v is None for v in _vals):
             raise TypeError(
@@ -390,6 +462,90 @@ def concatenate(arrays, axis=0, out=None, dtype=None, casting="same_kind"):
         return _array_fn(_strs, dtype=_su_spec)
     nd = _nd()
     _dt = dtype if dtype is not None else getattr(first, '_dtype', "float64")
+    # numpy 语义：0-d 数组不能直接拼接（"Scalars cannot be concatenated"）
+    if axis is not None and builtins.any(
+            (hasattr(a, '_array') and getattr(a, 'ndim', 0) == 0)
+            or (not hasattr(a, '_array') and not isinstance(
+                a, (builtins.list, builtins.tuple, builtins.str)))
+            for a in arr_list):
+        raise ValueError("zero-dimensional arraylets cannot be concatenated")
+    # numpy 语义：ndim 不一致时报 "all the input arrays must have same
+    # number of dimensions..."（Rust 层只有笼统的 incompatible shapes）
+    if axis is not None:
+        _ndims = []
+        for _a in arr_list:
+            _wa = _a if hasattr(_a, '_array') else _wrap(_a)
+            _ndims.append(getattr(_wa, 'ndim', 0))
+        if _ndims and builtins.len(builtins.set(_ndims)) > 1:
+            _i1 = builtins.next(
+                (i for i, d in builtins.enumerate(_ndims) if d != _ndims[0]), 1)
+            raise ValueError(
+                "all the input arrays must have same number of dimensions, "
+                f"but the array at index 0 has {_ndims[0]} dimension(s) "
+                f"and the array at index {_i1} has {_ndims[_i1]} dimension(s)")
+        # 同 ndim 但拼接轴外维度尺寸不一致 → numpy 格式消息
+        if axis is not None and _ndims and builtins.len(
+                builtins.set(_ndims)) == 1:
+            _ax = axis % max(_ndims[0], 1)
+            _shapes = [
+                builtins.tuple(
+                    (_a if hasattr(_a, '_array') else _wrap(_a)).shape)
+                for _a in arr_list]
+            for _i in range(1, builtins.len(_shapes)):
+                for _d in range(_ndims[0]):
+                    if _d == _ax:
+                        continue
+                    if _shapes[_i][_d] != _shapes[0][_d]:
+                        raise ValueError(
+                            "all the input array dimensions except for the "
+                            "concatenation axis must match exactly, but along "
+                            f"dimension {_d}, the array at index 0 has size "
+                            f"{_shapes[0][_d]} and the array at index {_i} "
+                            f"has size {_shapes[_i][_d]}")
+    # 负 axis 归一化：越界直达 Rust 会 abort，须在 Python 边界校验
+    if axis is not None:
+        from .exceptions import AxisError
+        _first_ndim = getattr(first, 'ndim', 0)
+        if axis < 0:
+            axis += _first_ndim
+        if not 0 <= axis < _first_ndim:
+            raise AxisError(
+                f'axis {axis} is out of bounds for array of '
+                f'dimension {_first_ndim}')
+    # copyto 语义对齐：str 标量元素按宽松转换（无法解析按 0），
+    # 与 np.copyto(dst, 'x', casting=...) 成功的行为一致
+    if builtins.any(isinstance(a, builtins.str) for a in arr_list):
+        arr_list = [
+            (builtins.float(a) if _str_parses(a) else 0.0)
+            if isinstance(a, builtins.str) else a
+            for a in arr_list
+        ]
+    # numpy 语义：pyscalar 越界（如 300→int8、2**64→int64）构造时抛
+    # OverflowError——仅在无显式 dtype= 时（目标由输入推断）；显式 dtype=
+    # 时标量走 copyto 宽松语义（wrap，不抛）。first 为标量时推断出
+    # float64 不可信，out 的 dtype 也参与检查。
+    if dtype is None and casting != "unsafe":
+        try:
+            from .__init__ import _INT_RANGES, dtype as _dtype_fn
+            _tgt_candidates = [_dt]
+            if out is not None:
+                _tgt_candidates.append(_out_dtype_of(out))
+            for _tgt_dt in _tgt_candidates:
+                _tgt_name = getattr(_dtype_fn(_tgt_dt), 'name', None) \
+                    if not isinstance(_tgt_dt, str) else _tgt_dt
+                if _tgt_name not in _INT_RANGES:
+                    continue
+                _lo, _hi = _INT_RANGES[_tgt_name]
+                for _a in arr_list:
+                    if isinstance(_a, builtins.int) \
+                            and not isinstance(_a, builtins.bool) \
+                            and not (_lo <= _a <= _hi):
+                        raise OverflowError(
+                            f"Python int too large to convert to {_tgt_name}")
+        except OverflowError:
+            raise
+        except Exception:
+            pass
     fields = getattr(first, '_fields', None)
     raw_data = getattr(first, '_raw_data', None)
     raw_list = [_ensure_raw(a) for a in arr_list]
@@ -410,6 +566,10 @@ def concatenate(arrays, axis=0, out=None, dtype=None, casting="same_kind"):
     if out is not None:
         return _finalize_out(res, out, arr_list, casting)
     return res
+
+
+# numpy 的 __array_function__ dispatcher 会访问 ._implementation 直调实现
+concatenate._implementation = concatenate
 
 
 def stack(arrays, axis=0, out=None, dtype=None, casting="same_kind"):
@@ -467,6 +627,10 @@ def vstack(arrays, out=None, dtype=None, casting="same_kind"):
     arr_list = list(arrays)
     if not arr_list:
         raise ValueError("vstack requires at least one array")
+    # numpy 语义：0-d 数组先按 (1,) 展平再堆叠
+    for _i, _a in builtins.enumerate(arr_list):
+        if hasattr(_a, '_array') and getattr(_a, 'ndim', 0) == 0:
+            arr_list[_i] = _a.reshape((1,))
     first = arr_list[0] if hasattr(arr_list[0], '_array') else _wrap(arr_list[0])
     nd = _nd()
     dtype0 = getattr(first, '_dtype', "float64")
@@ -498,6 +662,10 @@ def hstack(arrays, out=None, dtype=None, casting="same_kind"):
     arr_list = list(arrays)
     if not arr_list:
         raise ValueError("hstack requires at least one array")
+    # numpy 语义：0-d 数组先按 (1,) 展平再堆叠
+    for _i, _a in builtins.enumerate(arr_list):
+        if hasattr(_a, '_array') and getattr(_a, 'ndim', 0) == 0:
+            arr_list[_i] = _a.reshape((1,))
     first = arr_list[0] if hasattr(arr_list[0], '_array') else _wrap(arr_list[0])
     nd = _nd()
     dtype0 = getattr(first, '_dtype', "float64")

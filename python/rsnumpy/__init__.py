@@ -1218,6 +1218,12 @@ class ndarray:
             return _wrap_result(self._array + other_arr._array, dt)
         return _wrap_result(self._array + other, dt)
 
+    def __concat__(self, other):
+        # numpy ndarray 无序列拼接语义：operator.concat/`+` 拼接须 TypeError
+        raise TypeError(
+            f"cannot concatenate {builtins.type(self).__name__} objects; "
+            "use np.concatenate")
+
     def __radd__(self, other):
         dt = _promote_dtype(self._dtype, other)
         if self.size == 0:
@@ -6080,11 +6086,36 @@ def _attach_byteorder(arr, dtype):
     return arr
 
 
+def _string_dtype_spec(dtype):
+    """dtype 是带宽度/裸的 S/U 字符串简写（'U5'/'S4'/'S'/'U0'）时原样返回，
+    否则 None。供 zeros/ones/empty 走字符串数组构造。"""
+    if isinstance(dtype, str):
+        core = dtype[1:] if dtype and dtype[0] in '<>|=' else dtype
+        if core and core[0] in 'SU' \
+                and (len(core) == 1 or core[1:].isdigit()):
+            return dtype
+    return None
+
+
+def _string_filled(shape, fill, dtype):
+    """按形状生成字符串填充数组（zeros 填 ''、ones 填 '1'，与 numpy 一致）。"""
+    if isinstance(shape, int):
+        n = shape
+    else:
+        n = 1
+        for s in shape:
+            n *= int(s)
+    return array([fill] * n, dtype=dtype)
+
+
 def zeros(shape, dtype=None, order='C', buffer=None, *, device=None, like=None):
     """返回指定形状的零数组。"""
     dt_obj = _as_struct_dtype(dtype)
     if dt_obj is not None:
         return _wrap_structured(dt_obj, _make_struct_filled(shape, dt_obj, _zero_scalar_for))
+    _su = _string_dtype_spec(dtype)
+    if _su is not None:
+        return _string_filled(shape, '', _su)
     _dtype = _resolve_dtype(dtype)
     raw = _maybe_native_complex(np.zeros(shape), _dtype)
     return _attach_byteorder(
@@ -6097,6 +6128,9 @@ def ones(shape, dtype=None, order='C', buffer=None, *, device=None, like=None):
     dt_obj = _as_struct_dtype(dtype)
     if dt_obj is not None:
         return _wrap_structured(dt_obj, _make_struct_filled(shape, dt_obj, _one_scalar_for))
+    _su = _string_dtype_spec(dtype)
+    if _su is not None:
+        return _string_filled(shape, '1', _su)
     _dtype = _resolve_dtype(dtype)
     raw = _maybe_native_complex(np.ones(shape), _dtype)
     return _attach_byteorder(
@@ -6109,6 +6143,9 @@ def empty(shape, dtype=None, order='C', buffer=None, *, device=None, like=None):
     dt_obj = _as_struct_dtype(dtype)
     if dt_obj is not None:
         return _wrap_structured(dt_obj, _make_struct_filled(shape, dt_obj, _zero_scalar_for))
+    _su = _string_dtype_spec(dtype)
+    if _su is not None:
+        return _string_filled(shape, '', _su)
     _dtype = _resolve_dtype(dtype)
     raw = _maybe_native_complex(np.empty(shape), _dtype)
     arr = ndarray(raw._array if hasattr(raw, '_array') else raw, _dtype=_dtype)

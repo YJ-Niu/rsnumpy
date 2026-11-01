@@ -9,6 +9,11 @@ import builtins
 import rsnumpy.num_core as _core
 
 
+def _np_mod():
+    import rsnumpy
+    return rsnumpy
+
+
 def _get_strings(a):
     """从 ndarray 或列表中提取字符串列表（bytes 解码为 utf-8 str）。"""
     if isinstance(a, (str, bytes)):
@@ -664,7 +669,34 @@ class chararray:
         return multiply(self, other)
 
     def _cmp(self, other, op):
-        return _bool_op(op, self, other=other)
+        # numpy chararray 语义：比较前对两侧值 strip 尾部空格
+        # （'123' == '123  ' 为 True，'123' < '123  ' 为 False）
+        a_vals = _decode(self._vals())
+        if hasattr(other, '_vals'):
+            b_vals = _decode(other._vals())
+        elif hasattr(other, 'tolist'):
+            b_vals = _decode(_flatten(other.tolist(), []))
+        else:
+            b_vals = [_as_str_arg(other)] * builtins.len(a_vals)
+        ops = {'equal': lambda x, y: x == y,
+               'not_equal': lambda x, y: x != y,
+               'greater': lambda x, y: x > y,
+               'less': lambda x, y: x < y,
+               'greater_equal': lambda x, y: x >= y,
+               'less_equal': lambda x, y: x <= y}
+        _fn = ops.get(op)
+        if _fn is None:
+            return _bool_op(op, self, other=other)
+        shape = _shape_of(self._inst)
+        a_t = [v.rstrip(' ') if isinstance(v, str) else v for v in a_vals]
+        b_t = [v.rstrip(' ') if isinstance(v, str) else v for v in b_vals]
+        n = builtins.len(a_t)
+        if builtins.len(b_t) == 1 and n != 1:
+            b_t = b_t * n
+        res = [_fn(x, y) for x, y in builtins.zip(a_t, b_t)]
+        np = _np_mod()
+        out = np.array(res, dtype='bool')
+        return out.reshape(shape) if shape else out
 
     def __eq__(self, other):
         return self._cmp(other, 'equal')
