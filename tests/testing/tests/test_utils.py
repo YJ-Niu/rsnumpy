@@ -1160,6 +1160,7 @@ class TestArrayAssertLess:
         with pytest.raises(AssertionError):
             self._assert_func(x, y.astype(np.float32), strict=True)
 
+
 @pytest.mark.filterwarnings(
     "ignore:.*NumPy warning suppression and assertion utilities are deprecated"
     ".*:DeprecationWarning")
@@ -1412,6 +1413,7 @@ class TestAssertAllclose:
         expected_msg = 'inf values mismatch:'
         with pytest.raises(AssertionError, match=re.escape(expected_msg)):
             assert_allclose(a, b)
+
 
 class TestArrayAlmostEqualNulp:
 
