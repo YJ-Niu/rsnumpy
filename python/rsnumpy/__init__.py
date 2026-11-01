@@ -528,6 +528,25 @@ class ndarray:
             return 1
         return len(self._array)
 
+    def tofile(self, file, sep='', format='%s'):
+        """将数组写入文件（numpy ndarray.tofile 兼容）。
+
+        二进制模式（sep=''）逐记录/逐元素打包；结构化数组按字段
+        顺序写入原始字节（无 padding 差异，与 numpy 一致）。
+        """
+        from rsnumpy._core import multiarray
+        if sep:
+            vals = multiarray._flat_values(self)
+            text = sep.join(format % v for v in vals)
+            data = text.encode('utf-8')
+        else:
+            data = multiarray.pack_array_bytes(self)
+        if hasattr(file, 'write'):
+            file.write(data)
+        else:
+            with open(file, 'wb') as f:
+                f.write(data)
+
     def tolist(self):
         """转换为 Python 列表，元素类型与 _dtype 一致。"""
         raw = getattr(self, '_raw_data', None)
@@ -3867,6 +3886,11 @@ class _Record:
         if isinstance(other, _Record):
             return tuple(self._values) == tuple(other._values)
         return NotImplemented
+
+    def __reduce__(self):
+        """pickle 协议：经 _core.multiarray.scalar 还原（numpy 兼容）。"""
+        from rsnumpy._core import multiarray
+        return (multiarray.scalar, (self._dtype_obj, tuple(self._values)))
 
     def __repr__(self):
         return _fmt_record(tuple(self._values), self._dtype_obj)
