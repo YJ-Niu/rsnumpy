@@ -37,9 +37,11 @@ def collect(files):
     nodeids = []
     for line in r.stdout.splitlines():
         line = line.strip()
-        # a nodeid line starts with a .py path and contains '::'
+        # a nodeid line starts with a .py path and contains '::'.
+        # Keep the WHOLE line: parameter ids may contain spaces, and splitting
+        # on space truncated them into unresolvable nodeids (pytest rc=4).
         if line.endswith(".py") is False and ".py::" in line and line.count("::") >= 1:
-            nodeids.append(line.split(" ")[0])
+            nodeids.append(line)
     # de-dup, keep order
     seen, out = set(), []
     for n in nodeids:
@@ -66,10 +68,15 @@ def run_one(nodeid):
     # Force crash-skip OFF so the survey always catches (and reports) crashes,
     # even if the parent environment has RSNUMPY_COMPAT_SKIP_CRASHES=1 (build).
     env = {**os.environ, "RSNUMPY_COMPAT_SKIP_CRASHES": "0"}
-    r = subprocess.run(
-        [PY, "-m", "pytest", nodeid, "-q", "-p", "no:cacheprovider", "--no-header", "-x"],
-        capture_output=True, text=True, cwd=ROOT, timeout=180, env=env,
-    )
+    try:
+        r = subprocess.run(
+            [PY, "-m", "pytest", nodeid, "-q", "-p", "no:cacheprovider", "--no-header", "-x"],
+            capture_output=True, text=True, cwd=ROOT, timeout=180, env=env,
+        )
+    except subprocess.TimeoutExpired:
+        # Hang (e.g. gh-32809 boundary under load) — report it like a crash
+        # instead of letting the exception kill the whole survey.
+        return "crashed", nodeid
     return classify(r), nodeid
 
 
@@ -103,6 +110,7 @@ def main(files):
                 detail["failed"].append(nodeid)
             elif status not in ("passed", "skipped"):
                 detail["error"].append((status, nodeid))
+            print(f"RESULT {status} {nodeid}", file=sys.stderr)
             if i % 50 == 0 or i == len(nodeids):
                 print(f"  ...{i}/{len(nodeids)}", file=sys.stderr)
 

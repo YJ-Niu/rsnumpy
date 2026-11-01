@@ -324,7 +324,13 @@ class ndarray:
                         _vals = list(flat) if flat else (
                             list(data) if isinstance(data, (list, tuple)) else [data])
                         _scalar_in = not isinstance(data, (list, tuple))
-                        if str(_dtype) in ('bytes_', 'S'):
+                        _flat_bytes = bool(flat) and _py_all(
+                            isinstance(v, (bytes, bytearray)) for v in flat)
+                        _explicit_u = str(_dtype) in ('U', 'unicode_')
+                        if str(_dtype) in ('bytes_', 'S') or (
+                                _flat_bytes and not _explicit_u):
+                            # bytes 存储（S）：bytes 原样，其余 utf-8 编码。
+                            # 无显式 dtype 的全 bytes 输入也归 S（numpy 语义）。
                             _vals = [
                                 (v if isinstance(v, (bytes, bytearray))
                                  else str(v).encode('utf-8'))
@@ -332,17 +338,16 @@ class ndarray:
                             self._str_dtype = ('S', _py_max(
                                 (len(v) for v in _vals), default=0))
                         else:
-                            _vals = [v if isinstance(v, str) else str(v)
-                                     for v in _vals]
-                            # 记录 (kind, width)，供 dtype/itemsize 与整数索引取标量使用：
-                            # Python str 按 rsnumpy 惯例归为 unicode 'U'，bytes 归为 'S'。
-                            if flat and _py_all(
-                                    isinstance(v, (bytes, bytearray)) for v in flat):
-                                self._str_dtype = ('S', _py_max(
-                                    (len(bytes(v)) for v in flat), default=0))
-                            else:
-                                self._str_dtype = ('U', _py_max(
-                                    (len(v) for v in _vals), default=0))
+                            # str 存储（U）：bytes utf-8 解码（numpy 语义），
+                            # 其余非 str 按 str() 转换。
+                            _vals = [
+                                (v if isinstance(v, str)
+                                 else (v.decode('utf-8', 'surrogateescape')
+                                       if isinstance(v, (bytes, bytearray))
+                                       else str(v)))
+                                for v in _vals]
+                            self._str_dtype = ('U', _py_max(
+                                (len(v) for v in _vals), default=0))
                         self._raw_data = _vals
                         # 保留嵌套形状（flat 值数 == 嵌套元素数）：
                         # np.array([["a","b"],["c","d"]], dtype='U') → (2, 2)
@@ -735,6 +740,33 @@ class ndarray:
         # 标量布尔值作为索引：转换为 0-d rsnumpy 数组
         if isinstance(key, bool):
             key = ndarray([key], _dtype='bool')
+        # S/U 原始数据数组：整数标量索引直接从 _raw_data 取（Rust 路径对
+        # 字符串数组返回占位值）。
+        _rd = getattr(self, '_raw_data', None)
+        if _rd is not None and builtins.len(_rd) > 0:
+            _sk = getattr(getattr(self, 'dtype', None), 'kind', '')
+            if _sk in ('S', 'U'):
+                _sh = self.shape
+                _nd = self.ndim
+                if builtins.isinstance(key, (int,)) and not builtins.isinstance(key, bool):
+                    if _nd == 1:
+                        return _rd[key % _sh[0]]
+                    _st = 1
+                    for _d in _sh[1:]:
+                        _st *= _d
+                    _k = key % _sh[0]
+                    return array(_rd[_k * _st:(_k + 1) * _st], dtype=_sk)
+                if (builtins.isinstance(key, tuple)
+                        and builtins.len(key) == _nd
+                        and builtins.all(
+                            builtins.isinstance(k, (int,))
+                            and not builtins.isinstance(k, bool)
+                            for k in key)):
+                    _idx = 0
+                    for _k, _d in builtins.zip(key, _sh):
+                        _idx = _idx * _d + (_k % _d)
+                    if _idx < builtins.len(_rd):
+                        return _rd[_idx]
         # 结构化数组索引：字段 / 多字段 / 记录标量 / 子结构切片
         if getattr(self, '_dtype_obj', None) is not None:
             handled, res = _struct_getitem(self, key)
@@ -1730,6 +1762,10 @@ class ndarray:
         """若数组是另一数组的视图则返回其基数组，否则返回 None。"""
         return getattr(self, '_base', None)
 
+    @base.setter
+    def base(self, v):
+        object.__setattr__(self, '_base', v)
+
     @property
     def ndim(self):
         """返回数组维度数量。"""
@@ -1956,8 +1992,10 @@ class ndarray:
         """返回最小值的索引。"""
         return _ndarray_methods().argmin(self, axis)
 
-    def argsort(self, axis=-1):
+    def argsort(self, axis=-1, kind=None, stable=None):
         """返回排序后的索引。"""
+        # numpy 语义：接受 kind/stable 关键字（stable 即默认行为）。
+        _ = kind, stable
         return _ndarray_methods().argsort(self, axis)
 
     def sort(self, axis=-1):
@@ -4189,7 +4227,7 @@ def _make_scalar_type(name, base, pybase, itemsize, zero):
             '__complex__': lambda self: builtins.complex(self._value),
             '__bool__': lambda self: builtins.bool(self._value),
             '__index__': lambda self: builtins.int(self._value),
-            '__repr__': lambda self: builtins.repr(self._value),
+            '__repr__': lambda self: 'np.{}({})'.format(name, self._value),
             '__str__': lambda self: builtins.str(self._value),
             '__format__': lambda self, fmt: format(self._value, fmt),
         })
@@ -4232,8 +4270,8 @@ def _bool_new(cls, val=False, *args):
     return inst
 
 
-string_ = type('string_', (character,), {})
-unicode_ = type('unicode_', (character,), {})
+string_ = type('string_', (character, bytes), {})
+unicode_ = type('unicode_', (character, str), {})
 bytes_ = string_  # rsnumpy 中 bytes_ 为字节字符串类型
 str_ = unicode_   # rsnumpy 中 str_ 为 unicode 字符串类型
 _bool_ns = {
@@ -5019,7 +5057,7 @@ def _flatten_check(data):
             flat.append(item)
             if isinstance(item, complex):
                 has_complex = True
-            elif isinstance(item, str):
+            elif isinstance(item, (str, bytes, bytearray)):
                 has_string = True
     return flat, has_complex, has_string
 
@@ -5262,6 +5300,9 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
     - 大整数（<2^53）：使用 int64
     - 混合类型：使用结构化数组或 Python 列表
     """
+    # str 数据 + 'c' dtype：legacy numpy char 语义 → 逐字符 1-d S1。
+    if isinstance(data, str) and dtype is not None and str(dtype) == 'c':
+        return array(list(data), dtype='S1')
     if dtype is None:
         # ndarray 输入快速路径：直接沿用其 dtype，避免走回退路径产生 object dtype 警告。
         if _is_ndarray(data):
@@ -5409,66 +5450,80 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
             if _is_ndarray(data):
                 flat = _pyflat(data.tolist())
             elif isinstance(data, (list, tuple)):
-                # numpy 只解包一层 array-like：ndarray/__array__ 元素展开为其元素
-                _exp = []
-                for _it in data:
-                    if _is_ndarray(_it):
-                        _t = _it.tolist()
-                        _exp.append(_pyflat(_t) if isinstance(_t, list) else [_t])
-                    elif (not isinstance(_it, (list, tuple, str, bytes))
-                          and hasattr(_it, '__array__')):
-                        try:
-                            _inner = _it.__array__()
-                        except Exception:
-                            _inner = _it
-                        if _is_ndarray(_inner):
-                            _t = _inner.tolist()
+                # 纯嵌套列表（无数组元素，含多维）：直接展平 + 保留形状。
+                _has_arr_el = builtins.any(
+                    _is_arr_like_el(_it) for _it in data
+                    if not isinstance(_it, (list, tuple, str, bytes)))
+                if _has_arr_el:
+                    # numpy 只解包一层 array-like：ndarray/__array__ 元素展开为其元素
+                    _exp = []
+                    for _it in data:
+                        if _is_ndarray(_it):
+                            _t = _it.tolist()
                             _exp.append(_pyflat(_t) if isinstance(_t, list) else [_t])
-                        elif isinstance(_inner, (list, tuple)):
-                            _exp.extend(_inner)
+                        elif (not isinstance(_it, (list, tuple, str, bytes))
+                              and hasattr(_it, '__array__')):
+                            try:
+                                _inner = _it.__array__()
+                            except Exception:
+                                _inner = _it
+                            if _is_ndarray(_inner):
+                                _t = _inner.tolist()
+                                _exp.append(_pyflat(_t) if isinstance(_t, list) else [_t])
+                            elif isinstance(_inner, (list, tuple)):
+                                _exp.extend(_inner)
+                            else:
+                                _exp.append(_inner)
+                        elif (isinstance(_it, memoryview)
+                              or (not isinstance(_it, (list, tuple, str, bytes,
+                                                       int, float, complex, bool))
+                                  and (hasattr(_it, '__array_interface__')
+                                       or hasattr(_it, '__array_struct__')
+                                       or hasattr(_it, '__buffer__')))):
+                            # buffer/数组接口对象：解包一层（numpy 语义）
+                            try:
+                                _inner = np.array(_it)
+                                _iv = _inner.tolist()
+                                _mv = _pyflat(_iv) if isinstance(_iv, list) else [_iv]
+                            except Exception:
+                                _mv = [_it]
+                            if _mv and builtins.all(
+                                    not isinstance(v, (list, tuple)) for v in _mv):
+                                _exp.append(_mv)
+                            else:
+                                _exp.extend(_mv)
                         else:
-                            _exp.append(_inner)
-                    elif (isinstance(_it, memoryview)
-                          or (not isinstance(_it, (list, tuple, str, bytes,
-                                                   int, float, complex, bool))
-                              and (hasattr(_it, '__array_interface__')
-                                   or hasattr(_it, '__array_struct__')
-                                   or hasattr(_it, '__buffer__')))):
-                        # buffer/数组接口对象：解包一层（numpy 语义）
-                        try:
-                            _inner = np.array(_it)
-                            _iv = _inner.tolist()
-                            _mv = _pyflat(_iv) if isinstance(_iv, list) else [_iv]
-                        except Exception:
-                            _mv = [_it]
-                        if _mv and builtins.all(
-                                not isinstance(v, (list, tuple)) for v in _mv):
-                            _exp.append(_mv)
+                            _exp.append(_it)
+                    if _exp and builtins.all(isinstance(r, list) for r in _exp) and _exp[0]:
+                        _w0 = len(_exp[0])
+                        if builtins.all(len(r) == _w0 for r in _exp):
+                            _s_shape = (len(_exp), _w0)
+                            flat = [v for r in _exp for v in r]
                         else:
-                            _exp.extend(_mv)
-                    else:
-                        _exp.append(_it)
-                if _exp and builtins.all(isinstance(r, list) for r in _exp) and _exp[0]:
-                    _w0 = len(_exp[0])
-                    if builtins.all(len(r) == _w0 for r in _exp):
-                        _s_shape = (len(_exp), _w0)
-                        flat = [v for r in _exp for v in r]
+                            flat = _flatten_data(_exp)
                     else:
                         flat = _flatten_data(_exp)
                 else:
-                    flat = _flatten_data(_exp)
+                    flat = _flatten_data(data)
+                    _s_shape = _nested_shape(data)
             else:
                 flat = [data]
                 _s_scalar = True
             kind, width = sd
+            # S 目标：元素统一存 bytes；U 目标：统一存 str（numpy S/U dtype
+            # 存储语义），宽度推断基于转换后长度。
+            if kind == 'S':
+                flat = [v if isinstance(v, (bytes, bytearray))
+                        else str(v).encode('utf-8', 'surrogateescape')
+                        for v in flat]
+            else:
+                flat = [v if isinstance(v, str)
+                        else (v.decode('utf-8', 'surrogateescape')
+                              if isinstance(v, (bytes, bytearray)) else str(v))
+                        for v in flat]
             if width == 0:
                 # numpy 的裸 'S'/'U'：按数据推断最小宽度
-                if kind == 'S':
-                    width = _py_max(
-                        (len(v) if isinstance(v, (bytes, bytearray)) else len(str(v)) for v in flat),
-                        default=0)
-                else:
-                    width = _py_max((len(str(v)) for v in flat), default=0)
+                width = _py_max((len(v) for v in flat), default=0)
                 sd = (kind, width)
             arr = ndarray._wrap(np.zeros((len(flat),)), _dtype='string_', _raw_data=list(flat))
             if _s_shape is not None and _s_shape != (len(flat),):

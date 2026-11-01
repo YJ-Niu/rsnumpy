@@ -239,9 +239,25 @@ class NdArrayMethods:
         """改变数组形状而不改变数据。"""
         ndarray, _ = _get_deps()
         if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
-            shape = shape[0]
+            shape = builtins.tuple(shape[0])
         else:
-            shape = shape
+            shape = builtins.tuple(shape)
+        # 0 尺寸数组：Rust 不接受 0 维——占位 + shape override（numpy 语义）。
+        _sz = 1
+        for _d in shape:
+            _sz *= _d
+        if _sz == 0:
+            import rsnumpy as _rn
+            out = ndarray._wrap(_rn.zeros((1,)),
+                                _dtype=getattr(arr, '_dtype', "float64"),
+                                _fields=getattr(arr, '_fields', None),
+                                _raw_data=getattr(arr, '_raw_data', None))
+            out._rs_shape_override = shape
+            try:
+                out._rs_parent = arr
+            except Exception:
+                pass
+            return out
         try:
             result = arr._array.reshape(shape)
         except ValueError:

@@ -1,33 +1,18 @@
 """numpy._core._rational_tests 兼容实现。
 
-NumPy 在该模块定义测试专用 ``rational`` 标量 dtype（C 层类型）。
-rsnumpy 以纯 Python 类近似：提供 ``rational``/``rational2`` 名称与
-非 dtype 的 ``.dtype`` 哨兵，使 ``sctype2char``/``obj2sctype`` 等检查
-得到与 NumPy 一致的 KeyError 语义。rational dtype 的存储与算术
-未实现（依赖它的 scalar coercion 测试仍会失败）。
+NumPy 在该模块定义测试专用 ``rational`` 标量 dtype（C 层类型：真实
+dtype，但不在 sctypeDict 中）。rsnumpy 以纯 Python 类近似：
+
+- ``dtype`` 属性返回 object dtype——使标量构造路径（``np.array`` /
+  ``astype`` / setitem）可用；
+- 类型本身不在 sctypeDict 中，且类级 ``rational.dtype`` 是 property
+  对象（非 dtype 实例）——使 ``sctype2char`` 得到与 NumPy 一致的
+  KeyError。
+
+rational dtype 的专用存储与算术未实现（依赖它的 casting 测试仍失败）。
 """
 
 __all__ = ['rational', 'rational2']
-
-
-class _RationalDType:
-    """dtype 哨兵（非 rsnumpy dtype，仅用于类型检查兼容）。"""
-
-    kind = 'V'
-    itemsize = 16
-
-    def __init__(self, type_):
-        self.type = type_
-
-    def __repr__(self):
-        return f"rational_dtype({self.type.__name__})"
-
-    def __eq__(self, other):
-        return (isinstance(other, _RationalDType)
-                and other.type is self.type)
-
-    def __hash__(self):
-        return id(self)
 
 
 class rational:
@@ -39,7 +24,8 @@ class rational:
 
     @property
     def dtype(self):
-        return _RATIONAL_DT
+        import rsnumpy
+        return rsnumpy.dtype('O')
 
     def __repr__(self):
         return f"rational({self.real}, {self.imag})"
@@ -52,18 +38,8 @@ class rational:
         return hash((self.real, self.imag))
 
 
-_RATIONAL_DT = _RationalDType(rational)
-
-
 class rational2(rational):
-    """第二个测试用有理数类型（独立 dtype 哨兵）。"""
-
-    @property
-    def dtype(self):
-        return _RATIONAL2_DT
+    """第二个测试用有理数类型（独立的类身份，共享 object dtype 近似）。"""
 
     def __repr__(self):
         return f"rational2({self.real}, {self.imag})"
-
-
-_RATIONAL2_DT = _RationalDType(rational2)
