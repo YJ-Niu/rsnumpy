@@ -2,10 +2,14 @@
 set -euo pipefail
 
 # Build Rust lib into Python wheel using maturin
-# Usage: ./build_wheel.sh [--release|--debug] [--out-dir DIR] [--python PYTHON_EXEC]
+# Usage: ./build_wheel.sh [--release|--debug] [--out-dir DIR] [--python PYTHON_EXEC] [--test all|debug]
 #
 # 跨平台：macOS / Linux 直接运行；Windows 请在 Git Bash 或 WSL 中运行
 # （venv 布局会自动切换为 Scripts/python.exe）。
+#
+# 测试参数 --test：
+#   all   全量跑 ./tests 并重建 tests/test_config.txt（默认）
+#   debug 只跑 test_config.txt 里标志为 0 的文件（上次 failed/skipped/error 的）
 
 # ========== 从 Cargo.toml 读取元信息 ==========
 NAME=$(grep -m1 '^name = ' Cargo.toml | sed 's/name = "\(.*\)"/\1/')
@@ -50,6 +54,7 @@ fi
 
 RELEASE=true
 OUT_DIR="wheelhouse"
+TEST_MODE="all"
 
 # 如果 wheelhouse 目录存在, 则删除
 if [[ -d "$OUT_DIR" ]]; then
@@ -78,6 +83,18 @@ while [[ $# -gt 0 ]]; do
     --debug) RELEASE=false; shift ;;
     --out-dir) OUT_DIR="$2"; shift 2 ;;
     --python) PYTHON_EXEC="$2"; PYTHON_EXEC_SET=1; shift 2 ;;
+    --test)
+      case "$2" in
+        all|debug) TEST_MODE="$2" ;;
+        *) echo "Error: --test accepts 'all' or 'debug' (got '$2')." >&2; exit 1 ;;
+      esac
+      shift 2 ;;
+    --test=*)
+      case "${1#*=}" in
+        all|debug) TEST_MODE="${1#*=}" ;;
+        *) echo "Error: --test accepts 'all' or 'debug' (got '${1#*=}')." >&2; exit 1 ;;
+      esac
+      shift ;;
     *) PYTHON_EXEC="$1"; PYTHON_EXEC_SET=1; shift ;;
   esac
 done
@@ -198,16 +215,14 @@ if [[ "$INSTALLED" -eq 1 && "${SKIP_TESTS:-0}" != "1" ]]; then
   #     不能因此中断全量报告。
   #   * RSNUMPY_COMPAT_SKIP_CRASHES=1：跳过已知会让 pytest 进程直接崩溃的用例；
   #     未在清单中的 crash 由 xdist worker 隔离（只损失该 worker 上的用例）。
-  echo "Running rsnumpy-compatibility check over ./tests (non-gating report) ..."
-  # 核心门禁的 7 个文件刚在上面跑过且已通过，全量报告里 --ignore 排除，避免跑两遍。
-  COMPAT_IGNORES=()
-  for _f in "${CORE_TEST_FILES[@]}"; do
-    COMPAT_IGNORES+=(--ignore="$_f")
-  done
-  # SKIP_COMPAT=1 可只跳过这份非门禁大报告（核心门禁仍会跑），快速出 wheel。
-  if [[ "${SKIP_COMPAT:-0}" == "1" ]]; then
-    echo "  -> SKIP_COMPAT=1; skip the non-gating ./tests report (core gate already ran)."
-  else
+  #
+  # 测试模式（--test all|debug，默认 all）：
+  #   all   —— 全量跑 ./tests（核心 7 文件已由门禁跑过，--ignore 去重），结束后
+  #            由 tests/_status_plugin.py 全量重建 tests/test_config.txt：
+  #            每个测试文件全通过 → 1，存在 failed/skipped/error → 0。
+  #   debug —— 只跑 test_config.txt 中标志为 0 的文件（上次没全过的），跑完把
+  #            这次全通过的文件翻回 1。修 bug 时的快速回归回路。
+  echo "Running rsnumpy-compatibility check over ./tests (non-gating report, mode=$TEST_MODE) ..."
   # xdist 让 ~9800 个参照用例并行执行；更重要的是单用例把 rsnumpy C 扩展打崩
   # （Rust panic -> abort / segfault）时只损失一个 worker，其余用例继续，报告不会被
   # 整进程 abort 截断（依赖在上面的核心测试步骤里已尽力安装）。
@@ -225,19 +240,75 @@ if [[ "$INSTALLED" -eq 1 && "${SKIP_TESTS:-0}" != "1" ]]; then
     echo "  -> pytest-xdist unavailable; single-process report (a crash may truncate it)."
   fi
   # 边测边显示：pytest 输出直接流式打印（tee 同时落盘），不再先捕获后 tail——
-  # ~9800 个用例要跑几分钟，全程静默会让人以为卡住了。完整日志存
-  # debug_test/compat_report.log，尾部摘要（FAILURES/ERRORS/统计行）最后再回显。
+  # 全量要跑几分钟，全程静默会让人以为卡住了。完整日志存 debug_test/ 下。
   mkdir -p debug_test
-  COMPAT_LOG="debug_test/compat_report.log"
-  set +e
-  RSNUMPY_COMPAT_SKIP_CRASHES=1 PYTHONUNBUFFERED=1 "$VENV_PY" -m pytest tests \
-    -q -p no:cacheprovider --continue-on-collection-errors "${COMPAT_IGNORES[@]}" $COMPAT_JOBS 2>&1 \
-    | tee "$COMPAT_LOG"
-  COMPAT_RC=${PIPESTATUS[0]}
-  set -e
-  echo
-  echo "  -> full log: $COMPAT_LOG"
-  echo "  -> rsnumpy compatibility report above (failed/error = rsnumpy bugs/gaps vs the numpy reference; non-gating, rc=$COMPAT_RC)."
+  CONFIG_FILE="tests/test_config.txt"
+
+  # 给 pytest 挂上状态收集插件（PYTHONPATH 使 -p _status_plugin 可导入）。
+  STATUS_ENV=(RSNUMPY_TEST_CONFIG="$CONFIG_FILE" PYTHONPATH="$PWD/tests" RSNUMPY_COMPAT_SKIP_CRASHES=1 PYTHONUNBUFFERED=1)
+  if [[ "$TEST_MODE" == "all" ]]; then
+    STATUS_ENV+=(RSNUMPY_TEST_CONFIG_FULL=1)
+  fi
+
+  # 核心门禁的 7 个文件刚在上面跑过且已通过，全量报告里 --ignore 排除，避免跑两遍。
+  COMPAT_IGNORES=()
+  for _f in "${CORE_TEST_FILES[@]}"; do
+    COMPAT_IGNORES+=(--ignore="$_f")
+  done
+
+  # debug 模式：从配置里挑出标志为 0 的文件；没有配置文件则回退全量（首次引导）。
+  TARGETS=("tests")
+  if [[ "$TEST_MODE" == "debug" ]]; then
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+      echo "  -> $CONFIG_FILE not found; bootstrap with a full run first."
+      echo "     Run './build_wheel.sh --test all' once to generate it."
+      STATUS_ENV+=(RSNUMPY_TEST_CONFIG_FULL=1)
+    else
+      DEBUG_FILES=()
+      while read -r _line_f _line_flag; do
+        [[ "$_line_f" == \#* || -z "${_line_f:-}" ]] && continue
+        if [[ "$_line_flag" == "0" && -f "$_line_f" ]]; then
+          DEBUG_FILES+=("$_line_f")
+        fi
+      done < "$CONFIG_FILE"
+      if [[ ${#DEBUG_FILES[@]} -eq 0 ]]; then
+        echo "  -> every test file is green in $CONFIG_FILE; nothing to debug."
+        echo "     Run './build_wheel.sh --test all' to refresh the flags."
+        TARGETS=()
+      else
+        echo "  -> ${#DEBUG_FILES[@]} file(s) flagged 0 in $CONFIG_FILE:"
+        printf '     %s\n' "${DEBUG_FILES[@]}"
+        TARGETS=("${DEBUG_FILES[@]}")
+      fi
+    fi
+  fi
+
+  COMPAT_LOG="tests/${TEST_MODE}_report.log"
+  if [[ ${#TARGETS[@]} -gt 0 ]]; then
+    set +e
+    env "${STATUS_ENV[@]}" "$VENV_PY" -m pytest "${TARGETS[@]}" \
+      -q -p no:cacheprovider --continue-on-collection-errors \
+      -p _status_plugin "${COMPAT_IGNORES[@]}" $COMPAT_JOBS 2>&1 \
+      | tee "$COMPAT_LOG"
+    COMPAT_RC=${PIPESTATUS[0]}
+    set -e
+    echo
+    echo "  -> full log: $COMPAT_LOG"
+    echo "  -> rsnumpy compatibility report above (failed/error = rsnumpy bugs/gaps vs the numpy reference; non-gating, rc=$COMPAT_RC)."
+
+    # all 模式：核心 7 文件被 --ignore 排除、不进插件统计，但门禁已确认通过，
+    # 在配置里直接置 1（否则 debug 模式会重复跑它们）。
+    if [[ "$TEST_MODE" == "all" && -f "$CONFIG_FILE" ]]; then
+      for _f in "${CORE_TEST_FILES[@]}"; do
+        sed -i.bak "s|^$_f 0\$|$_f 1|" "$CONFIG_FILE"
+        rm -f "$CONFIG_FILE.bak"
+      done
+    fi
+    if [[ -f "$CONFIG_FILE" ]]; then
+      _n1=$(grep -c ' 1$' "$CONFIG_FILE" || true)
+      _n0=$(grep -c ' 0$' "$CONFIG_FILE" || true)
+      echo "  -> $CONFIG_FILE updated: $_n1 file(s) green (1), $_n0 file(s) flagged 0."
+    fi
   fi
 
   # ========== 冒烟测试：run_test.py / run_test2.py（非门禁报告） ==========
