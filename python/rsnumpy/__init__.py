@@ -1303,7 +1303,7 @@ class ndarray:
             # （相邻 fancy 索引按广播合并成单个块，如 V[g1,g2]→(15,) 而非
             # (15,15)），此时用 self[key] 的真实选择形状判定广播。
             _sel_shape = tuple(target_shape)
-            if any(_is_ndarray(k) or isinstance(k, (list, tuple)) for k in key):
+            if _py_any(_is_ndarray(k) or isinstance(k, (list, tuple)) for k in key):
                 try:
                     _sel_shape = tuple(getattr(self[key], 'shape', _sel_shape))
                 except Exception:
@@ -8100,7 +8100,7 @@ dtypes = _DTypeNamespace
 
 
 # numpy 兼容：np.dtype 既是类型（isinstance 可用）又可调用（np.dtype('int64')）
-dtype = DType
+dtype = DType  # noqa: F811
 
 
 def top_k(a, k, axis=-1, **kwargs):

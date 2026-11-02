@@ -367,7 +367,8 @@ class DType(metaclass=_DTypeMeta):
                     b, sh = fdt._subdtype
                     return (n, _typestr(b), sh)
                 elif fdt._names is not None:
-                    return (n, fdt.descr)
+                    # numpy 语义：嵌套结构化字段的 descr 仅保留首个子字段
+                    return (n, fdt.descr[:1])
                 else:
                     return (n, _typestr(fdt))
             # 使用列表推导代替显式 for 循环
