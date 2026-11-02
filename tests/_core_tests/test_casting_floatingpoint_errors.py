@@ -1,9 +1,9 @@
 import pytest
 from pytest import param
 
-import numpy as np
-from numpy.testing import IS_WASM
-from numpy.testing._private.utils import longdouble_fpe_mark
+import rsnumpy as np
+from rsnumpy.testing import IS_WASM
+from rsnumpy.testing._private.utils import longdouble_fpe_mark
 
 
 def values_and_dtypes():
@@ -66,7 +66,7 @@ def values_and_dtypes():
 
 def check_operations(dtype, value):
     """
-    There are many dedicated paths in NumPy which cast and should check for
+    There are many dedicated paths in rsnumpy which cast and should check for
     floating point errors which occurred during those casts.
     """
     if dtype.kind != 'i':
@@ -149,9 +149,10 @@ def check_operations(dtype, value):
 
     yield flat_assignment
 
+
 @pytest.mark.skipif(IS_WASM, reason="no wasm fp exception support")
 @pytest.mark.parametrize(["value", "dtype"], list(values_and_dtypes()))
-@pytest.mark.filterwarnings("ignore::numpy.exceptions.ComplexWarning")
+@pytest.mark.filterwarnings("ignore::rsnumpy.exceptions.ComplexWarning")
 def test_floatingpoint_errors_casting(dtype, value):
     dtype = np.dtype(dtype)
     for operation in check_operations(dtype, value):
