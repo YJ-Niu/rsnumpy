@@ -3490,6 +3490,13 @@ def _wrap_structured(dt, raw_data):
 
 def _make_structured_array(data, dt):
     """从任意输入数据 + 富结构化 DType 构造 ndarray。"""
+    # 0-d 单条记录：顶层 tuple 且长度等于顶层字段数（如 (1,2.0) 或 PbufferT[0]）。
+    # 直接按单记录 coerce（不转 list 当记录列表），强制 shape=()。
+    if isinstance(data, tuple) and len(data) == len(dt._names):
+        rec = _coerce_record(data, dt)
+        obj = _wrap_structured(dt, [rec])
+        obj._rs_shape_override = ()
+        return obj
     raw = _coerce_struct_data(list(data) if isinstance(data, (list, tuple)) else data, dt)
     if not isinstance(raw, list):
         raw = [raw]
@@ -3598,10 +3605,24 @@ def _build_plain_array(nested, base_dt, shape):
 
 def _field_values_to_array(values, fdt, outer):
     """把每条记录的某字段值列表按字段 DType 组装成 ndarray。"""
+    outer = tuple(outer) if outer else ()
+    # 0-d 数组的标量字段：单值 → 0-d 数组（ndarray(标量) 产出 shape=()）
+    if outer == () and fdt._names is None and fdt._subdtype is None:
+        v = values[0] if values else 0
+        return ndarray(v, _dtype=_scalar_name_of(fdt))
     if fdt._names is not None:
+        if outer == ():
+            # 0-d 嵌套 struct 字段：values[0] 即单条嵌套记录 → 0-d 结构化数组
+            rec = values[0] if values else ()
+            obj = _wrap_structured(fdt, [rec])
+            obj._rs_shape_override = ()
+            return obj
         return _wrap_structured(fdt, _reshape_flat(values, outer))
     if fdt._subdtype is not None:
         base, sub = fdt._subdtype
+        if outer == ():
+            # 0-d 子数组字段：values[0] 即子数组数据本身 → shape=sub
+            return _build_plain_array(values[0] if values else [], base, tuple(sub))
         nested = _reshape_flat(values, outer)
         return _build_plain_array(nested, base, tuple(outer) + tuple(sub))
     nested = _reshape_flat(values, outer)

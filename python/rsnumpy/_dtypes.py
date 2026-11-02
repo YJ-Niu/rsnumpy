@@ -667,6 +667,13 @@ def _parse_field_type(tok):
     tok = tok.strip()
     if not tok:
         raise TypeError("empty dtype token")
+    # 剥离字节序前缀（<, >, =, |）再检测子数组形式（leading-digit / 括号），
+    # 否则 '<0i4' 这类"前缀+子数组计数"会漏检落到 _parse_scalar_token 报错。
+    # base 还原前缀以保留字节序。
+    _bo = ''
+    if tok[0] in '<>=|':
+        _bo = tok[0]
+        tok = tok[1:]
     if tok[0] == '(':
         depth = 0
         end = 0
@@ -680,16 +687,16 @@ def _parse_field_type(tok):
                     break
         shape = _parse_shape(tok[1:end])
         rest = tok[end + 1:].strip()
-        base = _parse_scalar_token(rest)
+        base = _parse_scalar_token(_bo + rest)
         return _make_subarray(base, shape)
     j = 0
     while j < len(tok) and tok[j].isdigit():
         j += 1
     if 0 < j < len(tok):
         cnt = int(tok[:j])
-        base = _parse_scalar_token(tok[j:].strip())
+        base = _parse_scalar_token(_bo + tok[j:].strip())
         return _make_subarray(base, (cnt,))
-    return _parse_scalar_token(tok)
+    return _parse_scalar_token(_bo + tok)
 
 
 def _parse_string_dtype(s, align):
