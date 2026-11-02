@@ -211,16 +211,56 @@ def _reduce_given_mean(a, mean, axis, keepdims, ddof, want_std, out):
     return _v
 
 
+def _check_reduce_axis(a, axis):
+    """归约 axis 校验（numpy 语义：越界 → AxisError）。
+
+    越界 axis 直达 _core 会触发 Rust panic（进程 abort）。
+    返回归一化 axis：0-d 数组仅允许 axis=0（numpy 怪癖，返回自身），
+    归一化为 None（全归约）——Rust 对 0-d 的 axis=0 也会 panic。
+    """
+    if axis is None:
+        return None
+    if hasattr(a, 'ndim'):
+        _dim = int(a.ndim)
+    else:
+        _dim = int(_nd()(_ensure_raw(a)).ndim)
+    if isinstance(axis, (tuple, list)):
+        _axes = [x + _dim if x < 0 else x for x in axis]
+    else:
+        _axes = [axis + _dim if axis < 0 else axis]
+    if _dim == 0:
+        if any(x != 0 for x in _axes):
+            from rsnumpy.exceptions import AxisError
+            raise AxisError(
+                f"axis {axis} is out of bounds for array of dimension {_dim}")
+        return None
+    if any(x < 0 or x >= _dim for x in _axes):
+        from rsnumpy.exceptions import AxisError
+        raise AxisError(
+            f"axis {axis} is out of bounds for array of dimension {_dim}")
+    return axis
+
+
 def sum(a, axis=None, dtype=None, out=None, keepdims=False, initial=None, where=True):
     """计算数组元素之和。"""
     _ = dtype, out, initial, where
-    raw_result = _core.sum(_ensure_raw(a), axis, keepdims)
+    # 0-d 短路：Rust 归约对 0-d 输入会 abort；numpy 返回保持原 dtype 的 0-d
+    _a_raw = _ensure_raw(a)
+    if not tuple(getattr(_a_raw, 'shape', ())):
+        return _nd()(_a_raw, _dtype=getattr(a, '_dtype', 'float64'))
+    axis = _check_reduce_axis(a, axis)
+    raw_result = _core.sum(_a_raw, axis, keepdims)
     return _wrap(raw_result)
 
 
 def mean(a, axis=None, dtype=None, out=None, keepdims=False, where=True):
     """计算数组元素的平均值。"""
     _ = dtype, where
+    # 0-d 短路：Rust 归约会 abort；numpy 返回 float64 的 0-d
+    _a_raw = _ensure_raw(a)
+    if not tuple(getattr(_a_raw, 'shape', ())):
+        return _nd()(_a_raw, _dtype='float64')
+    axis = _check_reduce_axis(a, axis)
     # numpy 语义：空数组 → NaN + "Mean of empty slice" 告警
     try:
         if _ensure_raw(a).size == 0:
@@ -308,6 +348,11 @@ def std(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False, where=True,
         correction=None, mean=None):
     """计算数组元素的标准差。"""
     _ = dtype, where
+    # 0-d 短路：Rust 归约会 abort；numpy 返回 float64 的 0-d
+    _a_raw = _ensure_raw(a)
+    if not tuple(getattr(_a_raw, 'shape', ())):
+        return _nd()(0.0, _dtype='float64')
+    axis = _check_reduce_axis(a, axis)
     # numpy 兼容：correction 与 ddof 同义（correction 优先）
     if correction is not None:
         ddof = correction
@@ -348,6 +393,11 @@ def var(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False, where=True,
         correction=None, mean=None):
     """计算数组元素的方差。"""
     _ = dtype, where
+    # 0-d 短路：Rust 归约会 abort；numpy 返回 float64 的 0-d
+    _a_raw = _ensure_raw(a)
+    if not tuple(getattr(_a_raw, 'shape', ())):
+        return _nd()(0.0, _dtype='float64')
+    axis = _check_reduce_axis(a, axis)
     if correction is not None:
         ddof = correction
     # numpy 语义：空数组 → NaN + "Mean of empty slice" 告警
@@ -385,6 +435,7 @@ def var(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False, where=True,
 def min(a, axis=None, out=None, keepdims=False, initial=None, where=True):
     """计算数组元素的最小值。"""
     _ = out, initial, where
+    axis = _check_reduce_axis(a, axis)
     raw_result = _core.min(_ensure_raw(a), axis, keepdims)
     dtype = getattr(a, '_dtype', 'float64') if hasattr(a, '_dtype') else 'float64'
     return _nd()(raw_result, _dtype=dtype)
@@ -393,6 +444,7 @@ def min(a, axis=None, out=None, keepdims=False, initial=None, where=True):
 def max(a, axis=None, out=None, keepdims=False, initial=None, where=True):
     """计算数组元素的最大值。"""
     _ = out, initial, where
+    axis = _check_reduce_axis(a, axis)
     raw_result = _core.max(_ensure_raw(a), axis, keepdims)
     dtype = getattr(a, '_dtype', 'float64') if hasattr(a, '_dtype') else 'float64'
     return _nd()(raw_result, _dtype=dtype)
@@ -405,15 +457,123 @@ amax = max  # max 的别名，计算数组中的最大值
 def ptp(a, axis=None, out=None, keepdims=False):
     """计算数组元素的峰-峰值（最大值-最小值）。"""
     _ = out, keepdims
+    axis = _check_reduce_axis(a, axis)
     raw_result = _core.ptp(_ensure_raw(a), axis)
     arr_dtype = getattr(a, '_dtype', 'float64') if hasattr(a, '_dtype') else 'float64'
     return _nd()(raw_result, _dtype=arr_dtype)
 
 
+def _median_1d(col):
+    """1-d 中位数（numpy 语义：NaN 视为最大值排到末尾，取中间；偶数取均值）。"""
+    col = list(col)
+    if not col:
+        import warnings as _w_med
+        _w_med.warn("Mean of empty slice", RuntimeWarning, stacklevel=4)
+        return float('nan')
+    s = sorted(v for v in col if not (isinstance(v, float) and v != v))
+    total = len(col)
+    k = total // 2
+
+    def at(i):
+        if i < len(s):
+            return s[i]
+        return float('nan')
+
+    if total % 2:
+        return at(k)
+    return (at(k - 1) + at(k)) / 2
+
+
+def _shape_of(lst):
+    s = []
+    d = lst
+    while isinstance(d, (list, tuple)):
+        s.append(len(d))
+        d = d[0] if d else []
+    return tuple(s)
+
+
+def _geti(d, idx):
+    for i in idx:
+        d = d[i]
+    return d
+
+
+def _seti(d, idx, v):
+    for i in idx[:-1]:
+        d = d[i]
+    d[idx[-1]] = v
+
+
+def _median_reduce(vals, axis, fn):
+    """嵌套列表沿 axis 逐切片应用 fn（纯 Python，numpy 归约语义）。"""
+    import itertools as _it
+
+    def rec(data, depth):
+        if depth == axis:
+            rest0 = data[0] if data else None
+            rshape = _shape_of(rest0) if isinstance(rest0, (list, tuple)) else ()
+            cols = list(_it.product(*[range(x) for x in rshape])) if rshape else [()]
+            if rshape:
+                def mk(shape):
+                    if len(shape) == 1:
+                        return [None] * shape[0]
+                    return [mk(shape[1:]) for _ in range(shape[0])]
+                out = mk(rshape)
+                for ri in cols:
+                    _seti(out, ri, fn([_geti(blk, ri) for blk in data]))
+            else:
+                out = fn(list(data))
+            return out
+        return [rec(blk, depth + 1) for blk in data]
+
+    return rec(vals, 0)
+
+
+def _percentile_1d(col, q):
+    """1-d 百分位数（numpy 'linear' 语义；NaN 视为最大值排到末尾）。"""
+    col = list(col)
+    n = len(col)
+    if n == 0:
+        import warnings as _w_p
+        _w_p.warn("Percentile of empty slice", RuntimeWarning, stacklevel=4)
+        return float('nan')
+    s = sorted(v for v in col if not (isinstance(v, float) and v != v))
+    pos = (float(q) / 100.0) * (n - 1)
+    lo = int(pos)
+    hi = lo + 1
+
+    def at(i):
+        if i < len(s):
+            return s[i]
+        return float('nan')
+
+    if hi >= n:
+        return at(lo)
+    frac = pos - lo
+    return at(lo) + (at(hi) - at(lo)) * frac
+
+
 def median(a, axis=None, out=None, keepdims=False):
     """计算数组的中位数。"""
     _ = out, keepdims
-    return _wrap(_core.median(_ensure_raw(a), axis))
+    # 0-d 短路：Rust 归约会 abort；numpy 返回保持原 dtype 的 0-d
+    _a_raw = _ensure_raw(a)
+    if not tuple(getattr(_a_raw, 'shape', ())):
+        return _nd()(_a_raw, _dtype=getattr(a, '_dtype', 'float64'))
+    # 含 NaN 时 Rust 排序比较器非全序会 panic；走纯 Python 路径
+    try:
+        _flat = _flatten_c(_a_raw.tolist())
+        if any(isinstance(v, float) and v != v for v in _flat):
+            axis = _check_reduce_axis(a, axis)
+            if axis is None:
+                return _nd()(_median_1d(_flat), _dtype='float64')
+            return _nd()(_median_reduce(_a_raw.tolist(), axis, _median_1d),
+                         _dtype='float64')
+    except Exception:
+        pass
+    axis = _check_reduce_axis(a, axis)
+    return _wrap(_core.median(_a_raw, axis))
 
 
 def average(a, axis=None, weights=None, returned=False):
@@ -444,13 +604,33 @@ def average(a, axis=None, weights=None, returned=False):
 def percentile(a, q, axis=None, out=None, keepdims=False, interpolation='linear'):
     """计算数组的百分位数。"""
     _ = out, interpolation
-    return _wrap(_core.percentile(_ensure_raw(a), q, axis, keepdims))
+    # 含 NaN 时 Rust 排序比较器非全序会 panic；走纯 Python 路径
+    _a_raw = _ensure_raw(a)
+    try:
+        _flat = _flatten_c(_a_raw.tolist())
+        if any(isinstance(v, float) and v != v for v in _flat):
+            _shp = tuple(getattr(_a_raw, 'shape', ()))
+            if isinstance(q, (list, tuple)) or _is_ndarray(q):
+                raise ValueError("q must be scalar in the NaN fallback path")
+            axis = _check_reduce_axis(a, axis)
+            if axis is None or not _shp:
+                res = _nd()(_percentile_1d(_flat, q), _dtype='float64')
+            else:
+                res = _nd()(_median_reduce(_a_raw.tolist(), axis,
+                                           lambda c: _percentile_1d(c, q)),
+                            _dtype='float64')
+            if keepdims and tuple(getattr(res, 'shape', ())):
+                res = _insert_keepdims(res, len(_shp), {axis})
+            return res
+    except Exception:
+        pass
+    return _wrap(_core.percentile(_a_raw, q, axis, keepdims))
 
 
 def quantile(a, q, axis=None, out=None, keepdims=False, interpolation='linear'):
     """计算数组的分位数。"""
-    _ = axis, out, keepdims, interpolation
-    return percentile(a, q * 100)
+    return percentile(a, q * 100.0, axis=axis, out=out, keepdims=keepdims,
+                      interpolation=interpolation)
 
 
 def nanmedian(a, axis=None, out=None, keepdims=False):
@@ -486,6 +666,9 @@ def argmin(a, axis=None, out=None, keepdims=False):
 def argsort(a, axis=-1, kind=None, order=None):
     """返回数组排序后的索引。"""
     _ = kind, order
+    if axis is None:
+        a = a.ravel() if _is_ndarray(a) else _nd()(a).ravel()
+        axis = -1
     return _nd()._wrap(_core.argsort(_ensure_raw(a), axis), _dtype='int64')
 
 
@@ -503,15 +686,25 @@ def sort(a, axis=-1, kind=None, order=None):
         if raw_data is not None:
             sorted_data = sorted(raw_data, key=lambda x: x[field_idx])
             return _nd()(sorted_data, _dtype=arr._dtype, _fields=fields, _raw_data=sorted_data)
-    return _wrap(_core.sort(_ensure_raw(a), axis))
+    if axis is None:
+        arr = arr.ravel()
+        axis = -1
+    return _wrap(_core.sort(_ensure_raw(arr), axis))
 
 
 def lexsort(keys, axis=-1):
     """使用多个键进行间接排序。优先按最后一个键排序。"""
-    _ = axis
     if not isinstance(keys, (tuple, list)):
         keys = (keys,)
     nd = _nd()
+    # numpy 语义（gh-7528）：越界 axis → AxisError（避免 Rust panic）
+    _first = keys[0]
+    _dim = int(_first.ndim) if hasattr(_first, 'ndim') else int(nd(_first).ndim)
+    _ax = axis + _dim if axis < 0 else axis
+    if _ax < 0 or _ax >= _dim:
+        from rsnumpy.exceptions import AxisError
+        raise AxisError(
+            f"axis {axis} is out of bounds for array of dimension {_dim}")
     raw_keys = []
     for k in keys:
         if hasattr(k, '_array'):

@@ -96,15 +96,19 @@ rsnumpy.errstate = _errstate
 def _flatten(x):
     """Flatten an rsnumpy/scalar value to a nested Python list (handles 0-dim)."""
     if hasattr(x, "tolist"):
-        x = x.tolist()
-    if isinstance(x, list):
+        try:
+            x = x.tolist()
+        except TypeError:
+            # dtype / 标量类型对象的 tolist 是无 self 的 lambda 桩 → 当标量处理
+            return x
+    if isinstance(x, (list, tuple)):
         return [_flatten(v) for v in x]
     return x
 
 
 def _rflatten(x):
     out = []
-    if isinstance(x, list):
+    if isinstance(x, (list, tuple)):
         for v in x:
             out.extend(_rflatten(v))
     else:
@@ -226,6 +230,7 @@ class _Raises:
 
     def __init__(self, expected):
         self.expected = expected
+        self.exception = None
 
     def __enter__(self):
         return self
@@ -235,6 +240,7 @@ class _Raises:
             raise AssertionError(f"Did not raise {self.expected}")
         if not issubclass(exc_type, self.expected):
             return False
+        self.exception = exc
         return True
 
     def __call__(self, func, *args, **kwargs):

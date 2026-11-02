@@ -8,8 +8,8 @@ set -euo pipefail
 # （venv 布局会自动切换为 Scripts/python.exe）。
 #
 # 测试参数 --test：
-#   all   全量跑 ./tests 并重建 tests/test_config.txt（默认）
-#   debug 只跑 test_config.txt 里标志为 0 的文件（上次 failed/skipped/error 的）
+#   debug 只跑 test_config.txt 里标志为 0 的文件（上次 failed/skipped/error 的）（默认）
+#   all   全量跑 ./tests 并重建 tests/test_config.txt
 
 # ========== 从 Cargo.toml 读取元信息 ==========
 NAME=$(grep -m1 '^name = ' Cargo.toml | sed 's/name = "\(.*\)"/\1/')
@@ -54,7 +54,7 @@ fi
 
 RELEASE=true
 OUT_DIR="wheelhouse"
-TEST_MODE="all"
+TEST_MODE="debug"
 
 # 如果 wheelhouse 目录存在, 则删除
 if [[ -d "$OUT_DIR" ]]; then

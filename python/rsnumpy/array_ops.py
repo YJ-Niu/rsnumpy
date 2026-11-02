@@ -19,6 +19,16 @@ def _wrap(result):
     return _nd()(result)
 
 
+def _scalar_or_wrap(a):
+    """Python 标量按 numpy 语义保 dtype（bool→bool、int→int64）；
+    ndarray 构造器默认 float64（Rust f64 存储），直接 nd() 会丢 int 语义。"""
+    if isinstance(a, builtins.bool):
+        return _nd()(a, _dtype='bool')
+    if isinstance(a, builtins.int):
+        return _nd()(a, _dtype='int64')
+    return _wrap(a)
+
+
 def _nested_to_list(x):
     """Recursively turn nested arrays / lists / tuples into pure nested lists."""
     if hasattr(x, '_array'):
@@ -168,7 +178,7 @@ def broadcast_to(a, shape, subok=None, device=None):
         _tot = 1
         for _s in _shp:
             _tot *= _s
-        if _tot > 2**40:  # 与 __init__._MAX_ALLOC_ELEMENTS 保持一致
+        if _tot > 2**28:  # 2GB 量级：Rust 物化会 OOM / capacity overflow abort
             # 超大广播：零分配 Python 层视图（Rust 物化会 OOM / capacity overflow
             # abort 进程）。numpy 语义：broadcast_to 从不分配；物化时抛 MemoryError。
             res = nd._wrap(arr._array, _dtype=dtype, _fields=fields, _raw_data=raw_data)
@@ -200,15 +210,65 @@ def swapaxes(a, axis1, axis2):
     return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
 
 
+def _flat_to_nested(flat, shape):
+    """扁平列表按 C 序重塑为嵌套列表（插 1 维不改 C 序 flat，掩码用）。"""
+    if not shape:
+        return flat[0]
+    if len(shape) == 1:
+        return list(flat)
+    _sub = 1
+    for _x in shape[1:]:
+        _sub *= _x
+    return [_flat_to_nested(flat[_i * _sub:(_i + 1) * _sub], shape[1:])
+            for _i in range(shape[0])]
+
+
 def expand_dims(a, axis):
     """扩展数组的形状。"""
-    arr = a if hasattr(a, '_array') else _wrap(a)
+    # ma.MaskedArray 是独立类（非 ndarray 子类）：numpy subok 语义 →
+    # 数据与掩码一起扩展，重建为 MaskedArray（插 1 维不改 C 序 flat）。
+    _MA = getattr(getattr(_np(), 'ma', None), 'MaskedArray', None)
+    if _MA is not None and type(a) is _MA:
+        _ed = expand_dims(a._data, axis)
+        _m = _flat_to_nested(list(a._mask), tuple(getattr(_ed, 'shape', ())))
+        return _MA(_ed, mask=_m)
+    arr = a if hasattr(a, '_array') else _scalar_or_wrap(a)
     nd = _nd()
     dtype = getattr(arr, '_dtype', "float64")
     fields = getattr(arr, '_fields', None)
     raw_data = getattr(arr, '_raw_data', None)
-    result = _core.expand_dims(arr._array, axis)
-    return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
+    _shp = tuple(getattr(arr, 'shape', ()))
+    axes = tuple(axis) if isinstance(axis, (list, tuple)) else (axis,)
+    # numpy 官方语义（_shape_base_impl.expand_dims）：axis 在
+    # out_ndim = len(axis)+ndim 上归一化；重复 axis → ValueError；
+    # 越界 → AxisError（勿让越界值直达 Rust 崩溃）。
+    out_ndim = len(axes) + len(_shp)
+    _norm = []
+    for _ax in axes:
+        _n = _ax + out_ndim if _ax < 0 else _ax
+        if not 0 <= _n < out_ndim:
+            from rsnumpy.exceptions import AxisError as _AxisError
+            raise _AxisError(
+                f"axis {_ax} is out of bounds for array of dimension {len(_shp)}")
+        _norm.append(_n)
+    if len(set(_norm)) != len(_norm):
+        raise ValueError(f"repeated axis {axes}")
+    # 保持子类型（numpy subok 语义）；matrix 除外——matrix 恒为 2-d，
+    # expand_dims 必须降级为 ndarray（numpy 语义）。
+    _t = type(arr)
+    if _t is not nd and hasattr(_t, '_wrap') and \
+            _t is not getattr(_np(), 'matrix', None):
+        _cls = _t
+    else:
+        _cls = nd
+    if len(axes) == 1:
+        result = _core.expand_dims(arr._array, axes[0])
+    else:
+        _rs = list(_shp)
+        for _n in sorted(_norm):
+            _rs.insert(_n, 1)
+        result = _core.reshape(arr._array, tuple(_rs))
+    return _cls._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
 
 
 def squeeze(a, axis=None):
@@ -1012,18 +1072,83 @@ def unique(a, return_index=False, return_inverse=False, return_counts=False,
     axis 为 None 时展平后去重；为整数时，将该轴移到最前、其余维度展平，
     把每个子数组视为一个元素按字典序去重（唯一“行”）。
     """
-    _ = equal_nan
     arr = a if hasattr(a, '_array') else _wrap(a)
     nd = _nd()
     dtype = getattr(arr, '_dtype', "float64")
     fields = getattr(arr, '_fields', None)
     raw_data = getattr(arr, '_raw_data', None)
+    if int(getattr(arr, 'size', 0)) == 0:
+        # numpy 语义（issue 15559）：零尺寸数组各切片全为空且相等；
+        # Python 层处理避免 Rust 崩溃。
+        npmod = _np()
+        _shp = tuple(getattr(arr, 'shape', ()))
+        _intp = "int64"
+        if axis is None:
+            uniq = npmod.empty((0,), dtype=dtype)
+            idx = inv = cnt = npmod.empty((0,), dtype=_intp)
+        else:
+            _ax = axis + len(_shp) if axis < 0 else axis
+            n_axis = _shp[_ax]
+            if n_axis == 0:
+                uniq = npmod.empty(_shp, dtype=dtype)
+                idx = inv = cnt = npmod.empty((0,), dtype=_intp)
+            else:
+                _us = list(_shp)
+                _us[_ax] = 1
+                uniq = npmod.empty(tuple(_us), dtype=dtype)
+                idx = npmod.empty((1,), dtype=_intp)
+                idx[0] = 0
+                inv = npmod.zeros((n_axis,), dtype=_intp)
+                cnt = npmod.empty((1,), dtype=_intp)
+                cnt[0] = n_axis
+        if not (return_index or return_inverse or return_counts):
+            return uniq
+        outputs = [uniq]
+        if return_index:
+            outputs.append(idx)
+        if return_inverse:
+            outputs.append(inv)
+        if return_counts:
+            outputs.append(cnt)
+        return tuple(outputs)
 
     if axis is None:
+        if not (return_index or return_inverse or return_counts):
+            # 纯去重走纯 Python：NaN 按 numpy 语义处理——默认 equal_nan=True
+            # 全部 NaN 视为相等只留一个；False 时各 NaN 互不相等各占一席。
+            # Rust _core.unique_full 不做 NaN 去重，无法区分两种语义。
+            _flat = []
+
+            def _rec(x):
+                if isinstance(x, (list, tuple)):
+                    for _y in x:
+                        _rec(_y)
+                else:
+                    _flat.append(x)
+
+            _rec(arr._array.tolist())
+            _seen, _uniq = set(), []
+            for v in _flat:
+                if isinstance(v, float) and v != v:
+                    if equal_nan:
+                        if not any(isinstance(w, float) and w != w for w in _uniq):
+                            _uniq.append(v)
+                    else:
+                        _uniq.append(v)
+                    continue
+                if v in _seen:
+                    continue
+                _seen.add(v)
+                _uniq.append(v)
+            _nans = [v for v in _uniq if isinstance(v, float) and v != v]
+            _reals = [v for v in _uniq if not (isinstance(v, float) and v != v)]
+            try:
+                _reals = sorted(_reals)
+            except TypeError:
+                pass
+            return nd(_reals + _nans, _dtype=dtype)
         results = _core.unique_full(arr._array, return_index, return_inverse, return_counts)
         wrapped = [nd._wrap(r, _dtype=dtype, _fields=fields, _raw_data=raw_data) for r in results]
-        if not (return_index or return_inverse or return_counts):
-            return wrapped[0]
         return tuple(wrapped)
 
     results = _core.unique_axis(

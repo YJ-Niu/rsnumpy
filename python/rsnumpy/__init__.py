@@ -1024,6 +1024,21 @@ class ndarray:
                                 f"{_s}")
             # 元组内布尔掩码：形状必须与对应轴严格一致（numpy 语义）。
             # 注意 bool ndarray 此时可能已被转为（嵌套）bool 列表，需同查。
+            # numpy 语义：花式索引网格 size 溢出 → ValueError
+            # （Rust getitem_multi 遇到超大网格会 panic abort 整个进程）。
+            if _adv_shapes:
+                _ndim_b = _py_max(len(s) for s in _adv_shapes)
+                _b_b = [1] * _ndim_b
+                for s in _adv_shapes:
+                    for _i, _d in enumerate(s[_ndim_b - len(s):]):
+                        _j = _ndim_b - len(s) + _i
+                        if _d > _b_b[_j]:
+                            _b_b[_j] = _d
+                _gsize = 1
+                for _d in _b_b:
+                    _gsize *= _d
+                    if _gsize > (1 << 62):
+                        raise ValueError("maximum allowed size exceeded")
             _ax_pos = 0
             for _k in key:
                 if _k is None:
@@ -1133,6 +1148,21 @@ class ndarray:
                                 "shape mismatch: indexing arrays could not "
                                 f"be broadcast together with shapes {_bshape} "
                                 f"{_s}")
+            # numpy 语义：花式索引网格 size 溢出 → ValueError
+            # （Rust setitem_multi 对超大网格会挂死/panic）。
+            if _adv_shapes:
+                _ndim_b = _py_max(len(s) for s in _adv_shapes)
+                _b_b = [1] * _ndim_b
+                for s in _adv_shapes:
+                    for _i, _d in enumerate(s[_ndim_b - len(s):]):
+                        _j = _ndim_b - len(s) + _i
+                        if _d > _b_b[_j]:
+                            _b_b[_j] = _d
+                _gsize = 1
+                for _d in _b_b:
+                    _gsize *= _d
+                    if _gsize > (1 << 62):
+                        raise ValueError("maximum allowed size exceeded")
             _e_i = _py_index(key, lambda k: k is Ellipsis)
             if _e_i >= 0:
                 _e_n = self.ndim - (len(key) - 1)
@@ -1665,6 +1695,9 @@ class ndarray:
             result = ndarray(flat_result)
             result._dtype = "bool"
             return result.reshape(self.shape)
+        if isinstance(other, (list, tuple)) and not isinstance(other, str):
+            # 嵌套列表比较：先转 ndarray 再走 ndarray 分支（Rust 不接受 list）
+            other = ndarray(other)
         if _is_ndarray(other):
             if self.size == 0 or other.size == 0:
                 return _zero_size_bool_result(self, other)
@@ -5189,19 +5222,44 @@ class iinfo:
 
 
 class ndindex:
-    """按 C 顺序遍历给定形状的多维索引（兼容 rsnumpy.ndindex）。"""
+    """按 C 顺序遍历给定形状的多维索引（兼容 rsnumpy.ndindex）。
+    numpy 兼容迭代器语义：对象自身即迭代器（__iter__ 返回 self、
+    有状态、可 next()）；非整数维度 → TypeError；负维度 → ValueError。"""
 
     def __init__(self, *shape):
-        if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
-            shape = tuple(shape[0])
-        self._shape = tuple(int(s) for s in shape)
-
-    def __iter__(self):
+        if len(shape) == 1:
+            _arg = shape[0]
+            if isinstance(_arg, list):
+                raise TypeError("ndindex dimensions must be integers")
+            if isinstance(_arg, tuple):
+                shape = _arg
+        _dims = []
+        for s in shape:
+            if isinstance(s, _py_bool) or isinstance(s, _py_int):
+                si = s
+            else:
+                raise TypeError("ndindex dimensions must be integers")
+            if si < 0:
+                raise ValueError("negative dimensions are not allowed")
+            _dims.append(si)
+        self._shape = tuple(_dims)
         import itertools as _it
         if not self._shape:
-            yield ()
-            return
-        yield from _it.product(*[range(s) for s in self._shape])
+            self._it = iter([()])
+        else:
+            self._it = _it.product(*[range(s) for s in self._shape])
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return next(self._it)
+
+    def __len__(self):
+        n = 1
+        for s in self._shape:
+            n *= s
+        return n
 
 
 class ndenumerate:

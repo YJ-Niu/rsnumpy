@@ -301,6 +301,17 @@ class NdArrayMethods:
             new_shape = (new_shape,)
         elif isinstance(new_shape, list):
             new_shape = tuple(new_shape)
+        # 逻辑空数组：Rust 层对空数据 resize 会死循环（copy_len 恒 0）；
+        # numpy 语义：扩大时新元素以 0 填充 → Python 层直接重建。
+        if arr.size == 0:
+            try:
+                arr._array = _core.zeros(list(new_shape))
+            except Exception:
+                pass
+            _ov = getattr(arr, '_rs_shape_override', None)
+            if _ov is not None:
+                arr._rs_shape_override = None
+            return
         arr._array.resize(new_shape)
     
     @staticmethod
@@ -334,7 +345,21 @@ class NdArrayMethods:
         if len(axes) == 0:
             result = arr._array.T
         else:
-            result = _core.transpose_axes(arr._array, [int(x) for x in axes])
+            _ax = [int(x) for x in axes]
+            _nd = arr.ndim
+            if len(_ax) != _nd:
+                # numpy 语义：轴数必须与数组维度一致
+                raise ValueError("axes don't match array")
+            _norm = [x + _nd if x < 0 else x for x in _ax]
+            if len(set(_norm)) != len(_norm):
+                # numpy 语义：轴不可重复
+                raise ValueError("repeated axis in transpose")
+            for x in _norm:
+                if x < 0 or x >= _nd:
+                    raise ValueError(
+                        f"axis {x} is out of bounds for array of "
+                        f"dimension {_nd}")
+            result = _core.transpose_axes(arr._array, _norm)
         out = ndarray._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw)
         if raw is None:
             out.base = arr
@@ -365,9 +390,35 @@ class NdArrayMethods:
         return out
     
     @staticmethod
+    def _reduce_axis_check(arr, axis):
+        """归约 axis 校验（numpy 语义：越界 → AxisError；0-d 允许 axis=0）。
+
+        越界 axis 直达 Rust 会 panic abort 整个进程；0-d + axis=0
+        归一化为 None（全归约）——Rust 对 0-d 的 axis=0 也会 panic。
+        """
+        if axis is None:
+            return None
+        _dim = int(arr.ndim)
+        _ax = axis + _dim if axis < 0 else axis
+        if _dim == 0:
+            if _ax != 0:
+                from rsnumpy.exceptions import AxisError
+                raise AxisError(
+                    f"axis {axis} is out of bounds for array of "
+                    f"dimension {_dim}")
+            return None
+        if _ax < 0 or _ax >= _dim:
+            from rsnumpy.exceptions import AxisError
+            raise AxisError(
+                f"axis {axis} is out of bounds for array of "
+                f"dimension {_dim}")
+        return axis
+
+    @staticmethod
     def max(arr, axis=None, out=None, keepdims=False):
         """返回数组的最大值。"""
         _ = out
+        axis = NdArrayMethods._reduce_axis_check(arr, axis)
         result = arr._array.max(axis, keepdims)
         if axis is None and not keepdims and hasattr(result, 'tolist'):
             return result.tolist()
@@ -377,6 +428,7 @@ class NdArrayMethods:
     def min(arr, axis=None, out=None, keepdims=False):
         """返回数组的最小值。"""
         _ = out
+        axis = NdArrayMethods._reduce_axis_check(arr, axis)
         result = arr._array.min(axis, keepdims)
         if axis is None and not keepdims and hasattr(result, 'tolist'):
             return result.tolist()
@@ -386,6 +438,7 @@ class NdArrayMethods:
     def mean(arr, axis=None, dtype=None, out=None, keepdims=False):
         """计算数组的平均值。"""
         _ = dtype, out
+        axis = NdArrayMethods._reduce_axis_check(arr, axis)
         result = arr._array.mean(axis, keepdims)
         if axis is None and not keepdims and hasattr(result, 'tolist'):
             return result.tolist()
@@ -395,6 +448,7 @@ class NdArrayMethods:
     def std(arr, axis=None, dtype=None, out=None, ddof=0, keepdims=False):
         """计算数组的标准差。"""
         _ = dtype, out
+        axis = NdArrayMethods._reduce_axis_check(arr, axis)
         result = arr._array.std(axis, ddof, keepdims)
         if axis is None and not keepdims and hasattr(result, 'tolist'):
             return result.tolist()
@@ -404,6 +458,7 @@ class NdArrayMethods:
     def var(arr, axis=None, dtype=None, out=None, ddof=0, keepdims=False):
         """计算数组的方差。"""
         _ = dtype, out
+        axis = NdArrayMethods._reduce_axis_check(arr, axis)
         result = arr._array.var(axis, ddof, keepdims)
         if axis is None and not keepdims and hasattr(result, 'tolist'):
             return result.tolist()
@@ -413,6 +468,26 @@ class NdArrayMethods:
     def sum(arr, axis=None, dtype=None, out=None, keepdims=False):
         """计算数组元素的和。"""
         _ = dtype, out
+        # 0-d 短路：Rust 归约对 0-d 输入会 abort；numpy 返回保持原 dtype 的 0-d
+        if not tuple(getattr(arr._array, 'shape', ())):
+            nd = _nd()
+            return nd(arr._array, _dtype=getattr(arr, '_dtype', 'float64'))
+        # complex 短路：Rust 归约对 complex 会 abort，纯 Python 求和
+        _k = getattr(getattr(arr, '_dtype_obj', None), 'kind', None)
+        if _k is None:
+            _dn = str(getattr(arr, '_dtype', ''))
+            _k = _dn[0] if _dn else '?'
+        if _k == 'c':
+            _vals = arr.tolist()
+
+            def _cs(x):
+                if isinstance(x, (list, tuple)):
+                    return _cs(x[0]) + sum(_cs(y) for y in x[1:])
+                return x
+
+            _tot = _cs(_vals)
+            return _tot
+        axis = NdArrayMethods._reduce_axis_check(arr, axis)
         result = arr._array.sum(axis, keepdims)
         if axis is None and not keepdims and hasattr(result, 'tolist'):
             return result.tolist()
@@ -422,6 +497,11 @@ class NdArrayMethods:
     def prod(arr, axis=None, dtype=None, out=None, keepdims=False):
         """计算数组元素的乘积。"""
         _ = dtype, out
+        # 0-d 短路：Rust 归约对 0-d 输入会 abort；numpy 返回保持原 dtype 的 0-d
+        if not tuple(getattr(arr._array, 'shape', ())):
+            nd = _nd()
+            return nd(arr._array, _dtype=getattr(arr, '_dtype', 'float64'))
+        axis = NdArrayMethods._reduce_axis_check(arr, axis)
         result = arr._array.prod(axis, keepdims)
         if axis is None and not keepdims and hasattr(result, 'tolist'):
             return result.tolist()
@@ -430,18 +510,21 @@ class NdArrayMethods:
     @staticmethod
     def cumsum(arr, axis=None):
         """计算累积和。"""
+        axis = NdArrayMethods._reduce_axis_check(arr, axis)
         result = arr._array.cumsum(axis)
         return _wrap_result(result)
     
     @staticmethod
     def cumprod(arr, axis=None):
         """计算累积乘积。"""
+        axis = NdArrayMethods._reduce_axis_check(arr, axis)
         result = arr._array.cumprod(axis)
         return _wrap_result(result)
     
     @staticmethod
     def argmax(arr, axis=None):
         """返回最大值的索引。"""
+        axis = NdArrayMethods._reduce_axis_check(arr, axis)
         result = _wrap_result(_core.argmax_axis(arr._array, axis))
         if result.ndim == 0:
             return int(result.item())
@@ -450,6 +533,7 @@ class NdArrayMethods:
     @staticmethod
     def argmin(arr, axis=None):
         """返回最小值的索引。"""
+        axis = NdArrayMethods._reduce_axis_check(arr, axis)
         result = _wrap_result(_core.argmin_axis(arr._array, axis))
         if isinstance(result, int):
             return result

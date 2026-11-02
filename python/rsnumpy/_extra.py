@@ -387,6 +387,13 @@ def prod(a, axis=None, dtype=None, out=None, keepdims=False, initial=None, where
     """计算元素乘积。"""
     _ = dtype, out, where
     arr = _asarray(a)
+    # 0-d 短路：Rust 归约对 0-d 输入会 abort；numpy 返回保持原 dtype 的 0-d
+    if not tuple(getattr(arr._array, 'shape', ())):
+        res = _wrap(arr._array, _dtype=getattr(arr, '_dtype', 'float64'))
+        if initial is not None:
+            np = _np()
+            res = np.multiply(res, initial)
+        return res
     result = _core.prod(arr._array, axis, keepdims)
     if initial is not None:
         np = _np()
@@ -582,9 +589,57 @@ def union1d(ar1, ar2):
 
 
 def setdiff1d(ar1, ar2, assume_unique=False):
-    """返回在 ar1 但不在 ar2 中的唯一值。"""
+    """返回 the unique values in ar1 but not in ar2 (ar1 首现顺序，保 dtype)。"""
     _ = assume_unique
-    return _wrap(_core.setdiff1d(_asarray(ar1)._array, _asarray(ar2)._array))
+    a = _asarray(ar1)
+    b = _asarray(ar2)
+    npmod = _np()
+    _adtype = getattr(a, '_dtype', 'float64')
+    if int(getattr(a, 'size', 0)) == 0:
+        return npmod.array([], dtype=_adtype)
+
+    def _flat(x, out):
+        if isinstance(x, (list, tuple)):
+            for y in x:
+                _flat(y, out)
+        else:
+            out.append(x)
+
+    fa, fb = [], []
+    _ta = a.tolist()
+    for x in (_ta if isinstance(_ta, (list, tuple)) else [_ta]):
+        _flat(x, fa)
+    _tb = b.tolist()
+    for x in (_tb if isinstance(_tb, (list, tuple)) else [_tb]):
+        _flat(x, fb)
+
+    try:
+        _sb = set(fb)
+
+        def _in(v):
+            return v in _sb
+    except TypeError:
+        def _in(v):
+            return v in fb
+
+    out, _seen = [], set()
+    for v in fa:
+        if _in(v):
+            continue
+        try:
+            if v in _seen:
+                continue
+            _seen.add(v)
+        except TypeError:
+            if any(v == w for w in out):
+                continue
+        out.append(v)
+    if not out:
+        return npmod.array([], dtype=_adtype)
+    if all(isinstance(v, str) for v in out):
+        # str 走隐式构造：显式 dtype='string_' 会按 bytes 存储（tolist 变 b'..'）
+        return npmod.array(out)
+    return npmod.array(out, dtype=_adtype)
 
 
 def setxor1d(ar1, ar2, assume_unique=False):
@@ -959,9 +1014,12 @@ def array_split(ary, indices_or_sections, axis=0):
     """将数组切分为多个子数组，允许不等分。"""
     np = _np()
     arr = _asarray(ary)
+    _ndim = len(arr.shape)
     n = arr.shape[axis]
     if isinstance(indices_or_sections, int):
         k = indices_or_sections
+        if k <= 0:
+            raise ValueError("array_split does not support 0 sections")
         base, extra = n // k, n % k
         sizes = [base + 1 if i < extra else base for i in range(k)]
         bounds = []
@@ -972,11 +1030,23 @@ def array_split(ary, indices_or_sections, axis=0):
         bounds = bounds[:-1]
     else:
         bounds = list(indices_or_sections)
+    # 零分配广播视图：只调逻辑形状（numpy 语义：split 产出视图，不物化）
+    _ovr = getattr(arr, '_rs_shape_override', None)
     result = []
     prev = 0
     for b in list(bounds) + [n]:
-        idx = list(range(prev, b))
-        result.append(np.take(arr, idx, axis=axis))
+        if _ovr is not None:
+            _shp = list(_ovr)
+            _shp[axis] = b - prev
+            _res = np.ndarray._wrap(
+                arr._array, _dtype=getattr(arr, '_dtype', 'float64'))
+            _res._rs_shape_override = tuple(_shp)
+            result.append(_res)
+        else:
+            # 切片切分（numpy 视图语义；避免 list(range(巨大轴)) 的内存爆炸）
+            _key = [slice(None)] * _ndim
+            _key[axis] = slice(prev, b)
+            result.append(arr[tuple(_key)])
         prev = b
     return result
 
@@ -1006,12 +1076,48 @@ def unstack(x, axis=0):
 
 def take_along_axis(arr, indices, axis):
     """沿轴按索引取值。"""
-    # np = _np()
     a = _asarray(arr)
     idx = _asarray(indices)
     if axis is None:
-        a_flat = a.ravel()
-        return _wrap(_core.take_along_axis(a_flat._array, idx.ravel()._array, 0))
+        # numpy 官方语义（_shape_base_impl.take_along_axis）
+        if len(idx.shape) != 1:
+            raise ValueError(
+                "when axis=None, `indices` must have a single dimension.")
+        a = a.ravel()
+        axis = 0
+    _ndim = len(a.shape)
+    if axis < 0:
+        axis += _ndim
+    if not 0 <= axis < _ndim:
+        from rsnumpy.exceptions import AxisError as _AxisError
+        raise _AxisError(
+            f"axis {axis} is out of bounds for array of dimension {_ndim}")
+    if len(idx.shape) != _ndim:
+        raise ValueError(
+            "indices and array must have the same number of dimensions")
+    # numpy 语义：indices 必须是整数数组（bool/float 均不允许 → IndexError）
+    _k = getattr(getattr(idx, '_dtype_obj', None), 'kind', None)
+    if _k is None:
+        _idn = str(getattr(idx, '_dtype', ''))
+        _k = _idn[0] if _idn else '?'
+    if _k not in ('i', 'u'):
+        raise IndexError(
+            "arrays used as indices must be of integer (or boolean) type")
+    if tuple(idx.shape) != tuple(a.shape):
+        # numpy 语义：非 axis 维度上 a 与 indices 双向广播
+        # （结果 axis 维 = indices 的 axis 维）
+        _a_rest = a.shape[:axis] + a.shape[axis + 1:]
+        _i_rest = idx.shape[:axis] + idx.shape[axis + 1:]
+        if tuple(_a_rest) != tuple(_i_rest):
+            _rest = broadcast_shapes(tuple(_a_rest), tuple(_i_rest))
+
+            def _ins(s, d):
+                return s[:axis] + (d,) + s[axis:]
+
+            if tuple(_a_rest) != tuple(_rest):
+                a = _np().broadcast_to(a, _ins(_rest, a.shape[axis]))
+            if tuple(_i_rest) != tuple(_rest):
+                idx = _np().broadcast_to(idx, _ins(_rest, idx.shape[axis]))
     return _wrap(_core.take_along_axis(a._array, idx._array, axis))
 
 
@@ -1020,12 +1126,53 @@ def put_along_axis(arr, indices, values, axis):
     a = _asarray(arr)
     idx = _asarray(indices)
     v = _asarray(values)
+    _flat_mode = axis is None
     if axis is None:
-        a_flat = a.ravel()
-        _core.put_along_axis(a_flat._array, idx.ravel()._array, v._array, 0)
-        a._array = a_flat._array
+        # numpy 官方语义（_shape_base_impl.put_along_axis）
+        if len(idx.shape) != 1:
+            raise ValueError(
+                "when axis=None, `indices` must have a single dimension.")
+        a = a.ravel()
+        axis = 0
+    _ndim = len(a.shape)
+    if axis < 0:
+        axis += _ndim
+    if not 0 <= axis < _ndim:
+        from rsnumpy.exceptions import AxisError as _AxisError
+        raise _AxisError(
+            f"axis {axis} is out of bounds for array of dimension {_ndim}")
+    if len(idx.shape) != _ndim:
+        raise ValueError(
+            "indices and array must have the same number of dimensions")
+    _k = getattr(getattr(idx, '_dtype_obj', None), 'kind', None)
+    if _k is None:
+        _idn = str(getattr(idx, '_dtype', ''))
+        _k = _idn[0] if _idn else '?'
+    if _k not in ('i', 'u'):
+        raise IndexError(
+            "arrays used as indices must be of integer (or boolean) type")
+    # values 广播到 indices 形状（numpy 官方语义）
+    if tuple(v.shape) != tuple(idx.shape):
+        v = _np().broadcast_to(v, tuple(idx.shape))
+    if tuple(idx.shape) == tuple(a.shape):
+        _core.put_along_axis(a._array, idx._array, v._array, axis)
         return None
-    _core.put_along_axis(a._array, idx._array, v._array, axis)
+    # numpy 官方实现（_make_along_axis_idx）：正交 arange 花式索引 +
+    # 标准 setitem，写入落回原数组（rsnumpy 的切片 getitem 是拷贝，
+    # 切片回写方案不可行）。
+    _shp_ones = (1,) * len(a.shape)
+    _fancy = []
+    for _dim, _n in enumerate(a.shape):
+        if _dim == axis:
+            _fancy.append(idx)
+        else:
+            _ind_shape = _shp_ones[:_dim] + (-1,) + _shp_ones[_dim + 1:]
+            _fancy.append(
+                _np().arange(_n, dtype=_np().intp).reshape(_ind_shape))
+    a[tuple(_fancy)] = v
+    if _flat_mode and hasattr(arr, '_array'):
+        # ravel 可能是拷贝：写回原数组以保持就地语义
+        arr[...] = a.tolist()
     return None
 
 
@@ -1903,28 +2050,174 @@ def indices(dimensions, dtype=None, sparse=False):
     return res.astype(dtype or "int64")
 
 
+def _reshape_list(flat, shape):
+    """扁平列表按 C 序重塑为嵌套列表。"""
+    if not shape:
+        return flat[0]
+    if builtins.len(shape) == 1:
+        return list(flat)
+    _sub = 1
+    for _d0 in shape[1:]:
+        _sub *= _d0
+    return [_reshape_list(flat[_i * _sub:(_i + 1) * _sub], shape[1:])
+            for _i in range(shape[0])]
+
+
 def unravel_index(indices, shape, order='C'):
     """将扁平索引转换为多维坐标。"""
     dims = [int(s) for s in (shape if isinstance(shape, (list, tuple)) else (shape,))]
-    arr = _asarray(indices)
-    scalar_in = isscalar(indices) or (hasattr(indices, "ndim") and arr.ndim == 0)
-    result = _core.unravel_index(arr._array, dims, order)
-    if scalar_in:
-        return tuple(int(_wrap(r, _dtype='int64').item()) for r in result)
-    return tuple(_wrap(r, _dtype='int64') for r in result)
+    _ndim = len(dims)
+    _prod = 1
+    for _d0 in dims:
+        _prod *= _d0
+    if _prod > 2**63 - 1:
+        # numpy 语义（gh-9538）：乘积溢出 intp → ValueError（勿让 Rust 溢出）
+        raise ValueError(
+            "shape exceeds the maximum size representable by intp")
+    if isinstance(indices, (list, tuple)):
+        if builtins.len(indices) == 0:
+            raise TypeError(
+                "indices must be integral: the provided empty sequence "
+                "was of length 0, but the shape requires at least 1 element")
+        idx = _asarray(indices)
+    else:
+        if isinstance(indices, builtins.float):
+            raise TypeError("only int indices permitted")
+        idx = _asarray(indices)
+    _dt = str(getattr(idx, '_dtype', ''))
+    if _dt and _dt[0] not in ('i', 'u'):
+        raise TypeError("only int indices permitted")
+    _shp = tuple(getattr(idx, 'shape', ()))
+    _flat_idx = _flat(idx)
+    _scalar_in = _shp == ()
+    if _ndim == 0:
+        # 0-d 形状：唯一合法扁平索引是 0
+        if _flat_idx and (builtins.min(_flat_idx) < 0
+                          or builtins.max(_flat_idx) > 0):
+            raise ValueError("indices out of bounds for a 0d array")
+        if not _scalar_in:
+            raise ValueError(
+                "cannot unravel non-scalar indices into a 0d array")
+        return ()
+    if _prod == 0:
+        # 零尺寸形状：空输入 → 各维空数组；非空 → 越界
+        if builtins.len(_flat_idx) == 0:
+            nd = _np().ndarray
+            return tuple(nd(_reshape_list([], _shp), _dtype='int64')
+                         for _ in dims)
+        raise ValueError("indices out of bounds for zero-sized shape")
+    if _flat_idx and (builtins.min(_flat_idx) < 0
+                      or builtins.max(_flat_idx) >= _prod):
+        raise ValueError("indices out of bounds")
+    # 步长（C 序 / F 序）
+    if order == 'F':
+        _strides = []
+        _s = 1
+        for _d0 in dims:
+            _strides.append(_s)
+            _s *= _d0
+    else:
+        _strides = [1] * _ndim
+        for _d0 in range(_ndim - 2, -1, -1):
+            _strides[_d0] = _strides[_d0 + 1] * dims[_d0 + 1]
+    nd = _np().ndarray
+    res = []
+    for _d0 in range(_ndim):
+        _st = _strides[_d0]
+        _dd = dims[_d0]
+        _col = [(v // _st) % _dd for v in _flat_idx]
+        if _scalar_in:
+            res.append(_col[0])
+        else:
+            res.append(nd(_reshape_list(_col, _shp), _dtype='int64'))
+    return tuple(res)
 
 
 def ravel_multi_index(multi_index, dims, mode='raise', order='C'):
     """将多维坐标转换为扁平索引。"""
     dims_list = [int(s) for s in dims]
-    raw_keys = [_asarray(m)._array for m in multi_index]
-    result = _core.ravel_multi_index(raw_keys, dims_list, mode, order)
-    scalar_in = builtin_all(isscalar(m) or (hasattr(m, "ndim") and _asarray(m).ndim == 0)
-                            for m in multi_index)
-    wrapped = _wrap(result, _dtype='int64')
-    if scalar_in and wrapped.ndim == 0:
-        return int(wrapped.item())
-    return wrapped
+    _ndim = len(dims_list)
+    _prod = 1
+    for _d0 in dims_list:
+        _prod *= _d0
+    if _prod > 2**63 - 1:
+        # numpy 语义（gh-7546）：乘积溢出 intp → ValueError
+        raise ValueError(
+            "product of dims exceeds the maximum size representable by intp")
+    # 每维模式（mode 可为字符串或每维元组）
+    if isinstance(mode, (list, tuple)):
+        modes = tuple(str(m0) for m0 in mode)
+        if builtins.len(modes) != _ndim:
+            raise ValueError(
+                "mode must be a string or a tuple of strings of length ndim")
+    else:
+        modes = (str(mode),) * _ndim
+    for _m0 in set(modes):
+        if _m0 not in ('raise', 'clip', 'wrap'):
+            raise ValueError(f"unknown mode {_m0!r}")
+    idxs = []
+    for m in multi_index:
+        if isinstance(m, (list, tuple)) and builtins.len(m) == 0:
+            raise TypeError(
+                "indices must be integral: the provided empty sequence "
+                "was of length 0, but the shape requires at least 1 element")
+        _m = _asarray(m)
+        _dt = str(getattr(_m, '_dtype', ''))
+        if _dt and _dt[0] not in ('i', 'u'):
+            raise TypeError("only int indices permitted")
+        idxs.append(_m)
+    if builtins.len(idxs) != _ndim:
+        raise ValueError(
+            "multi_index must have exactly one entry per dimension")
+    _shps = [tuple(getattr(_m, 'shape', ())) for _m in idxs]
+    _bshape = (tuple(broadcast_shapes(*_shps)) if builtins.len(_shps) > 1
+               else _shps[0]) if _shps else ()
+    # 零尺寸维度：空输入 → 空结果；非空索引 → 越界（任何 mode 下都成立）
+    if builtins.any(_d0 == 0 for _d0 in dims_list):
+        _n_elems = 1
+        for _d0 in _bshape:
+            _n_elems *= _d0
+        if _n_elems == 0:
+            nd = _np().ndarray
+            return nd(_reshape_list([], _bshape), _dtype='int64')
+        raise ValueError("indices outside the allowed range")
+    _flats = [_flat(_m) for _m in idxs]
+    _n = 1
+    for _d0 in _bshape:
+        _n *= _d0
+    # 步长（C 序 / F 序）
+    if order == 'F':
+        _strides = []
+        _s = 1
+        for _d0 in dims_list:
+            _strides.append(_s)
+            _s *= _d0
+    else:
+        _strides = [1] * _ndim
+        for _d0 in range(_ndim - 2, -1, -1):
+            _strides[_d0] = _strides[_d0 + 1] * dims_list[_d0 + 1]
+    _res = []
+    for _i in range(_n):
+        _v = 0
+        for _d0 in range(_ndim):
+            _x = _flats[_d0][_i]
+            _dd = dims_list[_d0]
+            _mo = modes[_d0]
+            if _mo == 'wrap':
+                _x = _x % _dd
+            elif _mo == 'clip':
+                if _x < 0:
+                    _x = 0
+                elif _x > _dd - 1:
+                    _x = _dd - 1
+            elif _x < 0 or _x >= _dd:
+                raise ValueError("indices outside the allowed range")
+            _v += _x * _strides[_d0]
+        _res.append(_v)
+    if _bshape == ():
+        return builtins.int(_res[0])
+    nd = _np().ndarray
+    return nd(_reshape_list(_res, _bshape), _dtype='int64')
 
 
 # ========== 沿轴应用 / 分段函数 ==========
