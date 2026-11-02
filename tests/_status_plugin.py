@@ -30,7 +30,7 @@ _RANK = {"passed": 0, "skipped": 1, "failed": 2}
 _status = {}   # relpath -> "passed" | "skipped" | "failed"（该文件最坏结果）
 _pending = {}  # relpath -> 该文件的测试项总数（controller 收集期统计）
 _seen = {}     # relpath -> 已出过报告的 nodeid 集合（setup/call/teardown 去重）
-_config = None # pytest.Config（pytest_configure 里保存）
+_config = None  # pytest.Config（pytest_configure 里保存）
 
 _HEADER = (
     "# rsnumpy 测试配置: <测试文件> <标志>\n"
