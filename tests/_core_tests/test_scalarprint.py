@@ -4,9 +4,9 @@
 
 import pytest
 
-import numpy as np
-from numpy.testing import IS_MUSL, assert_, assert_equal, assert_raises
-from numpy.testing._private.utils import LONG_DOUBLE_IS_IBM_DOUBLE_DOUBLE
+import rsnumpy as np
+from rsnumpy.testing import IS_MUSL, assert_, assert_equal, assert_raises
+from rsnumpy.testing._private.utils import LONG_DOUBLE_IS_IBM_DOUBLE_DOUBLE
 
 
 class TestRealScalars:

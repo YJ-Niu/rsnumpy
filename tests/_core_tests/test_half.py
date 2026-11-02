@@ -2,9 +2,9 @@ import platform
 
 import pytest
 
-import numpy as np
-from numpy import float16, float32, float64, uint16
-from numpy.testing import IS_WASM, assert_, assert_equal
+import rsnumpy as np
+from rsnumpy import float16, float32, float64, uint16
+from rsnumpy.testing import IS_WASM, assert_, assert_equal
 
 
 def assert_raises_fpe(strmatch, callable, *args, **kwargs):

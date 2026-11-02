@@ -2,8 +2,8 @@ import sys
 
 import pytest
 
-import numpy as np
-from numpy._core import (
+import rsnumpy as np
+from rsnumpy._core import (
     arange,
     array,
     atleast_1d,
@@ -16,14 +16,14 @@ from numpy._core import (
     stack,
     vstack,
 )
-from numpy._core.shape_base import (
+from rsnumpy._core.shape_base import (
     _block_concatenate,
     _block_dispatcher,
     _block_setup,
     _block_slicing,
 )
-from numpy.exceptions import AxisError
-from numpy.testing import (
+from rsnumpy.exceptions import AxisError
+from rsnumpy.testing import (
     assert_,
     assert_array_equal,
     assert_equal,

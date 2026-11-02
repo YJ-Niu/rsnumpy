@@ -3,9 +3,9 @@ from io import StringIO
 
 import pytest
 
-import numpy as np
-from numpy._core.tests._locales import CommaDecimalPointLocale
-from numpy.testing import IS_MUSL, assert_, assert_equal
+import rsnumpy as np
+from rsnumpy._core.tests._locales import CommaDecimalPointLocale
+from rsnumpy.testing import IS_MUSL, assert_, assert_equal
 
 _REF = {np.inf: 'inf', -np.inf: '-inf', np.nan: 'nan'}
 
@@ -155,7 +155,7 @@ def test_complex_type_print(tp):
 
 
 def test_scalar_format():
-    """Test the str.format method with NumPy scalar types"""
+    """Test the str.format method with rsnumpy scalar types"""
     tests = [('{0}', True, np.bool),
             ('{0}', False, np.bool),
             ('{0:d}', 130, np.uint8),

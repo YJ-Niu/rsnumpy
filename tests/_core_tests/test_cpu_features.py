@@ -7,13 +7,13 @@ import sys
 
 import pytest
 
-from numpy._core._multiarray_umath import (
+from rsnumpy._core._multiarray_umath import (
     __cpu_baseline__,
     __cpu_dispatch__,
     __cpu_features__,
 )
-from numpy.testing import HAS_SUBPROCESSES
-from numpy.testing._private.utils import run_subprocess
+from rsnumpy.testing import HAS_SUBPROCESSES
+from rsnumpy.testing._private.utils import run_subprocess
 
 
 def assert_features_equal(actual, desired, fname):
@@ -42,7 +42,7 @@ f"""
 ### Extra debugging information
 ###########################################
 -------------------------------------------
---- NumPy Detections
+--- rsnumpy Detections
 -------------------------------------------
 {detected}
 -------------------------------------------
@@ -142,7 +142,7 @@ class TestEnvPrivation:
     BASELINE_FEAT = None if len(__cpu_baseline__) == 0 else __cpu_baseline__[0]
     SCRIPT = """
 def main():
-    from numpy._core._multiarray_umath import (
+    from rsnumpy._core._multiarray_umath import (
         __cpu_features__,
         __cpu_dispatch__
     )

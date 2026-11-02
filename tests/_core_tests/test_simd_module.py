@@ -1,6 +1,6 @@
 import pytest
 
-from numpy._core._simd import targets
+from rsnumpy._core._simd import targets
 
 """
 This testing unit only for checking the sanity of common functionality,

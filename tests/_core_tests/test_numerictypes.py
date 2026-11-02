@@ -3,10 +3,10 @@ import sys
 
 import pytest
 
-import numpy as np
-import numpy._core.numerictypes as nt
-from numpy._core.numerictypes import issctype, sctype2char, sctypes
-from numpy.testing import assert_, assert_equal, assert_raises, assert_raises_regex
+import rsnumpy as np
+import rsnumpy._core.numerictypes as nt
+from rsnumpy._core.numerictypes import issctype, sctype2char, sctypes
+from rsnumpy.testing import assert_, assert_equal, assert_raises, assert_raises_regex
 
 # This is the structure of the table used for plain objects:
 #
@@ -486,13 +486,13 @@ class TestIsDType:
 
     def test_isdtype_bool_is_not_numeric(self):
         # Booleans are not part of the "numeric" kind (matching the array API
-        # and `np.number`), even though NumPy internally flags them numeric.
+        # and `np.number`), even though rsnumpy internally flags them numeric.
         assert np.isdtype(np.dtype(bool), "bool")
         assert not np.isdtype(np.dtype(bool), "numeric")
         assert not np.isdtype(np.dtype(bool), np.dtypes.NumberAbstractDType)
 
     def test_isdtype_invalid_args(self):
-        with assert_raises_regex(TypeError, r".*must be a NumPy dtype.*"):
+        with assert_raises_regex(TypeError, r".*must be a rsnumpy dtype.*"):
             np.isdtype("int64", np.int64)
         with assert_raises_regex(TypeError, r".*kind argument must.*"):
             np.isdtype(np.int64, 1)
@@ -500,7 +500,7 @@ class TestIsDType:
             np.isdtype(np.int64, "int64")
 
     def test_isdtype_string_dtype(self):
-        # gh-27545: StringDType has no NumPy scalar type, but it is a
+        # gh-27545: StringDType has no rsnumpy scalar type, but it is a
         # built-in dtype, so `isdtype` must accept it rather than raise
         dt = np.dtypes.StringDType()
         assert not np.isdtype(dt, "bool")
@@ -564,7 +564,7 @@ class Test_sctype2char:
         assert_equal(sctype2char(np.ndarray), 'O')
 
     def test_third_party_scalar_type(self):
-        from numpy._core._rational_tests import rational, rational2
+        from rsnumpy._core._rational_tests import rational, rational2
         assert_raises(KeyError, sctype2char, rational)
         assert_raises(KeyError, sctype2char, rational(1))
         assert_raises(KeyError, sctype2char, rational2)

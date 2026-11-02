@@ -1,13 +1,13 @@
 """
-Tests for numpy/_core/src/multiarray/conversion_utils.c
+Tests for rsnumpy/_core/src/multiarray/conversion_utils.c
 """
 import re
 
 import pytest
 
-import numpy._core._multiarray_tests as mt
-from numpy._core.multiarray import CLIP, RAISE, WRAP
-from numpy.testing import assert_raises
+import rsnumpy._core._multiarray_tests as mt
+from rsnumpy._core.multiarray import CLIP, RAISE, WRAP
+from rsnumpy.testing import assert_raises
 
 
 class StringConverterTestCase:

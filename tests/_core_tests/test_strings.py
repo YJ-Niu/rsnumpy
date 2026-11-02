@@ -3,10 +3,10 @@ import sys
 
 import pytest
 
-import numpy as np
-from numpy._core._exceptions import _UFuncNoLoopError
-from numpy.testing import assert_array_equal, assert_raises
-from numpy.testing._private.utils import requires_memory
+import rsnumpy as np
+from rsnumpy._core._exceptions import _UFuncNoLoopError
+from rsnumpy.testing import assert_array_equal, assert_raises
+from rsnumpy.testing._private.utils import requires_memory
 
 COMPARISONS = [
     (operator.eq, np.equal, "=="),
@@ -148,7 +148,7 @@ def test_large_string_coercion_error(str_dt):
             return large_string
 
     try:
-        # TypeError from NumPy, or OverflowError from 32bit Python.
+        # TypeError from rsnumpy, or OverflowError from 32bit Python.
         with pytest.raises((TypeError, OverflowError)):
             np.array([large_string], dtype=str_dt)
 
@@ -1129,7 +1129,7 @@ class TestMethods:
                                np.array([expected], dtype=dt))
 
     def test_slice_zero_step_raises(self, dt):
-        from numpy._core.umath import _slice
+        from rsnumpy._core.umath import _slice
         with pytest.raises(ValueError, match="slice step cannot be zero"):
             _slice(np.array(["abcd"], dtype=dt), 0, 4, 0)
 

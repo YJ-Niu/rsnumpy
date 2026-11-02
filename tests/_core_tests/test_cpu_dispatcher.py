@@ -1,10 +1,10 @@
-from numpy._core import _umath_tests
-from numpy._core._multiarray_umath import (
+from rsnumpy._core import _umath_tests
+from rsnumpy._core._multiarray_umath import (
     __cpu_baseline__,
     __cpu_dispatch__,
     __cpu_features__,
 )
-from numpy.testing import assert_equal
+from rsnumpy.testing import assert_equal
 
 
 def test_dispatcher():

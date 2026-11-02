@@ -6,9 +6,9 @@ import weakref
 
 import pytest
 
-import numpy as np
-from numpy._core._rational_tests import rational
-from numpy.testing import HAS_REFCOUNT, assert_, assert_raises
+import rsnumpy as np
+from rsnumpy._core._rational_tests import rational
+from rsnumpy.testing import HAS_REFCOUNT, assert_, assert_raises
 
 
 class A:
@@ -113,7 +113,7 @@ class TestCharacter:
 @pytest.mark.skipif(not HAS_REFCOUNT, reason="Python lacks refcounts")
 def test_rational_gc():
     # `rational` is a heap type with a GC-aware allocator, unlike the static
-    # numpy scalar types, so it takes part in cyclic garbage collection.
+    # rsnumpy scalar types, so it takes part in cyclic garbage collection.
     assert gc.is_tracked(rational(1, 2))
     assert not gc.is_tracked(np.float64(1.0))
 

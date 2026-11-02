@@ -2,7 +2,7 @@ import warnings
 
 import pytest
 
-import numpy as np
+import rsnumpy as np
 
 
 @pytest.mark.filterwarnings("error")

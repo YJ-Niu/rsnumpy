@@ -7,11 +7,11 @@ import warnings
 
 import pytest
 
-import numpy as np
-from numpy._core._rational_tests import rational, rational2
-from numpy._utils import _pep440
-from numpy.exceptions import ComplexWarning
-from numpy.testing import (
+import rsnumpy as np
+from rsnumpy._core._rational_tests import rational, rational2
+from rsnumpy._utils import _pep440
+from rsnumpy.exceptions import ComplexWarning
+from rsnumpy.testing import (
     _gen_alignment_data,
     assert_,
     assert_almost_equal,
@@ -20,14 +20,14 @@ from numpy.testing import (
     assert_raises,
     check_support_sve,
 )
-from numpy.testing._private.hypothesis_helpers import (
+from rsnumpy.testing._private.hypothesis_helpers import (
     HAS_HYPOTHESIS,
     given,
     hynp,
     sampled_from,
     settings,
 )
-from numpy.testing._private.utils import LONG_DOUBLE_IS_IBM_DOUBLE_DOUBLE
+from rsnumpy.testing._private.utils import LONG_DOUBLE_IS_IBM_DOUBLE_DOUBLE
 
 types = [np.bool, np.byte, np.ubyte, np.short, np.ushort, np.intc, np.uintc,
          np.int_, np.uint, np.longlong, np.ulonglong,
@@ -665,7 +665,7 @@ class TestSizeOf:
 class TestMultiply:
     def test_seq_repeat(self):
         # Test that basic sequences get repeated when multiplied with
-        # numpy integers. And errors are raised when multiplied with others.
+        # rsnumpy integers. And errors are raised when multiplied with others.
         # Some of this behaviour may be controversial and could be open for
         # change.
         accepted_types = set(np.typecodes["AllInteger"])
@@ -681,22 +681,22 @@ class TestMultiply:
 
         for seq_type in (list, tuple):
             seq = seq_type([1, 2, 3])
-            for numpy_type in accepted_types:
+            for rsnumpy_type in accepted_types:
                 i = np.dtype(numpy_type).type(2)
                 assert_equal(seq * i, seq * int(i))
                 assert_equal(i * seq, int(i) * seq)
 
-            for numpy_type in deprecated_types:
+            for rsnumpy_type in deprecated_types:
                 i = np.dtype(numpy_type).type()
                 with assert_raises(TypeError):
                     operator.mul(seq, i)
 
-            for numpy_type in forbidden_types:
+            for rsnumpy_type in forbidden_types:
                 i = np.dtype(numpy_type).type()
                 assert_raises(TypeError, operator.mul, seq, i)
                 assert_raises(TypeError, operator.mul, i, seq)
 
-            for numpy_type in datetime_types:
+            for rsnumpy_type in datetime_types:
                 i = np.dtype(numpy_type).type(1, "D")
                 assert_raises(TypeError, operator.mul, seq, i)
                 assert_raises(TypeError, operator.mul, i, seq)
@@ -842,13 +842,13 @@ class TestHash:
     def test_float_and_complex_hashes(self, type_code):
         scalar = np.dtype(type_code).type
         for val in [np.pi, np.inf, 3, 6.]:
-            numpy_val = scalar(val)
-            # Cast back to Python, in case the NumPy scalar has less precision
-            if numpy_val.dtype.kind == 'c':
+            rsnumpy_val = scalar(val)
+            # Cast back to Python, in case the rsnumpy scalar has less precision
+            if rsnumpy_val.dtype.kind == 'c':
                 val = complex(numpy_val)
             else:
                 val = float(numpy_val)
-            assert val == numpy_val
+            assert val == rsnumpy_val
             assert hash(val) == hash(numpy_val)
 
         if hash(float(np.nan)) != hash(float(np.nan)):
@@ -860,7 +860,7 @@ class TestHash:
         # Test some complex valued hashes specifically:
         scalar = np.dtype(type_code).type
         for val in [np.pi + 1j, np.inf - 3j, 3j, 6. + 1j]:
-            numpy_val = scalar(val)
+            rsnumpy_val = scalar(val)
             assert hash(complex(numpy_val)) == hash(numpy_val)
 
 
@@ -914,7 +914,7 @@ def test_operator_scalars(op, type1, type2):
 @pytest.mark.parametrize("op", binary_operators_for_scalars)
 @pytest.mark.parametrize("sctype", [np.longdouble, np.clongdouble])
 def test_longdouble_operators_with_obj(sctype, op):
-    # This is/used to be tricky, because NumPy generally falls back to
+    # This is/used to be tricky, because rsnumpy generally falls back to
     # using the ufunc via `np.asarray()`, this effectively might do:
     # longdouble + None
     #   -> asarray(longdouble) + np.array(None, dtype=object)
@@ -925,7 +925,7 @@ def test_longdouble_operators_with_obj(sctype, op):
     # That would recurse infinitely.  Other scalars return the python object
     # on cast, so this type of things works OK.
     #
-    # As of NumPy 2.1, this has been consolidated into the np.generic binops
+    # As of rsnumpy 2.1, this has been consolidated into the np.generic binops
     # and now checks `.item()`.  That also allows the below path to work now.
     try:
         op(sctype(3), None)
@@ -940,7 +940,7 @@ def test_longdouble_operators_with_obj(sctype, op):
 @pytest.mark.parametrize("op", [operator.add, operator.pow, operator.sub])
 @pytest.mark.parametrize("sctype", [np.longdouble, np.clongdouble])
 def test_longdouble_with_arrlike(sctype, op):
-    # As of NumPy 2.1, longdouble behaves like other types and can coerce
+    # As of rsnumpy 2.1, longdouble behaves like other types and can coerce
     # e.g. lists.  (Not necessarily better, but consistent.)
     assert_array_equal(op(sctype(3), [1, 2]), op(3, np.array([1, 2])))
     assert_array_equal(op([1, 2], sctype(3)), op(np.array([1, 2]), 3))
@@ -1044,7 +1044,7 @@ def test_subclass_deferral(sctype, __op__, __rop__, op, cmp):
     these additionally add the "array priority" mechanism.
 
     The behaviour was modified subtly in 1.22 (to make it closer to how Python
-    scalars work).  Due to its complexity and the fact that subclassing NumPy
+    scalars work).  Due to its complexity and the fact that subclassing rsnumpy
     scalars is probably a bad idea to begin with.  There is probably room
     for adjustments here.
     """

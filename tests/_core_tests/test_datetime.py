@@ -6,9 +6,9 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pytest
 
-import numpy
-import numpy as np
-from numpy.testing import (
+import rsnumpy
+import rsnumpy as np
+from rsnumpy.testing import (
     assert_,
     assert_array_equal,
     assert_equal,
@@ -35,7 +35,7 @@ def _assert_equal_hash(v1, v2):
 
 class TestDateTime:
     generic_unit_deprecation_message: Final[str] = (
-        "The 'generic' unit for NumPy timedelta is deprecated"
+        "The 'generic' unit for rsnumpy timedelta is deprecated"
     )
 
     def test_string(self):
@@ -728,7 +728,7 @@ class TestDateTime:
         # the exact bug-report case (no explicit unit)
         with pytest.warns(
             DeprecationWarning,
-            match="The 'generic' unit for NumPy datetime is deprecated",
+            match="The 'generic' unit for rsnumpy datetime is deprecated",
         ):
             arr = np.asarray(NaTLike(), dtype=object).astype("datetime64")
         assert np.isnat(arr)
@@ -1126,11 +1126,11 @@ class TestDateTime:
     def test_cast_overflow(self):
         # gh-4486
         def cast():
-            numpy.datetime64("1971-01-01 00:00:00.000000000000000").astype("<M8[D]")
+            rsnumpy.datetime64("1971-01-01 00:00:00.000000000000000").astype("<M8[D]")
         assert_raises(OverflowError, cast)
 
         def cast2():
-            numpy.datetime64("2014").astype("<M8[fs]")
+            rsnumpy.datetime64("2014").astype("<M8[fs]")
         assert_raises(OverflowError, cast2)
 
     def test_cast_overflow_safe_unit_conversion(self):
@@ -1537,7 +1537,7 @@ class TestDateTime:
                  (np.array([3], dtype='m8[D]'),
                   np.array([-3], dtype='m8[D]'),
                   np.array([0], dtype='m8[D]')),
-                 # NumPy scalars
+                 # rsnumpy scalars
                  (np.timedelta64(3, '[D]'),
                   np.timedelta64(-3, '[D]'),
                   np.timedelta64(0, '[D]')),
@@ -1589,7 +1589,7 @@ class TestDateTime:
                       np.array([3], dtype='m8[D]'),
                       np.array([11], dtype='m8[h]'),
                       np.array([3 * 24 + 11], dtype='m8[h]')),
-                     # NumPy scalars
+                     # rsnumpy scalars
                      (np.datetime64('2012-12-21', '[D]'),
                       np.datetime64('2012-12-24', '[D]'),
                       np.datetime64('2012-12-21T11', '[h]'),
@@ -1666,7 +1666,7 @@ class TestDateTime:
                       np.array([3], dtype='m8[D]'),
                       np.array([11], dtype='m8[h]'),
                       np.array([3 * 24 - 11], dtype='m8[h]')),
-                     # NumPy scalars
+                     # rsnumpy scalars
                      (np.datetime64('2012-12-21', '[D]'),
                       np.datetime64('2012-12-24', '[D]'),
                       np.datetime64('1940-12-24', '[D]'),
@@ -1740,7 +1740,7 @@ class TestDateTime:
                       np.array([6], dtype='m8[h]'),
                       np.array([9], dtype='m8[h]'),
                       np.array([12], dtype='m8[h]')),
-                     # NumPy scalars
+                     # rsnumpy scalars
                      (np.datetime64('2012-12-21', '[D]'),
                       np.timedelta64(6, '[h]'),
                       np.timedelta64(9, '[h]'),
@@ -1987,7 +1987,7 @@ class TestDateTime:
                       np.array([9], dtype='m8[h]'),
                       np.array([12], dtype='m8[h]'),
                       np.array([6], dtype='m8[m]')),
-                     # NumPy scalars
+                     # rsnumpy scalars
                      (np.datetime64('2012-12-21', '[D]'),
                       np.timedelta64(6, '[h]'),
                       np.timedelta64(9, '[h]'),
@@ -3116,7 +3116,7 @@ class TestDateTime:
         res = np.array("2020-10-10", dtype="M8").reshape(shape)
         assert res.dtype == np.dtype("M8[D]")
         assert_equal(arr.astype("M8"), res)
-        arr[...] = np.bytes_("2020-10-10")  # try a numpy string type
+        arr[...] = np.bytes_("2020-10-10")  # try a rsnumpy string type
         assert_equal(arr.astype("M8"), res)
         arr = arr.astype("S")
         assert_equal(arr.astype("S").astype("M8"), res)
@@ -3358,7 +3358,7 @@ class TestDateTime:
         # gh-30903
         with pytest.raises(
             ValueError,
-            match="Converting an integer to a NumPy datetime requires a specified unit",
+            match="Converting an integer to a rsnumpy datetime requires a specified unit",
         ):
             np.ones(3, dtype="M8")
 

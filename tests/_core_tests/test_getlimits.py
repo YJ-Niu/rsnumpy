@@ -9,11 +9,11 @@ import warnings
 
 import pytest
 
-import numpy as np
-from numpy import double, half, longdouble, single
-from numpy._core import finfo, iinfo
-from numpy._core._rational_tests import rational
-from numpy.testing import HAS_SUBPROCESSES, assert_, assert_equal, assert_raises
+import rsnumpy as np
+from rsnumpy import double, half, longdouble, single
+from rsnumpy._core import finfo, iinfo
+from rsnumpy._core._rational_tests import rational
+from rsnumpy.testing import HAS_SUBPROCESSES, assert_, assert_equal, assert_raises
 
 ##################################################
 
@@ -110,7 +110,7 @@ class TestFinfo:
         # Use a fresh subprocess with a cold cache so that calling
         # finfo(longdouble) first reliably exercises the bug.
         code = textwrap.dedent("""
-            import numpy as np
+            import rsnumpy as np
 
             f_ld = np.finfo(np.longdouble)
             f_64 = np.finfo(np.float64)

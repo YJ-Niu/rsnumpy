@@ -3,8 +3,8 @@ Test the scalar constructors, which also do type-coercion
 """
 import pytest
 
-import numpy as np
-from numpy.testing import assert_almost_equal, assert_equal
+import rsnumpy as np
+from rsnumpy.testing import assert_almost_equal, assert_equal
 
 
 class TestFromString:
@@ -52,7 +52,7 @@ class TestExtraArgs:
         with pytest.raises(UnicodeDecodeError):
             np.str_(b'\\xx', 'unicode-escape')
 
-        # superclass fails, but numpy succeeds
+        # superclass fails, but rsnumpy succeeds
         assert np.bytes_(-2) == b'-2'
 
     def test_datetime(self):

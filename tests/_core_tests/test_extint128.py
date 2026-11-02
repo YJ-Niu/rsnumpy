@@ -4,9 +4,9 @@ import operator
 
 import pytest
 
-import numpy as np
-import numpy._core._multiarray_tests as mt
-from numpy.testing import assert_equal, assert_raises
+import rsnumpy as np
+import rsnumpy._core._multiarray_tests as mt
+from rsnumpy.testing import assert_equal, assert_raises
 
 INT64_MAX = np.iinfo(np.int64).max
 INT64_MIN = np.iinfo(np.int64).min

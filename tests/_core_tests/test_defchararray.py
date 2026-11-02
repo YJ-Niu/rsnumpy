@@ -1,8 +1,8 @@
 import pytest
 
-import numpy as np
-from numpy._core.multiarray import _vec_string
-from numpy.testing import (
+import rsnumpy as np
+from rsnumpy._core.multiarray import _vec_string
+from rsnumpy.testing import (
     assert_,
     assert_array_equal,
     assert_equal,

@@ -1,7 +1,7 @@
 import pytest
 
-from numpy.f2py import crackfortran
-from numpy.testing import HAS_SUBPROCESSES
+from rsnumpy.f2py import crackfortran
+from rsnumpy.testing import HAS_SUBPROCESSES
 
 from . import util
 

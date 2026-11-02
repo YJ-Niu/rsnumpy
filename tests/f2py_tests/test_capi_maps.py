@@ -1,4 +1,4 @@
-from numpy.f2py import capi_maps
+from rsnumpy.f2py import capi_maps
 
 
 def test_complex_long_double_capi_map():

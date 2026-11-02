@@ -2,8 +2,8 @@ import sys
 
 import pytest
 
-import numpy as np
-from numpy.testing import HAS_REFCOUNT, assert_, assert_array_equal, assert_raises
+import rsnumpy as np
+from rsnumpy.testing import HAS_REFCOUNT, assert_, assert_array_equal, assert_raises
 
 
 class TestTake:

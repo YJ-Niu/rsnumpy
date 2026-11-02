@@ -4,8 +4,8 @@ import warnings
 
 import pytest
 
-import numpy as np
-from numpy import (
+import rsnumpy as np
+from rsnumpy import (
     arange,
     array,
     dtype,
@@ -19,9 +19,9 @@ from numpy import (
     sqrt,
     stack,
 )
-from numpy._core import sctypes
-from numpy._core.function_base import add_newdoc
-from numpy.testing import (
+from rsnumpy._core import sctypes
+from rsnumpy._core.function_base import add_newdoc
+from rsnumpy.testing import (
     IS_WASM,
     assert_,
     assert_allclose,

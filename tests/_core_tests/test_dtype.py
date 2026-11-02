@@ -13,11 +13,11 @@ from typing import Any
 
 import pytest
 
-import numpy as np
-import numpy.dtypes
-from numpy._core._multiarray_tests import create_custom_field_dtype
-from numpy._core._rational_tests import rational, rational2
-from numpy.testing import (
+import rsnumpy as np
+import rsnumpy.dtypes
+from rsnumpy._core._multiarray_tests import create_custom_field_dtype
+from rsnumpy._core._rational_tests import rational, rational2
+from rsnumpy.testing import (
     HAS_REFCOUNT,
     IS_64BIT,
     IS_WASM,
@@ -27,8 +27,8 @@ from numpy.testing import (
     assert_equal,
     assert_raises,
 )
-from numpy.testing._private.hypothesis_helpers import HAS_HYPOTHESIS, hynp, hypothesis
-from numpy.testing._private.utils import requires_deep_recursion, requires_memory
+from rsnumpy.testing._private.hypothesis_helpers import HAS_HYPOTHESIS, hynp, hypothesis
+from rsnumpy.testing._private.utils import requires_deep_recursion, requires_memory
 
 
 def assert_dtype_equal(a, b):
@@ -141,7 +141,7 @@ class TestBuiltin:
             np.dtype(dtype)
 
     def test_expired_dtypes_with_bad_bytesize(self):
-        match: str = r".*removed in NumPy 2.0.*"
+        match: str = r".*removed in rsnumpy 2.0.*"
         with pytest.raises(TypeError, match=match):
             np.dtype("int0")
         with pytest.raises(TypeError, match=match):
@@ -263,7 +263,7 @@ class TestBuiltin:
 
 
 class TestByteOrderStr:
-    """Regression coverage for numpy._core._dtype._byte_order_str.
+    """Regression coverage for rsnumpy._core._dtype._byte_order_str.
 
     Documents the premise the dead-branch removal relies on:
     dtype.byteorder only ever returns one of '<', '>', '=', or '|'.
@@ -806,7 +806,7 @@ class TestSubarray:
         assert item[0].base is arr
 
     def test_subarray_cast_copies(self):
-        # Older versions of NumPy did NOT copy, but they got the ownership
+        # Older versions of rsnumpy did NOT copy, but they got the ownership
         # wrong (not actually knowing the correct base!).  Versions since 1.21
         # (I think) crashed fairly reliable.  This defines the correct behavior
         # as a copy.  Keeping the ownership would be possible (but harder)
@@ -924,7 +924,7 @@ class TestMonsterType:
     def test_deep_subarray_dtype_dealloc(self):
         import threading
 
-        import numpy as np
+        import rsnumpy as np
 
         def build_and_drop():
             d = np.dtype(np.int32)
@@ -1572,7 +1572,7 @@ class TestPromotion:
         # that we get the default integer
         expected_dtype = np.dtype(int)  # the default integer
         assert np.result_type(val, 0) == expected_dtype
-        # With NEP 50, the NumPy scalar wins though:
+        # With NEP 50, the rsnumpy scalar wins though:
         assert np.result_type(val, np.int8(0)) == np.int8
 
     @pytest.mark.parametrize(["other", "expected"],
@@ -1713,7 +1713,7 @@ class TestFromDTypeAttribute:
         class dt(np.void):
             # This code path is fully untested before, so it is unclear
             # what this should be useful for. Note that if np.void is used
-            # numpy will think we are deallocating a base type [1.17, 2019-02].
+            # rsnumpy will think we are deallocating a base type [1.17, 2019-02].
             dtype = np.dtype("f,f")
 
         np.dtype(dt)
@@ -2221,7 +2221,7 @@ def test_result_type_integers_and_unitless_timedelta64():
     # would cause a seg. fault.
     with pytest.warns(
         DeprecationWarning,
-        match="The 'generic' unit for NumPy timedelta is deprecated",
+        match="The 'generic' unit for rsnumpy timedelta is deprecated",
     ):
         td = np.timedelta64(4)
         result = np.result_type(0, td)

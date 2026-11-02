@@ -8,9 +8,9 @@ import operator
 
 import pytest
 
-import numpy as np
-from numpy.testing import assert_array_equal
-from numpy.testing._private.hypothesis_helpers import (
+import rsnumpy as np
+from rsnumpy.testing import assert_array_equal
+from rsnumpy.testing._private.hypothesis_helpers import (
     HAS_HYPOTHESIS,
     hypothesis,
     strategies,
@@ -82,7 +82,7 @@ def test_nep50_weak_integers_with_inexact(dtype):
         with pytest.raises(OverflowError):
             np.array(1, dtype=dtype) + too_big_int
     else:
-        # NumPy uses (or used) `int -> string -> longdouble` for the
+        # rsnumpy uses (or used) `int -> string -> longdouble` for the
         # conversion.  But Python may refuse `str(int)` for huge ints.
         # In that case, RuntimeWarning would be correct, but conversion
         # fails earlier (seems to happen on 32bit linux, possibly only debug).
@@ -175,7 +175,7 @@ def test_nep50_huge_integers(ufunc):
     with pytest.raises(OverflowError):
         ufunc(np.int64(1), 2**100)  # np.array(2**100) would go to object
 
-    # This would go to object and thus a Python float, not a NumPy one:
+    # This would go to object and thus a Python float, not a rsnumpy one:
     res = ufunc(1.0, 2**100)
     assert isinstance(res, np.float64)
 
@@ -209,7 +209,7 @@ def test_nep50_in_ufunc_at():
     np.add.at(arr, [0], 2**100)
     assert arr[0] == 2.0**100
 
-    # NumPy scalars and 0-d arrays remain strongly typed:
+    # rsnumpy scalars and 0-d arrays remain strongly typed:
     arr = np.zeros(2, dtype=np.uint8)
     np.add.at(arr, [0], np.int64(-1))
     assert arr[0] == 255
@@ -243,7 +243,7 @@ def test_nep50_in_ufunc_outer(scalar, expected):
 
 
 def test_nep50_in_ufunc_outer_strong_operands():
-    # gh-32076: NumPy scalars and 0-d arrays remain strongly typed.
+    # gh-32076: rsnumpy scalars and 0-d arrays remain strongly typed.
     arr = np.arange(6, dtype="float32").reshape(3, 2)
     assert np.add.outer(np.float64(1), arr).dtype == "float64"
     assert np.add.outer(np.array(1.), arr).dtype == "float64"
@@ -323,7 +323,7 @@ def test_integer_comparison_with_cast(arr):
         [np.equal, np.not_equal, np.less_equal, np.less,
          np.greater_equal, np.greater])
 def test_integer_integer_comparison(comp):
-    # Test that the NumPy comparison ufuncs work with large Python integers
+    # Test that the rsnumpy comparison ufuncs work with large Python integers
     assert comp(2**200, -2**200) == comp(2**200, -2**200, dtype=object)
 
 

@@ -2,12 +2,12 @@ from tempfile import NamedTemporaryFile
 
 import pytest
 
-import numpy as np
-from numpy._core._multiarray_umath import (
+import rsnumpy as np
+from rsnumpy._core._multiarray_umath import (
     _discover_array_parameters as discover_array_params,
     _get_sfloat_dtype,
 )
-from numpy.testing import assert_array_equal
+from rsnumpy.testing import assert_array_equal
 
 SF = _get_sfloat_dtype()
 
@@ -52,7 +52,7 @@ class TestSFloat:
 
     def test_class_discovery(self):
         # This does not test much, since we always discover the scaling as 1.
-        # But most of NumPy (when writing) does not understand DType classes
+        # But most of rsnumpy (when writing) does not understand DType classes
         dt, _ = discover_array_params([1., 2., 3.], dtype=SF)
         assert dt == SF(1.)
 
@@ -311,7 +311,7 @@ class TestSFloat:
         #             (SF has no subtract loop; once the dispatcher
         #             accepts the DType class, the missing-loop error
         #             surfaces.)
-        from numpy.lib._histograms_impl import _unsigned_subtract
+        from rsnumpy.lib._histograms_impl import _unsigned_subtract
         a = np.array([3.]).view(SF(1.))
         b = np.array([1.]).view(SF(1.))
         with pytest.raises(TypeError,

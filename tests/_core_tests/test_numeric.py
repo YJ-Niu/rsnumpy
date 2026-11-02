@@ -8,14 +8,14 @@ from decimal import Decimal
 
 import pytest
 
-import numpy as np
-from numpy import ma
-from numpy._core import sctypes
-from numpy._core._rational_tests import rational, rational2
-from numpy._core.numerictypes import obj2sctype
-from numpy.exceptions import AxisError
-from numpy.random import rand, randint, randn
-from numpy.testing import (
+import rsnumpy as np
+from rsnumpy import ma
+from rsnumpy._core import sctypes
+from rsnumpy._core._rational_tests import rational, rational2
+from rsnumpy._core.numerictypes import obj2sctype
+from rsnumpy.exceptions import AxisError
+from rsnumpy.random import rand, randint, randn
+from rsnumpy.testing import (
     HAS_REFCOUNT,
     IS_64BIT,
     IS_WASM,
@@ -28,8 +28,8 @@ from numpy.testing import (
     assert_raises,
     assert_raises_regex,
 )
-from numpy.testing._private.hypothesis_helpers import HAS_HYPOTHESIS, given, hynp, st
-from numpy.testing._private.utils import longdouble_fpe_mark, requires_memory
+from rsnumpy.testing._private.hypothesis_helpers import HAS_HYPOTHESIS, given, hynp, st
+from rsnumpy.testing._private.utils import longdouble_fpe_mark, requires_memory
 
 
 class TestResize:
@@ -1233,13 +1233,13 @@ class TestTypes:
         invalid_types = "BHILQP" + "FDG" + "mM" + "f" + "V"
 
         rational_dt = np.dtype(rational)
-        for numpy_dtype in valid_types:
-            numpy_dtype = np.dtype(numpy_dtype)
+        for rsnumpy_dtype in valid_types:
+            rsnumpy_dtype = np.dtype(numpy_dtype)
             assert np.can_cast(numpy_dtype, rational_dt)
             assert np.promote_types(numpy_dtype, rational_dt) is rational_dt
 
-        for numpy_dtype in invalid_types:
-            numpy_dtype = np.dtype(numpy_dtype)
+        for rsnumpy_dtype in invalid_types:
+            rsnumpy_dtype = np.dtype(numpy_dtype)
             assert not np.can_cast(numpy_dtype, rational_dt)
             with pytest.raises(TypeError):
                 np.promote_types(numpy_dtype, rational_dt)
@@ -1345,7 +1345,7 @@ class TestTypes:
     )
     def test_promote_types_metadata(self, dtype1, dtype2):
         """Metadata handling in promotion does not appear formalized
-        right now in NumPy. This test should thus be considered to
+        right now in rsnumpy. This test should thus be considered to
         document behaviour, rather than test the correct definition of it.
 
         This test is very ugly, it was useful for rewriting part of the
@@ -1502,7 +1502,7 @@ class TestTypes:
                                 casting='unsafe'))
 
     def test_can_cast_values(self):
-        # With NumPy 2 and NEP 50, can_cast errors on Python scalars.  We could
+        # With rsnumpy 2 and NEP 50, can_cast errors on Python scalars.  We could
         # define this as (usually safe) at some point, and already do so
         # in `copyto` and ufuncs (but there an error is raised if the integer
         # is out of bounds and a warning for out-of-bound floats).
@@ -1840,7 +1840,7 @@ class TestNonzero:
                 elif dt == 'm':
                     with pytest.warns(
                         DeprecationWarning,
-                        match="The 'generic' unit for NumPy timedelta is deprecated",
+                        match="The 'generic' unit for rsnumpy timedelta is deprecated",
                     ):
                         m = np.zeros((3, 3), dtype=dt)
                         n = np.ones(1, dtype=dt)
@@ -3181,7 +3181,7 @@ class TestIsclose:
         # NEP 50 broadcasting of python scalars
         assert f32 == below_one
         # Test that it works for isclose arguments too (and that those fail if
-        # one uses a numpy float64).
+        # one uses a rsnumpy float64).
         assert np.isclose(f32, below_one, atol=0, rtol=0)
         assert np.isclose(f32, np.float32(0), atol=below_one)
         assert np.isclose(f32, 2, atol=0, rtol=below_one / 2)
@@ -4327,5 +4327,5 @@ class TestAsType:
         assert_equal(actual, expected)
         assert_equal(actual.dtype, expected.dtype)
 
-        with pytest.raises(TypeError, match="Input should be a NumPy array"):
+        with pytest.raises(TypeError, match="Input should be a rsnumpy array"):
             np.astype(data, np.float64)

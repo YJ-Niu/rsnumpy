@@ -1,6 +1,6 @@
 
-import numpy as np
-from numpy.testing import assert_, assert_array_equal, assert_equal
+import rsnumpy as np
+from rsnumpy.testing import assert_, assert_array_equal, assert_equal
 
 
 def buffer_length(arr):

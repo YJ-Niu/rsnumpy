@@ -3,8 +3,8 @@ import warnings
 
 import pytest
 
-import numpy as np
-from numpy.testing import (
+import rsnumpy as np
+from rsnumpy.testing import (
     assert_,
     assert_allclose,
     assert_almost_equal,
@@ -413,7 +413,7 @@ class TestEinsum:
             assert_equal(np.einsum("ii", a, optimize=do_opt), b)
             assert_equal(np.einsum(a, [0, 0], optimize=do_opt), b)
 
-            # gh-15961: should accept numpy int64 type in subscript list
+            # gh-15961: should accept rsnumpy int64 type in subscript list
             np_array = np.asarray([0, 0])
             assert_equal(np.einsum(a, np_array, optimize=do_opt), b)
             assert_equal(np.einsum(a, list(np_array), optimize=do_opt), b)
@@ -1341,7 +1341,7 @@ def test_overlap():
     assert_equal(c, d)
 
 def test_einsum_chunking_precision():
-    """Most einsum operations are reductions and until NumPy 2.3 reductions
+    """Most einsum operations are reductions and until rsnumpy 2.3 reductions
     never (or almost never?) used the `GROWINNER` mechanism to increase the
     inner loop size when no buffers are needed.
     Because einsum reductions work roughly:

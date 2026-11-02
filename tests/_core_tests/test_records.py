@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-import numpy as np
-from numpy.testing import (
+import rsnumpy as np
+from rsnumpy.testing import (
     IS_64BIT,
     assert_,
     assert_allclose,
@@ -18,7 +18,7 @@ from numpy.testing import (
     assert_raises,
     temppath,
 )
-from numpy.testing._private.utils import requires_memory
+from rsnumpy.testing._private.utils import requires_memory
 
 
 class TestFromrecords:

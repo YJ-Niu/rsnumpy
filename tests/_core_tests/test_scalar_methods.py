@@ -9,10 +9,10 @@ from typing import Any, Literal
 
 import pytest
 
-import numpy as np
-from numpy._core import sctypes
-from numpy.testing import assert_equal, assert_raises
-from numpy.testing._private.utils import LONG_DOUBLE_IS_IBM_DOUBLE_DOUBLE
+import rsnumpy as np
+from rsnumpy._core import sctypes
+from rsnumpy.testing import assert_equal, assert_raises
+from rsnumpy.testing._private.utils import LONG_DOUBLE_IS_IBM_DOUBLE_DOUBLE
 
 
 class TestAsIntegerRatio:
@@ -289,12 +289,12 @@ class TestByteswap:
 
 @pytest.mark.parametrize("scalar", [np.bool(True), np.int8(1), np.float64(1)])
 def test_array_wrap(scalar):
-    # Test scalars array wrap as long as it exists.  NumPy itself should
+    # Test scalars array wrap as long as it exists.  rsnumpy itself should
     # probably not use it, so it may not be necessary to keep it around.
 
     arr0d = np.array(3, dtype=np.int8)
     # Third argument not passed, None, or True "decays" to scalar.
-    # (I don't think NumPy would pass `None`, but it seems clear to support)
+    # (I don't think rsnumpy would pass `None`, but it seems clear to support)
     assert type(scalar.__array_wrap__(arr0d)) is np.int8
     assert type(scalar.__array_wrap__(arr0d, None, None)) is np.int8
     assert type(scalar.__array_wrap__(arr0d, None, True)) is np.int8

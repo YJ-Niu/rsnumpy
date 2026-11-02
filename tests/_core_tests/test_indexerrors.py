@@ -1,5 +1,5 @@
-import numpy as np
-from numpy.testing import assert_raises, assert_raises_regex
+import rsnumpy as np
+from rsnumpy.testing import assert_raises, assert_raises_regex
 
 
 class TestIndexErrors:

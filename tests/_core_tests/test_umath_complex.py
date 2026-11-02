@@ -3,11 +3,11 @@ import sys
 
 import pytest
 
-import numpy as np
+import rsnumpy as np
 
 # import the c-extension module directly since _arg is not exported via umath
-import numpy._core._multiarray_umath as ncu
-from numpy.testing import (
+import rsnumpy._core._multiarray_umath as ncu
+from rsnumpy.testing import (
     assert_allclose,
     assert_almost_equal,
     assert_array_equal,

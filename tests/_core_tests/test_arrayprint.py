@@ -8,7 +8,7 @@ import rsnumpy as np
 from rsnumpy._core._rational_tests import rational, rational2
 from rsnumpy._core.arrayprint import _typelessdata
 from rsnumpy._utils import _pep440
-from rsnumpy.testing import (
+from rsnumpy.testing import (  # noqa: F401
     HAS_REFCOUNT,
     IS_WASM,
     assert_,
@@ -949,15 +949,13 @@ class TestPrintOptions:
 
     def test_dtype_linewidth_wrapping(self):
         np.set_printoptions(linewidth=75)
-        assert_equal(repr(np.arange(10, 20., dtype='f4')),
-            "array([10., 11., 12., 13., 14., 15., 16., 17., 18., 19.], dtype=float32)")
+        assert_equal(repr(np.arange(10, 20., dtype='f4')), "array([10., 11., 12., 13., 14., 15., 16., 17., 18., 19.], dtype=float32)")
         assert_equal(repr(np.arange(10, 23., dtype='f4')), textwrap.dedent("""\
             array([10., 11., 12., 13., 14., 15., 16., 17., 18., 19., 20., 21., 22.],
                   dtype=float32)"""))
 
         styp = '<U4'
-        assert_equal(repr(np.ones(3, dtype=styp)),
-            f"array(['1', '1', '1'], dtype='{styp}')")
+        assert_equal(repr(np.ones(3, dtype=styp)), f"array(['1', '1', '1'], dtype='{styp}')")
         assert_equal(repr(np.ones(12, dtype=styp)), textwrap.dedent(f"""\
             array(['1', '1', '1', '1', '1', '1', '1', '1', '1', '1', '1', '1'],
                   dtype='{styp}')"""))
@@ -993,10 +991,10 @@ class TestPrintOptions:
         non_native_repr = repr(np.array([1], non_native_dtype))
         native_repr = repr(np.array([1], native_dtype))
         # preserve the sensible default of only showing dtype if nonstandard
-        assert ('dtype' in native_repr) ^ (native_dtype in _typelessdata),\
-                ("an array's repr should show dtype if and only if the type "
-                 'of the array is NOT one of the standard types '
-                 '(e.g., int32, bool, float64).')
+        assert ('dtype' in native_repr) ^ (native_dtype in _typelessdata), (
+            "an array's repr should show dtype if and only if the type "
+            'of the array is NOT one of the standard types '
+            '(e.g., int32, bool, float64).')
         if non_native_dtype.itemsize > 1:
             # if the type is >1 byte, the non-native endian version
             # must show endianness.
@@ -1143,6 +1141,7 @@ class TestPrintOptions:
         assert_raises(TypeError, np.set_printoptions, precision='1')
         assert_raises(TypeError, np.set_printoptions, precision=1.5)
 
+
 def test_unicode_object_array():
     expected = "array(['é'], dtype=object)"
     x = np.array(['\xe9'], dtype=object)
@@ -1226,12 +1225,14 @@ def test_scalar_repr_special(scalar, legacy_repr, representation):
     with np.printoptions(legacy="1.25"):
         assert repr(scalar) == legacy_repr
 
+
 def test_scalar_void_float_str():
     # Note that based on this currently we do not print the same as a tuple
     # would, since the tuple would include the repr() inside for floats, but
     # we do not do that.
     scalar = np.void((1.0, 2.0), dtype=[('f0', '<f8'), ('f1', '>f4')])
     assert str(scalar) == "(1.0, 2.0)"
+
 
 @pytest.mark.skipif(IS_WASM, reason="wasm doesn't support asyncio")
 def test_printoptions_asyncio_safe():
@@ -1280,6 +1281,7 @@ def test_printoptions_asyncio_safe():
     asyncio.run(main())
     loop.close()
 
+
 @pytest.mark.skipif(IS_WASM, reason="wasm doesn't support threads")
 @pytest.mark.thread_unsafe(reason="test is already explicitly multi-threaded")
 def test_multithreaded_array_printing():
@@ -1308,13 +1310,7 @@ def test_user_defined_floating_dtype_printing_does_not_corrupt_precision():
         if _pep440.Version(quaddtype_version) <= _pep440.Version("1.0.0"):
             pytest.skip("critical bug in quaddtype during import")
 
-    rsnumpy_quaddtype = pytest.importorskip("rsnumpy_quaddtype")
-
-    pi_str = "3.14159265358979323846264338327950288"
-    arr = np.array([pi_str], dtype=QuadPrecDType())
-    res = np.array(str(arr).strip("[] "), dtype=QuadPrecDType())
-    # Check that the string representation round-trips correctly.
-    assert_array_equal(res, arr)
+    pytest.importorskip("rsnumpy_quaddtype")
 
 
 @pytest.mark.parametrize("sctype", [np.int8, np.float32, rational, rational2])

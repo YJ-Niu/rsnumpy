@@ -2,7 +2,7 @@
 The tests exercise the casting machinery in a more low-level manner.
 The reason is mostly to test a new implementation of the casting machinery.
 
-Unlike most tests in NumPy, these are closer to unit-tests rather
+Unlike most tests in rsnumpy, these are closer to unit-tests rather
 than integration tests.
 """
 
@@ -14,11 +14,11 @@ import warnings
 
 import pytest
 
-import numpy as np
-from numpy._core._multiarray_umath import _get_castingimpl as get_castingimpl
-from numpy.lib.stride_tricks import as_strided
-from numpy.testing import assert_array_equal, assert_equal
-from numpy.testing.print_coercion_tables import (
+import rsnumpy as np
+from rsnumpy._core._multiarray_umath import _get_castingimpl as get_castingimpl
+from rsnumpy.lib.stride_tricks import as_strided
+from rsnumpy.testing import assert_array_equal, assert_equal
+from rsnumpy.testing.print_coercion_tables import (
     print_cancast_table,
     print_new_cast_table,
 )
@@ -87,6 +87,7 @@ class Casting(enum.IntEnum):
 
 
 same_value_dtypes = tuple(type(np.dtype(c)) for c in "?bhilqBHILQefdgFDG")
+
 
 def _get_cancast_table():
     table = textwrap.dedent("""
@@ -302,7 +303,7 @@ class TestCasting:
                         assert from_dt is from_res
                         assert to_dt is to_res
 
-    @pytest.mark.filterwarnings("ignore::numpy.exceptions.ComplexWarning")
+    @pytest.mark.filterwarnings("ignore::rsnumpy.exceptions.ComplexWarning")
     @pytest.mark.parametrize("from_dt", simple_dtype_instances())
     def test_simple_direct_casts(self, from_dt):
         """
@@ -328,7 +329,7 @@ class TestCasting:
                 # each of which should is tested individually.
                 return
 
-            safe = casting <= Casting.safe
+            safe = casting <= Casting.safe  # noqa: F841
             del from_res, to_res, casting
 
             arr1, arr2, values = self.get_data(from_dt, to_dt)
@@ -428,7 +429,7 @@ class TestCasting:
              ("M8[ms]", "M8[ns]", Casting.safe, None, 10**6, 1),
              ("M8[ms]", "M8[7ms]", Casting.same_kind, None, 1, 7),
              ("M8[4D]", "M8[1M]", Casting.same_kind, None, None,
-                  # give full values based on NumPy 1.19.x
+                  # give full values based on rsnumpy 1.19.x
                   [-2**63, 0, -1, 1314, -1315, 564442610]),
              ("m8[ns]", None, Casting.no, 0, 1, 1),
              (str(np.dtype("m8[ns]").newbyteorder()), None,
@@ -440,7 +441,7 @@ class TestCasting:
              ("m8[ms]", "m8[ns]", Casting.safe, None, 10**6, 1),
              ("m8[ms]", "m8[7ms]", Casting.same_kind, None, 1, 7),
              ("m8[4D]", "m8[1M]", Casting.unsafe, None, None,
-                  # give full values based on NumPy 1.19.x
+                  # give full values based on rsnumpy 1.19.x
                   [-2**63, 0, 0, 1314, -1315, 564442610])])
     def test_time_to_time(self, from_dt, to_dt,
                           expected_casting, expected_view_off,
@@ -449,7 +450,7 @@ class TestCasting:
         if to_dt is not None:
             to_dt = np.dtype(to_dt)
 
-        # Test a few values for casting (results generated with NumPy 1.19)
+        # Test a few values for casting (results generated with rsnumpy 1.19)
         values = np.array([-2**63, 1, 2**63 - 1, 10000, -10000, 2**32])
         values = values.astype(np.dtype("int64").newbyteorder(from_dt.byteorder))
         assert values.dtype.byteorder == from_dt.byteorder
@@ -469,7 +470,7 @@ class TestCasting:
             if to_dt == np.dtype("M8"):
                 with pytest.warns(
                     DeprecationWarning,
-                    match="The 'generic' unit for NumPy timedelta is deprecated",
+                    match="The 'generic' unit for rsnumpy timedelta is deprecated",
                 ):
                     expected_out[0] = "NaT"
             else:
@@ -840,7 +841,7 @@ class TestCasting:
             np.typecodes["AllInteger"] + np.typecodes["AllFloat"])
     def test_nonstandard_bool_to_other(self, dtype):
         # simple test for casting bool_ to numeric types, which should not
-        # expose the detail that NumPy bools can sometimes take values other
+        # expose the detail that rsnumpy bools can sometimes take values other
         # than 0 and 1.  See also gh-19514.
         nonstandard_bools = np.array([0, 3, -7], dtype=np.int8).view(bool)
         res = nonstandard_bools.astype(dtype)
@@ -851,7 +852,7 @@ class TestCasting:
             np.typecodes["AllInteger"] + np.typecodes["AllFloat"])
     @pytest.mark.parametrize("from_dtype",
             np.typecodes["AllInteger"] + np.typecodes["AllFloat"])
-    @pytest.mark.filterwarnings("ignore::numpy.exceptions.ComplexWarning")
+    @pytest.mark.filterwarnings("ignore::rsnumpy.exceptions.ComplexWarning")
     def test_same_value_overflow(self, from_dtype, to_dtype):
         if from_dtype == to_dtype:
             return
@@ -940,7 +941,7 @@ class TestCasting:
             s1_66.astype(to_dtype, casting='same_value')
 
     @pytest.mark.parametrize("value", [np.nan, np.inf, -np.inf])
-    @pytest.mark.filterwarnings("ignore::numpy.exceptions.ComplexWarning")
+    @pytest.mark.filterwarnings("ignore::rsnumpy.exceptions.ComplexWarning")
     @pytest.mark.filterwarnings("ignore::RuntimeWarning")
     def test_same_value_naninf(self, value):
         # These work, but may trigger FPE warnings on macOS
@@ -958,7 +959,7 @@ class TestCasting:
         with pytest.raises(ValueError):
             np.array([value], dtype=np.float32).astype(np.int64, casting='same_value')
 
-    @pytest.mark.filterwarnings("ignore::numpy.exceptions.ComplexWarning")
+    @pytest.mark.filterwarnings("ignore::rsnumpy.exceptions.ComplexWarning")
     def test_same_value_complex(self):
         arr = np.array([complex(1, 1)], dtype=np.cdouble)
         # This works

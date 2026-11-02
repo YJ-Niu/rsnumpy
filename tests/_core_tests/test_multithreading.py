@@ -9,11 +9,11 @@ import threading
 
 import pytest
 
-import numpy as np
-from numpy._core import _rational_tests
-from numpy._core.tests.test_stringdtype import random_unicode_string_list
-from numpy.testing import HAS_SUBPROCESSES, IS_64BIT, IS_WASM
-from numpy.testing._private.utils import run_subprocess, run_threaded
+import rsnumpy as np
+from rsnumpy._core import _rational_tests
+from rsnumpy._core.tests.test_stringdtype import random_unicode_string_list
+from rsnumpy.testing import HAS_SUBPROCESSES, IS_64BIT, IS_WASM
+from rsnumpy.testing._private.utils import run_subprocess, run_threaded
 
 if IS_WASM:
     pytest.skip(allow_module_level=True, reason="no threading support in wasm")
@@ -209,7 +209,7 @@ def test_blas_gemm_thread_safety():
 
 
 def test_printoptions_thread_safety():
-    # until NumPy 2.1 the printoptions state was stored in globals
+    # until rsnumpy 2.1 the printoptions state was stored in globals
     # this verifies that they are now stored in a context variable
     b = threading.Barrier(2)
 
@@ -630,7 +630,7 @@ def threaded_deadlock_reproducer(operation, nworkers, niters, stall,
 
 
 def allocator_lock_order_workload(case_):
-    import numpy as np
+    import rsnumpy as np
 
     N = 1_000
     NWORKERS = 8
@@ -662,7 +662,7 @@ def allocator_lock_order_workload(case_):
                 np.maximum(c, a, out=b)   # locks alloc(c), alloc(a), alloc(b)
 
     elif case_ == "four-allocator":
-        from numpy._core.umath import _replace
+        from rsnumpy._core.umath import _replace
 
         a = np.array(["a"] * N, dtype="T")
         b = np.array(["b"] * N, dtype="T")
@@ -682,7 +682,7 @@ def allocator_lock_order_workload(case_):
                 _replace(d, a, b, counts, out=c)
 
     elif case_ == "duplicate-allocator":
-        from numpy._core.umath import _replace
+        from rsnumpy._core.umath import _replace
 
         a = np.array(["same"] * N, dtype="T")
         b = np.array(["other"] * N, dtype="T")
@@ -705,7 +705,7 @@ def allocator_lock_order_workload(case_):
 
 def test_setitem_reentrant_no_deadlock():
     def workload():
-        import numpy as np
+        import rsnumpy as np
 
         arr = np.empty(2, dtype="T")
 
@@ -742,8 +742,8 @@ def test_concurrent_allocator_acquire_no_deadlock(case_):
 
 
 def unique_deadlock_workload():
-    import numpy as np
-    from numpy._core._multiarray_umath import _unique_hash
+    import rsnumpy as np
+    from rsnumpy._core._multiarray_umath import _unique_hash
 
     NWORKERS = 8
     NITERS = 200

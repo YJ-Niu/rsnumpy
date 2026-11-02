@@ -10,11 +10,11 @@ import tempfile
 
 import pytest
 
-import numpy as np
-from numpy._core.tests._natype import pd_NA
-from numpy.dtypes import StringDType
-from numpy.exceptions import ComplexWarning
-from numpy.testing import assert_array_equal
+import rsnumpy as np
+from rsnumpy._core.tests._natype import pd_NA
+from rsnumpy.dtypes import StringDType
+from rsnumpy.exceptions import ComplexWarning
+from rsnumpy.testing import assert_array_equal
 
 
 def random_unicode_string_list():
@@ -712,7 +712,7 @@ def test_pad_extreme_width_overflow():
 
 
 def test_pad_out_aliases_fill():
-    from numpy._core.umath import _center, _ljust, _rjust
+    from rsnumpy._core.umath import _center, _ljust, _rjust
     dt = StringDType()
     for pad, expected in [(_center, "***abc***"), (_ljust, "abc******"),
                           (_rjust, "******abc")]:
@@ -733,7 +733,7 @@ def test_zfill_no_padding_no_oob():
     assert np.strings.zfill(np.array(["42"], dtype=dt), 1).tolist() == ["42"]
     assert np.strings.zfill(np.array(["-7"], dtype=dt), 5).tolist() == ["-0007"]
     # the in-place path writes into a heap buffer the sanitizer can bounds-check
-    from numpy._core.umath import _zfill
+    from rsnumpy._core.umath import _zfill
     a = np.array([""], dtype=dt)
     assert _zfill(a, 20, out=a).tolist() == ["0" * 20]
 
@@ -1863,7 +1863,7 @@ def test_setitem_nan_na_matches_float_cast(typename, nan_like_na_object):
 
 @pytest.mark.parametrize("typename", ["complex64", "complex128", "clongdouble"])
 def test_setitem_cfloat_nan(typename, nan_like_na_object):
-    # setitem agrees with the cast, for numpy scalars and Python complex
+    # setitem agrees with the cast, for rsnumpy scalars and Python complex
     dt = StringDType(na_object=nan_like_na_object)
     arr = np.empty(1, dtype=dt)
 
@@ -2454,7 +2454,7 @@ def test_nat_casts():
     NaT_dt = np.datetime64('NaT', 'D')
     NaT_td = np.timedelta64('NaT', 's')
     for na_object in [np._NoValue, None, np.nan, 'nat', '']:
-        # numpy treats empty string and all case combinations of 'nat' as NaT
+        # rsnumpy treats empty string and all case combinations of 'nat' as NaT
         dtype = StringDType(na_object=na_object)
         arr = np.array([''] + all_nats, dtype=dtype)
         dt_array = arr.astype('M8[s]')
@@ -3088,7 +3088,7 @@ class TestImplementation:
     def get_view(self, a):
         # Cannot view a StringDType as anything else directly, since
         # it has references. So, we use a stride trick hack.
-        from numpy.lib._stride_tricks_impl import DummyArray
+        from rsnumpy.lib._stride_tricks_impl import DummyArray
         interface = dict(a.__array_interface__)
         interface['descr'] = self.view_dtype.descr
         interface['typestr'] = self.view_dtype.str

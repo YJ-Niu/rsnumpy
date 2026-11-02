@@ -7,10 +7,10 @@ from itertools import product
 
 import pytest
 
-import numpy as np
-from numpy._core._multiarray_tests import array_indexing
-from numpy.exceptions import ComplexWarning, VisibleDeprecationWarning
-from numpy.testing import (
+import rsnumpy as np
+from rsnumpy._core._multiarray_tests import array_indexing
+from rsnumpy.exceptions import ComplexWarning, VisibleDeprecationWarning
+from rsnumpy.testing import (
     HAS_REFCOUNT,
     assert_,
     assert_array_equal,
@@ -191,7 +191,7 @@ class TestIndexing:
                       [7, 8, 9]])
         assert_(a[...] is not a)
         assert_equal(a[...], a)
-        # `a[...]` was `a` in numpy <1.9.
+        # `a[...]` was `a` in rsnumpy <1.9.
         assert_(a[...].base is a)
 
         # Slicing with ellipsis can skip an
@@ -353,7 +353,7 @@ class TestIndexing:
         assert_raises(IndexError, a.__getitem__, (np.array([0]),) * 64)
 
     def test_scalar_array_bool(self):
-        # NumPy bools can be used as boolean index (python ones as of yet not)
+        # rsnumpy bools can be used as boolean index (python ones as of yet not)
         a = np.array(1)
         assert_equal(a[np.bool(True)], a[np.array(True)])
         assert_equal(a[np.bool(False)], a[np.array(False)])
@@ -857,7 +857,7 @@ class TestMultiIndexingAutomated:
         * This still lacks tests for complex item setting.
         * If you change behavior of indexing, you might want to modify
           these tests to try more combinations.
-        * Behavior was written to match numpy version 1.8. (though a
+        * Behavior was written to match rsnumpy version 1.8. (though a
           first version matched 1.7.)
         * Only tuple indices are supported by the mimicking code.
           (and tested as of writing this)
@@ -957,8 +957,8 @@ class TestMultiIndexingAutomated:
                 ndim += 1
                 continue
             if not isinstance(indx, np.ndarray):
-                # This could be open for changes in numpy.
-                # numpy should maybe raise an error if casting to intp
+                # This could be open for changes in rsnumpy.
+                # rsnumpy should maybe raise an error if casting to intp
                 # is not safe. It rejects np.array([1., 2.]) but not
                 # [1., 2.] as index (same for ie. np.take).
                 # (Note the importance of empty lists if changing this here)
@@ -1316,7 +1316,7 @@ class TestFloatNonIntegerArgument:
         assert_raises(TypeError, np.take, a, [0], np.float64(1.))
 
     def test_non_integer_sequence_multiplication(self):
-        # NumPy scalar sequence multiply should not work with non-integers
+        # rsnumpy scalar sequence multiply should not work with non-integers
         def mult(a, b):
             return a * b
 

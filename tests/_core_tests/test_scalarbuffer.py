@@ -3,10 +3,10 @@ Test scalar buffer interface adheres to PEP 3118
 """
 import pytest
 
-import numpy as np
-from numpy._core._multiarray_tests import get_buffer_info
-from numpy._core._rational_tests import rational, rational2
-from numpy.testing import assert_, assert_equal, assert_raises
+import rsnumpy as np
+from rsnumpy._core._multiarray_tests import get_buffer_info
+from rsnumpy._core._rational_tests import rational, rational2
+from rsnumpy.testing import assert_, assert_equal, assert_raises
 
 # PEP3118 format strings for native (standard alignment and byteorder) types
 scalars_and_codes = [

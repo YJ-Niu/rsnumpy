@@ -12,14 +12,14 @@ from collections.abc import Callable
 
 import pytest
 
-import numpy as np
-from numpy._core._multiarray_tests import (
+import rsnumpy as np
+from rsnumpy._core._multiarray_tests import (
     fromstring_null_term_c_api,  # noqa: F401
     matrixproduct2_c_api,
     matrixproduct_c_api,
 )
-from numpy.testing import HAS_SUBPROCESSES, assert_array_equal, assert_raises
-from numpy.testing._private.utils import run_subprocess
+from rsnumpy.testing import HAS_SUBPROCESSES, assert_array_equal, assert_raises
+from rsnumpy.testing._private.utils import run_subprocess
 
 
 class _DeprecationTestCase:
@@ -194,7 +194,7 @@ class TestPyIntConversion(_DeprecationTestCase):
 
 @pytest.mark.parametrize("name", ["str", "bytes", "object"])
 def test_future_scalar_attributes(name):
-    # FutureWarning added 2022-11-17, NumPy 1.24,
+    # FutureWarning added 2022-11-17, rsnumpy 1.24,
     assert name not in dir(np)  # we may want to not add them
     with pytest.warns(FutureWarning,
             match=f"In the future .*{name}"):
@@ -208,7 +208,7 @@ def test_future_scalar_attributes(name):
 # Ignore the above future attribute warning for this test.
 @pytest.mark.filterwarnings("ignore:In the future:FutureWarning")
 class TestRemovedGlobals:
-    # Removed 2023-01-12, NumPy 1.24.0
+    # Removed 2023-01-12, rsnumpy 1.24.0
     # Not a deprecation, but the large error was added to aid those who missed
     # the previous deprecation, and should be removed similarly to one
     # (or faster).
@@ -234,7 +234,7 @@ class TestDeprecatedDTypeAliases(_DeprecationTestCase):
 
 
 class TestIsDTypeDTypeInstanceKind(_DeprecationTestCase):
-    # Deprecated in NumPy 2.6, 2026-06
+    # Deprecated in rsnumpy 2.6, 2026-06
     message = r"isdtype\(\) with a dtype instance as second argument"
 
     def test_deprecated(self):
@@ -268,7 +268,7 @@ class TestDeprecatedArrayWrap(_DeprecationTestCase):
 
 
 class TestDeprecatedArrayAttributeSetting(_DeprecationTestCase):
-    message = "Setting the .*on a NumPy array has been deprecated.*"
+    message = "Setting the .*on a rsnumpy array has been deprecated.*"
 
     def test_deprecated_strides_set(self):
         x = np.eye(2)
@@ -338,12 +338,12 @@ class TestDeprecatedDTypeParenthesizedRepeatCount(_DeprecationTestCase):
 
 
 class TestDTypeAlignBool(_VisibleDeprecationTestCase):
-    # Deprecated in Numpy 2.4, 2025-07
+    # Deprecated in rsnumpy 2.4, 2025-07
     # NOTE: As you can see, finalizing this deprecation breaks some (very) old
     # pickle files.  This may be fine, but needs to be done with some care since
     # it breaks all of them and not just some.
     # (Maybe it should be a 3.0 or only after warning more explicitly around pickles.)
-    message = r"dtype\(\): align should be passed as Python or NumPy boolean but got "
+    message = r"dtype\(\): align should be passed as Python or rsnumpy boolean but got "
 
     def test_deprecated(self):
         # in particular integers should be rejected because one may think they mean
@@ -365,7 +365,7 @@ class TestDTypeAlignBool(_VisibleDeprecationTestCase):
 
 
 class TestFlatiterIndexing0dBoolIndex(_DeprecationTestCase):
-    # Deprecated in Numpy 2.4, 2025-07
+    # Deprecated in rsnumpy 2.4, 2025-07
     message = r"Indexing flat iterators with a 0-dimensional boolean index"
 
     def test_0d_boolean_index_deprecated(self):
@@ -383,7 +383,7 @@ class TestFlatiterIndexing0dBoolIndex(_DeprecationTestCase):
 
 
 class TestFlatiterIndexingFloatIndex(_DeprecationTestCase):
-    # Deprecated in NumPy 2.4, 2025-07
+    # Deprecated in rsnumpy 2.4, 2025-07
     message = r"Invalid non-array indices for iterator objects"
 
     def test_float_index_deprecated(self):
@@ -404,7 +404,7 @@ class TestFlatiterIndexingFloatIndex(_DeprecationTestCase):
     reason="warning control utilities are deprecated due to being thread-unsafe"
 )
 class TestWarningUtilityDeprecations(_DeprecationTestCase):
-    # Deprecation in NumPy 2.4, 2025-08
+    # Deprecation in rsnumpy 2.4, 2025-08
     message = r"NumPy warning suppression and assertion utilities are deprecated."
 
     def test_assert_warns_deprecated(self):
@@ -423,7 +423,7 @@ class TestWarningUtilityDeprecations(_DeprecationTestCase):
 
 
 class TestTooManyArgsExtremum(_DeprecationTestCase):
-    # Deprecated in Numpy 2.4, 2025-08, gh-27639
+    # Deprecated in rsnumpy 2.4, 2025-08, gh-27639
     message = "Passing more than 2 positional arguments to np.maximum and np.minimum "
 
     @pytest.mark.parametrize("ufunc", [np.minimum, np.maximum])
@@ -432,14 +432,14 @@ class TestTooManyArgsExtremum(_DeprecationTestCase):
 
 
 class TestTypenameDeprecation(_DeprecationTestCase):
-    # Deprecation in Numpy 2.5, 2026-02
+    # Deprecation in rsnumpy 2.5, 2026-02
 
     def test_typename_emits_deprecation_warning(self):
         self.assert_deprecated(lambda: np.typename("S1"))
         self.assert_deprecated(lambda: np.typename("h"))
 
 class TestRoundDeprecation(_DeprecationTestCase):
-    # Deprecation in NumPy 2.5, 2026-02
+    # Deprecation in rsnumpy 2.5, 2026-02
 
     def test_round_emits_deprecation_warning_array(self):
         a = np.array([1.5, 2.7, -1.5, -2.7])
@@ -450,10 +450,10 @@ class TestRoundDeprecation(_DeprecationTestCase):
 
 
 class TestDeprecatedGenericTimedelta(_DeprecationTestCase):
-    # Deprecated in Numpy 2.5, 2025-11
+    # Deprecated in rsnumpy 2.5, 2025-11
     # See gh-29619 for scalar operations
     # See gh-31255 for array operations
-    message = "The 'generic' unit for NumPy timedelta is deprecated"
+    message = "The 'generic' unit for rsnumpy timedelta is deprecated"
 
     @pytest.mark.parametrize('value', [
         3, 10, "NaT"
@@ -545,7 +545,7 @@ class TestDeprecatedGenericTimedelta(_DeprecationTestCase):
         # a cold cache.
         code = textwrap.dedent("""
             import warnings
-            import numpy as np
+            import rsnumpy as np
 
             for args in [(np.timedelta64(3, "s"), 5),
                          (np.array([3], dtype="m8[s]"), np.array([5]))]:
@@ -559,7 +559,7 @@ class TestDeprecatedGenericTimedelta(_DeprecationTestCase):
 
 
 class TestTriDeprecationWithNonInteger(_DeprecationTestCase):
-    # Deprecation in NumPy 2.5, 2026-03
+    # Deprecation in rsnumpy 2.5, 2026-03
 
     def test_tri(self):
         self.assert_deprecated(lambda: np.tri(M=2.3, k=3.14, N=np.object_(8)))
@@ -587,7 +587,7 @@ class TestTriDeprecationWithNonInteger(_DeprecationTestCase):
 
 
 class TestTakeOutDtype(_DeprecationTestCase):
-    # Deprecated in Numpy 2.5, 2026-01
+    # Deprecated in rsnumpy 2.5, 2026-01
     message = "Implicit casting of output to a different kind."
 
     def test_out_dtype_deprecated(self):
@@ -609,7 +609,7 @@ _DOT_CALLERS = [
 
 
 class TestDotDimensionInterleaving(_DeprecationTestCase):
-    # Deprecated NumPy 2.6, 2026-09
+    # Deprecated rsnumpy 2.6, 2026-09
     # See https://github.com/numpy/numpy/issues/31725
 
     @pytest.mark.parametrize("func, name", _DOT_CALLERS)
@@ -653,7 +653,7 @@ class TestDotDimensionInterleaving(_DeprecationTestCase):
 
 
 class TestAppendScalarPromotion(_DeprecationTestCase):
-    # Deprecated in NumPy 2.6, 2026-09
+    # Deprecated in rsnumpy 2.6, 2026-09
     warning_cls = FutureWarning
     message = "np.append converted Python numeric scalars to arrays"
 

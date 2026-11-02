@@ -4,12 +4,12 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from numpy._core._multiarray_tests import (
+from rsnumpy._core._multiarray_tests import (
     create_identity_hash,
     identity_hash_get_item,
     identity_hash_set_item_default,
 )
-from numpy.testing import IS_WASM
+from rsnumpy.testing import IS_WASM
 
 
 @pytest.mark.parametrize("key_length", [1, 3, 6])

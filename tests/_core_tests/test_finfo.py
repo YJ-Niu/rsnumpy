@@ -1,8 +1,8 @@
 import pytest
 
-import numpy as np
-from numpy import exp2, log10
-from numpy._core import numerictypes as ntypes
+import rsnumpy as np
+from rsnumpy import exp2, log10
+from rsnumpy._core import numerictypes as ntypes
 
 
 class MachArLike:

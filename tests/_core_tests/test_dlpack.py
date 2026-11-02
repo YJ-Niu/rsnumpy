@@ -2,8 +2,8 @@ import sys
 
 import pytest
 
-import numpy as np
-from numpy.testing import assert_array_equal
+import rsnumpy as np
+from rsnumpy.testing import assert_array_equal
 
 
 def new_and_old_dlpack():

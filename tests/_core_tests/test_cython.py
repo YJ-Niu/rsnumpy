@@ -7,9 +7,9 @@ from datetime import datetime
 
 import pytest
 
-import numpy as np
-from numpy.testing import HAS_SUBPROCESSES, IS_EDITABLE, assert_array_equal
-from numpy.testing._private.utils import run_subprocess
+import rsnumpy as np
+from rsnumpy.testing import HAS_SUBPROCESSES, IS_EDITABLE, assert_array_equal
+from rsnumpy.testing._private.utils import run_subprocess
 
 # This import is copied from random.tests.test_extending
 try:
@@ -18,7 +18,7 @@ try:
 except ImportError:
     cython = None
 else:
-    from numpy._utils import _pep440
+    from rsnumpy._utils import _pep440
 
     # Note: keep in sync with the one in pyproject.toml
     required_version = "3.1.0"
@@ -87,7 +87,7 @@ def test_is_timedelta64_object(install_temp):
 
     with pytest.warns(
         DeprecationWarning,
-        match="The 'generic' unit for NumPy timedelta is deprecated",
+        match="The 'generic' unit for rsnumpy timedelta is deprecated",
     ):
         assert checks.is_td64(np.timedelta64(1234))
 
@@ -112,7 +112,7 @@ def test_is_datetime64_object(install_temp):
 
     with pytest.warns(
         DeprecationWarning,
-        match="The 'generic' unit for NumPy timedelta is deprecated",
+        match="The 'generic' unit for rsnumpy timedelta is deprecated",
     ):
         assert not checks.is_dt64(np.timedelta64(1234))
 
@@ -372,7 +372,7 @@ def test_npystring_pack_invalid_utf8(install_temp):
     """Check StringDType stays safe on stored bytes that aren't valid UTF-8."""
     import checks
 
-    from numpy._core.umath import _center, _ljust, _rjust
+    from rsnumpy._core.umath import _center, _ljust, _rjust
 
     sdt = np.dtypes.StringDType()
 

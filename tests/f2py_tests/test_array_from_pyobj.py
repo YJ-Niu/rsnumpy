@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-import numpy as np
-from numpy._core._type_aliases import c_names_dict as _c_names_dict
+import rsnumpy as np
+from rsnumpy._core._type_aliases import c_names_dict as _c_names_dict
 
 from . import util
 
@@ -147,7 +147,7 @@ _cast_dict['CHARACTER'] = ['CHARACTER']
 # 32 bit system malloc typically does not provide the alignment required by
 # 16 byte long double types this means the inout intent cannot be satisfied
 # and several tests fail as the alignment flag can be randomly true or false
-# when numpy gains an aligned allocator the tests could be enabled again
+# when rsnumpy gains an aligned allocator the tests could be enabled again
 #
 # Furthermore, on macOS ARM64 and AIX, LONGDOUBLE is an alias for DOUBLE.
 if ((np.intp().dtype.itemsize != 4 or np.clongdouble().dtype.alignment <= 8)

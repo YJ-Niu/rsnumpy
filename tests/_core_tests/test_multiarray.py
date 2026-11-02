@@ -28,16 +28,16 @@ from decimal import Decimal
 
 import pytest
 
-import numpy as np
-import numpy._core._multiarray_tests as _multiarray_tests
-from numpy._core._multiarray_umath import _array_converter
-from numpy._core._rational_tests import rational, rational2
-from numpy._core.multiarray import _get_ndarray_c_version, dot
-from numpy._core.tests._locales import CommaDecimalPointLocale
-from numpy.exceptions import AxisError, ComplexWarning
-from numpy.lib import stride_tricks
-from numpy.lib.recfunctions import repack_fields
-from numpy.testing import (
+import rsnumpy as np
+import rsnumpy._core._multiarray_tests as _multiarray_tests
+from rsnumpy._core._multiarray_umath import _array_converter
+from rsnumpy._core._rational_tests import rational, rational2
+from rsnumpy._core.multiarray import _get_ndarray_c_version, dot
+from rsnumpy._core.tests._locales import CommaDecimalPointLocale
+from rsnumpy.exceptions import AxisError, ComplexWarning
+from rsnumpy.lib import stride_tricks
+from rsnumpy.lib.recfunctions import repack_fields
+from rsnumpy.testing import (
     BLAS_SUPPORTS_FPE,
     HAS_REFCOUNT,
     HAS_SUBPROCESSES,
@@ -59,7 +59,7 @@ from numpy.testing import (
     runstring,
     temppath,
 )
-from numpy.testing._private.utils import (
+from rsnumpy.testing._private.utils import (
     _no_tracing,
     longdouble_fpe_mark,
     requires_deep_recursion,
@@ -201,7 +201,7 @@ class TestFlags:
         # Test that the writeable flag can be changed for an array wrapping
         # low level C-data, but not owning its data.
         # Also see that this is deprecated to change from python.
-        from numpy._core._multiarray_tests import get_c_wrapping_array
+        from rsnumpy._core._multiarray_tests import get_c_wrapping_array
 
         arr_writeable = get_c_wrapping_array(True)
         assert not arr_writeable.flags.owndata
@@ -388,7 +388,7 @@ class TestAttributes:
     def test_int_subclassing(self):
         # Regression test for https://github.com/numpy/numpy/pull/3526
 
-        numpy_int = np.int_(0)
+        rsnumpy_int = np.int_(0)
 
         # int_ doesn't inherit from Python int, because it's not fixed-width
         assert_(not isinstance(numpy_int, int))
@@ -675,10 +675,10 @@ class TestAssignment:
         # For compatibility with <= 1.5, a limited version of broadcasting
         # the output to the input.
         #
-        # This behavior is inconsistent with NumPy broadcasting
+        # This behavior is inconsistent with rsnumpy broadcasting
         # in general, because it only uses one of the two broadcasting
         # rules (adding a new "1" dimension to the left of the shape),
-        # applied to the output instead of an input. In NumPy 2.0, this kind
+        # applied to the output instead of an input. In rsnumpy 2.0, this kind
         # of broadcasting assignment will likely be disallowed.
         a[...] = np.arange(6)[::-1].reshape(1, 2, 3)
         assert_equal(a, [[5, 4, 3], [2, 1, 0]])
@@ -706,7 +706,7 @@ class TestAssignment:
     )
     def test_unicode_assignment(self):
         # gh-5049
-        from numpy._core.arrayprint import set_printoptions
+        from rsnumpy._core.arrayprint import set_printoptions
 
         @contextmanager
         def inject_str(s):
@@ -813,8 +813,8 @@ class TestZeroRank:
         a, b = self._create_arrays()
         assert_equal(a[...], 0)
         assert_equal(b[...], 'x')
-        assert_(a[...].base is a)  # `a[...] is a` in numpy <1.9.
-        assert_(b[...].base is b)  # `b[...] is b` in numpy <1.9.
+        assert_(a[...].base is a)  # `a[...] is a` in rsnumpy <1.9.
+        assert_(b[...].base is b)  # `b[...] is b` in rsnumpy <1.9.
 
     def test_empty_subscript(self):
         a, b = self._create_arrays()
@@ -1349,7 +1349,7 @@ class TestCreation:
             np.ndarray, np.empty,
             lambda shape, dtype: np.empty_like(np.empty(shape, dtype=dtype))])
     def test_object_initialized_to_None(self, function, dtype):
-        # NumPy has support for object fields to be NULL (meaning None)
+        # rsnumpy has support for object fields to be NULL (meaning None)
         # but generally, we should always fill with the proper None, and
         # downstream may rely on that.  (For fully initialized arrays!)
         arr = function(3, dtype=dtype)
@@ -2775,7 +2775,7 @@ class TestMethods:
 
     @pytest.mark.parametrize("func", [np.sort, np.argsort])
     def test_descending_kwarg_forwarding(self, func):
-        # NumPy currently calls the sort/argsort methods. The descending
+        # rsnumpy currently calls the sort/argsort methods. The descending
         # kwarg introduced in 2.5 is only forwarded if True.
 
         class MyArray(np.ndarray):
@@ -5158,7 +5158,7 @@ class TestTemporaryElide:
         # def incref_elide(a):
         #    d = input.copy() # refcount 1
         #    return d, d + d # PyNumber_Add without increasing refcount
-        from numpy._core._multiarray_tests import incref_elide
+        from rsnumpy._core._multiarray_tests import incref_elide
         d = np.ones(100000)
         orig, res = incref_elide(d)
         d + d
@@ -5173,7 +5173,7 @@ class TestTemporaryElide:
         #
         # def incref_elide_l(d):
         #    return l[4] + l[4] # PyNumber_Add without increasing refcount
-        from numpy._core._multiarray_tests import incref_elide_l
+        from rsnumpy._core._multiarray_tests import incref_elide_l
         # padding with 1 makes sure the object on the stack is not overwritten
         l = [1, 1, 1, 1, np.ones(100000)]
         res = incref_elide_l(l)
@@ -5253,7 +5253,7 @@ class TestTemporaryElide:
 
 class TestCAPI:
     def test_IsPythonScalar(self):
-        from numpy._core._multiarray_tests import IsPythonScalar
+        from rsnumpy._core._multiarray_tests import IsPythonScalar
         assert_(IsPythonScalar(b'foobar'))
         assert_(IsPythonScalar(1))
         assert_(IsPythonScalar(2**80))
@@ -5437,9 +5437,9 @@ class TestPickling:
     @pytest.mark.skipif(pickle.HIGHEST_PROTOCOL < 5,
                         reason="requires pickle protocol 5")
     def test_load_numpy1_pkl_protocol5(self):
-        # numpy 1.x dumps contiguous arrays with protocol 5 via
-        # numpy.core.numeric._frombuffer, which must be loadable without
-        # warning despite np.core being deprecated in numpy 2.0.
+        # rsnumpy 1.x dumps contiguous arrays with protocol 5 via
+        # rsnumpy.core.numeric._frombuffer, which must be loadable without
+        # warning despite np.core being deprecated in rsnumpy 2.0.
         c_contiguous_dumped = b'\x80\x05\x95\x8f\x00\x00\x00\x00\x00\x00\x00\x8c\x12numpy.core.numeric\x94\x8c\x0b_frombuffer\x94\x93\x94(\x96\x18\x00\x00\x00\x00\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\x0c\r\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x94\x8c\x05numpy\x94\x8c\x05dtype\x94\x93\x94\x8c\x02u1\x94\x89\x88\x87\x94R\x94(K\x03\x8c\x01|\x94NNNJ\xff\xff\xff\xffJ\xff\xff\xff\xffK\x00t\x94bK\x03K\x04K\x02\x87\x94\x8c\x01C\x94t\x94R\x94.'  # noqa: E501
         f_contiguous_dumped = b'\x80\x05\x95\x8f\x00\x00\x00\x00\x00\x00\x00\x8c\x12numpy.core.numeric\x94\x8c\x0b_frombuffer\x94\x93\x94(\x96\x18\x00\x00\x00\x00\x00\x00\x00\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\x0c\r\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x94\x8c\x05numpy\x94\x8c\x05dtype\x94\x93\x94\x8c\x02u1\x94\x89\x88\x87\x94R\x94(K\x03\x8c\x01|\x94NNNJ\xff\xff\xff\xffJ\xff\xff\xff\xffK\x00t\x94bK\x03K\x04K\x02\x87\x94\x8c\x01F\x94t\x94R\x94.'  # noqa: E501
         x = np.arange(24, dtype='uint8').reshape(3, 4, 2)
@@ -5847,7 +5847,7 @@ class TestArgmaxArgminCommon:
          ('argmin', np.argmin)])
     def test_np_vs_ndarray(self, arr_method, np_method):
         # make sure both ndarray.argmax/argmin and
-        # numpy.argmax/argmin support out/axis args
+        # rsnumpy.argmax/argmin support out/axis args
         a = np.random.normal(size=(2, 3))
         arg_method = getattr(a, arr_method)
 
@@ -6301,7 +6301,7 @@ class TestMinMax:
         assert_equal((lo, hi), (np.min(a), np.max(a)))
 
     def test_minmax_user_dtype_with_promoter(self):
-        from numpy._core._multiarray_umath import _get_sfloat_dtype
+        from rsnumpy._core._multiarray_umath import _get_sfloat_dtype
 
         a = np.array([1., 5., 3.]).astype(_get_sfloat_dtype())
         lo, hi = np._core.umath.minimummaximum.reduce(a)
@@ -7256,7 +7256,7 @@ class TestFromBuffer:
 
     @pytest.mark.parametrize("obj", [np.arange(10), b"12345678"])
     def test_array_base(self, obj):
-        # Objects (including NumPy arrays), which do not use the
+        # Objects (including rsnumpy arrays), which do not use the
         # `release_buffer` slot should be directly used as a base object.
         # See also gh-21612
         new = np.frombuffer(obj)
@@ -7425,7 +7425,7 @@ class TestResize:
     )
     def test_check_reference_module_scope(self):
         code = textwrap.dedent("""
-            import numpy as np
+            import rsnumpy as np
 
             # See gh-30991
             a = np.array([[0, 1], [2, 3]], order='C')
@@ -8477,7 +8477,7 @@ class TestDot:
 
 
 class MatmulCommon:
-    """Common tests for '@' operator and numpy.matmul.
+    """Common tests for '@' operator and rsnumpy.matmul.
 
     """
     # Should work with these types. Will want to add
@@ -9148,7 +9148,7 @@ class TestChoose:
             a.choose([0, a] + [2] * 62)
 
         assert_array_equal(res, a)
-        # Choose is unfortunately limited to 32 dims as of NumPy 2.0
+        # Choose is unfortunately limited to 32 dims as of rsnumpy 2.0
         a = np.ones((1,) * 60, dtype=np.intp)
         with pytest.raises(RuntimeError,
                 match=".*32 dimensions but the array has 60"):
@@ -9492,7 +9492,7 @@ class TestMinScalarType:
         assert_equal(wanted, dt)
 
 
-from numpy._core._internal import _dtype_from_pep3118
+from rsnumpy._core._internal import _dtype_from_pep3118
 
 
 class TestPEP3118Dtype:
@@ -9739,7 +9739,7 @@ class TestNewBufferProtocol:
 
     def test_invalid_buffer_format(self):
         # datetime64 cannot be used fully in a buffer yet
-        # Should be fixed in the next Numpy major release
+        # Should be fixed in the next rsnumpy major release
         dt = np.dtype([('a', 'uint16'), ('b', 'M8[s]')])
         a = np.empty(3, dt)
         assert_raises((ValueError, BufferError), memoryview, a)
@@ -9961,7 +9961,7 @@ class TestNewBufferProtocol:
             np.array, m)
 
     def test_error_message_unsupported(self):
-        # wchar has no corresponding numpy type - if this changes in future, we
+        # wchar has no corresponding rsnumpy type - if this changes in future, we
         # need a better way to construct an invalid memoryview format.
         t = ctypes.c_wchar * 4
         with assert_raises(ValueError) as cm:
@@ -10002,8 +10002,8 @@ class TestNewBufferProtocol:
     def test_error_if_stored_buffer_info_is_corrupted(self,
                                                       structured_scalar):
         """
-        If a user extends a NumPy array before 1.20 and then runs it
-        on NumPy 1.20+. A C-subclassed array might in theory modify
+        If a user extends a rsnumpy array before 1.20 and then runs it
+        on rsnumpy 1.20+. A C-subclassed array might in theory modify
         the new buffer-info field. This checks that an error is raised
         if this happens (for buffer export), an error is written on delete.
         This is a sanity check to help users transition to safe code, it
@@ -10052,7 +10052,7 @@ class TestArrayCreationCopyArgument:
     false_vals = [False, np._CopyMode.NEVER, np.False_]
 
     def test_scalars(self):
-        # Test both numpy and python scalars
+        # Test both rsnumpy and python scalars
         for dtype in np.typecodes["All"]:
             arr = np.zeros((), dtype=dtype)
             scalar = arr[()]
@@ -10118,7 +10118,7 @@ class TestArrayCreationCopyArgument:
         arr = np.arange(10)
         view = memoryview(arr)
 
-        # Checking bases is a bit tricky since numpy creates another
+        # Checking bases is a bit tricky since rsnumpy creates another
         # memoryview, so use may_share_memory.
         for copy in self.true_vals:
             res = np.array(view, copy=copy)
@@ -10156,14 +10156,14 @@ class TestArrayCreationCopyArgument:
         for copy in self.true_vals:
             res = np.array(arr, copy=copy)
             assert_array_equal(res, base_arr)
-            # An additional copy is no longer forced by NumPy in this case.
-            # NumPy trusts the ArrayLike made a copy:
+            # An additional copy is no longer forced by rsnumpy in this case.
+            # rsnumpy trusts the ArrayLike made a copy:
             assert res is base_arr
 
         for copy in self.if_needed_vals + self.false_vals:
             res = np.array(arr, copy=copy)
             assert_array_equal(res, base_arr)
-            assert res is base_arr  # numpy trusts the ArrayLike
+            assert res is base_arr  # rsnumpy trusts the ArrayLike
 
     def test___array__copy_arg(self):
         a = np.ones((10, 10), dtype=int)
@@ -10191,7 +10191,7 @@ class TestArrayCreationCopyArgument:
         assert_array_equal(arr, base_arr)
         assert arr is base_arr
 
-        # As of NumPy 2.1, explicitly passing copy=True does trigger passing
+        # As of rsnumpy 2.1, explicitly passing copy=True does trigger passing
         # it to __array__ (deprecation warning is triggered).
         with pytest.warns(DeprecationWarning,
                           match="__array__.*must implement.*'copy'"):
@@ -10444,7 +10444,7 @@ def test_interface_nullptr(iface):
 
     arr = np.asarray(ArrayLike())
     # Note, we currently set the base anyway, but we do an allocation
-    # (because NumPy doesn't like NULL data pointers everywhere).
+    # (because rsnumpy doesn't like NULL data pointers everywhere).
     assert arr.shape == iface["shape"]
     assert arr.dtype == np.dtype(iface["typestr"])
     assert arr.base is not None
@@ -10452,7 +10452,7 @@ def test_interface_nullptr(iface):
 
 
 def test_interface_nullptr_size_check():
-    # Note that prior to NumPy 2.4 the below took the scalar path (if shape had size 1)
+    # Note that prior to rsnumpy 2.4 the below took the scalar path (if shape had size 1)
     class ArrayLike:
         __array_interface__ = {"data": (0, True), "typestr": "f8", "shape": ()}
 
@@ -11086,7 +11086,7 @@ class TestCTypes:
 
     @pytest.mark.thread_unsafe(reason="modifies global module state")
     def test_ctypes_is_not_available(self):
-        from numpy._core import _internal
+        from rsnumpy._core import _internal
         _internal.ctypes = None
         try:
             test_arr = np.array([[1, 2, 3], [4, 5, 6]])
@@ -11232,7 +11232,7 @@ class TestWritebackIfCopy:
         assert_equal(b, np.array([[15, 18, 21], [42, 54, 66], [69, 90, 111]]))
 
     def test_view_assign(self):
-        from numpy._core._multiarray_tests import (
+        from rsnumpy._core._multiarray_tests import (
             npy_create_writebackifcopy,
             npy_resolve,
         )
@@ -11261,7 +11261,7 @@ class TestWritebackIfCopy:
             _multiarray_tests.npy_abuse_writebackifcopy(v)
 
     def test_view_discard_refcount(self):
-        from numpy._core._multiarray_tests import (
+        from rsnumpy._core._multiarray_tests import (
             npy_create_writebackifcopy,
             npy_discard,
         )
@@ -11567,11 +11567,11 @@ def test_equal_subclass_no_override(op, dt1, dt2):
             type(self).called_wrap += 1
             return super().__array_wrap__(new, context, return_scalar)
 
-    numpy_arr = np.zeros(5, dtype=dt1)
+    rsnumpy_arr = np.zeros(5, dtype=dt1)
     my_arr = np.zeros(5, dtype=dt2).view(MyArr)
 
     assert type(op(numpy_arr, my_arr)) is MyArr
-    assert type(op(my_arr, numpy_arr)) is MyArr
+    assert type(op(my_arr, rsnumpy_arr)) is MyArr
     # We expect 2 calls (more if there were more fields):
     assert MyArr.called_wrap == 2
 
@@ -11630,7 +11630,7 @@ def test_comparisons_forwards_error(op):
 
 
 def test_richcompare_scalar_boolean_singleton_return():
-    # These are currently guaranteed to be the boolean numpy singletons
+    # These are currently guaranteed to be the boolean rsnumpy singletons
     assert (np.array(0) == "a") is np.bool_(False)
     assert (np.array(0) != "a") is np.bool_(True)
     assert (np.int16(0) == "a") is np.bool_(False)
@@ -11672,7 +11672,7 @@ def test_npymath_complex(fun, npfun, x, y, test_dtype):
 
 def test_npymath_real():
     # Smoketest npymath functions
-    from numpy._core._multiarray_tests import (
+    from rsnumpy._core._multiarray_tests import (
         npy_cosh,
         npy_log10,
         npy_sinh,
@@ -11698,7 +11698,7 @@ def test_npymath_real():
 
 def test_uintalignment_and_alignment():
     # alignment code needs to satisfy these requirements:
-    #  1. numpy structs match C struct layout
+    #  1. rsnumpy structs match C struct layout
     #  2. ufuncs/casting is safe wrt to aligned access
     #  3. copy code is safe wrt to "uint alidned" access
     #
@@ -11717,7 +11717,7 @@ def test_uintalignment_and_alignment():
     assert_equal(np.zeros(1, dtype=d2)['f1'].flags['ALIGNED'], True)
     assert_equal(np.zeros(1, dtype='u1,c8')['f1'].flags['ALIGNED'], False)
 
-    # check that C struct matches numpy struct size
+    # check that C struct matches rsnumpy struct size
     s = _multiarray_tests.get_struct_alignments()
     for d, (alignment, size) in zip([d1, d2, d3], s):
         assert_equal(d.alignment, alignment)
@@ -11734,7 +11734,7 @@ def test_uintalignment_and_alignment():
 
 class TestAlignment:
     # adapted from scipy._lib.tests.test__util.test__aligned_zeros
-    # Checks that unusual memory alignments don't trip up numpy.
+    # Checks that unusual memory alignments don't trip up rsnumpy.
 
     def check(self, shape, dtype, order, align):
         err_msg = repr((shape, dtype, order, align))
@@ -12096,7 +12096,7 @@ def test_insufficient_width():
         np.binary_repr(-5, width=2)
 
 def test_npy_char_raises():
-    from numpy._core._multiarray_tests import npy_char_deprecation
+    from rsnumpy._core._multiarray_tests import npy_char_deprecation
     with pytest.raises(ValueError):
         npy_char_deprecation()
 
@@ -12160,7 +12160,7 @@ def test_array_interface_excess_dimensions_raises():
     base = np.array(42)  # base can be any scalar or array
     interface = dict(base.__array_interface__)
 
-    # Modify the shape to exceed NumPy's dimension limit (NPY_MAXDIMS, typically 64)
+    # Modify the shape to exceed rsnumpy's dimension limit (NPY_MAXDIMS, typically 64)
     interface['shape'] = tuple([1] * 136)  # match the original bug report
 
     dummy = DummyArray(interface)
@@ -12309,7 +12309,7 @@ class TestPatternMatching:
 class TestSubinterpreterTeardown:
     """
     ``_multiarray_umath`` declares Py_MOD_MULTIPLE_INTERPRETERS_NOT_SUPPORTED,
-    so importing numpy in a subinterpreter must fail cleanly with an
+    so importing rsnumpy in a subinterpreter must fail cleanly with an
     ImportError rather than crashing. Closing the subinterpreter afterwards
     exercises its teardown path even though the import failed.
     """
@@ -12321,8 +12321,8 @@ class TestSubinterpreterTeardown:
         interp = interpreters.create()
         try:
             with pytest.raises(interpreters.ExecutionFailed) as exc:
-                interp.exec("import numpy")
-            # numpy rewraps every C-extension ImportError in a generic
+                interp.exec("import rsnumpy")
+            # rsnumpy rewraps every C-extension ImportError in a generic
             # message, so the type alone would also pass for a broken build.
             msg = exc.value.excinfo.msg
             assert "does not support loading in subinterpreters" in msg, msg

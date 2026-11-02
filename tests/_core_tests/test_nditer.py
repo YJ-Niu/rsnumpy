@@ -6,11 +6,11 @@ import warnings
 
 import pytest
 
-import numpy as np
-import numpy._core._multiarray_tests as _multiarray_tests
-import numpy._core.umath as ncu
-from numpy import all, arange, array, nditer
-from numpy.testing import (
+import rsnumpy as np
+import rsnumpy._core._multiarray_tests as _multiarray_tests
+import rsnumpy._core.umath as ncu
+from rsnumpy import all, arange, array, nditer
+from rsnumpy.testing import (
     HAS_REFCOUNT,
     HAS_SUBPROCESSES,
     IS_64BIT,
@@ -19,7 +19,7 @@ from numpy.testing import (
     assert_equal,
     assert_raises,
 )
-from numpy.testing._private.utils import requires_memory
+from rsnumpy.testing._private.utils import requires_memory
 
 
 def iter_multi_index(i):
@@ -665,7 +665,7 @@ def test_iter_dim_coalescing():
     assert_equal(i.ndim, 1)
 
 def test_iter_broadcasting():
-    # Standard NumPy broadcasting rules
+    # Standard rsnumpy broadcasting rules
 
     # 1D with scalar
     i = nditer([arange(6), np.int32(2)], ['multi_index'], [['readonly']] * 2)
@@ -2245,7 +2245,7 @@ def test_buffered_cast_error_paths_unraisable():
     # probably be cleaned out in the future to check for
     # pytest.PytestUnraisableExceptionWarning:
     code = textwrap.dedent("""
-        import numpy as np
+        import rsnumpy as np
 
         it = np.nditer((np.array(1, dtype="i"),), op_dtypes=["S1"],
                        op_flags=["writeonly"], casting="unsafe", flags=["buffered"])
@@ -2611,7 +2611,7 @@ def test_iter_buffered_reduce_reuse():
 
 
 def test_iter_buffered_reduce_reuse_core():
-    # NumPy re-uses buffers for broadcast operands (as of writing when reading).
+    # rsnumpy re-uses buffers for broadcast operands (as of writing when reading).
     # Test this even if the offset is manually set at some point during
     # the iteration.  (not a particularly tricky path)
     arr = np.empty((1, 6, 4, 1)).reshape(1, 6, 4, 1)[:, ::3, ::2, :]

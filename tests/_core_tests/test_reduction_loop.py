@@ -2,8 +2,8 @@ import itertools
 
 import pytest
 
-import numpy as np
-from numpy._core._reduction_loop_tests import (
+import rsnumpy as np
+from rsnumpy._core._reduction_loop_tests import (
     minimum_intp_maximum,
     minimum_object_maximum,
     minimummaximum as mm,

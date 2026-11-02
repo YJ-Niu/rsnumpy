@@ -1,4 +1,4 @@
-# NOTE: Please avoid the use of numpy.testing since NPYV intrinsics
+# NOTE: Please avoid the use of rsnumpy.testing since NPYV intrinsics
 # may be involved in their functionality.
 import itertools
 import math
@@ -7,8 +7,8 @@ import re
 
 import pytest
 
-from numpy._core._multiarray_umath import __cpu_baseline__
-from numpy._core._simd import clear_floatstatus, get_floatstatus, targets
+from rsnumpy._core._multiarray_umath import __cpu_baseline__
+from rsnumpy._core._simd import clear_floatstatus, get_floatstatus, targets
 
 
 def check_floatstatus(divbyzero=False, overflow=False,

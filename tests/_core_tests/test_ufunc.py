@@ -8,14 +8,14 @@ import warnings
 import pytest
 from pytest import param
 
-import numpy as np
-import numpy._core._operand_flag_tests as opflag_tests
-import numpy._core._rational_tests as _rational_tests
-import numpy._core._umath_tests as umt
-import numpy._core.umath as ncu
-import numpy.linalg._umath_linalg as uml
-from numpy.exceptions import AxisError
-from numpy.testing import (
+import rsnumpy as np
+import rsnumpy._core._operand_flag_tests as opflag_tests
+import rsnumpy._core._rational_tests as _rational_tests
+import rsnumpy._core._umath_tests as umt
+import rsnumpy._core.umath as ncu
+import rsnumpy.linalg._umath_linalg as uml
+from rsnumpy.exceptions import AxisError
+from rsnumpy.testing import (
     HAS_REFCOUNT,
     IS_WASM,
     assert_,
@@ -27,7 +27,7 @@ from numpy.testing import (
     assert_no_warnings,
     assert_raises,
 )
-from numpy.testing._private.utils import requires_memory
+from rsnumpy.testing._private.utils import requires_memory
 
 UNARY_UFUNCS = [obj for obj in np._core.umath.__dict__.values()
                     if isinstance(obj, np.ufunc)]
@@ -218,8 +218,8 @@ class TestUfunc:
             assert_(pickle.loads(pickle.dumps(np.sin,
                                               protocol=proto)) is np.sin)
 
-            # Check that ufunc not defined in the top level numpy namespace
-            # such as numpy._core._rational_tests.test_add can also be pickled
+            # Check that ufunc not defined in the top level rsnumpy namespace
+            # such as rsnumpy._core._rational_tests.test_add can also be pickled
             res = pickle.loads(pickle.dumps(_rational_tests.test_add,
                                             protocol=proto))
             assert_(res is _rational_tests.test_add)
@@ -499,7 +499,7 @@ class TestUfunc:
             np.add(3, 4, signature=(None,))
 
     def test_signature_dtype_type(self):
-        # Since that will be the normal behaviour (past NumPy 1.21)
+        # Since that will be the normal behaviour (past rsnumpy 1.21)
         # we do support the types already:
         float_dtype = type(np.dtype(np.float64))
         np.add(3, 4, signature=(float_dtype, float_dtype, None))
@@ -2032,7 +2032,7 @@ class TestUfunc:
             uf.accumulate(np.zeros((0, 0)), axis=0)
 
     def test_safe_casting(self):
-        # In old versions of numpy, in-place operations used the 'unsafe'
+        # In old versions of rsnumpy, in-place operations used the 'unsafe'
         # casting rules. In versions >= 1.10, 'same_kind' is the
         # default and an exception is raised instead of a warning.
         # when 'same_kind' is not satisfied.
@@ -2057,7 +2057,7 @@ class TestUfunc:
         b = np.array([0, 1, 2], dtype='i8')
         c = np.empty(3, dtype=_rational_tests.rational)
 
-        # Output must be specified so numpy knows what
+        # Output must be specified so rsnumpy knows what
         # ufunc signature to look for
         result = _rational_tests.test_add(a, b, c)
         target = np.array([0, 2, 4], dtype=_rational_tests.rational)
@@ -2092,7 +2092,7 @@ class TestUfunc:
         assert_equal(a, 10)
 
     def test_struct_ufunc(self):
-        import numpy._core._struct_ufunc_tests as struct_ufunc
+        import rsnumpy._core._struct_ufunc_tests as struct_ufunc
 
         a = np.array([(1, 2, 3)], dtype='u8,u8,u8')
         b = np.array([(1, 2, 3)], dtype='u8,u8,u8')
@@ -3399,7 +3399,7 @@ class TestLowlevelAPIAccess:
         assert np.sin.resolve_dtypes((int, None)) == (
             np.dtype("f8"), np.dtype("f8"))
         with pytest.raises(TypeError,
-                match="Output descriptors must be NumPy dtypes or None."):
+                match="Output descriptors must be rsnumpy dtypes or None."):
             np.sin.resolve_dtypes((int, int))
 
     def test_resolve_dtypes_comparison(self):
@@ -3411,7 +3411,7 @@ class TestLowlevelAPIAccess:
 
     def test_weird_dtypes(self):
         S0 = np.dtype("S0")
-        # S0 is often converted by NumPy to S1, but not here:
+        # S0 is often converted by rsnumpy to S1, but not here:
         r = np.equal.resolve_dtypes((S0, S0, None))
         assert r == (S0, S0, np.dtype(bool))
 

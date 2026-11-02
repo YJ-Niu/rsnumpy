@@ -11,10 +11,10 @@ from functools import reduce
 
 import pytest
 
-import numpy as np
-import numpy._core.umath as ncu
-from numpy._core import _umath_tests as ncu_tests, sctypes
-from numpy.testing import (
+import rsnumpy as np
+import rsnumpy._core.umath as ncu
+from rsnumpy._core import _umath_tests as ncu_tests, sctypes
+from rsnumpy.testing import (
     HAS_REFCOUNT,
     IS_MUSL,
     IS_WASM,
@@ -31,7 +31,7 @@ from numpy.testing import (
     assert_raises,
     assert_raises_regex,
 )
-from numpy.testing._private.utils import (
+from rsnumpy.testing._private.utils import (
     LONG_DOUBLE_IS_IBM_DOUBLE_DOUBLE,
     _glibc_older_than,
     longdouble_fpe_mark,
@@ -1062,7 +1062,7 @@ class TestDivisionIntegerOverflowsAndDivideByZero:
 
     @pytest.mark.parametrize("dtype", np.typecodes["AllInteger"])
     def test_divide_by_zero(self, dtype):
-        # Note that the return value cannot be well defined here, but NumPy
+        # Note that the return value cannot be well defined here, but rsnumpy
         # currently uses 0 consistently.  This could be changed.
         to_check = interesting_binop_operands(1, 0, dtype)
         for op1, op2, extractor, operand_identifier in to_check:
@@ -5410,8 +5410,8 @@ def test_outer_exceeds_maxdims():
         np.add.outer(deep, deep)
 
 def test_bad_legacy_ufunc_silent_errors():
-    # legacy ufuncs can't report errors and NumPy can't check if the GIL
-    # is released.  So NumPy has to check after the GIL is released just to
+    # legacy ufuncs can't report errors and rsnumpy can't check if the GIL
+    # is released.  So rsnumpy has to check after the GIL is released just to
     # cover all bases.  `np.power` uses/used to use this.
     arr = np.arange(3).astype(np.float64)
 

@@ -7,9 +7,9 @@ import sysconfig
 
 import pytest
 
-import numpy as np
-from numpy.testing import HAS_SUBPROCESSES, IS_EDITABLE, NOGIL_BUILD
-from numpy.testing._private.utils import run_subprocess
+import rsnumpy as np
+from rsnumpy.testing import HAS_SUBPROCESSES, IS_EDITABLE, NOGIL_BUILD
+from rsnumpy.testing._private.utils import run_subprocess
 
 # This import is copied from random.tests.test_extending
 try:
@@ -18,7 +18,7 @@ try:
 except ImportError:
     cython = None
 else:
-    from numpy._utils import _pep440
+    from rsnumpy._utils import _pep440
 
     # Note: keep in sync with the one in pyproject.toml
     required_version = "3.1.0"
@@ -39,7 +39,7 @@ if IS_EDITABLE:
 def build_limited_api_modules(tmpdir_factory):
     # Based in part on test_cython from random.tests.test_extending
     # This runs meson only once, but that single build compiles a separate
-    # extension module for every (Python, NumPy) version combination; see
+    # extension module for every (Python, rsnumpy) version combination; see
     # the comment above _PY_ABI3_VERSIONS below.
     if not HAS_SUBPROCESSES:
         pytest.skip("No subprocess")
@@ -159,7 +159,7 @@ def _check_api_module(mod, cython=False):
 
         # NpyString allocator API; under abi3t PyArray_StringDTypeObject is
         # opaque and only the descriptor object pointer is passed. Absent
-        # when the module targets NumPy < 2.0 (the "default" target).
+        # when the module targets rsnumpy < 2.0 (the "default" target).
         if hasattr(mod, "stringdtype_load"):
             arr = np.array(["hello", "world"], dtype=np.dtypes.StringDType())
             assert mod.stringdtype_load(arr) == "hello"
@@ -173,18 +173,18 @@ def _check_api_module(mod, cython=False):
             assert mod.stringdtype_load(arr) is None
 
 
-# Test limited API extension modules for all supported Python and NumPy versions.
+# Test limited API extension modules for all supported Python and rsnumpy versions.
 #
 # The single meson build run by build_limited_api_modules compiles one C and one
 # Cython extension module for every combination of abi3 Python version (up to
-# the running interpreter) and NumPy target version listed below, e.g.
+# the running interpreter) and rsnumpy target version listed below, e.g.
 # limited_api_3_11_npy2_2 and limited_api_cython_3_11_npy2_2 (see meson.build
 # in examples/limited_api). The test first runs the build, then imports every
 # one of those modules by name and tests it with the _check_api_module helper.
 # So every iteration tests a different extension module built with a different
-# combination of Python and NumPy target versions.
+# combination of Python and rsnumpy target versions.
 #
-# Normally a single Python package uses a single Python and a single NumPy version
+# Normally a single Python package uses a single Python and a single rsnumpy version
 # as the target (i.e., lowest-supported) version, so this test isn't realistic in
 # that respect. However, it *is* realistic for cross-package issues between
 # extension modules. This can happen in practice, e.g. when Cython extensions load
@@ -195,7 +195,7 @@ def _check_api_module(mod, cython=False):
 # with the lists defined in meson.build, and the test should be updated
 # if new versions are added here.
 # The special "default" entry builds without defining NPY_TARGET_VERSION at all,
-# which exercises the path where numpyconfig.h picks the current API version.
+# which exercises the path where rsnumpyconfig.h picks the current API version.
 _PY_ABI3_VERSIONS = ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "3.15"]
 _NPY_TARGET_VERSIONS = ["2.0", "2.1", "2.2", "2.3", "2.4", "2.5", "default"]
 

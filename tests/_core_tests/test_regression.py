@@ -12,11 +12,11 @@ from os import path
 
 import pytest
 
-import numpy as np
-from numpy._utils import asbytes, asunicode
-from numpy.exceptions import AxisError, ComplexWarning
-from numpy.lib.stride_tricks import as_strided
-from numpy.testing import (
+import rsnumpy as np
+from rsnumpy._utils import asbytes, asunicode
+from rsnumpy.exceptions import AxisError, ComplexWarning
+from rsnumpy.lib.stride_tricks import as_strided
+from rsnumpy.testing import (
     HAS_REFCOUNT,
     IS_64BIT,
     IS_WASM,
@@ -29,7 +29,7 @@ from numpy.testing import (
     assert_raises,
     assert_raises_regex,
 )
-from numpy.testing._private.utils import (
+from rsnumpy.testing._private.utils import (
     _no_tracing,
     requires_deep_recursion,
     requires_memory,
@@ -294,7 +294,7 @@ class TestRegression:
         assert_equal(0, np.add.identity)
 
     def test_numpy_float_python_long_addition(self):
-        # Check that numpy float and python longs can be added correctly.
+        # Check that rsnumpy float and python longs can be added correctly.
         a = np.float64(23.) + 2**135
         assert_equal(a, 23. + 2**135)
 
@@ -1100,7 +1100,7 @@ class TestRegression:
     def test_compress_small_type(self):
         # Ticket #789, changeset 5217.
         # compress with out argument segfaulted if cannot cast safely
-        import numpy as np
+        import rsnumpy as np
         a = np.array([[1, 2], [3, 4]])
         b = np.zeros((2, 1), dtype=np.single)
         a.compress([True, False], axis=1, out=b)
@@ -1714,7 +1714,7 @@ class TestRegression:
                 return obj
 
             # it is perfectly reasonable that prior
-            # to numpy version 1.7.0 a subclass of ndarray
+            # to rsnumpy version 1.7.0 a subclass of ndarray
             # might have been created that did not expect
             # squeeze to have an axis argument
             # NOTE: this example is somewhat artificial;
@@ -1786,7 +1786,7 @@ class TestRegression:
         a[()] = b
         b[()] = a
         assert_raises(RecursionError, int, a)
-        # NumPy has no tp_traverse currently, so circular references
+        # rsnumpy has no tp_traverse currently, so circular references
         # cannot be detected. So resolve it:
         a[()] = None
 
@@ -1875,7 +1875,7 @@ class TestRegression:
 
     def test_ticket_1770(self):
         "Should not segfault on python 3k"
-        import numpy as np
+        import rsnumpy as np
         try:
             a = np.zeros((1,), dtype=[('f1', 'f')])
             a['f1'] = 1
@@ -2048,7 +2048,7 @@ class TestRegression:
     def test_string_truncation_ucs2(self):
         # Ticket #2081. Python compiled with two byte unicode
         # can lead to truncation if itemsize is not properly
-        # adjusted for NumPy's four byte unicode.
+        # adjusted for rsnumpy's four byte unicode.
         a = np.array(['abcd'])
         assert_equal(a.dtype.itemsize, 16)
 
@@ -2116,7 +2116,7 @@ class TestRegression:
         assert_(c.flags.f_contiguous)
 
     def test_fortran_order_buffer(self):
-        import numpy as np
+        import rsnumpy as np
         a = np.array([['Hello', 'Foob']], dtype='U5', order='F')
         arr = np.ndarray(shape=[1, 2, 5], dtype='U1', buffer=a)
         arr2 = np.array([[['H', 'e', 'l', 'l', 'o'],
@@ -2560,7 +2560,7 @@ class TestRegression:
 
     def test_load_ufunc_pickle(self):
         # ufuncs are pickled with a semi-private path in
-        # numpy.core._multiarray_umath and must be loadable without warning
+        # rsnumpy.core._multiarray_umath and must be loadable without warning
         # despite np.core being deprecated.
         test_data = (
             b'\x80\x04\x95(\x00\x00\x00\x00\x00\x00\x00\x8c\x1cnumpy.core.'
@@ -2570,7 +2570,7 @@ class TestRegression:
         assert result is np.add
 
     def test_load_core_pickle_globals(self):
-        # numpy 1.x pickles arrays and scalars with paths in numpy.core,
+        # rsnumpy 1.x pickles arrays and scalars with paths in rsnumpy.core,
         # which must be loadable without warning despite np.core being
         # deprecated in 2.0.
         test_data = b'\x80\x04\x95&\x00\x00\x00\x00\x00\x00\x00\x8c\x12numpy.core.numeric\x94\x8c\x0b_frombuffer\x94\x93\x94.'  # noqa: E501

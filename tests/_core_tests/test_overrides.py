@@ -8,16 +8,16 @@ from unittest import mock
 
 import pytest
 
-import numpy as np
-from numpy._core._multiarray_umath import _ArrayFunctionDispatcher
-from numpy._core.overrides import (
+import rsnumpy as np
+from rsnumpy._core._multiarray_umath import _ArrayFunctionDispatcher
+from rsnumpy._core.overrides import (
     _get_implementing_args,
     _ReductionKind,
     array_function_dispatch,
     verify_matching_signatures,
 )
-from numpy.testing import assert_, assert_equal, assert_raises, assert_raises_regex
-from numpy.testing.overrides import get_overridable_numpy_array_functions
+from rsnumpy.testing import assert_, assert_equal, assert_raises, assert_raises_regex
+from rsnumpy.testing.overrides import get_overridable_numpy_array_functions
 
 
 def _return_not_implemented(self, *args, **kwargs):
@@ -198,7 +198,7 @@ class TestNDArrayArrayFunction:
         assert_equal(result, expected.view(OverrideSub))
 
     def test_no_wrapper(self):
-        # Regular numpy functions have wrappers, but do not presume
+        # Regular rsnumpy functions have wrappers, but do not presume
         # all functions do (array creation ones do not): check that
         # we just call the function in that case.
         array = np.array(1)
@@ -738,14 +738,14 @@ class TestArrayLike:
 
     @pytest.mark.parametrize('function, args, kwargs', _array_tests)
     @pytest.mark.parametrize('numpy_ref', [True, False])
-    def test_array_like(self, function, args, kwargs, numpy_ref):
+    def test_array_like(self, function, args, kwargs, rsnumpy_ref):
         MyArray = self._create_MyArray()
         self.add_method('array', MyArray)
         self.add_method(function, MyArray)
         np_func = getattr(np, function)
         my_func = getattr(MyArray, function)
 
-        if numpy_ref is True:
+        if rsnumpy_ref is True:
             ref = np.array(1)
         else:
             ref = MyArray.array()
@@ -753,7 +753,7 @@ class TestArrayLike:
         like_args = tuple(a() if callable(a) else a for a in args)
         array_like = np_func(*like_args, **kwargs, like=ref)
 
-        if numpy_ref is True:
+        if rsnumpy_ref is True:
             assert type(array_like) is np.ndarray
 
             np_args = tuple(a() if callable(a) else a for a in args)
@@ -802,12 +802,12 @@ class TestArrayLike:
         assert_equal(array_like.view(np.ndarray), np_arr)
 
     @pytest.mark.parametrize('numpy_ref', [True, False])
-    def test_array_like_fromfile(self, numpy_ref):
+    def test_array_like_fromfile(self, rsnumpy_ref):
         MyArray = self._create_MyArray()
         self.add_method('array', MyArray)
         self.add_method("fromfile", MyArray)
 
-        if numpy_ref is True:
+        if rsnumpy_ref is True:
             ref = np.array(1)
         else:
             ref = MyArray.array()
@@ -819,7 +819,7 @@ class TestArrayLike:
             data.tofile(fname)
 
             array_like = np.fromfile(fname, like=ref)
-            if numpy_ref is True:
+            if rsnumpy_ref is True:
                 assert type(array_like) is np.ndarray
                 np_res = np.fromfile(fname, like=ref)
                 assert_equal(np_res, data)

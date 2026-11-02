@@ -2,8 +2,8 @@ import multiprocessing
 
 import pytest
 
-import numpy as np
-from numpy.testing import IS_IOS, IS_WASM
+import rsnumpy as np
+from rsnumpy.testing import IS_IOS, IS_WASM
 
 pytestmark = pytest.mark.thread_unsafe(
     reason="tests in this module are explicitly multi-processed"
@@ -41,7 +41,7 @@ def test_read_write_bool_array():
     # (e.g., `free(): invalid pointer`).
     #
     # This test creates a multi-process race between a writer and a reader to
-    # ensure that NumPy does not exhibit such failures.
+    # ensure that rsnumpy does not exhibit such failures.
     from concurrent.futures import ProcessPoolExecutor
     from multiprocessing import shared_memory
     n = 10000
