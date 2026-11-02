@@ -1,5 +1,5 @@
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 a: npt.NDArray[np.float64]
 generator = (i for i in range(10))

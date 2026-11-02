@@ -1,7 +1,7 @@
 from typing import Any, assert_type
 
-import numpy as np
-import numpy.lib.format as fmt
+import rsnumpy as np
+import rsnumpy.lib.format as fmt
 
 ###
 

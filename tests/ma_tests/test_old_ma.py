@@ -3,10 +3,10 @@ from functools import reduce
 
 import pytest
 
-import numpy as np
-import numpy._core.fromnumeric as fromnumeric
-import numpy._core.umath as umath
-from numpy.ma import (
+import rsnumpy as np
+import rsnumpy._core.fromnumeric as fromnumeric
+import rsnumpy._core.umath as umath
+from rsnumpy.ma import (
     MaskedArray,
     MaskType,
     absolute,
@@ -83,7 +83,7 @@ from numpy.ma import (
     where,
     zeros,
 )
-from numpy.testing import assert_, assert_equal, assert_raises
+from rsnumpy.testing import assert_, assert_equal, assert_raises
 
 pi = np.pi
 

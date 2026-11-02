@@ -1,7 +1,7 @@
 from typing import Any, Protocol, assert_type
 
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 class CanAbs[T](Protocol):
     def __abs__(self, /) -> T: ...

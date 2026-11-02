@@ -1,7 +1,7 @@
 from typing import Any, Literal, assert_type
 
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 i4: np.int32
 f8: np.float64

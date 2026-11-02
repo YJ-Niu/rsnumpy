@@ -1,9 +1,9 @@
 import datetime as dt
 from typing import Any, cast
 
-import numpy as np
-import numpy.typing as npt
-from numpy._typing import _Shape
+import rsnumpy as np
+import rsnumpy.typing as npt
+from rsnumpy._typing import _Shape
 
 type MaskedArray[ScalarT: np.generic] = np.ma.MaskedArray[_Shape, np.dtype[ScalarT]]
 
@@ -195,5 +195,5 @@ MAR_c **= AR_LIKE_i
 MAR_c **= AR_LIKE_f
 MAR_c **= AR_LIKE_c
 
-# https://github.com/numpy/numpy/issues/31737
+# https://github.com/rsnumpy/rsnumpy/issues/31737
 np.ma.masked_array([1])

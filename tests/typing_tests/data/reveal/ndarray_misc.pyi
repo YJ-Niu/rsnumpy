@@ -14,8 +14,8 @@ from types import ModuleType
 from typing import Any, Literal, TypeVar, assert_type
 from typing_extensions import CapsuleType
 
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 class SubClass(np.ndarray[tuple[Any, ...], np.dtype[np.object_]]): ...
 

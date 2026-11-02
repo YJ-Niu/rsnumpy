@@ -1,5 +1,5 @@
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 class DTypeLike:
     dtype: np.dtype[np.int_]

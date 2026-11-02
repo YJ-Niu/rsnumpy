@@ -1,8 +1,8 @@
 from collections.abc import Mapping
 from typing import Any, SupportsIndex, assert_type
 
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 ###
 

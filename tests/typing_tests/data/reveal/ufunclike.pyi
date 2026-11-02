@@ -1,8 +1,8 @@
 from typing import Any, assert_type
 
-import numpy as np
-import numpy.typing as npt
-from numpy._typing import _SupportsArray
+import rsnumpy as np
+import rsnumpy.typing as npt
+from rsnumpy._typing import _SupportsArray
 
 AR_LIKE_b: list[bool]
 AR_LIKE_u: list[np.uint32]

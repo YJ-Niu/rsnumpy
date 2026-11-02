@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-import numpy as np
-from numpy.testing import assert_array_equal, assert_equal
+import rsnumpy as np
+from rsnumpy.testing import assert_array_equal, assert_equal
 
 from . import util
 

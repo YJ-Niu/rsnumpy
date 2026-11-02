@@ -1,8 +1,8 @@
 from collections.abc import Sequence
 from typing import Any, assert_type
 
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 AR_i4: npt.NDArray[np.int32]
 AR_i8: npt.NDArray[np.int64]

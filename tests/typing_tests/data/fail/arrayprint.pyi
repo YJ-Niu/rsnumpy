@@ -1,8 +1,8 @@
 from collections.abc import Callable
 from typing import Any
 
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 AR: npt.NDArray[np.float64]
 func1: Callable[[Any], str]

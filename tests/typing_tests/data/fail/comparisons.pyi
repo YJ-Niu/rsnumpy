@@ -1,5 +1,5 @@
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 AR_i: npt.NDArray[np.int64]
 AR_f: npt.NDArray[np.float64]

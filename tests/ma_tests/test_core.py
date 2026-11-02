@@ -19,14 +19,14 @@ from functools import reduce
 
 import pytest
 
-import numpy as np
-import numpy._core.fromnumeric as fromnumeric
-import numpy._core.umath as umath
-import numpy.ma.core
-from numpy import ndarray
-from numpy._utils import asbytes
-from numpy.exceptions import AxisError
-from numpy.ma.core import (
+import rsnumpy as np
+import rsnumpy._core.fromnumeric as fromnumeric
+import rsnumpy._core.umath as umath
+import rsnumpy.ma.core
+from rsnumpy import ndarray
+from rsnumpy._utils import asbytes
+from rsnumpy.exceptions import AxisError
+from rsnumpy.ma.core import (
     MAError,
     MaskedArray,
     MaskError,
@@ -135,7 +135,7 @@ from numpy.ma.core import (
     zeros,
     zeros_like,
 )
-from numpy.ma.testutils import (
+from ma_tests.testutils import (
     assert_,
     assert_almost_equal,
     assert_array_equal,
@@ -145,8 +145,8 @@ from numpy.ma.testutils import (
     assert_not_equal,
     fail_if_equal,
 )
-from numpy.testing import IS_WASM, assert_raises, temppath
-from numpy.testing._private.utils import requires_memory
+from rsnumpy.testing import IS_WASM, assert_raises, temppath
+from testing._private.utils import requires_memory
 
 pi = np.pi
 
@@ -157,7 +157,7 @@ num_ids = [dt_.char for dt_ in num_dts]
 
 WARNING_MESSAGE = ("setting an item on a masked array which has a shared "
                    "mask will not copy")
-WARNING_MARK_SPEC = f"ignore:.*{WARNING_MESSAGE}:numpy.ma.core.MaskedArrayFutureWarning"
+WARNING_MARK_SPEC = f"ignore:.*{WARNING_MESSAGE}:rsnumpy.ma.core.MaskedArrayFutureWarning"
 class TestMaskedArray:
     # Base test class for MaskedArrays.
 
@@ -853,7 +853,7 @@ class TestMaskedArray:
         msg = "setting an item on a masked array which has a shared mask will not copy"
         with warnings.catch_warnings():
             warnings.filterwarnings(
-                'ignore', msg, numpy.ma.core.MaskedArrayFutureWarning)
+                'ignore', msg, rsnumpy.ma.core.MaskedArrayFutureWarning)
             # Tests some generic features
             atest = array([10], mask=True)
             btest = array([20])
@@ -906,10 +906,10 @@ class TestMaskedArray:
         assert_equal(test, control)
 
         # test if mask gets set correctly (see #6760)
-        Z = numpy.ma.zeros(2, numpy.dtype([("A", "(2,2)i1,(2,2)i1", (2, 2))]))
-        assert_equal(Z.data.dtype, numpy.dtype([('A', [('f0', 'i1', (2, 2)),
+        Z = rsnumpy.ma.zeros(2, rsnumpy.dtype([("A", "(2,2)i1,(2,2)i1", (2, 2))]))
+        assert_equal(Z.data.dtype, rsnumpy.dtype([('A', [('f0', 'i1', (2, 2)),
                                           ('f1', 'i1', (2, 2))], (2, 2))]))
-        assert_equal(Z.mask.dtype, numpy.dtype([('A', [('f0', '?', (2, 2)),
+        assert_equal(Z.mask.dtype, rsnumpy.dtype([('A', [('f0', '?', (2, 2)),
                                           ('f1', '?', (2, 2))], (2, 2))]))
 
     def test_filled_with_f_order(self):
@@ -1004,9 +1004,9 @@ class TestMaskedArray:
         assert_equal(test.dtype, control.dtype)
         # for strings
         ndtype = [('a', 'U5'), ('b', [('c', 'U5')])]
-        arr = np.array([('NumPy', ('array',)), ('array', ('numpy',))], dtype=ndtype)
+        arr = np.array([('NumPy', ('array',)), ('array', ('rsnumpy',))], dtype=ndtype)
         test = flatten_structured_array(arr)
-        control = np.array([['NumPy', 'array'], ['array', 'numpy']], dtype='U5')
+        control = np.array([['NumPy', 'array'], ['array', 'rsnumpy']], dtype='U5')
         assert_equal(test, control)
         assert_equal(test.dtype, control.dtype)
 
@@ -1392,7 +1392,7 @@ class TestMaskedArrayArithmetic:
         for funcname in ('min', 'max'):
             # Initialize
             npfunc = getattr(np, funcname)
-            mafunc = getattr(numpy.ma.core, funcname)
+            mafunc = getattr(rsnumpy.ma.core, funcname)
             # Use the np version
             nout = np.empty((4,), dtype=int)
             try:
@@ -1833,7 +1833,7 @@ class TestMaskedArrayArithmetic:
 
     def test_eq_ne_structured_extra(self):
         # ensure simple examples are symmetric and make sense.
-        # from https://github.com/numpy/numpy/pull/8590#discussion_r101126465
+        # from https://github.com/rsnumpy/rsnumpy/pull/8590#discussion_r101126465
         dt = np.dtype('i4,i4')
         for m1 in (mvoid((1, 2), mask=(0, 0), dtype=dt),
                    mvoid((1, 2), mask=(0, 1), dtype=dt),
@@ -2114,7 +2114,7 @@ class TestMaskedArrayArithmetic:
                                      [False, True]])
 
     def test_numpyarithmetic(self):
-        # Check that the mask is not back-propagated when using numpy functions
+        # Check that the mask is not back-propagated when using rsnumpy functions
         a = masked_array([-1, 0, 1, 2, 3], mask=[0, 0, 0, 0, 1])
         control = masked_array([np.nan, np.nan, 0, np.log(2), -1],
                                mask=[1, 1, 0, 0, 1])
@@ -2522,12 +2522,12 @@ class TestFillingValues:
 
         for timecode in ("as", "fs", "ps", "ns", "us", "ms", "s", "m",
                          "h", "D", "W", "M", "Y"):
-            control = numpy.datetime64("NaT", timecode)
-            test = default_fill_value(numpy.dtype("<M8[" + timecode + "]"))
+            control = rsnumpy.datetime64("NaT", timecode)
+            test = default_fill_value(rsnumpy.dtype("<M8[" + timecode + "]"))
             np.testing.assert_equal(test, control)
 
-            control = numpy.timedelta64("NaT", timecode)
-            test = default_fill_value(numpy.dtype("<m8[" + timecode + "]"))
+            control = rsnumpy.timedelta64("NaT", timecode)
+            test = default_fill_value(rsnumpy.dtype("<m8[" + timecode + "]"))
             np.testing.assert_equal(test, control)
 
     def test_extremum_fill_value(self):
@@ -2812,7 +2812,7 @@ class TestUfuncs:
                 uf = getattr(umath, f)
             except AttributeError:
                 uf = getattr(fromnumeric, f)
-            mf = getattr(numpy.ma.core, f)
+            mf = getattr(rsnumpy.ma.core, f)
             args = self._create_data()[:uf.nin]
             ur = uf(*args)
             mr = mf(*args)
@@ -5237,7 +5237,7 @@ class TestMaskedArrayFunctions:
         assert allequal(x, z)
 
         # test allequal for the same input, with mask=nomask, this test is for
-        # the scenario raised in https://github.com/numpy/numpy/issues/27201
+        # the scenario raised in https://github.com/rsnumpy/rsnumpy/issues/27201
         assert allequal(x, x)
         assert allequal(x, x, fill_value=False)
 
@@ -5726,7 +5726,7 @@ class TestOptionalArgs:
         a = np.ma.array(d, mask=m)
 
         def testaxis(f, a, d):
-            numpy_f = numpy.__getattribute__(f)
+            numpy_f = rsnumpy.__getattribute__(f)
             ma_f = np.ma.__getattribute__(f)
 
             # test axis arg
@@ -5735,7 +5735,7 @@ class TestOptionalArgs:
                          numpy_f(d[..., :-1], axis=(0, 1)))
 
         def testkeepdims(f, a, d):
-            numpy_f = numpy.__getattribute__(f)
+            numpy_f = rsnumpy.__getattribute__(f)
             ma_f = np.ma.__getattribute__(f)
 
             # test keepdims arg
@@ -6140,7 +6140,7 @@ def test_astype_mask_ordering():
 
 @pytest.mark.parametrize('dt1', num_dts, ids=num_ids)
 @pytest.mark.parametrize('dt2', num_dts, ids=num_ids)
-@pytest.mark.filterwarnings('ignore::numpy.exceptions.ComplexWarning')
+@pytest.mark.filterwarnings('ignore::rsnumpy.exceptions.ComplexWarning')
 def test_astype_basic(dt1, dt2):
     # See gh-12070
     src = np.ma.array(ones(3, dt1), fill_value=1)
@@ -6306,7 +6306,7 @@ def test_frommethod_signature(fn, signature):
 )
 def test_convert2ma_signature(fn, signature):
     assert str(inspect.signature(fn)) == signature
-    assert fn.__module__ == 'numpy.ma.core'
+    assert fn.__module__ == 'rsnumpy.ma.core'
 
 
 class TestPatternMatching:

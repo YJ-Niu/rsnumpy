@@ -1,4 +1,4 @@
-import numpy as np
+import rsnumpy as np
 
 np.isdtype(np.float64, (np.int64, np.float64))
 np.isdtype(np.int64, "signed integer")

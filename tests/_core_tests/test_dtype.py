@@ -27,8 +27,8 @@ from rsnumpy.testing import (
     assert_equal,
     assert_raises,
 )
-from rsnumpy.testing._private.hypothesis_helpers import HAS_HYPOTHESIS, hynp, hypothesis
-from rsnumpy.testing._private.utils import requires_deep_recursion, requires_memory
+from testing._private.hypothesis_helpers import HAS_HYPOTHESIS, hynp, hypothesis
+from testing._private.utils import requires_deep_recursion, requires_memory
 
 
 def assert_dtype_equal(a, b):
@@ -1128,8 +1128,8 @@ class TestString:
 
     def test_void_subclass_fields(self):
         dt = np.dtype((np.record, [('a', '<u2')]))
-        assert_equal(repr(dt), "dtype((numpy.record, [('a', '<u2')]))")
-        assert_equal(str(dt), "(numpy.record, [('a', '<u2')])")
+        assert_equal(repr(dt), "dtype((rsnumpy.record, [('a', '<u2')]))")
+        assert_equal(str(dt), "(rsnumpy.record, [('a', '<u2')])")
         assert_equal(dt.name, 'record16')
 
     def test_custom_dtype_str(self):
@@ -1297,8 +1297,8 @@ class TestDTypeMakeCanonical:
     @pytest.mark.skipif(not HAS_HYPOTHESIS, reason="hypothesis is not installed")
     @pytest.mark.slow
     @hypothesis.given(
-            dtype=hypothesis.extra.numpy.array_dtypes(
-                subtype_strategy=hypothesis.extra.numpy.array_dtypes(),
+            dtype=hypothesis.extra.rsnumpy.array_dtypes(
+                subtype_strategy=hypothesis.extra.rsnumpy.array_dtypes(),
                 min_size=5, max_size=10, allow_subarrays=True),
             random=hypothesis.strategies.randoms())
     def test_structured(self, dtype, random):
@@ -1681,7 +1681,7 @@ def test_invalid_dtype_string():
 
 
 def test_keyword_argument():
-    # test for https://github.com/numpy/numpy/pull/16574#issuecomment-642660971
+    # test for https://github.com/rsnumpy/rsnumpy/pull/16574#issuecomment-642660971
     assert np.dtype(dtype=np.float64) == np.dtype(np.float64)
 
 
@@ -1788,12 +1788,12 @@ class TestDTypeClasses:
                 dt_name += "c"
             sc_name = dtype.type.__name__
             assert dt_name == sc_name.strip("_")
-            assert type(dtype).__module__ == "numpy.dtypes"
+            assert type(dtype).__module__ == "rsnumpy.dtypes"
 
-            assert getattr(numpy.dtypes, type(dtype).__name__) is type(dtype)
+            assert getattr(rsnumpy.dtypes, type(dtype).__name__) is type(dtype)
         elif dtype.type.__name__ == "rational":
             assert type(dtype).__name__ == "dtype[rational]"
-            assert type(dtype).__module__ == "numpy"
+            assert type(dtype).__module__ == "rsnumpy"
 
         assert not type(dtype)._abstract
 
@@ -1814,7 +1814,7 @@ class TestDTypeClasses:
         assert isinstance(np.dtype, type)
 
         assert type(np.dtype).__name__ == "_DTypeMeta"
-        assert type(np.dtype).__module__ == "numpy"
+        assert type(np.dtype).__module__ == "rsnumpy"
         assert np.dtype._abstract
 
     def test_is_numeric(self):
@@ -1834,15 +1834,15 @@ class TestDTypeClasses:
     @pytest.mark.parametrize("int_", ["UInt", "Int"])
     @pytest.mark.parametrize("size", [8, 16, 32, 64])
     def test_integer_alias_names(self, int_, size):
-        DType = getattr(numpy.dtypes, f"{int_}{size}DType")
-        sctype = getattr(numpy, f"{int_.lower()}{size}")
+        DType = getattr(rsnumpy.dtypes, f"{int_}{size}DType")
+        sctype = getattr(rsnumpy, f"{int_.lower()}{size}")
         assert DType.type is sctype
         assert DType.__name__.lower().removesuffix("dtype") == sctype.__name__
 
     @pytest.mark.parametrize("name",
             ["Half", "Float", "Double", "CFloat", "CDouble"])
     def test_float_alias_names_not_present(self, name):
-        assert not hasattr(numpy.dtypes, f"{name}DType")
+        assert not hasattr(rsnumpy.dtypes, f"{name}DType")
 
     def test_scalar_helper_all_dtypes(self):
         for dtype in np.dtypes.__all__:
@@ -1880,7 +1880,7 @@ class TestAbstractDTypes:
         assert name in np.dtypes.__all__
         abstract = getattr(np.dtypes, name)
         assert abstract.__name__ == name
-        assert abstract.__module__ == "numpy.dtypes"
+        assert abstract.__module__ == "rsnumpy.dtypes"
         assert abstract._abstract
         with pytest.raises(TypeError):
             abstract()

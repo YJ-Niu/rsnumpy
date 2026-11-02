@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from numpy.f2py.f2py2e import get_newer_options, main as f2pycli
-from numpy.testing._private.utils import NOGIL_BUILD
+from rsnumpy.f2py.f2py2e import get_newer_options, main as f2pycli
+from testing._private.utils import NOGIL_BUILD
 
 from . import util
 
@@ -318,7 +318,7 @@ def test_file_processing_switch(capfd, hello_world_f90, retreal_f77,
                                 monkeypatch):
     """Tests that it is possible to return to file processing mode
     CLI :: :
-    BUG: numpy-gh #20520
+    BUG: rsnumpy-gh #20520
     """
     foutl = get_io_paths(retreal_f77, mname="test")
     ipath = foutl.finp
@@ -364,7 +364,7 @@ def test_mod_gen_f77(capfd, hello_world_f90, monkeypatch):
 def test_mod_gen_gh25263(capfd, hello_world_f77, monkeypatch):
     """Check that pyf files are correctly generated with module structure
     CLI :: -m <name> -h pyf_file
-    BUG: numpy-gh #20520
+    BUG: rsnumpy-gh #20520
     """
     MNAME = "hi"
     foutl = get_io_paths(hello_world_f77, mname=MNAME)
@@ -524,7 +524,7 @@ def test_latex_doc_gh30268(tmp_path):
     with open(fpath, "w") as f:
         f.write(fsource)
 
-    cmd = [sys.executable, "-m", "numpy.f2py", "-c", str(fpath), "-m", "test_latex", "--latex-doc"]
+    cmd = [sys.executable, "-m", "rsnumpy.f2py", "-c", str(fpath), "-m", "test_latex", "--latex-doc"]
     subprocess.check_call(cmd, cwd=tmp_path)
 
 
@@ -819,7 +819,7 @@ def test_version(capfd, monkeypatch):
     with pytest.raises(SystemExit):
         f2pycli()
         out, _ = capfd.readouterr()
-        import numpy as np
+        import rsnumpy as np
         assert np.__version__ == out.strip()
 
 

@@ -1,5 +1,5 @@
-import numpy as np
-from numpy._typing import ArrayLike
+import rsnumpy as np
+from rsnumpy._typing import ArrayLike
 
 class A: ...
 

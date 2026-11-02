@@ -3,9 +3,9 @@
 """
 import pytest
 
-import numpy as np
-from numpy.lib._arraypad_impl import _as_pairs
-from numpy.testing import assert_allclose, assert_array_equal, assert_equal
+import rsnumpy as np
+from rsnumpy.lib._arraypad_impl import _as_pairs
+from rsnumpy.testing import assert_allclose, assert_array_equal, assert_equal
 
 _numeric_dtypes = (
     np._core.sctypes["uint"]

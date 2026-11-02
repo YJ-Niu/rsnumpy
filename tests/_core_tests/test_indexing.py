@@ -179,7 +179,7 @@ class TestIndexing:
 
     def test_gh_26844_segfault(self):
         # check for absence of segfault for:
-        # https://github.com/numpy/numpy/pull/26958/files#r1854589178
+        # https://github.com/rsnumpy/rsnumpy/pull/26958/files#r1854589178
         a = np.arange(5)
         expected = [0, 1, 3, 3, 3]
         a[2:][None, a[:-2]] = 3

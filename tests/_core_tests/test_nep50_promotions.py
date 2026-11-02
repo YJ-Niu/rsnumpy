@@ -10,7 +10,7 @@ import pytest
 
 import rsnumpy as np
 from rsnumpy.testing import assert_array_equal
-from rsnumpy.testing._private.hypothesis_helpers import (
+from testing._private.hypothesis_helpers import (
     HAS_HYPOTHESIS,
     hypothesis,
     strategies,

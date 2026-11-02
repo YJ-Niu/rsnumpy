@@ -626,6 +626,67 @@ sys.modules["rsnumpy.testing._private.utils"] = _priv_utils
 
 
 # ---------------------------------------------------------------------------
+# 6b. Complete the stubs with the helper names the copied tests import but the
+#     compact stubs above do not define.  The full NumPy implementations live
+#     under tests/testing/_private/ (already ported to rsnumpy), so reuse them
+#     instead of re-implementing.  Existing attributes win: the assert_*
+#     defined above carry rsnumpy-tuned comparison semantics.
+# ---------------------------------------------------------------------------
+_TEST_DIR = os.path.dirname(os.path.abspath(__file__))
+if _TEST_DIR not in sys.path:
+    sys.path.insert(0, _TEST_DIR)
+
+try:
+    import testing._private.utils as _full_testing_utils
+except Exception:  # pragma: no cover - never block collection on the shim
+    _full_testing_utils = None
+
+if _full_testing_utils is not None:
+    for _n in (
+        "IS_EDITABLE", "IS_INSTALLED", "HAS_SUBPROCESSES", "IS_MUSL", "IS_IOS",
+        "IS_64BIT", "NOGIL_BUILD", "BLAS_SUPPORTS_FPE", "HAS_LAPACK64",
+        "_assert_valid_refcount", "assert_approx_equal", "assert_array_less",
+        "assert_array_compare", "assert_array_almost_equal_nulp",
+        "assert_no_gc_cycles", "break_cycles", "build_err_msg",
+        "clear_and_catch_warnings", "runstring", "suppress_warnings",
+    ):
+        if not hasattr(_testing, _n):
+            setattr(_testing, _n, getattr(_full_testing_utils, _n))
+    for _n in ("NOGIL_BUILD", "_glibc_older_than", "_no_tracing",
+               "requires_deep_recursion", "run_subprocess", "run_threaded"):
+        if not hasattr(_priv_utils, _n):
+            setattr(_priv_utils, _n, getattr(_full_testing_utils, _n))
+
+try:
+    import testing._private.extbuild as _full_extbuild
+except Exception:  # pragma: no cover
+    _full_extbuild = None
+if _full_extbuild is not None and not hasattr(_testing, "extbuild"):
+    _testing.extbuild = _full_extbuild
+
+
+def _asbytes(s):
+    """numpy._utils.asbytes 的最小实现。"""
+    if isinstance(s, bytes):
+        return s
+    if isinstance(s, str):
+        return s.encode("latin1")
+    return str(s).encode("latin1")
+
+
+def _asunicode(s):
+    """numpy._utils.asunicode 的最小实现。"""
+    if isinstance(s, bytes):
+        return s.decode("latin1")
+    return str(s)
+
+
+for _n, _f in (("asbytes", _asbytes), ("asunicode", _asunicode)):
+    if not hasattr(_utils, _n):
+        setattr(_utils, _n, _f)
+
+
+# ---------------------------------------------------------------------------
 # 7. Skip tests that depend on C-helpers or numpy features rsnumpy lacks
 # ---------------------------------------------------------------------------
 _SKIP_MARKERS = (
@@ -652,6 +713,11 @@ _KNOWN_CRASH_SUBSTRINGS = (
     # 2GB 级 exotic dtype 单元素：rsnumpy f64 后端需 ~3GB+ 且填充极慢，
     # 在 pytest 进程内存压力下会 thrash 数分钟后进程死亡（numpy gh-32809 边界）。
     "test_nonzero_large_dtype",
+    # rsnumpy 的 take 在非法索引类型上直接 abort（Rust panic），
+    # 会带走整个单进程 pytest；逐用例 survey 仍会报告为 crashed。
+    "test_arraytypes_fasttake",
+    # 空数组 put 的越界/类型组合同样触发 Rust panic -> abort。
+    "test_item_selection.py::TestPut::test_empty",
 )
 
 

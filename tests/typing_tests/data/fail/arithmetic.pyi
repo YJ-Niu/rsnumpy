@@ -1,7 +1,7 @@
 from typing import Any
 
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 b_ = np.bool()
 dt = np.datetime64(0, "D")
@@ -51,7 +51,7 @@ AR_i // AR_LIKE_m  # type: ignore[operator]
 AR_f // AR_LIKE_m  # type: ignore[operator]
 AR_c // AR_LIKE_m  # type: ignore[operator]
 
-# regression tests for https://github.com/numpy/numpy/issues/28957
+# regression tests for https://github.com/rsnumpy/rsnumpy/issues/28957
 AR_c // 2  # type: ignore[operator]
 AR_c // AR_i  # type: ignore[operator]
 AR_c // AR_c  # type: ignore[operator]

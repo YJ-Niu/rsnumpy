@@ -1,6 +1,6 @@
 from pathlib import Path
 
-import numpy as np
+import rsnumpy as np
 
 path: Path
 d1: np.lib.npyio.DataSource

@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import IO, Any, assert_type
 
-import numpy as np
+import rsnumpy as np
 
 path1: Path
 path2: str

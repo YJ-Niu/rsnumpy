@@ -3,9 +3,9 @@ import threading
 
 import pytest
 
-import numpy as np
-from numpy.random import random
-from numpy.testing import IS_WASM, assert_allclose, assert_array_equal, assert_raises
+import rsnumpy as np
+from rsnumpy.random import random
+from rsnumpy.testing import IS_WASM, assert_allclose, assert_array_equal, assert_raises
 
 
 def fft1(x):

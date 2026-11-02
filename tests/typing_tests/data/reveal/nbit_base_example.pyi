@@ -1,8 +1,8 @@
 from typing import assert_type
 
-import numpy as np
-import numpy.typing as npt
-from numpy._typing import _32Bit, _64Bit
+import rsnumpy as np
+import rsnumpy.typing as npt
+from rsnumpy._typing import _32Bit, _64Bit
 
 def add[T1: npt.NBitBase, T2: npt.NBitBase](a: np.floating[T1], b: np.integer[T2]) -> np.floating[T1 | T2]: ...  # type: ignore[deprecated]
 

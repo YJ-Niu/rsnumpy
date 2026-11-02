@@ -1,4 +1,4 @@
-import numpy as np
+import rsnumpy as np
 
 class Test(np.nditer): ...  # type: ignore[misc]
 

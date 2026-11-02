@@ -445,7 +445,7 @@ class TestLinspace:
         assert_equal(ls, linspace(0.0, np.arange(3.0), 1))
 
     def test_array_interface(self):
-        # Regression test for https://github.com/numpy/numpy/pull/6659
+        # Regression test for https://github.com/rsnumpy/rsnumpy/pull/6659
         # Ensure that start/stop can be objects that implement
         # __array_interface__ and are convertible to numeric scalars
 
@@ -595,5 +595,5 @@ class TestAdd_newdoc:
         prev_doc = np._core.flatiter.index.__doc__
         # nothing changed, but error ignored, this should probably
         # give a warning (or even error) in the future.
-        add_newdoc("numpy._core", "flatiter", ("index", "bad docstring"))
+        add_newdoc("rsnumpy._core", "flatiter", ("index", "bad docstring"))
         assert prev_doc == np._core.flatiter.index.__doc__

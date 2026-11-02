@@ -1,9 +1,9 @@
 """Tests for polyutils module.
 
 """
-import numpy as np
-import numpy.polynomial.polyutils as pu
-from numpy.testing import assert_, assert_almost_equal, assert_equal, assert_raises
+import rsnumpy as np
+import rsnumpy.polynomial.polyutils as pu
+from rsnumpy.testing import assert_, assert_almost_equal, assert_equal, assert_raises
 
 
 class TestMisc:

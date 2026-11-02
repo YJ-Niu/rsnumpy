@@ -1,9 +1,9 @@
 from typing import Any, Literal, NoReturn, assert_type
 
-import numpy as np
-import numpy.typing as npt
-from numpy._typing import NDArray, _AnyShape
-from numpy.ma.mrecords import MaskedRecords, fromrecords
+import rsnumpy as np
+import rsnumpy.typing as npt
+from rsnumpy._typing import NDArray, _AnyShape
+from rsnumpy.ma.mrecords import MaskedRecords, fromrecords
 
 type MaskedArray[ScalarT: np.generic] = np.ma.MaskedArray[_AnyShape, np.dtype[ScalarT]]
 type _NoMaskType = np.bool[Literal[False]]
@@ -359,7 +359,7 @@ assert_type(MAR_1d.filled(), np.ndarray[tuple[int], np.dtype])
 assert_type(np.ma.filled(MAR_f4, float("nan")), NDArray[np.float32])
 assert_type(np.ma.filled([[1, 2, 3]]), NDArray[Any])
 # PyRight detects this one correctly, but mypy doesn't.
-# https://github.com/numpy/numpy/pull/28742#discussion_r2048968375
+# https://github.com/rsnumpy/rsnumpy/pull/28742#discussion_r2048968375
 assert_type(np.ma.filled(MAR_1d), np.ndarray[tuple[int], np.dtype])  # type: ignore[assert-type]
 
 assert_type(MAR_b.repeat(3), np.ma.MaskedArray[tuple[int], np.dtype[np.bool]])
@@ -397,7 +397,7 @@ assert_type(MAR_1d.ravel(order="A"), np.ma.MaskedArray[tuple[int], np.dtype[Any]
 
 assert_type(np.ma.getmask(MAR_f4), NDArray[np.bool] | _NoMaskType)
 # PyRight detects this one correctly, but mypy doesn't:
-# `Revealed type is "Union[numpy.ndarray[Any, Any], numpy.bool[Any]]"`
+# `Revealed type is "Union[rsnumpy.ndarray[Any, Any], rsnumpy.bool[Any]]"`
 assert_type(np.ma.getmask(MAR_1d), np.ndarray[tuple[int], np.dtype[np.bool]] | np.bool)  # type: ignore[assert-type]
 assert_type(np.ma.getmask(MAR_2d_f4), np.ndarray[tuple[int, int], np.dtype[np.bool]] | _NoMaskType)
 assert_type(np.ma.getmask([1, 2]), NDArray[np.bool] | _NoMaskType)
@@ -692,7 +692,7 @@ assert_type(AR_LIKE_dt64 + MAR_o, Any)
 assert_type(AR_LIKE_o + MAR_o, Any)
 
 # Masked Array subtraction
-# Keep in sync with numpy/typing/tests/data/reveal/arithmetic.pyi
+# Keep in sync with rsnumpy/typing/tests/data/reveal/arithmetic.pyi
 
 assert_type(MAR_number - AR_number, MaskedArray[np.number])
 

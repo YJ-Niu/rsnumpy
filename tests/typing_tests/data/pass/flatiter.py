@@ -1,4 +1,4 @@
-import numpy as np
+import rsnumpy as np
 
 a = np.empty((2, 2)).flat
 

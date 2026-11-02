@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 
-from numpy._typing import _NestedSequence
+from rsnumpy._typing import _NestedSequence
 
 a: Sequence[float]
 b: list[complex]

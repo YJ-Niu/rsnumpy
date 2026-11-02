@@ -1,6 +1,6 @@
 from typing import assert_type
 
-from numpy.lib import NumpyVersion
+from rsnumpy.lib import NumpyVersion
 
 version = NumpyVersion("1.8.0")
 

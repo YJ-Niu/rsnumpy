@@ -1,8 +1,8 @@
 import pytest
 
-import numpy as np
-from numpy.random import MT19937, PCG64, Generator
-from numpy.testing import assert_, assert_array_equal
+import rsnumpy as np
+from rsnumpy.random import MT19937, PCG64, Generator
+from rsnumpy.testing import assert_, assert_array_equal
 
 
 class TestRegression:
@@ -67,7 +67,7 @@ class TestRegression:
     def test_multivariate_normal_size_types(self):
         # Test for multivariate_normal issue with 'size' argument.
         # Check that the multivariate_normal size argument can be a
-        # numpy integer.
+        # rsnumpy integer.
         mt19937 = self._create_generator()
         mt19937.multivariate_normal([0], [[0]], size=1)
         mt19937.multivariate_normal([0], [[0]], size=np.int_(1))
@@ -105,7 +105,7 @@ class TestRegression:
         # beta CDF at x = np.finfo(np.double).smallest_subnormal/2
         # is p = 0.0776169083131899, e.g,
         #
-        #    import numpy as np
+        #    import rsnumpy as np
         #    from mpmath import mp
         #    mp.dps = 160
         #    x = mp.mpf(np.finfo(np.float64).smallest_subnormal)/2
@@ -120,7 +120,7 @@ class TestRegression:
     def test_choice_sum_of_probs_tolerance(self):
         # The sum of probs should be 1.0 with some tolerance.
         # For low precision dtypes the tolerance was too tight.
-        # See numpy github issue 6123.
+        # See rsnumpy github issue 6123.
         mt19937 = self._create_generator()
         a = [1, 2, 3]
         counts = [4, 4, 2]

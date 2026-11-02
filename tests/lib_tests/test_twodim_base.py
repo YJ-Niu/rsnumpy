@@ -3,8 +3,8 @@
 """
 import pytest
 
-import numpy as np
-from numpy import (
+import rsnumpy as np
+from rsnumpy import (
     add,
     arange,
     array,
@@ -23,7 +23,7 @@ from numpy import (
     vander,
     zeros,
 )
-from numpy.testing import (
+from rsnumpy.testing import (
     assert_,
     assert_array_almost_equal,
     assert_array_equal,

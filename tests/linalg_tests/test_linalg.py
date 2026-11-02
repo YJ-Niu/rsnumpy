@@ -11,8 +11,8 @@ import warnings
 
 import pytest
 
-import numpy as np
-from numpy import (
+import rsnumpy as np
+from rsnumpy import (
     array,
     asarray,
     atleast_2d,
@@ -27,11 +27,11 @@ from numpy import (
     multiply,
     single,
 )
-from numpy._core import swapaxes
-from numpy.exceptions import AxisError
-from numpy.linalg import LinAlgError, matrix_power, matrix_rank, multi_dot, norm
-from numpy.linalg._linalg import _multi_dot_matrix_chain_order
-from numpy.testing import (
+from rsnumpy._core import swapaxes
+from rsnumpy.exceptions import AxisError
+from rsnumpy.linalg import LinAlgError, matrix_power, matrix_rank, multi_dot, norm
+from rsnumpy.linalg._linalg import _multi_dot_matrix_chain_order
+from rsnumpy.testing import (
     HAS_LAPACK64,
     HAS_SUBPROCESSES,
     NOGIL_BUILD,
@@ -43,18 +43,18 @@ from numpy.testing import (
     assert_raises,
     assert_raises_regex,
 )
-from numpy.testing._private.utils import run_subprocess
+from testing._private.utils import run_subprocess
 
 try:
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore",
-            message="The numpy.linalg.lapack_lite module is deprecated",
+            message="The rsnumpy.linalg.lapack_lite module is deprecated",
             category=DeprecationWarning,
         )
-        import numpy.linalg.lapack_lite
+        import rsnumpy.linalg.lapack_lite
 except ImportError:
-    # May be broken when numpy was built without BLAS/LAPACK present
+    # May be broken when rsnumpy was built without BLAS/LAPACK present
     # If so, ensure we don't break the whole test suite - the `lapack_lite`
     # submodule should be removed, it's only used in two tests in this file.
     pass
@@ -2154,12 +2154,12 @@ def test_sdot_bug_8577():
     """)
 
     for bad_lib in bad_libs:
-        code = template.format(before="import numpy as np", after="",
+        code = template.format(before="import rsnumpy as np", after="",
                                bad_lib=bad_lib)
         run_subprocess([sys.executable, "-c", code])
 
         # Swapped import order
-        code = template.format(after="import numpy as np", before="",
+        code = template.format(after="import rsnumpy as np", before="",
                                bad_lib=bad_lib)
         run_subprocess([sys.executable, "-c", code])
 

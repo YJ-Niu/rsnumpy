@@ -1,6 +1,6 @@
-# This test is ported from numpy.distutils
-from numpy.f2py._src_pyf import process_str
-from numpy.testing import assert_equal
+# This test is ported from rsnumpy.distutils
+from rsnumpy.f2py._src_pyf import process_str
+from rsnumpy.testing import assert_equal
 
 pyf_src = """
 python module foo

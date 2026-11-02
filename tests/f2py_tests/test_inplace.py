@@ -1,9 +1,9 @@
 
 import pytest
 
-import numpy as np
-from numpy.f2py.tests import util
-from numpy.testing import assert_array_equal
+import rsnumpy as np
+from . import util
+from rsnumpy.testing import assert_array_equal
 
 
 @pytest.mark.slow

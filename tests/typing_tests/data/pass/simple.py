@@ -2,8 +2,8 @@
 import operator
 from collections.abc import Iterable
 
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 # Basic checks
 array = np.array([1, 2])

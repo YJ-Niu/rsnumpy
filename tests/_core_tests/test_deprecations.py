@@ -19,7 +19,7 @@ from rsnumpy._core._multiarray_tests import (
     matrixproduct_c_api,
 )
 from rsnumpy.testing import HAS_SUBPROCESSES, assert_array_equal, assert_raises
-from rsnumpy.testing._private.utils import run_subprocess
+from testing._private.utils import run_subprocess
 
 
 class _DeprecationTestCase:
@@ -290,7 +290,7 @@ class TestDeprecatedArrayAttributeSetting(_DeprecationTestCase):
 class TestDeprecatedViewDtypePropertySetter(_DeprecationTestCase):
     # view() with dtype change on a subclass that overrides the
     # dtype property should warn to implement _set_dtype instead.
-    message = r"numpy.ndarray.view\(\) used a custom `dtype` setter.*"
+    message = r"rsnumpy.ndarray.view\(\) used a custom `dtype` setter.*"
 
     def test_view_dtype_property_setter(self):
         class MyArray(np.ndarray):
@@ -599,8 +599,8 @@ class TestTakeOutDtype(_DeprecationTestCase):
 
 
 _DOT_CALLERS = [
-    pytest.param(np.dot, "numpy.dot", id="np.dot"),
-    pytest.param(np.ndarray.dot, "numpy.dot", id="ndarray.dot"),
+    pytest.param(np.dot, "rsnumpy.dot", id="np.dot"),
+    pytest.param(np.ndarray.dot, "rsnumpy.dot", id="ndarray.dot"),
     pytest.param(matrixproduct_c_api, "PyArray_MatrixProduct",
                  id="PyArray_MatrixProduct"),
     pytest.param(matrixproduct2_c_api, "PyArray_MatrixProduct2",
@@ -610,7 +610,7 @@ _DOT_CALLERS = [
 
 class TestDotDimensionInterleaving(_DeprecationTestCase):
     # Deprecated rsnumpy 2.6, 2026-09
-    # See https://github.com/numpy/numpy/issues/31725
+    # See https://github.com/rsnumpy/rsnumpy/issues/31725
 
     @pytest.mark.parametrize("func, name", _DOT_CALLERS)
     @pytest.mark.parametrize("a_shape, b_shape", [

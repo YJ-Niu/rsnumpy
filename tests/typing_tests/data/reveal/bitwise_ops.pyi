@@ -1,7 +1,7 @@
 from typing import Any, Literal as L, assert_type
 
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 ###
 

@@ -1,8 +1,8 @@
 import pytest
 
-import numpy as np
-from numpy._core._rational_tests import rational, rational2
-from numpy.lib._stride_tricks_impl import (
+import rsnumpy as np
+from rsnumpy._core._rational_tests import rational, rational2
+from rsnumpy.lib._stride_tricks_impl import (
     _broadcast_shape,
     as_strided,
     broadcast_arrays,
@@ -10,7 +10,7 @@ from numpy.lib._stride_tricks_impl import (
     broadcast_to,
     sliding_window_view,
 )
-from numpy.testing import (
+from rsnumpy.testing import (
     assert_,
     assert_array_equal,
     assert_equal,

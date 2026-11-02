@@ -9,7 +9,7 @@ import pytest
 
 import rsnumpy as np
 from rsnumpy.testing import HAS_SUBPROCESSES, IS_EDITABLE, assert_array_equal
-from rsnumpy.testing._private.utils import run_subprocess
+from testing._private.utils import run_subprocess
 
 # This import is copied from random.tests.test_extending
 try:

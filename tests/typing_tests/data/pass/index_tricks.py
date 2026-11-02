@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import numpy as np
+import rsnumpy as np
 
 AR_LIKE_b = [[True, True], [True, True]]
 AR_LIKE_i = [[1, 2], [3, 4]]

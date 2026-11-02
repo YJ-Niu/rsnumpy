@@ -1,5 +1,5 @@
-import numpy as np
-from numpy.testing import assert_, assert_array_equal
+import rsnumpy as np
+from rsnumpy.testing import assert_, assert_array_equal
 
 
 class TestRegression:
@@ -15,7 +15,7 @@ class TestRegression:
 
     def test_mem_masked_where(self):
         # Ticket #62
-        from numpy.ma import MaskType, masked_where
+        from rsnumpy.ma import MaskType, masked_where
         a = np.zeros((1, 1))
         b = np.zeros(a.shape, MaskType)
         c = masked_where(b, a)

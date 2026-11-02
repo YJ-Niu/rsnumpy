@@ -4,7 +4,7 @@ from io import StringIO
 import pytest
 
 import rsnumpy as np
-from rsnumpy._core.tests._locales import CommaDecimalPointLocale
+from _core_tests._locales import CommaDecimalPointLocale
 from rsnumpy.testing import IS_MUSL, assert_, assert_equal
 
 _REF = {np.inf: 'inf', -np.inf: '-inf', np.nan: 'nan'}

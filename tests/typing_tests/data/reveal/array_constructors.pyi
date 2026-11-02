@@ -3,9 +3,9 @@ from pathlib import Path
 from typing import Any, assert_type
 from typing_extensions import CapsuleType
 
-import numpy as np
-import numpy.typing as npt
-from numpy._typing import _AnyShape
+import rsnumpy as np
+import rsnumpy.typing as npt
+from rsnumpy._typing import _AnyShape
 
 class SubClass[ScalarT: np.generic](np.ndarray[_AnyShape, np.dtype[ScalarT]]): ...
 
@@ -129,7 +129,7 @@ assert_type(np.array(B, subok=True, ndmin=0), SubClass[np.float64])
 assert_type(np.array(B, subok=True, ndmin=1), npt.NDArray[np.float64])  # subtype erased because unknown shape-type could be modified
 assert_type(np.array(D), npt.NDArray[np.float64 | np.int64])
 assert_type(np.array(E, subok=True), SubClass[np.float64 | np.int64])
-# https://github.com/numpy/numpy/issues/29245
+# https://github.com/rsnumpy/rsnumpy/issues/29245
 assert_type(np.array([]), npt.NDArray[Any])
 assert_type(np.array([], dtype=np.bool), npt.Array1D[np.bool[Any]])
 assert_type(np.array(None, dtype=np.object_), npt.Array0D[np.object_[None]])
@@ -486,7 +486,7 @@ assert_type(np.arange(10, dtype=np.float64), npt.Array1D[np.float64])
 assert_type(np.arange(0, 10, step=2, dtype=np.int16), npt.Array1D[np.int16])
 assert_type(np.arange(10, dtype=int), npt.Array1D[np.int_])
 assert_type(np.arange(0, 10, dtype="f8"), npt.Array1D[Any])
-# https://github.com/numpy/numpy/issues/30628
+# https://github.com/rsnumpy/rsnumpy/issues/30628
 assert_type(np.arange("2025-12-20", "2025-12-23", dtype="datetime64[D]"), npt.Array1D[np.datetime64])
 
 assert_type(np.require(B, requirements=["C", "OWNDATA"]), SubClass[np.float64])

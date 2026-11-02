@@ -1,4 +1,4 @@
-import numpy as np
+import rsnumpy as np
 
 i8 = np.int64()
 i4 = np.int32()

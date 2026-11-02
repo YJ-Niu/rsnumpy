@@ -16,14 +16,14 @@ from tempfile import NamedTemporaryFile
 
 import pytest
 
-import numpy as np
-import numpy.ma as ma
-from numpy._utils import asbytes
-from numpy.exceptions import VisibleDeprecationWarning
-from numpy.lib import _npyio_impl
-from numpy.lib._iotools import ConversionWarning, ConverterError
-from numpy.ma.testutils import assert_equal
-from numpy.testing import (
+import rsnumpy as np
+import rsnumpy.ma as ma
+from rsnumpy._utils import asbytes
+from rsnumpy.exceptions import VisibleDeprecationWarning
+from rsnumpy.lib import _npyio_impl
+from rsnumpy.lib._iotools import ConversionWarning, ConverterError
+from ma_tests.testutils import assert_equal
+from rsnumpy.testing import (
     HAS_REFCOUNT,
     IS_WASM,
     assert_,
@@ -36,7 +36,7 @@ from numpy.testing import (
     tempdir,
     temppath,
 )
-from numpy.testing._private.utils import requires_memory
+from testing._private.utils import requires_memory
 
 
 class TextIO(BytesIO):
@@ -93,7 +93,7 @@ class RoundtripTest:
         save_kwds : dict
             Parameters passed to `save_func`.
         load_kwds : dict
-            Parameters passed to `numpy.load`.
+            Parameters passed to `rsnumpy.load`.
         args : tuple of arrays
             Arrays stored to file.
 
@@ -321,11 +321,11 @@ class TestSavezLoad(RoundtripTest):
         # It might be a "weak" test since failed to get triggered on
         # e.g. Debian sid of 2012 Jul 05 but was reported to
         # trigger the failure on Ubuntu 10.04:
-        # http://projects.scipy.org/numpy/ticket/1517#comment:2
+        # http://projects.scipy.org/rsnumpy/ticket/1517#comment:2
         with temppath(suffix='.npz') as tmp:
             np.savez(tmp, data='LOVELY LOAD')
             # We need to check if the garbage collector can properly close
-            # numpy npz file returned by np.load when their reference count
+            # rsnumpy npz file returned by np.load when their reference count
             # goes to zero.  Python running in debug mode raises a
             # ResourceWarning when file closing is left to the garbage
             # collector, so we catch the warnings.
@@ -2436,7 +2436,7 @@ M   33  21.99
         assert_array_equal(res, np.arange(10))
 
     def test_auto_dtype_largeint(self):
-        # Regression test for numpy/numpy#5635 whereby large integers could
+        # Regression test for rsnumpy/rsnumpy#5635 whereby large integers could
         # cause OverflowErrors.
 
         # Test the automatic definition of the output dtype

@@ -28,8 +28,8 @@ from rsnumpy.testing import (
     assert_raises,
     assert_raises_regex,
 )
-from numpy.testing._private.hypothesis_helpers import HAS_HYPOTHESIS, given, hynp, st
-from numpy.testing._private.utils import longdouble_fpe_mark, requires_memory
+from testing._private.hypothesis_helpers import HAS_HYPOTHESIS, given, hynp, st
+from testing._private.utils import longdouble_fpe_mark, requires_memory
 
 
 class TestResize:
@@ -268,7 +268,7 @@ class TestNonarrayArgs:
         assert_array_max_ulp(round(i, ndigits=-2), 500)
 
     def test_round_py_consistency(self):
-        # gh-15896（numpy 侧 bug）：rsnumpy 的标量 round 本就与 Python 一致，
+        # gh-15896（rsnumpy 侧 bug）：rsnumpy 的标量 round 本就与 Python 一致，
         # 原 xfail 标记已过时（XPASS）。
         f = 5.1 * 10**73
         assert_equal(round(np.float64(f), -73), round(f, -73))
@@ -700,7 +700,7 @@ class TestIsscalar:
         assert_(np.isscalar(3.1))
         assert_(np.isscalar(np.int16(12345)))
         assert_(np.isscalar(False))
-        assert_(np.isscalar('numpy'))
+        assert_(np.isscalar('rsnumpy'))
         assert_(not np.isscalar([3.1]))
         assert_(not np.isscalar(None))
 
@@ -2287,7 +2287,7 @@ class TestArrayComparisons:
         assert_(type(res) is bool)
 
     def test_array_equal_different_scalar_types(self):
-        # https://github.com/numpy/numpy/issues/27271
+        # https://github.com/rsnumpy/rsnumpy/issues/27271
         a = np.array("foo")
         b = np.array(1)
         assert not np.array_equal(a, b)
@@ -3158,7 +3158,7 @@ class TestIsclose:
         # NEP 50 broadcasting of python scalars
         assert f32 == below_one
         # Test that it works for isclose arguments too (and that those fail if
-        # one uses a numpy float64).
+        # one uses a rsnumpy float64).
         assert np.isclose(f32, below_one, atol=0, rtol=0)
         assert np.isclose(f32, np.float32(0), atol=below_one)
         assert np.isclose(f32, 2, atol=0, rtol=below_one / 2)

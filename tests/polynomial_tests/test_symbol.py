@@ -4,9 +4,9 @@ Tests related to the ``symbol`` attribute of the ABCPolyBase class.
 
 import pytest
 
-import numpy.polynomial as poly
-from numpy._core import array
-from numpy.testing import assert_, assert_equal, assert_raises
+import rsnumpy.polynomial as poly
+from rsnumpy._core import array
+from rsnumpy.testing import assert_, assert_equal, assert_raises
 
 
 class TestInit:

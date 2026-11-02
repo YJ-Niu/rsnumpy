@@ -1,4 +1,4 @@
-import numpy as np
+import rsnumpy as np
 
 f8 = np.float64(1)
 i8 = np.int64(1)

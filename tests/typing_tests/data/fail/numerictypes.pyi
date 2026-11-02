@@ -1,4 +1,4 @@
-import numpy as np
+import rsnumpy as np
 
 np.isdtype(1, np.int64)  # type: ignore[arg-type]
 

@@ -2,7 +2,7 @@ import datetime as dt
 
 import pytest
 
-import numpy as np
+import rsnumpy as np
 
 b = np.bool()
 b_ = np.bool_()

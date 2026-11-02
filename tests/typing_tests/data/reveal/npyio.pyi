@@ -4,9 +4,9 @@ import zipfile
 from collections.abc import Callable, Mapping
 from typing import IO, Any, Literal, assert_type
 
-import numpy as np
-import numpy.typing as npt
-from numpy.lib._npyio_impl import BagObj
+import rsnumpy as np
+import rsnumpy.typing as npt
+from rsnumpy.lib._npyio_impl import BagObj
 
 str_path: str
 pathlib_path: pathlib.Path

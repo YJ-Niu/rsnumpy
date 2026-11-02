@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from io import StringIO
 
-import numpy as np
-import numpy.lib.array_utils as array_utils
+import rsnumpy as np
+import rsnumpy.lib.array_utils as array_utils
 
 FILE = StringIO()
 AR = np.arange(10, dtype=np.float64)

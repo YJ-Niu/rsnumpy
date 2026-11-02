@@ -4,8 +4,8 @@ from os.path import join
 
 import pytest
 
-import numpy as np
-from numpy.random import (
+import rsnumpy as np
+from rsnumpy.random import (
     MT19937,
     PCG64,
     PCG64DXSM,
@@ -16,8 +16,8 @@ from numpy.random import (
     SeedSequence,
     default_rng,
 )
-from numpy.random._common import interface
-from numpy.testing import (
+from rsnumpy.random._common import interface
+from rsnumpy.testing import (
     assert_allclose,
     assert_array_equal,
     assert_equal,
@@ -141,7 +141,7 @@ def gauss_from_uint(x, n, bits):
 
 
 def test_seedsequence():
-    from numpy.random.bit_generator import (
+    from rsnumpy.random.bit_generator import (
         ISeedSequence,
         ISpawnableSeedSequence,
         SeedlessSeedSequence,
@@ -185,7 +185,7 @@ def test_generator_spawning():
 
 def test_spawn_negative_n_children():
     """Test that spawn raises ValueError for negative n_children."""
-    from numpy.random.bit_generator import SeedlessSeedSequence
+    from rsnumpy.random.bit_generator import SeedlessSeedSequence
 
     rng = np.random.default_rng(42)
     seq = rng.bit_generator.seed_seq
@@ -209,7 +209,7 @@ def test_spawn_negative_n_children():
 
 
 def test_non_spawnable():
-    from numpy.random.bit_generator import ISeedSequence
+    from rsnumpy.random.bit_generator import ISeedSequence
 
     class FakeSeedSequence:
         def generate_state(self, n_words, dtype=np.uint32):

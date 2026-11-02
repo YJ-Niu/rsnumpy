@@ -1,6 +1,6 @@
-"""Typing tests for `numpy._core._ufunc_config`."""
+"""Typing tests for `rsnumpy._core._ufunc_config`."""
 
-import numpy as np
+import rsnumpy as np
 
 def func1(a: str, b: int, c: float) -> None: ...
 def func2(a: str, *, b: int) -> None: ...

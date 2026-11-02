@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-import numpy as np
+import rsnumpy as np
 
 c16 = np.complex128()
 f8 = np.float64()

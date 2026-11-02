@@ -11,9 +11,9 @@ import pytest
 
 import rsnumpy as np
 from rsnumpy._core import _rational_tests
-from rsnumpy._core.tests.test_stringdtype import random_unicode_string_list
+from _core_tests.test_stringdtype import random_unicode_string_list
 from rsnumpy.testing import HAS_SUBPROCESSES, IS_64BIT, IS_WASM
-from rsnumpy.testing._private.utils import run_subprocess, run_threaded
+from testing._private.utils import run_subprocess, run_threaded
 
 if IS_WASM:
     pytest.skip(allow_module_level=True, reason="no threading support in wasm")

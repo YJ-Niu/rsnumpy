@@ -1,7 +1,7 @@
 from typing import type_check_only
 
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 _0d_bool: np.bool
 _nd_bool: npt.NDArray[np.bool]

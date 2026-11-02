@@ -3,9 +3,9 @@
 """
 import pytest
 
-import numpy as np
-from numpy.ma.core import MaskedArrayFutureWarning
-from numpy.ma.testutils import assert_equal
+import rsnumpy as np
+from rsnumpy.ma.core import MaskedArrayFutureWarning
+from ma_tests.testutils import assert_equal
 
 
 class TestArgsort:

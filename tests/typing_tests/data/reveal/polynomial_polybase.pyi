@@ -2,10 +2,10 @@ from collections.abc import Sequence
 from decimal import Decimal
 from typing import Any, Literal as L, assert_type
 
-import numpy as np
-import numpy.polynomial as npp
-import numpy.typing as npt
-from numpy._typing import _SupportsArray
+import rsnumpy as np
+import rsnumpy.polynomial as npp
+import rsnumpy.typing as npt
+from rsnumpy._typing import _SupportsArray
 
 type _Ar_x = npt.NDArray[np.inexact | np.object_]
 type _Ar_f = npt.NDArray[np.floating]

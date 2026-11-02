@@ -1,12 +1,12 @@
 """
-Tests for :mod:`numpy._core.numeric`.
+Tests for :mod:`rsnumpy._core.numeric`.
 
 Does not include tests which fall under ``array_constructors``.
 """
 
 from typing import Any
 
-import numpy as np
+import rsnumpy as np
 
 
 class SubClass(np.ndarray[tuple[Any, ...], np.dtype[np.float64]]): ...

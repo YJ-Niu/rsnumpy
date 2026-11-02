@@ -6,9 +6,9 @@ from math import inf, nan
 
 import pytest
 
-import numpy.polynomial as poly
-from numpy._core import arange, array, printoptions
-from numpy.testing import assert_, assert_equal
+import rsnumpy.polynomial as poly
+from rsnumpy._core import arange, array, printoptions
+from rsnumpy.testing import assert_, assert_equal
 
 
 class TestStrUnicodeSuperSubscripts:
@@ -265,9 +265,9 @@ def test_set_default_printoptions():
 
 @pytest.mark.thread_unsafe(reason="set_default_printstyle() is global state")
 def test_complex_coefficients():
-    """Test both numpy and built-in complex."""
+    """Test both rsnumpy and built-in complex."""
     coefs = [0 + 1j, 1 + 1j, -2 + 2j, 3 + 0j]
-    # numpy complex
+    # rsnumpy complex
     p1 = poly.Polynomial(coefs)
     # Python complex
     p2 = poly.Polynomial(array(coefs, dtype=object))

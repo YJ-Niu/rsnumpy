@@ -4,8 +4,8 @@ from typing import Any, cast
 
 import pytest
 
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 c16 = np.complex128(1)
 f8 = np.float64(1)

@@ -33,7 +33,7 @@ import rsnumpy._core._multiarray_tests as _multiarray_tests
 from rsnumpy._core._multiarray_umath import _array_converter
 from rsnumpy._core._rational_tests import rational, rational2
 from rsnumpy._core.multiarray import _get_ndarray_c_version, dot
-from rsnumpy._core.tests._locales import CommaDecimalPointLocale
+from _core_tests._locales import CommaDecimalPointLocale
 from rsnumpy.exceptions import AxisError, ComplexWarning
 from rsnumpy.lib import stride_tricks
 from rsnumpy.lib.recfunctions import repack_fields
@@ -59,7 +59,7 @@ from rsnumpy.testing import (
     runstring,
     temppath,
 )
-from rsnumpy.testing._private.utils import (
+from testing._private.utils import (
     _no_tracing,
     longdouble_fpe_mark,
     requires_deep_recursion,
@@ -386,7 +386,7 @@ class TestAttributes:
         assert_equal(three.dtype.str[1], 'f')
 
     def test_int_subclassing(self):
-        # Regression test for https://github.com/numpy/numpy/pull/3526
+        # Regression test for https://github.com/rsnumpy/rsnumpy/pull/3526
 
         rsnumpy_int = np.int_(0)
 
@@ -797,12 +797,12 @@ class TestDtypedescr:
     def test_structured_non_void(self):
         fields = [('a', '<i2'), ('b', '<i2')]
         dt_int = np.dtype(('i4', fields))
-        assert_equal(str(dt_int), "(numpy.int32, [('a', '<i2'), ('b', '<i2')])")
+        assert_equal(str(dt_int), "(rsnumpy.int32, [('a', '<i2'), ('b', '<i2')])")
 
         # gh-9821
         arr_int = np.zeros(4, dt_int)
         assert_equal(repr(arr_int),
-            "array([0, 0, 0, 0], dtype=(numpy.int32, [('a', '<i2'), ('b', '<i2')]))")
+            "array([0, 0, 0, 0], dtype=(rsnumpy.int32, [('a', '<i2'), ('b', '<i2')]))")
 
 
 class TestZeroRank:
@@ -1647,16 +1647,16 @@ class TestStructured:
             assert_(not np.can_cast(a.dtype, t, casting=casting))
 
     def test_objview(self):
-        # https://github.com/numpy/numpy/issues/3286
+        # https://github.com/rsnumpy/rsnumpy/issues/3286
         a = np.array([], dtype=[('a', 'f'), ('b', 'f'), ('c', 'O')])
         a[['a', 'b']]  # TypeError?
 
-        # https://github.com/numpy/numpy/issues/3253
+        # https://github.com/rsnumpy/rsnumpy/issues/3253
         dat2 = np.zeros(3, [('A', 'i'), ('B', '|O')])
         dat2[['B', 'A']]  # TypeError?
 
     def test_setfield(self):
-        # https://github.com/numpy/numpy/issues/3126
+        # https://github.com/rsnumpy/rsnumpy/issues/3126
         struct_dt = np.dtype([('elem', 'i4', 5),])
         dt = np.dtype([('field', 'i4', 10), ('struct', struct_dt)])
         x = np.zeros(1, dt)
@@ -4796,7 +4796,7 @@ class TestBinop:
     #   - else, call ufunc
     def test_ufunc_binop_interaction(self):
         # Python method name (without underscores)
-        #   -> (numpy ufunc, has_in_place_version, preferred_dtype)
+        #   -> (rsnumpy ufunc, has_in_place_version, preferred_dtype)
         ops = {
             'add':      (np.add, True, float),
             'sub':      (np.subtract, True, float),
@@ -5298,9 +5298,9 @@ class TestCAPI:
         [
             module + item
             for item in ("sin", "strings.str_len", "fft._pocketfft_umath.ifft")
-            for module in ("", "numpy:")
+            for module in ("", "rsnumpy:")
         ] + [
-            "numpy.strings:str_len",
+            "rsnumpy.strings:str_len",
             "functools:reduce",
             "functools:reduce.__doc__"
         ]
@@ -5317,7 +5317,7 @@ class TestCAPI:
 
     @pytest.mark.parametrize(
         "entry_point",
-        ["sin.", "numpy:", "numpy:sin:__call__", "numpy.sin:__call__."]
+        ["sin.", "rsnumpy:", "rsnumpy:sin:__call__", "rsnumpy.sin:__call__."]
     )
     def test_import_entry_point_errors(self, entry_point):
         # Don't really care about precise error.
@@ -12130,7 +12130,7 @@ class TestDevice:
 
         with assert_raises_regex(
             AttributeError,
-            r"attribute 'device' of '(numpy.|)ndarray' objects is "
+            r"attribute 'device' of '(rsnumpy.|)ndarray' objects is "
             r"not writable"
         ):
             arr.device = "other"
@@ -12171,7 +12171,7 @@ def test_array_interface_excess_dimensions_raises():
 @pytest.mark.parametrize("dtype", [np.float32, np.float64, np.uint32, np.complex128])
 def test_array_dunder_array_preserves_dtype_on_none(dtype):
     """
-    Regression test for: https://github.com/numpy/numpy/issues/27407
+    Regression test for: https://github.com/rsnumpy/rsnumpy/issues/27407
     Ensure that __array__(None) returns an array of the same dtype.
     """
     a = np.array([1], dtype=dtype)

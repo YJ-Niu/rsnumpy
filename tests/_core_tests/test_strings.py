@@ -6,7 +6,7 @@ import pytest
 import rsnumpy as np
 from rsnumpy._core._exceptions import _UFuncNoLoopError
 from rsnumpy.testing import assert_array_equal, assert_raises
-from rsnumpy.testing._private.utils import requires_memory
+from testing._private.utils import requires_memory
 
 COMPARISONS = [
     (operator.eq, np.equal, "=="),

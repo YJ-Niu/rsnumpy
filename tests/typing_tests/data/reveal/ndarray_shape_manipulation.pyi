@@ -1,7 +1,7 @@
 from typing import assert_type
 
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 type _ArrayND = npt.NDArray[np.int64]
 

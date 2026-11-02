@@ -2,8 +2,8 @@ import decimal
 import fractions
 from typing import assert_type
 
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 c16 = np.complex128()
 f8 = np.float64()

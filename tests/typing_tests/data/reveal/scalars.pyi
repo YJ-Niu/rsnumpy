@@ -1,7 +1,7 @@
 import datetime as dt
 from typing import Any, Literal, assert_type
 
-import numpy as np
+import rsnumpy as np
 
 b: np.bool
 u8: np.uint64

@@ -1,9 +1,9 @@
 from decimal import Decimal
 from typing import Any, assert_type, type_check_only
 
-import numpy as np
-import numpy.polynomial as npp
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.polynomial as npp
+import rsnumpy.typing as npt
 
 b: np.bool
 i1: np.int8

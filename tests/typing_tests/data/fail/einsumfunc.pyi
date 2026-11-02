@@ -1,5 +1,5 @@
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 _i64_nd: npt.NDArray[np.int64]
 _m64_nd: npt.NDArray[np.timedelta64]

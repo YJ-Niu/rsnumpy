@@ -1,4 +1,4 @@
-import numpy.exceptions as ex
+import rsnumpy.exceptions as ex
 
 ex.AxisError(1.0)  # type: ignore[call-overload]
 ex.AxisError(1, ndim=2.0)  # type: ignore[call-overload]

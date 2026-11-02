@@ -1,4 +1,4 @@
-"""Test the runtime usage of `numpy.typing`."""
+"""Test the runtime usage of `rsnumpy.typing`."""
 
 from typing import (
     Any,
@@ -12,9 +12,9 @@ from typing import (
 
 import pytest
 
-import numpy as np
-import numpy._typing as _npt
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy._typing as _npt
+import rsnumpy.typing as npt
 
 
 class TypeTup(NamedTuple):
@@ -84,7 +84,7 @@ def test_get_type_hints_str(name: type, tup: TypeTup) -> None:
 
 
 def test_keys() -> None:
-    """Test that ``TYPES.keys()`` and ``numpy.typing.__all__`` are synced."""
+    """Test that ``TYPES.keys()`` and ``rsnumpy.typing.__all__`` are synced."""
     keys = TYPES.keys()
     ref = set(npt.__all__)
     assert keys == ref

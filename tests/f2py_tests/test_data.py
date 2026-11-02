@@ -1,7 +1,7 @@
 import pytest
 
-import numpy as np
-from numpy.f2py.crackfortran import crackfortran
+import rsnumpy as np
+from rsnumpy.f2py.crackfortran import crackfortran
 
 from . import util
 

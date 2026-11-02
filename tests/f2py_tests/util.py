@@ -20,10 +20,10 @@ from pathlib import Path
 
 import pytest
 
-import numpy
-from numpy._utils import asunicode
-from numpy.f2py._backends._meson import MesonBackend
-from numpy.testing import IS_IOS, IS_WASM, temppath
+import rsnumpy
+from rsnumpy._utils import asunicode
+from rsnumpy.f2py._backends._meson import MesonBackend
+from rsnumpy.testing import IS_IOS, IS_WASM, temppath
 
 #
 # Check if compilers are available at all...
@@ -201,7 +201,7 @@ def build_module(source_files, options=[], skip=[], only=[], module_name=None):
 
     """
 
-    code = f"import sys; sys.path = {sys.path!r}; import numpy.f2py; numpy.f2py.main()"
+    code = f"import sys; sys.path = {sys.path!r}; import rsnumpy.f2py; rsnumpy.f2py.main()"
 
     d = get_module_dir()
     # gh-27045 : Skip if no compilers are found
@@ -428,7 +428,7 @@ class F2PyTest:
 
 def getpath(*a):
     # Package root
-    d = Path(numpy.f2py.__file__).parent.resolve()
+    d = Path(rsnumpy.f2py.__file__).parent.resolve()
     return d.joinpath(*a)
 
 

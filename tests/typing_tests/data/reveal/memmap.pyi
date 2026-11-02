@@ -1,6 +1,6 @@
 from typing import Any, Literal, assert_type
 
-import numpy as np
+import rsnumpy as np
 
 type _Memmap[ScalarT: np.generic] = np.memmap[tuple[Any, ...], np.dtype[ScalarT]]
 

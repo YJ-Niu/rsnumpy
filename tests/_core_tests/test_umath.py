@@ -31,7 +31,7 @@ from rsnumpy.testing import (
     assert_raises,
     assert_raises_regex,
 )
-from rsnumpy.testing._private.utils import (
+from testing._private.utils import (
     LONG_DOUBLE_IS_IBM_DOUBLE_DOUBLE,
     _glibc_older_than,
     longdouble_fpe_mark,
@@ -1584,7 +1584,7 @@ class TestSpecialFloats:
                 yf = np.array(y, dtype=dt)
                 assert_equal(np.exp(yf), xf)
 
-    # See: https://github.com/numpy/numpy/issues/19192
+    # See: https://github.com/rsnumpy/rsnumpy/issues/19192
     @pytest.mark.xfail(
         _glibc_older_than("2.17"),
         reason="Older glibc versions may not raise appropriate FP exceptions"
@@ -1649,7 +1649,7 @@ class TestSpecialFloats:
                 assert_raises(FloatingPointError, np.log1p,
                               np.array(-2.0, dtype=dt))
 
-        # See https://github.com/numpy/numpy/issues/18005
+        # See https://github.com/rsnumpy/rsnumpy/issues/18005
         with assert_no_warnings():
             a = np.array(1e9, dtype='float32')
             np.log(a)
@@ -1889,7 +1889,7 @@ class TestSpecialFloats:
         # Make sure glibc < 2.18 atanh is not used, issue 25087
         assert np.signbit(np.arctanh(-1j).real)
 
-    # See: https://github.com/numpy/numpy/issues/20448
+    # See: https://github.com/rsnumpy/rsnumpy/issues/20448
     @pytest.mark.xfail(
         _glibc_older_than("2.17"),
         reason="Older glibc versions may not raise appropriate FP exceptions"
@@ -2006,7 +2006,7 @@ class TestSpecialFloats:
         # Verify a bug fix caused due to filling the remaining lanes of the
         # partially loaded dividend SIMD vector with ones, which leads to
         # raising an overflow warning when the divisor is denormal.
-        # see https://github.com/numpy/numpy/issues/25097
+        # see https://github.com/rsnumpy/rsnumpy/issues/25097
         with assert_no_warnings():
             np.zeros(128 + 1, dtype=dt) / subnorm
 
@@ -4420,7 +4420,7 @@ class TestSpecialMethods:
     def test_ufunc_docstring(self):
         original_doc = np.add.__doc__
         new_doc = "new docs"
-        expected_dict = {"__module__": "numpy", "__qualname__": "add"}
+        expected_dict = {"__module__": "rsnumpy", "__qualname__": "add"}
         expected_dict["__signature__"] = inspect.signature(np.add)
 
         np.add.__doc__ = new_doc
@@ -5314,7 +5314,7 @@ def test_complex_nan_comparisons():
 
 def test_rint_big_int():
     # np.rint bug for large integer values on Windows 32-bit and MKL
-    # https://github.com/numpy/numpy/issues/6685
+    # https://github.com/rsnumpy/rsnumpy/issues/6685
     val = 4607998452777363968
     # This is exactly representable in floating point
     assert_equal(val, int(float(val)))
@@ -5324,7 +5324,7 @@ def test_rint_big_int():
 
 @pytest.mark.parametrize('ftype', [np.float32, np.float64])
 def test_memoverlap_accumulate(ftype):
-    # Reproduces bug https://github.com/numpy/numpy/issues/15597
+    # Reproduces bug https://github.com/rsnumpy/rsnumpy/issues/15597
     arr = np.array([0.61, 0.60, 0.77, 0.41, 0.19], dtype=ftype)
     out_max = np.array([0.61, 0.61, 0.77, 0.77, 0.77], dtype=ftype)
     out_min = np.array([0.61, 0.60, 0.60, 0.41, 0.19], dtype=ftype)

@@ -1,7 +1,7 @@
 import pytest
 
-import numpy as np
-from numpy import (
+import rsnumpy as np
+from rsnumpy import (
     common_type,
     iscomplex,
     iscomplexobj,
@@ -13,7 +13,7 @@ from numpy import (
     nan_to_num,
     real_if_close,
 )
-from numpy.testing import assert_, assert_array_equal, assert_equal
+from rsnumpy.testing import assert_, assert_array_equal, assert_equal
 
 
 def assert_all(x):

@@ -1,4 +1,4 @@
-import numpy as np
+import rsnumpy as np
 
 dtype_obj = np.dtype(np.str_)
 void_dtype_obj = np.dtype([("f0", np.float64), ("f1", np.float32)])

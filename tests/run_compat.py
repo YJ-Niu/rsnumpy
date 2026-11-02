@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Crash-isolated numpy-compatibility runner.
+"""Crash-isolated rsnumpy-compatibility runner.
 
-Runs every numpy test copied into this directory in its **own subprocess**, so a
+Runs every rsnumpy test copied into this directory in its **own subprocess**, so a
 C-extension abort / segfault in one test cannot take the whole run down (rsnumpy
-is not yet as hard as numpy against every edge case).  Reports how
-numpy-compatible rsnumpy is:
+is not yet as hard as rsnumpy against every edge case).  Reports how
+rsnumpy-compatible rsnumpy is:
 
-    passed   — rsnumpy handles this numpy case correctly
+    passed   — rsnumpy handles this rsnumpy case correctly
     failed   — a real rsnumpy gap (wrong result / missing API)
-    skipped  — needs a numpy C-helper / feature rsnumpy lacks (see conftest)
+    skipped  — needs a rsnumpy C-helper / feature rsnumpy lacks (see conftest)
     crashed  — rsnumpy C ext aborts / segfaults (robustness bug to track)
 
 Usage:  python run_compat.py            (all files in this dir)

@@ -1,8 +1,8 @@
 """ Test functions for linalg module using the matrix class."""
 import pytest
 
-import numpy as np
-from numpy.linalg.tests.test_linalg import (
+import rsnumpy as np
+from linalg_tests.test_linalg import (
     CondCases,
     DetCases,
     EigCases,

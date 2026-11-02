@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-import numpy as np
+import rsnumpy as np
 
 if TYPE_CHECKING:
     from collections.abc import Callable

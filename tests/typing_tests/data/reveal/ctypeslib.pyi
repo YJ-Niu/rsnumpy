@@ -1,9 +1,9 @@
 import ctypes as ct
 from typing import Any, assert_type
 
-import numpy as np
-import numpy.typing as npt
-from numpy import ctypeslib
+import rsnumpy as np
+import rsnumpy.typing as npt
+from rsnumpy import ctypeslib
 
 AR_bool: npt.NDArray[np.bool]
 AR_i8: npt.NDArray[np.int8]

@@ -3,7 +3,7 @@ from pytest import param
 
 import rsnumpy as np
 from rsnumpy.testing import IS_WASM
-from rsnumpy.testing._private.utils import longdouble_fpe_mark
+from testing._private.utils import longdouble_fpe_mark
 
 
 def values_and_dtypes():

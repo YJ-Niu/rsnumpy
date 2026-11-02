@@ -1,6 +1,6 @@
 from typing import Any
 
-import numpy as np
+import rsnumpy as np
 
 AR_U: np.char.chararray[tuple[Any, ...], np.dtype[np.str_]]  # type: ignore[deprecated]
 AR_S: np.char.chararray[tuple[Any, ...], np.dtype[np.bytes_]]  # type: ignore[deprecated]

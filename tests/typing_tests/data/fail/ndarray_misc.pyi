@@ -7,8 +7,8 @@ function-based counterpart in `../from_numeric.py`.
 """
 from typing import Any, Never
 
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 f8: np.float64
 

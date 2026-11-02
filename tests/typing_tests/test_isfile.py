@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-import numpy as np
-from numpy.testing import assert_
+import rsnumpy as np
+from rsnumpy.testing import assert_
 
 ROOT = Path(np.__file__).parents[0]
 FILES = [

@@ -1,6 +1,6 @@
 from typing import Any, assert_type
 
-import numpy as np
+import rsnumpy as np
 
 type _ArrayND = np.ndarray[tuple[Any, ...], np.dtypes.StrDType]
 type _Array1D = np.ndarray[tuple[int], np.dtypes.BytesDType]

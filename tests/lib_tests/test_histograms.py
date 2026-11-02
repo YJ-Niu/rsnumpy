@@ -2,9 +2,9 @@ import warnings
 
 import pytest
 
-import numpy as np
-from numpy import histogram, histogram_bin_edges, histogramdd
-from numpy.testing import (
+import rsnumpy as np
+from rsnumpy import histogram, histogram_bin_edges, histogramdd
+from rsnumpy.testing import (
     assert_,
     assert_allclose,
     assert_almost_equal,
@@ -72,7 +72,7 @@ class TestHistogram:
         a, b = histogram(v, bins, density=True)
         assert_array_equal(a, [.1, .1, .1, 0.])
 
-        # Taken from a bug report from N. Becker on the numpy-discussion
+        # Taken from a bug report from N. Becker on the rsnumpy-discussion
         # mailing list Aug. 6, 2010.
         counts, dmy = np.histogram(
             [1, 2, 3, 4], [0.5, 1.5, np.inf], density=True)

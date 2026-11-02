@@ -1,8 +1,8 @@
 from typing import Any, Literal, assert_type
 
-import numpy as np
-import numpy.typing as npt
-from numpy.linalg._linalg import (
+import rsnumpy as np
+import rsnumpy.typing as npt
+from rsnumpy.linalg._linalg import (
     EighResult,
     EigResult,
     QRResult,

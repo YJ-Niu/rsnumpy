@@ -1,7 +1,7 @@
 import os
 import tempfile
 
-import numpy as np
+import rsnumpy as np
 
 nd = np.array([[1, 2], [3, 4]])
 scalar_array = np.array(1)

@@ -29,7 +29,7 @@ from rsnumpy.testing import (
     assert_raises,
     assert_raises_regex,
 )
-from rsnumpy.testing._private.utils import (
+from testing._private.utils import (
     _no_tracing,
     requires_deep_recursion,
     requires_memory,
@@ -142,7 +142,7 @@ class TestRegression:
 
     def test_scalar_compare(self):
         # Trac Ticket #72
-        # https://github.com/numpy/numpy/issues/565
+        # https://github.com/rsnumpy/rsnumpy/issues/565
         a = np.array(['test', 'auto'])
         assert_array_equal(a == 'auto', np.array([False, True]))
         assert_(a[1] == 'auto')
@@ -467,7 +467,7 @@ class TestRegression:
         assert np.lexsort((xs,)).shape[0] == xs.shape[0]
 
     @pytest.mark.filterwarnings(
-        "ignore:.*align should be passed:numpy.exceptions.VisibleDeprecationWarning",
+        "ignore:.*align should be passed:rsnumpy.exceptions.VisibleDeprecationWarning",
     )
     def test_pickle_py2_bytes_encoding(self):
         # Check that arrays and scalars pickled on Py2 are
@@ -1080,7 +1080,7 @@ class TestRegression:
             np.dot(z, y)
 
     @pytest.mark.filterwarnings(
-        "ignore:.*align should be passed:numpy.exceptions.VisibleDeprecationWarning",
+        "ignore:.*align should be passed:rsnumpy.exceptions.VisibleDeprecationWarning",
     )
     def test_astype_copy(self):
         # Ticket #788, changeset r5155
@@ -1914,14 +1914,14 @@ class TestRegression:
             assert_equal(bytestring[0:1], '\x01'.encode('ascii'))
 
     @pytest.mark.filterwarnings(
-        "ignore:.*align should be passed:numpy.exceptions.VisibleDeprecationWarning",
+        "ignore:.*align should be passed:rsnumpy.exceptions.VisibleDeprecationWarning",
     )
     @pytest.mark.xfail("LSAN_OPTIONS" in os.environ, reason="known leak", run=False)
     def test_pickle_py2_array_latin1_hack(self):
         # Check that unpickling hacks in Py3 that support
         # encoding='latin1' work correctly.
 
-        # Python2 output for pickle.dumps(numpy.array([129], dtype='b'))
+        # Python2 output for pickle.dumps(rsnumpy.array([129], dtype='b'))
         data = (
             b"cnumpy.core.multiarray\n_reconstruct\np0\n(cnumpy\n"
             b"ndarray\np1\n(I0\ntp2\nS'b'\np3\ntp4\nRp5\n(I1\n(I1\ntp6\n"
@@ -1935,7 +1935,7 @@ class TestRegression:
         assert_raises(Exception, pickle.loads, data, encoding='koi8-r')
 
     @pytest.mark.filterwarnings(
-        "ignore:.*align should be passed:numpy.exceptions.VisibleDeprecationWarning",
+        "ignore:.*align should be passed:rsnumpy.exceptions.VisibleDeprecationWarning",
     )
     def test_pickle_py2_scalar_latin1_hack(self):
         # Check that scalar unpickling hack in Py3 that supports
@@ -2405,9 +2405,9 @@ class TestRegression:
         assert b'_multiarray_umath' not in s
         if protocol == 5 and len(val.shape) > 0:
             # unpickling ndarray goes through _frombuffer for protocol 5
-            assert b'numpy._core.numeric' in s
+            assert b'rsnumpy._core.numeric' in s
         else:
-            assert b'numpy._core.multiarray' in s
+            assert b'rsnumpy._core.multiarray' in s
 
     def test_object_casting_errors(self):
         # gh-11993 update to ValueError (see gh-16909), since strings can in

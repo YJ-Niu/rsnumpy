@@ -1,6 +1,6 @@
 import pytest
 
-from numpy.f2py.symbolic import (
+from rsnumpy.f2py.symbolic import (
     ArithOp,
     Expr,
     Language,

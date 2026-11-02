@@ -3,8 +3,8 @@ import sys
 
 import pytest
 
-import numpy as np
-from numpy import (
+import rsnumpy as np
+from rsnumpy import (
     apply_along_axis,
     apply_over_axes,
     array_split,
@@ -20,8 +20,8 @@ from numpy import (
     tile,
     vsplit,
 )
-from numpy.exceptions import AxisError
-from numpy.testing import assert_, assert_array_equal, assert_equal, assert_raises
+from rsnumpy.exceptions import AxisError
+from rsnumpy.testing import assert_, assert_array_equal, assert_equal, assert_raises
 
 IS_64BIT = sys.maxsize > 2**32
 
@@ -40,7 +40,7 @@ def _add_keepdims(func):
 class TestTakeAlongAxis:
     def test_argequivalent(self):
         """ Test it translates from arg<func> to <func> """
-        from numpy.random import rand
+        from rsnumpy.random import rand
         a = rand(3, 4, 5)
 
         funcs = [
@@ -655,7 +655,7 @@ class TestDsplit:
 
 class TestSqueeze:
     def test_basic(self):
-        from numpy.random import rand
+        from rsnumpy.random import rand
 
         a = rand(20, 10, 10, 1, 1)
         b = rand(20, 1, 10, 1, 20)
@@ -778,7 +778,7 @@ class TestTile:
         assert_equal(d, (3, 2, 0))
 
     def test_kroncompare(self):
-        from numpy.random import randint
+        from rsnumpy.random import randint
 
         reps = [(2,), (1, 2), (2, 1), (2, 2), (2, 3, 2), (3, 2)]
         shape = [(3,), (2, 3), (3, 4, 3), (3, 2, 3), (4, 3, 2, 4), (2, 2)]

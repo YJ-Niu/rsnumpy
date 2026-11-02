@@ -1,5 +1,5 @@
-import numpy as np
-from numpy._typing import ArrayLike, NDArray, _SupportsArray
+import rsnumpy as np
+from rsnumpy._typing import ArrayLike, NDArray, _SupportsArray
 
 x1: ArrayLike = True
 x2: ArrayLike = 5

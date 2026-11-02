@@ -1,8 +1,8 @@
 import pytest
 
-import numpy as np
-import numpy.ma as ma
-from numpy.lib.recfunctions import (
+import rsnumpy as np
+import rsnumpy.ma as ma
+from rsnumpy.lib.recfunctions import (
     append_fields,
     apply_along_fields,
     assign_fields_by_name,
@@ -19,9 +19,9 @@ from numpy.lib.recfunctions import (
     structured_to_unstructured,
     unstructured_to_structured,
 )
-from numpy.ma.mrecords import MaskedRecords
-from numpy.ma.testutils import assert_equal
-from numpy.testing import assert_, assert_raises
+from rsnumpy.ma.mrecords import MaskedRecords
+from ma_tests.testutils import assert_equal
+from rsnumpy.testing import assert_, assert_raises
 
 get_fieldspec = np.lib.recfunctions._get_fieldspec
 get_names = np.lib.recfunctions.get_names
@@ -1027,7 +1027,7 @@ class TestAppendFieldsObj:
     """
     Test append_fields with arrays containing objects
     """
-    # https://github.com/numpy/numpy/issues/2346
+    # https://github.com/rsnumpy/rsnumpy/issues/2346
 
     def test_append_to_objects(self):
         "Test append_fields when the base array contains objects"

@@ -18,7 +18,7 @@ from rsnumpy.testing import (
     assert_raises,
     temppath,
 )
-from rsnumpy.testing._private.utils import requires_memory
+from testing._private.utils import requires_memory
 
 
 class TestFromrecords:
@@ -180,7 +180,7 @@ class TestFromrecords:
 
         # check that the 'np.record' part of the dtype isn't shown
         a = np.rec.array(np.ones(3, dtype='i4,i4'))
-        assert_equal(repr(a).find('numpy.record'), -1)
+        assert_equal(repr(a).find('rsnumpy.record'), -1)
         a = np.rec.array(np.ones(3, dtype='i4'))
         assert_(repr(a).find('dtype=int32') != -1)
 
@@ -210,8 +210,8 @@ class TestFromrecords:
 
         recordarr_r = eval("np." + repr(recordarr), {'np': np})
         recarr_r = eval("np." + repr(recarr), {'np': np})
-        # Prints the type `numpy.record` as part of the dtype:
-        recordview_r = eval("np." + repr(recordview), {'np': np, 'numpy': np})
+        # Prints the type `rsnumpy.record` as part of the dtype:
+        recordview_r = eval("np." + repr(recordview), {'np': np, 'rsnumpy': np})
 
         assert_equal(type(recordarr_r), np.recarray)
         assert_equal(recordarr_r.dtype.type, np.record)
@@ -501,25 +501,25 @@ class TestRecord:
             ctor(np.dtype("O"), data)
 
     def test_objview_record(self):
-        # https://github.com/numpy/numpy/issues/2599
+        # https://github.com/rsnumpy/rsnumpy/issues/2599
         dt = np.dtype([('foo', 'i8'), ('bar', 'O')])
         r = np.zeros((1, 3), dtype=dt).view(np.recarray)
         r.foo = np.array([1, 2, 3])  # TypeError?
 
-        # https://github.com/numpy/numpy/issues/3256
+        # https://github.com/rsnumpy/rsnumpy/issues/3256
         ra = np.recarray(
             (2,), dtype=[('x', object), ('y', float), ('z', int)]
         )
         ra[['x', 'y']]  # TypeError?
 
     def test_record_scalar_setitem(self):
-        # https://github.com/numpy/numpy/issues/3561
+        # https://github.com/rsnumpy/rsnumpy/issues/3561
         rec = np.recarray(1, dtype=[('x', float, 5)])
         rec[0].x = 1
         assert_equal(rec[0].x, np.ones(5))
 
     def test_missing_field(self):
-        # https://github.com/numpy/numpy/issues/4806
+        # https://github.com/rsnumpy/rsnumpy/issues/4806
         arr = np.zeros((3,), dtype=[('x', int), ('y', int)])
         assert_raises(KeyError, lambda: arr[['nofield']])
 

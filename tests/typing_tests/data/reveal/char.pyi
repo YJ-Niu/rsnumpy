@@ -1,8 +1,8 @@
 from typing import assert_type
 
-import numpy as np
-import numpy._typing as np_t
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy._typing as np_t
+import rsnumpy.typing as npt
 
 type AR_T_alias = np.ndarray[np_t._AnyShape, np.dtypes.StringDType]
 type AR_TU_alias = AR_T_alias | npt.NDArray[np.str_]

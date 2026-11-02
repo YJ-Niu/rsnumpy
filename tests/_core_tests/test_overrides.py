@@ -584,10 +584,10 @@ class TestNDArrayMethods:
 class TestNumPyFunctions:
 
     def test_set_module(self):
-        assert_equal(np.sum.__module__, 'numpy')
-        assert_equal(np.char.equal.__module__, 'numpy.char')
-        assert_equal(np.fft.fft.__module__, 'numpy.fft')
-        assert_equal(np.linalg.solve.__module__, 'numpy.linalg')
+        assert_equal(np.sum.__module__, 'rsnumpy')
+        assert_equal(np.char.equal.__module__, 'rsnumpy.char')
+        assert_equal(np.fft.fft.__module__, 'rsnumpy.fft')
+        assert_equal(np.linalg.solve.__module__, 'rsnumpy.linalg')
 
     def test_inspect_sum(self):
         signature = inspect.signature(np.sum)

@@ -6,15 +6,15 @@
 """
 import pickle
 
-import numpy as np
-import numpy.ma as ma
-from numpy._core.records import (
+import rsnumpy as np
+import rsnumpy.ma as ma
+from rsnumpy._core.records import (
     fromarrays as recfromarrays,
     fromrecords as recfromrecords,
     recarray,
 )
-from numpy.ma import masked, nomask
-from numpy.ma.mrecords import (
+from rsnumpy.ma import masked, nomask
+from rsnumpy.ma.mrecords import (
     MaskedRecords,
     addfield,
     fromarrays,
@@ -22,8 +22,8 @@ from numpy.ma.mrecords import (
     fromtextfile,
     mrecarray,
 )
-from numpy.ma.testutils import assert_, assert_equal, assert_equal_records
-from numpy.testing import temppath
+from ma_tests.testutils import assert_, assert_equal, assert_equal_records
+from rsnumpy.testing import temppath
 
 
 class TestMRecords:

@@ -1,8 +1,8 @@
 """Tests for the NumpyVersion class.
 
 """
-from numpy.lib import NumpyVersion
-from numpy.testing import assert_, assert_raises
+from rsnumpy.lib import NumpyVersion
+from rsnumpy.testing import assert_, assert_raises
 
 
 def test_main_versions():

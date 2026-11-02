@@ -8,8 +8,8 @@ from urllib.parse import urlparse
 
 import pytest
 
-import numpy.lib._datasource as datasource
-from numpy.testing import assert_, assert_equal, assert_raises
+import rsnumpy.lib._datasource as datasource
+from rsnumpy.testing import assert_, assert_equal, assert_raises
 
 
 def urlopen_stub(url, data=None):

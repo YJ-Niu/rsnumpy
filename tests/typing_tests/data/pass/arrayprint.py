@@ -1,4 +1,4 @@
-import numpy as np
+import rsnumpy as np
 
 AR = np.arange(10)
 AR.setflags(write=False)

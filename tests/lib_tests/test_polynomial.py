@@ -1,8 +1,8 @@
 import pytest
 
-import numpy as np
-import numpy.polynomial.polynomial as poly
-from numpy.testing import (
+import rsnumpy as np
+import rsnumpy.polynomial.polynomial as poly
+from rsnumpy.testing import (
     assert_,
     assert_allclose,
     assert_almost_equal,

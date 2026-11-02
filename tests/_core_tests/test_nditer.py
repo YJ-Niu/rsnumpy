@@ -19,7 +19,7 @@ from rsnumpy.testing import (
     assert_equal,
     assert_raises,
 )
-from rsnumpy.testing._private.utils import requires_memory
+from testing._private.utils import requires_memory
 
 
 def iter_multi_index(i):
@@ -1544,7 +1544,7 @@ def test_iter_copy():
 @pytest.mark.parametrize("dtype", np.typecodes["All"])
 @pytest.mark.parametrize("loop_dtype", np.typecodes["All"])
 @pytest.mark.filterwarnings(
-    "ignore::numpy.exceptions.ComplexWarning",
+    "ignore::rsnumpy.exceptions.ComplexWarning",
 )
 def test_iter_copy_casts(dtype, loop_dtype):
     if dtype.lower() == "m":

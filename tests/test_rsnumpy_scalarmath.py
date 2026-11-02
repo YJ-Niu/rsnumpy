@@ -670,7 +670,7 @@ class TestSizeOf:
 class TestMultiply:
     def test_seq_repeat(self):
         # Test that basic sequences get repeated when multiplied with
-        # numpy integers. And errors are raised when multiplied with others.
+        # rsnumpy integers. And errors are raised when multiplied with others.
         # Some of this behaviour may be controversial and could be open for
         # change.
         accepted_types = set(np.typecodes["AllInteger"])

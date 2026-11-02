@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-import numpy as np
-import numpy.testing as npt
-from numpy.f2py._backends._meson import MesonTemplate
+import rsnumpy as np
+import rsnumpy.testing as npt
+from rsnumpy.f2py._backends._meson import MesonTemplate
 
 from . import util
 
@@ -85,7 +85,7 @@ class TestNumpyVersionAttribute(util.F2PyTest):
         # Check that the attribute __f2py_numpy_version__ is a string
         assert isinstance(self.module.__f2py_numpy_version__, str)
 
-        # Check that __f2py_numpy_version__ has the value numpy.__version__
+        # Check that __f2py_numpy_version__ has the value rsnumpy.__version__
         assert np.__version__ == self.module.__f2py_numpy_version__
 
 

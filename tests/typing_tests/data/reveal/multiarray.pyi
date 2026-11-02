@@ -1,8 +1,8 @@
 import datetime as dt
 from typing import Any, Literal, assert_type
 
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 class SubClass[ScalarT: np.generic](np.ndarray[tuple[Any, ...], np.dtype[ScalarT]]): ...
 

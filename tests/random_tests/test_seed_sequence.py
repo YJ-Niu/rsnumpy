@@ -1,6 +1,6 @@
-import numpy as np
-from numpy.random import SeedSequence
-from numpy.testing import (
+import rsnumpy as np
+from rsnumpy.random import SeedSequence
+from rsnumpy.testing import (
     assert_array_compare,
     assert_array_equal,
     assert_raises,

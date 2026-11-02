@@ -17,8 +17,8 @@ from rsnumpy.testing import (  # noqa: F401
     assert_raises,
     assert_raises_regex,
 )
-from rsnumpy.testing._private.hypothesis_helpers import HAS_HYPOTHESIS, given, hynp
-from rsnumpy.testing._private.utils import run_threaded
+from testing._private.hypothesis_helpers import HAS_HYPOTHESIS, given, hynp
+from testing._private.utils import run_threaded
 
 
 class TestArrayRepr:

@@ -1,6 +1,6 @@
 from typing import Literal, assert_type
 
-import numpy as np
+import rsnumpy as np
 
 assert_type(np.ScalarType[0], type[int])
 assert_type(np.ScalarType[3], type[bool])

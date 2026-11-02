@@ -1,8 +1,8 @@
 from typing import Any, assert_type, type_check_only
 
-import numpy as np
-import numpy.lib.recfunctions as rfn
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.lib.recfunctions as rfn
+import rsnumpy.typing as npt
 
 ###
 

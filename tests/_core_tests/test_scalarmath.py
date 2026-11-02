@@ -20,14 +20,14 @@ from rsnumpy.testing import (
     assert_raises,
     check_support_sve,
 )
-from rsnumpy.testing._private.hypothesis_helpers import (
+from testing._private.hypothesis_helpers import (
     HAS_HYPOTHESIS,
     given,
     hynp,
     sampled_from,
     settings,
 )
-from rsnumpy.testing._private.utils import LONG_DOUBLE_IS_IBM_DOUBLE_DOUBLE
+from testing._private.utils import LONG_DOUBLE_IS_IBM_DOUBLE_DOUBLE
 
 types = [np.bool, np.byte, np.ubyte, np.short, np.ushort, np.intc, np.uintc,
          np.int_, np.uint, np.longlong, np.ulonglong,

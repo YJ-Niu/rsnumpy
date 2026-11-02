@@ -3,7 +3,7 @@
 """
 import pytest
 
-import numpy as np
+import rsnumpy as np
 
 
 def test_qr_mode_full_removed():

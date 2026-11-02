@@ -2,9 +2,9 @@ import contextlib
 from collections.abc import Callable
 from typing import assert_type
 
-import numpy as np
-import numpy.typing as npt
-from numpy._core.arrayprint import _FormatOptions
+import rsnumpy as np
+import rsnumpy.typing as npt
+from rsnumpy._core.arrayprint import _FormatOptions
 
 AR: npt.NDArray[np.int64]
 func_float: Callable[[np.floating], str]

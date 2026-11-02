@@ -159,7 +159,7 @@ fi
 # ========== 构建后核心测试门禁（对本次构建的 wheel 把关） ==========
 # 每个成功安装的构建都必须通过 tests/ 下的核心 pytest 套件：buffer 协议、
 # 逐元素算术、构造、索引、归约、比较，并用 xfail 钉住已知缺口（修好后自动翻绿）。
-# 显式枚举核心测试文件（不跑 `pytest tests/` 整目录）——因为 tests/numpy/ 是
+# 显式枚举核心测试文件（不跑 `pytest tests/` 整目录）——因为 tests/ 其余目录是
 # 「NumPy 参照基准」harness，单独作为非门禁报告跑（见下），不并入核心门禁。
 # SKIP_TESTS=1 可跳过（例如只要快速出 release wheel、不做验证时）。
 CORE_TEST_FILES=(
@@ -175,8 +175,11 @@ if [[ "$INSTALLED" -eq 1 && "${SKIP_TESTS:-0}" != "1" ]]; then
   echo "Running core test suite against the installed wheel ..."
   if command -v uv; then
     uv pip install --python "$VENV_PY" --quiet pytest
+    # xdist 是可选的：装不上就回退单进程（构建不应因可选插件而失败）。
+    uv pip install --python "$VENV_PY" --quiet pytest-xdist || true
   else
     "$VENV_PY" -m pip install --quiet pytest
+    "$VENV_PY" -m pip install --quiet pytest-xdist || true
   fi
   if "$VENV_PY" -m pytest "${CORE_TEST_FILES[@]}" -q; then
     echo "  -> core test suite passed."
@@ -186,30 +189,56 @@ if [[ "$INSTALLED" -eq 1 && "${SKIP_TESTS:-0}" != "1" ]]; then
   fi
 
   # ========== NumPy 参照基准：验证 rsnumpy 兼容性（非门禁报告） ==========
-  # 用 NumPy 官方测试（tests/test_rsnumpy_*.py，~3400 用例，numpy 改名为 rsnumpy）
-  # 作为参照基准验证 rsnumpy 的 NumPy 兼容性——被测对象是 rsnumpy，这些测试只是
-  # ground truth。failed = rsnumpy 待修的 bug 或待补的 API（见下），故只报告数字、
-  # 不门禁；核心门禁是上面的 7 个核心文件。构建模式跳过已知 C 扩展崩溃测试
-  # （RSNUMPY_COMPAT_SKIP_CRASHES=1）避免单进程 pytest 被 crash 中断；完整 crash
-  # 清单由 ./tests/run_compat.py 产出。
-  REFERENCE_TESTS=(
-    tests/test_rsnumpy_array_coercion.py
-    tests/test_rsnumpy_indexing.py
-    tests/test_rsnumpy_numeric.py
-    tests/test_rsnumpy_scalarmath.py
-    tests/test_rsnumpy_defchararray.py
-    tests/test_rsnumpy_function_base.py
-    tests/test_rsnumpy_numerictypes.py
-    tests/test_rsnumpy_records.py
-    tests/test_rsnumpy_shape_base.py
-  )
-  echo "Running rsnumpy -compatibility check (non-gating report) ..."
+  # 把 ./tests 下的全部测试（从 NumPy 官方测试树拷贝、导入已改为 rsnumpy）作为
+  # 参照基准跑一遍——被测对象是 rsnumpy，这些测试只是 ground truth。
+  # failed / error = rsnumpy 待修的 bug 或待补的 API，故只报告、不门禁；
+  # 核心门禁仍是上面的 7 个核心文件。
+  #   * --continue-on-collection-errors：rsnumpy 尚未实现的子模块（f2py、
+  #     polynomial 各子模块、random.Generator 等）会让整个测试文件收集失败，
+  #     不能因此中断全量报告。
+  #   * RSNUMPY_COMPAT_SKIP_CRASHES=1：跳过已知会让 pytest 进程直接崩溃的用例；
+  #     未在清单中的 crash 由 xdist worker 隔离（只损失该 worker 上的用例）。
+  echo "Running rsnumpy-compatibility check over ./tests (non-gating report) ..."
+  # 核心门禁的 7 个文件刚在上面跑过且已通过，全量报告里 --ignore 排除，避免跑两遍。
+  COMPAT_IGNORES=()
+  for _f in "${CORE_TEST_FILES[@]}"; do
+    COMPAT_IGNORES+=(--ignore="$_f")
+  done
+  # SKIP_COMPAT=1 可只跳过这份非门禁大报告（核心门禁仍会跑），快速出 wheel。
+  if [[ "${SKIP_COMPAT:-0}" == "1" ]]; then
+    echo "  -> SKIP_COMPAT=1; skip the non-gating ./tests report (core gate already ran)."
+  else
+  # xdist 让 ~9800 个参照用例并行执行；更重要的是单用例把 rsnumpy C 扩展打崩
+  # （Rust panic -> abort / segfault）时只损失一个 worker，其余用例继续，报告不会被
+  # 整进程 abort 截断（依赖在上面的核心测试步骤里已尽力安装）。
+  # 并行度默认 4（COMPAT_WORKERS 可覆盖，设为 0 强制单进程）——并行度过高时
+  # 每个用例都是数组的重计算，机器会满载发烫；4 个 worker 既能隔离 crash 又留有余量。
+  COMPAT_JOBS=""
+  if "$VENV_PY" -c "import xdist" >/dev/null 2>&1; then
+    COMPAT_WORKERS_N="${COMPAT_WORKERS:-4}"
+    if [[ "$COMPAT_WORKERS_N" != "0" ]]; then
+      COMPAT_JOBS="-n $COMPAT_WORKERS_N"
+    else
+      echo "  -> COMPAT_WORKERS=0; single-process report (a crash may truncate it)."
+    fi
+  else
+    echo "  -> pytest-xdist unavailable; single-process report (a crash may truncate it)."
+  fi
+  # 边测边显示：pytest 输出直接流式打印（tee 同时落盘），不再先捕获后 tail——
+  # ~9800 个用例要跑几分钟，全程静默会让人以为卡住了。完整日志存
+  # debug_test/compat_report.log，尾部摘要（FAILURES/ERRORS/统计行）最后再回显。
+  mkdir -p debug_test
+  COMPAT_LOG="debug_test/compat_report.log"
   set +e
-  COMPAT_OUT=$(RSNUMPY_COMPAT_SKIP_CRASHES=1 "$VENV_PY" -m pytest "${REFERENCE_TESTS[@]}" -q -p no:cacheprovider 2>&1)
-  COMPAT_RC=$?
+  RSNUMPY_COMPAT_SKIP_CRASHES=1 PYTHONUNBUFFERED=1 "$VENV_PY" -m pytest tests \
+    -q -p no:cacheprovider --continue-on-collection-errors "${COMPAT_IGNORES[@]}" $COMPAT_JOBS 2>&1 \
+    | tee "$COMPAT_LOG"
+  COMPAT_RC=${PIPESTATUS[0]}
   set -e
-  echo "$COMPAT_OUT" | tail -15
-  echo "  -> rsnumpy compatibility report above (failed = rsnumpy bugs/gaps vs the numpy reference; non-gating, rc=$COMPAT_RC)."
+  echo
+  echo "  -> full log: $COMPAT_LOG"
+  echo "  -> rsnumpy compatibility report above (failed/error = rsnumpy bugs/gaps vs the numpy reference; non-gating, rc=$COMPAT_RC)."
+  fi
 
   # ========== 冒烟测试：run_test.py / run_test2.py（非门禁报告） ==========
   # 独立顺序执行脚本（非 pytest），验证 rsnumpy 核心功能无异常。

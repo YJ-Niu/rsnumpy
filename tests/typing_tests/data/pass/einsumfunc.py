@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import numpy as np
+import rsnumpy as np
 
 AR_LIKE_b = [True, True, True]
 AR_LIKE_u = [np.uint32(1), np.uint32(2), np.uint32(3)]

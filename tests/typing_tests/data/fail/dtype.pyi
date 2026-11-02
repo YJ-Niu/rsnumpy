@@ -1,6 +1,6 @@
 from typing import Any
 
-import numpy as np
+import rsnumpy as np
 
 class Test1:
     not_dtype = np.dtype(float)

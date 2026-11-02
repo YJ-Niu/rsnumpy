@@ -1,6 +1,6 @@
 from typing import Any, NamedTuple
 
-import numpy as np
+import rsnumpy as np
 
 
 # Subtype of tuple[int, int]

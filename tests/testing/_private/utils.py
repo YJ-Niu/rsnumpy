@@ -84,7 +84,7 @@ else:
 RSNUMPY_ROOT = pathlib.Path(np.__file__).parent
 
 try:
-    np_dist = importlib.metadata.distribution('numpy')
+    np_dist = importlib.metadata.distribution('rsnumpy')
 except importlib.metadata.PackageNotFoundError:
     IS_INSTALLED = IS_EDITABLE = False
 else:
@@ -110,7 +110,7 @@ else:
     # might already be installed on the environment, causing us to find its
     # metadata, even though we are not actually loading that package.
     # Work around this issue by checking if the rsnumpy root matches.
-    if not IS_EDITABLE and np_dist.locate_file('numpy') != RSNUMPY_ROOT:
+    if not IS_EDITABLE and np_dist.locate_file('rsnumpy') != RSNUMPY_ROOT:
         IS_INSTALLED = False
 
 IS_WASM = platform.machine() in ["wasm32", "wasm64"]
@@ -1041,7 +1041,7 @@ def assert_array_equal(actual, desired, err_msg='', verbose=True, *,
     advised.
 
     .. note:: When either `actual` or `desired` is already an instance of
-        `numpy.ndarray` and `desired` is not a ``dict``, the behavior of
+        `rsnumpy.ndarray` and `desired` is not a ``dict``, the behavior of
         ``assert_equal(actual, desired)`` is identical to the behavior of this
         function. Otherwise, this function performs `np.asanyarray` on the
         inputs before comparison, whereas `assert_equal` defines special
@@ -1470,7 +1470,7 @@ def rundocs(filename=None, raise_on_error=True):
     -----
     The doctests can be run by the user/developer by adding the ``doctests``
     argument to the ``test()`` call. For example, to run all tests (including
-    doctests) for ``numpy.lib``:
+    doctests) for ``rsnumpy.lib``:
 
     >>> np.lib.test(doctests=True)  # doctest: +SKIP
     """
@@ -1759,7 +1759,7 @@ def assert_allclose(actual, desired, rtol=1e-7, atol=0, equal_nan=True,
     >>> np.testing.assert_allclose(x, y, rtol=1e-5, atol=0)
 
     As mentioned in the Notes section, `assert_allclose` has special
-    handling for scalars. Here, the test checks that the value of `numpy.sin`
+    handling for scalars. Here, the test checks that the value of `rsnumpy.sin`
     is nearly zero at integer multiples of π.
 
     >>> x = np.arange(3) * np.pi

@@ -1,4 +1,4 @@
-from numpy.lib import NumpyVersion
+from rsnumpy.lib import NumpyVersion
 
 version: NumpyVersion
 

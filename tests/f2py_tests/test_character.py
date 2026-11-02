@@ -3,7 +3,7 @@ import textwrap
 import pytest
 
 import rsnumpy as np
-import util
+from . import util
 from rsnumpy.testing import assert_array_equal, assert_equal, assert_raises
 
 

@@ -1,6 +1,6 @@
-import numpy as np
-import numpy.typing as npt
-from numpy._typing import _AnyShape
+import rsnumpy as np
+import rsnumpy.typing as npt
+from rsnumpy._typing import _AnyShape
 
 type _MArray[ScalarT: np.generic] = np.ma.MaskedArray[_AnyShape, np.dtype[ScalarT]]
 

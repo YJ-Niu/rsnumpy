@@ -2,9 +2,9 @@ from collections.abc import Callable
 from fractions import Fraction
 from typing import Any, Never, assert_type, type_check_only
 
-import numpy as np
-import numpy.typing as npt
-from numpy._globals import _NoValueType
+import rsnumpy as np
+import rsnumpy.typing as npt
+from rsnumpy._globals import _NoValueType
 
 type _Tuple2[T] = tuple[T, T]
 type _Tuple3[T] = tuple[T, T, T]

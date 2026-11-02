@@ -1,7 +1,7 @@
 import pytest
 
-import numpy as np
-from numpy.lib._index_tricks_impl import (
+import rsnumpy as np
+from rsnumpy.lib._index_tricks_impl import (
     c_,
     diag_indices,
     diag_indices_from,
@@ -15,7 +15,7 @@ from numpy.lib._index_tricks_impl import (
     r_,
     s_,
 )
-from numpy.testing import (
+from rsnumpy.testing import (
     assert_,
     assert_almost_equal,
     assert_array_almost_equal,
@@ -692,7 +692,7 @@ def test_ndindex_negative_dimensions(negative_shape_arg):
 
 
 def test_ndindex_empty_shape():
-    import numpy as np
+    import rsnumpy as np
     # ndindex() and ndindex(()) should return a single empty tuple
     assert list(np.ndindex()) == [()]
     assert list(np.ndindex(())) == [()]

@@ -4,9 +4,9 @@ from functools import partial
 
 import pytest
 
-import numpy as np
-from numpy.random import MT19937, PCG64, PCG64DXSM, SFC64, Generator, Philox
-from numpy.testing import assert_, assert_array_equal, assert_equal
+import rsnumpy as np
+from rsnumpy.random import MT19937, PCG64, PCG64DXSM, SFC64, Generator, Philox
+from rsnumpy.testing import assert_, assert_array_equal, assert_equal
 
 DTYPES_BOOL_INT_UINT = (np.bool, np.int8, np.int16, np.int32, np.int64,
                         np.uint8, np.uint16, np.uint32, np.uint64)

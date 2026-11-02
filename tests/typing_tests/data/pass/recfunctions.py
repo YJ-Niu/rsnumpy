@@ -1,10 +1,10 @@
-"""These tests are based on the doctests from `numpy/lib/recfunctions.py`."""
+"""These tests are based on the doctests from `rsnumpy/lib/recfunctions.py`."""
 
 from typing import Any, assert_type
 
-import numpy as np
-import numpy.typing as npt
-from numpy.lib import recfunctions as rfn
+import rsnumpy as np
+import rsnumpy.typing as npt
+from rsnumpy.lib import recfunctions as rfn
 
 
 def test_recursive_fill_fields() -> None:

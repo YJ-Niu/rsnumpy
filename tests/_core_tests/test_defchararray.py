@@ -785,7 +785,7 @@ class TestOperations:
                 ob % A
 
     def test_slice(self):
-        """Regression test for https://github.com/numpy/numpy/issues/5982"""
+        """Regression test for https://github.com/rsnumpy/rsnumpy/issues/5982"""
 
         arr = np.array([['abc ', 'def '], ['geh ', 'ijk ']],
                        dtype='S4').view(np.char.chararray)

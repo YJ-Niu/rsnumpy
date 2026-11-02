@@ -1,4 +1,4 @@
-import numpy as np
+import rsnumpy as np
 
 nd1 = np.array([[1, 2], [3, 4]])
 

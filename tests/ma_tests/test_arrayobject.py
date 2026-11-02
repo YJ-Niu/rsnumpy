@@ -1,8 +1,8 @@
 import pytest
 
-import numpy as np
-from numpy.ma import masked_array
-from numpy.testing import assert_array_equal
+import rsnumpy as np
+from rsnumpy.ma import masked_array
+from rsnumpy.testing import assert_array_equal
 
 
 def test_matrix_transpose_raises_error_for_1d():

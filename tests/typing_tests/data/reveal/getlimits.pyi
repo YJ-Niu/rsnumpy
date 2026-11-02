@@ -1,6 +1,6 @@
 from typing import assert_type
 
-import numpy as np
+import rsnumpy as np
 
 f: float
 f8: np.float64

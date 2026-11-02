@@ -1,7 +1,7 @@
 import pytest
 
-import numpy as np
-from numpy.testing import assert_allclose
+import rsnumpy as np
+from rsnumpy.testing import assert_allclose
 
 from . import util
 
@@ -59,7 +59,7 @@ class TestISOC(util.F2PyTest):
 
 
 def test_process_f2cmap_dict():
-    from numpy.f2py.auxfuncs import process_f2cmap_dict
+    from rsnumpy.f2py.auxfuncs import process_f2cmap_dict
 
     f2cmap_all = {"integer": {"8": "rubbish_type"}}
     new_map = {"INTEGER": {"4": "int"}}

@@ -1,7 +1,7 @@
 import datetime as dt
 
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 i8: np.int64
 

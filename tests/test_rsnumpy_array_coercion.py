@@ -280,7 +280,7 @@ class TestScalarDiscovery:
         assert_array_equal(arr, arr3)
         assert_array_equal(arr, arr4)
 
-    @pytest.mark.filterwarnings("ignore::numpy.exceptions.ComplexWarning")
+    @pytest.mark.filterwarnings("ignore::rsnumpy.exceptions.ComplexWarning")
     @pytest.mark.parametrize("cast_to", list(scalar_instances()))
     def test_scalar_coercion_same_as_cast_and_assignment(self, cast_to):
         """
@@ -700,7 +700,7 @@ class TestArrayLikes:
 
     def test_arraylike_classes(self):
         # The classes of array-likes should generally be acceptable to be
-        # stored inside a numpy (object) array.  This tests all of the
+        # stored inside a rsnumpy (object) array.  This tests all of the
         # special attributes (since all are checked during coercion).
         arr = np.array(np.int64)
         assert arr[()] is np.int64
@@ -796,13 +796,13 @@ class TestAsArray:
         underlying data (the base object) is shared with the original array
         object.
 
-        Ref https://github.com/numpy/numpy/issues/1468
+        Ref https://github.com/rsnumpy/rsnumpy/issues/1468
         """
         int_array = np.array([1, 2, 3], dtype='i')
         assert np.asarray(int_array) is int_array
 
         # The character code resolves to the singleton dtype object provided
-        # by the numpy package.
+        # by the rsnumpy package.
         assert np.asarray(int_array, dtype='i') is int_array
 
         # Derive a dtype from n.dtype('i'), but add a metadata object to force

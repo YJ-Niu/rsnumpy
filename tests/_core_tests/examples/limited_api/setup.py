@@ -6,7 +6,7 @@ import os
 
 from setuptools import Extension, setup
 
-import numpy as np
+import rsnumpy as np
 
 macros = [("NPY_NO_DEPRECATED_API", 0), ("Py_LIMITED_API", "0x03060000")]
 

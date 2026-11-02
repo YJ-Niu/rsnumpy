@@ -11,9 +11,9 @@ from tempfile import NamedTemporaryFile, mkstemp
 
 import pytest
 
-import numpy as np
-from numpy.ma.testutils import assert_equal
-from numpy.testing import HAS_REFCOUNT, assert_array_equal
+import rsnumpy as np
+from ma_tests.testutils import assert_equal
+from rsnumpy.testing import HAS_REFCOUNT, assert_array_equal
 
 
 def test_scientific_notation():

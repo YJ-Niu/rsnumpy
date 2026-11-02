@@ -8,11 +8,11 @@ from typing import Any
 
 import pytest
 
-import rsrsnumpy as np
-from rsrsnumpy._core._multiarray_umath import _get_castingimpl as get_castingimpl
+import rsnumpy as np
+from rsnumpy._core._multiarray_umath import _get_castingimpl as get_castingimpl
 
-# accessing `rsrsnumpy.char.charray` will issue a deprecation warning
-from rsrsnumpy._core.defchararray import chararray
+# accessing `rsnumpy.char.charray` will issue a deprecation warning
+from rsnumpy._core.defchararray import chararray
 
 
 class TestResolveDescriptors:

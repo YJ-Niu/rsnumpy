@@ -2,8 +2,8 @@ import platform
 
 import pytest
 
-from numpy import array
-from numpy.testing import IS_64BIT
+from rsnumpy import array
+from rsnumpy.testing import IS_64BIT
 
 from . import util
 
@@ -51,7 +51,7 @@ class TestReturnReal(util.F2PyTest):
 
 @pytest.mark.skipif(
     platform.system() == "Darwin",
-    reason="Prone to error when run with numpy/f2py/tests on mac os, "
+    reason="Prone to error when run with rsnumpy/f2py/tests on mac os, "
     "but not when run in isolation",
 )
 @pytest.mark.skipif(

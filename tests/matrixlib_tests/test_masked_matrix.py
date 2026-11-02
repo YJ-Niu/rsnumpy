@@ -1,7 +1,7 @@
 import pickle
 
-import numpy as np
-from numpy.ma.core import (
+import rsnumpy as np
+from rsnumpy.ma.core import (
     MaskedArray,
     MaskType,
     add,
@@ -15,8 +15,8 @@ from numpy.ma.core import (
     masked_values,
     nomask,
 )
-from numpy.ma.extras import mr_
-from numpy.ma.testutils import assert_, assert_array_equal, assert_equal, assert_raises
+from rsnumpy.ma.extras import mr_
+from ma_tests.testutils import assert_, assert_array_equal, assert_equal, assert_raises
 
 
 class MMatrix(MaskedArray, np.matrix,):

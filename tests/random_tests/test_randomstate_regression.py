@@ -2,9 +2,9 @@ import sys
 
 import pytest
 
-import numpy as np
-from numpy import random
-from numpy.testing import assert_, assert_array_equal, assert_raises
+import rsnumpy as np
+from rsnumpy import random
+from rsnumpy.testing import assert_, assert_array_equal, assert_raises
 
 
 class TestRegression:
@@ -73,7 +73,7 @@ class TestRegression:
     def test_multivariate_normal_size_types(self):
         # Test for multivariate_normal issue with 'size' argument.
         # Check that the multivariate_normal size argument can be a
-        # numpy integer.
+        # rsnumpy integer.
         random.multivariate_normal([0], [[0]], size=1)
         random.multivariate_normal([0], [[0]], size=np.int_(1))
         random.multivariate_normal([0], [[0]], size=np.int64(1))
@@ -88,7 +88,7 @@ class TestRegression:
     def test_choice_sum_of_probs_tolerance(self):
         # The sum of probs should be 1.0 with some tolerance.
         # For low precision dtypes the tolerance was too tight.
-        # See numpy github issue 6123.
+        # See rsnumpy github issue 6123.
         random.seed(1234)
         a = [1, 2, 3]
         counts = [4, 4, 2]

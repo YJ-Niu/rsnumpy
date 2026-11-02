@@ -179,7 +179,7 @@ class TestIndexing:
 
     def test_gh_26844_segfault(self):
         # check for absence of segfault for:
-        # https://github.com/numpy/numpy/pull/26958/files#r1854589178
+        # https://github.com/rsnumpy/rsnumpy/pull/26958/files#r1854589178
         a = np.arange(5)
         expected = [0, 1, 3, 3, 3]
         a[2:][None, a[:-2]] = 3
@@ -191,7 +191,7 @@ class TestIndexing:
                       [7, 8, 9]])
         assert_(a[...] is not a)
         assert_equal(a[...], a)
-        # `a[...]` was `a` in numpy <1.9.
+        # `a[...]` was `a` in rsnumpy <1.9.
         assert_(a[...].base is a)
 
         # Slicing with ellipsis can skip an
@@ -856,7 +856,7 @@ class TestMultiIndexingAutomated:
         * This still lacks tests for complex item setting.
         * If you change behavior of indexing, you might want to modify
           these tests to try more combinations.
-        * Behavior was written to match numpy version 1.8. (though a
+        * Behavior was written to match rsnumpy version 1.8. (though a
           first version matched 1.7.)
         * Only tuple indices are supported by the mimicking code.
           (and tested as of writing this)
@@ -956,8 +956,8 @@ class TestMultiIndexingAutomated:
                 ndim += 1
                 continue
             if not isinstance(indx, np.ndarray):
-                # This could be open for changes in numpy.
-                # numpy should maybe raise an error if casting to intp
+                # This could be open for changes in rsnumpy.
+                # rsnumpy should maybe raise an error if casting to intp
                 # is not safe. It rejects np.array([1., 2.]) but not
                 # [1., 2.] as index (same for ie. np.take).
                 # (Note the importance of empty lists if changing this here)

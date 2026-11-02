@@ -5,7 +5,7 @@ Set up:
 
     >>> import sys
     >>> from io import BytesIO
-    >>> from numpy.lib import format
+    >>> from rsnumpy.lib import format
     >>>
     >>> scalars = [
     ...     np.uint8,
@@ -284,9 +284,9 @@ from io import BytesIO
 
 import pytest
 
-import numpy as np
-from numpy.lib import format
-from numpy.testing import (
+import rsnumpy as np
+from rsnumpy.lib import format
+from rsnumpy.testing import (
     IS_64BIT,
     IS_WASM,
     assert_,
@@ -294,7 +294,7 @@ from numpy.testing import (
     assert_raises,
     assert_raises_regex,
 )
-from numpy.testing._private.utils import requires_memory
+from testing._private.utils import requires_memory
 
 # Generate some basic arrays to test with.
 scalars = [
@@ -571,7 +571,7 @@ def test_load_padded_dtype(tmpdir, dt):
 
 
 @pytest.mark.filterwarnings(
-    "ignore:.*align should be passed:numpy.exceptions.VisibleDeprecationWarning")
+    "ignore:.*align should be passed:rsnumpy.exceptions.VisibleDeprecationWarning")
 def test_pickle_python2_python3():
     # Test that loading object arrays saved on Python 2 works both on
     # Python 2 and Python 3 and vice versa
@@ -1053,7 +1053,7 @@ def test_metadata_dtype(dt):
     # Loading should work (metadata was stripped):
     arr2 = np.load(buf)
     # BUG: assert_array_equal does not check metadata
-    from numpy.lib._utils_impl import drop_metadata
+    from rsnumpy.lib._utils_impl import drop_metadata
     assert_array_equal(arr, arr2)
     assert drop_metadata(arr.dtype) is not arr.dtype
     assert drop_metadata(arr2.dtype) is arr2.dtype

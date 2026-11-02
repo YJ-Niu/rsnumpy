@@ -1,6 +1,6 @@
-import numpy as np
-from numpy.lib import array_utils
-from numpy.testing import assert_equal
+import rsnumpy as np
+from rsnumpy.lib import array_utils
+from rsnumpy.testing import assert_equal
 
 
 class TestByteBounds:

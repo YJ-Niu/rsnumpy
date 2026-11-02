@@ -624,7 +624,7 @@ class TestComplexAbsoluteAVX:
         abs_true = np.ones(arraysize, dtype=arr.real.dtype)
         assert_equal(np.abs(arr[::stride]), abs_true[::stride])
 
-# Testcase taken as is from https://github.com/numpy/numpy/issues/16660
+# Testcase taken as is from https://github.com/rsnumpy/rsnumpy/issues/16660
 class TestComplexAbsoluteMixedDTypes:
     @pytest.mark.parametrize("stride", [-4, -3, -2, -1, 1, 2, 3, 4])
     @pytest.mark.parametrize("astype", [np.complex64, np.complex128])

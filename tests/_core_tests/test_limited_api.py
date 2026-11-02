@@ -9,7 +9,7 @@ import pytest
 
 import rsnumpy as np
 from rsnumpy.testing import HAS_SUBPROCESSES, IS_EDITABLE, NOGIL_BUILD
-from rsnumpy.testing._private.utils import run_subprocess
+from testing._private.utils import run_subprocess
 
 # This import is copied from random.tests.test_extending
 try:
@@ -165,7 +165,7 @@ def _check_api_module(mod, cython=False):
             assert mod.stringdtype_load(arr) == "hello"
             # A long string is stored on the heap, so loading it
             # dereferences the allocator acquired from the descriptor.
-            text = "numpy" * 20
+            text = "rsnumpy" * 20
             arr = np.array([text, "world"], dtype=np.dtypes.StringDType())
             assert mod.stringdtype_load(arr) == text
             arr = np.array([None, "world"],

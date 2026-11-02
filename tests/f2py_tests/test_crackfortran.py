@@ -6,9 +6,9 @@ import time
 
 import pytest
 
-import numpy as np
-from numpy.f2py import crackfortran
-from numpy.f2py.crackfortran import markinnerspaces, nameargspattern
+import rsnumpy as np
+from rsnumpy.f2py import crackfortran
+from rsnumpy.f2py.crackfortran import markinnerspaces, nameargspattern
 
 from . import util
 
@@ -313,7 +313,7 @@ class TestNameArgsPatternBacktracking:
     )
     def test_nameargspattern_backtracking(self, adversary):
         '''address ReDOS vulnerability:
-        https://github.com/numpy/numpy/issues/23338'''
+        https://github.com/rsnumpy/rsnumpy/issues/23338'''
         trials_per_batch = 12
         batches_per_regex = 4
         start_reps, end_reps = 15, 25

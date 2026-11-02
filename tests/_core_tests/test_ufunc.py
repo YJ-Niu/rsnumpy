@@ -27,7 +27,7 @@ from rsnumpy.testing import (
     assert_no_warnings,
     assert_raises,
 )
-from rsnumpy.testing._private.utils import requires_memory
+from testing._private.utils import requires_memory
 
 UNARY_UFUNCS = [obj for obj in np._core.umath.__dict__.values()
                     if isinstance(obj, np.ufunc)]
@@ -226,7 +226,7 @@ class TestUfunc:
 
     def test_pickle_withstring(self):
         astring = (b"cnumpy.core\n_ufunc_reconstruct\np0\n"
-                   b"(S'numpy._core.umath'\np1\nS'cos'\np2\ntp3\nRp4\n.")
+                   b"(S'rsnumpy._core.umath'\np1\nS'cos'\np2\ntp3\nRp4\n.")
         assert_(pickle.loads(astring) is np.cos)
 
     def test_pickle_name_is_qualname(self):
@@ -328,7 +328,7 @@ class TestUfunc:
         """
         pass
 
-    # from include/numpy/ufuncobject.h
+    # from include/rsnumpy/ufuncobject.h
     size_inferred = 2
     can_ignore = 4
 
@@ -2564,7 +2564,7 @@ class TestUfunc:
                       out=None, invalid=0)
 
     def test_structured_equal(self):
-        # https://github.com/numpy/numpy/issues/4855
+        # https://github.com/rsnumpy/rsnumpy/issues/4855
 
         class MyA(np.ndarray):
             def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):

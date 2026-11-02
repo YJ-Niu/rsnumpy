@@ -11,7 +11,7 @@ import tempfile
 import pytest
 
 import rsnumpy as np
-from rsnumpy._core.tests._natype import pd_NA
+from _core_tests._natype import pd_NA
 from rsnumpy.dtypes import StringDType
 from rsnumpy.exceptions import ComplexWarning
 from rsnumpy.testing import assert_array_equal
@@ -1678,7 +1678,7 @@ def test_unsized_integer_casts(typename, signed):
             "longdouble",
             marks=pytest.mark.xfail(
                 np.dtypes.LongDoubleDType() != np.dtypes.Float64DType(),
-                reason="numpy lacks an ld2a implementation",
+                reason="rsnumpy lacks an ld2a implementation",
                 strict=True,
             ),
         ),
@@ -1993,7 +1993,7 @@ class TestFixedWidthCastSafety:
             "clongdouble",
             marks=pytest.mark.xfail(
                 np.dtypes.CLongDoubleDType() != np.dtypes.Complex128DType(),
-                reason="numpy lacks an ld2a implementation",
+                reason="rsnumpy lacks an ld2a implementation",
                 strict=True,
             ),
         ),

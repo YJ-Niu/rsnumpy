@@ -1,8 +1,8 @@
 import datetime as dt
 from typing import Any, assert_type
 
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 b: bool
 c: complex
@@ -387,7 +387,7 @@ assert_type(b_ + u4, np.uint32)
 assert_type(b + u4, np.uint32)
 assert_type(AR_f + u4, npt.NDArray[np.float64])
 
-# regression tests for https://github.com/numpy/numpy/issues/28805
+# regression tests for https://github.com/rsnumpy/rsnumpy/issues/28805
 
 assert_type(AR_floating + f, npt.NDArray[np.floating])
 assert_type(AR_floating - f, npt.NDArray[np.floating])

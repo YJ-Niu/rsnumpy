@@ -1,7 +1,7 @@
-"""Tests for :mod:`numpy._core.fromnumeric`."""
+"""Tests for :mod:`rsnumpy._core.fromnumeric`."""
 
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 A = np.array(True, ndmin=2, dtype=bool)
 A.setflags(write=False)

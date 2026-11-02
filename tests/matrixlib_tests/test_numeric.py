@@ -1,5 +1,5 @@
-import numpy as np
-from numpy.testing import assert_equal
+import rsnumpy as np
+from rsnumpy.testing import assert_equal
 
 
 class TestDot:

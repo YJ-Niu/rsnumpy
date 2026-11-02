@@ -9,7 +9,7 @@ import pytest
 
 import rsnumpy as np
 import rsnumpy._core._multiarray_umath as ncu
-from rsnumpy._core.tests._natype import pd_NA
+from _core_tests._natype import pd_NA
 from rsnumpy.testing import (
     HAS_REFCOUNT,
     assert_,

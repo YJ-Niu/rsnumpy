@@ -13,7 +13,7 @@ from rsnumpy._core._multiarray_umath import (
     __cpu_features__,
 )
 from rsnumpy.testing import HAS_SUBPROCESSES
-from rsnumpy.testing._private.utils import run_subprocess
+from testing._private.utils import run_subprocess
 
 
 def assert_features_equal(actual, desired, fname):

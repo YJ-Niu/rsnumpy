@@ -1,7 +1,7 @@
 from typing import Any, assert_type, type_check_only
 
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 type _1D = tuple[int]
 type _2D = tuple[int, int]

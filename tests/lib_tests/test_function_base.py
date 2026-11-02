@@ -8,9 +8,9 @@ from functools import partial
 
 import pytest
 
-import numpy as np
-import numpy.lib._function_base_impl as nfb
-from numpy import (
+import rsnumpy as np
+import rsnumpy.lib._function_base_impl as nfb
+from rsnumpy import (
     angle,
     average,
     bartlett,
@@ -43,10 +43,10 @@ from numpy import (
     unwrap,
     vectorize,
 )
-from numpy._core.numeric import normalize_axis_tuple
-from numpy.exceptions import AxisError
-from numpy.random import rand
-from numpy.testing import (
+from rsnumpy._core.numeric import normalize_axis_tuple
+from rsnumpy.exceptions import AxisError
+from rsnumpy.random import rand
+from rsnumpy.testing import (
     HAS_REFCOUNT,
     IS_WASM,
     NOGIL_BUILD,
@@ -59,7 +59,7 @@ from numpy.testing import (
     assert_raises,
     assert_raises_regex,
 )
-from numpy.testing._private.hypothesis_helpers import (
+from testing._private.hypothesis_helpers import (
     HAS_HYPOTHESIS,
     arrays,
     hypothesis,
@@ -2258,7 +2258,7 @@ class TestUnwrap:
 
     @staticmethod
     def _reference_unwrap(p, discont=None, period=2 * np.pi):
-        # the documented algorithm, spelled out with plain numpy ops
+        # the documented algorithm, spelled out with plain rsnumpy ops
         p = np.asarray(p)
         dtype = np.result_type(p, period)
         if discont is None:
@@ -2465,7 +2465,7 @@ class TestUnwrap:
             quaddtype_version = version("numpy_quaddtype")
         except Exception:
             pytest.skip("numpy_quaddtype not installed")
-        from numpy._utils import _pep440
+        from rsnumpy._utils import _pep440
         if _pep440.Version(quaddtype_version) <= _pep440.Version("1.0.0"):
             pytest.skip("critical bug in quaddtype during import")
 
@@ -3143,14 +3143,14 @@ class TestMeshgrid:
     def test_invalid_arguments(self):
         # Test that meshgrid complains about invalid arguments
         # Regression test for issue #4755:
-        # https://github.com/numpy/numpy/issues/4755
+        # https://github.com/rsnumpy/rsnumpy/issues/4755
         assert_raises(TypeError, meshgrid,
                       [1, 2, 3], [4, 5, 6, 7], indices='ij')
 
     def test_return_type(self):
         # Test for appropriate dtype in returned arrays.
         # Regression test for issue #5297
-        # https://github.com/numpy/numpy/issues/5297
+        # https://github.com/rsnumpy/rsnumpy/issues/5297
         x = np.arange(0, 10, dtype=np.float32)
         y = np.arange(10, 20, dtype=np.float64)
 

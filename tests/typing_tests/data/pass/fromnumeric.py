@@ -1,6 +1,6 @@
-"""Tests for :mod:`numpy._core.fromnumeric`."""
+"""Tests for :mod:`rsnumpy._core.fromnumeric`."""
 
-import numpy as np
+import rsnumpy as np
 
 A = np.array(True, ndmin=2, dtype=bool)
 B = np.array(1.0, ndmin=2, dtype=np.float32)

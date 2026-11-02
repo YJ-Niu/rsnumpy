@@ -1,10 +1,10 @@
 from functools import reduce
 from operator import mul
 
-import numpy as np
-from numpy.lib import Arrayterator
-from numpy.random import randint
-from numpy.testing import assert_
+import rsnumpy as np
+from rsnumpy.lib import Arrayterator
+from rsnumpy.random import randint
+from rsnumpy.testing import assert_
 
 
 def test():

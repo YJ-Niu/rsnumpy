@@ -1,5 +1,5 @@
 """
-Provide python-space access to the functions exposed in numpy/__init__.pxd
+Provide python-space access to the functions exposed in rsnumpy/__init__.pxd
 for testing.
 """
 
@@ -10,8 +10,8 @@ from Cython.Build import cythonize
 from distutils.core import setup
 from setuptools.extension import Extension
 
-import numpy as np
-from numpy._utils import _pep440
+import rsnumpy as np
+from rsnumpy._utils import _pep440
 
 macros = [
     ("NPY_NO_DEPRECATED_API", 0),

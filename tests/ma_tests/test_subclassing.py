@@ -4,9 +4,9 @@
 :contact: pierregm_at_uga_dot_edu
 
 """
-import numpy as np
-from numpy.lib.mixins import NDArrayOperatorsMixin
-from numpy.ma.core import (
+import rsnumpy as np
+from rsnumpy.lib.mixins import NDArrayOperatorsMixin
+from rsnumpy.ma.core import (
     MaskedArray,
     add,
     arange,
@@ -20,10 +20,10 @@ from numpy.ma.core import (
     masked_array,
     nomask,
 )
-from numpy.ma.testutils import assert_equal
-from numpy.testing import assert_, assert_raises
+from ma_tests.testutils import assert_equal
+from rsnumpy.testing import assert_, assert_raises
 
-# from numpy.ma.core import (
+# from rsnumpy.ma.core import (
 
 def assert_startswith(a, b):
     # produces a better error message than assert_(a.startswith(b))
@@ -90,7 +90,7 @@ class CSAIterator:
     """
     Flat iterator object that uses its own setter/getter
     (works around ndarray.flat not propagating subclass setters/getters
-    see https://github.com/numpy/numpy/issues/4564)
+    see https://github.com/rsnumpy/rsnumpy/issues/4564)
     roughly following MaskedIterator
     """
     def __init__(self, a):
@@ -161,7 +161,7 @@ class WrappedArray(NDArrayOperatorsMixin):
     """
     Wrapping a MaskedArray rather than subclassing to test that
     ufunc deferrals are commutative.
-    See: https://github.com/numpy/numpy/issues/15200)
+    See: https://github.com/rsnumpy/rsnumpy/issues/15200)
     """
     __slots__ = ('_array', 'attrs')
     __array_priority__ = 20

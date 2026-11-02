@@ -2,9 +2,9 @@ from io import StringIO
 
 import pytest
 
-import numpy as np
-import numpy.lib._utils_impl as _utils_impl
-from numpy.testing import assert_raises_regex
+import rsnumpy as np
+import rsnumpy.lib._utils_impl as _utils_impl
+from rsnumpy.testing import assert_raises_regex
 
 
 def test_assert_raises_regex_context_manager():

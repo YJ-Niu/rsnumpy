@@ -3,10 +3,10 @@
 """
 from functools import reduce
 
-import numpy as np
-import numpy.polynomial.chebyshev as cheb
-from numpy.polynomial.polynomial import polyval
-from numpy.testing import assert_, assert_almost_equal, assert_equal, assert_raises
+import rsnumpy as np
+import rsnumpy.polynomial.chebyshev as cheb
+from rsnumpy.polynomial.polynomial import polyval
+from rsnumpy.testing import assert_, assert_almost_equal, assert_equal, assert_raises
 
 
 def trim(x):

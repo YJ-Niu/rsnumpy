@@ -3,9 +3,9 @@
 
 import pytest
 
-import numpy as np
-from numpy import arange, array, dot, float64, linalg, transpose
-from numpy.testing import (
+import rsnumpy as np
+from rsnumpy import arange, array, dot, float64, linalg, transpose
+from rsnumpy.testing import (
     assert_,
     assert_almost_equal,
     assert_array_almost_equal,

@@ -1,10 +1,10 @@
 from typing import Literal, Never, assert_type
 
-import numpy as np
+import rsnumpy as np
 
 info = np.__array_namespace_info__()
 
-assert_type(info.__module__, Literal["numpy"])
+assert_type(info.__module__, Literal["rsnumpy"])
 
 assert_type(info.default_device(), Literal["cpu"])
 assert_type(info.devices()[0], Literal["cpu"])

@@ -1,4 +1,4 @@
-"""Tests of interaction of matrix with other parts of numpy.
+"""Tests of interaction of matrix with other parts of rsnumpy.
 
 Note that tests with MaskedArray and linalg are done in separate files.
 """
@@ -7,8 +7,8 @@ import warnings
 
 import pytest
 
-import numpy as np
-from numpy.testing import (
+import rsnumpy as np
+from rsnumpy.testing import (
     assert_,
     assert_almost_equal,
     assert_array_almost_equal,

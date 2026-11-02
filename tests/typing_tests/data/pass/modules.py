@@ -1,5 +1,5 @@
-import numpy as np
-from numpy import f2py
+import rsnumpy as np
+from rsnumpy import f2py
 
 np.char
 np.ctypeslib

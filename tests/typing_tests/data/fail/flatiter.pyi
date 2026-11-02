@@ -1,7 +1,7 @@
 from typing import Any
 
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 class _Index:
     def __index__(self) -> int: ...

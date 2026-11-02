@@ -1,4 +1,4 @@
-"""See https://github.com/numpy/numpy/pull/10676.
+"""See https://github.com/rsnumpy/rsnumpy/pull/10676.
 
 """
 import sys

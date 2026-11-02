@@ -12,7 +12,7 @@ import pytest
 import rsnumpy as np
 from rsnumpy._core import sctypes
 from rsnumpy.testing import assert_equal, assert_raises
-from rsnumpy.testing._private.utils import LONG_DOUBLE_IS_IBM_DOUBLE_DOUBLE
+from testing._private.utils import LONG_DOUBLE_IS_IBM_DOUBLE_DOUBLE
 
 
 class TestAsIntegerRatio:

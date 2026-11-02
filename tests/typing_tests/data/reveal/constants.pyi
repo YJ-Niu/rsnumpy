@@ -1,6 +1,6 @@
 from typing import Literal, assert_type
 
-import numpy as np
+import rsnumpy as np
 
 assert_type(np.e, float)
 assert_type(np.euler_gamma, float)

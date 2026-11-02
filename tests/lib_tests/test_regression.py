@@ -1,5 +1,5 @@
-import numpy as np
-from numpy.testing import (
+import rsnumpy as np
+from rsnumpy.testing import (
     _assert_valid_refcount,
     assert_,
     assert_array_almost_equal,
@@ -173,7 +173,7 @@ class TestRegression:
 
     def test_append_fields_dtype_list(self):
         # Ticket #1676
-        from numpy.lib.recfunctions import append_fields
+        from rsnumpy.lib.recfunctions import append_fields
 
         base = np.array([1, 2, 3], dtype=np.int32)
         names = ['a', 'b', 'c']

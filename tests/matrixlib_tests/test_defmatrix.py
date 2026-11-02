@@ -1,9 +1,9 @@
 import collections.abc
 
-import numpy as np
-from numpy import asmatrix, bmat, matrix
-from numpy.linalg import matrix_power
-from numpy.testing import (
+import rsnumpy as np
+from rsnumpy import asmatrix, bmat, matrix
+from rsnumpy.linalg import matrix_power
+from rsnumpy.testing import (
     assert_,
     assert_almost_equal,
     assert_array_almost_equal,
@@ -127,7 +127,7 @@ class TestProperties:
         assert_equal(x.var(ddof=1), mx.var(ddof=1))
 
     def test_basic(self):
-        import numpy.linalg as linalg
+        import rsnumpy.linalg as linalg
 
         A = np.array([[1., 2.],
                       [3., 4.]])
@@ -215,7 +215,7 @@ class TestCasting:
 
 class TestAlgebra:
     def test_basic(self):
-        import numpy.linalg as linalg
+        import rsnumpy.linalg as linalg
 
         A = np.array([[1., 2.], [3., 4.]])
         mA = matrix(A)

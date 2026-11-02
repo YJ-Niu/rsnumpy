@@ -2,14 +2,14 @@ import threading
 from collections.abc import Sequence
 from typing import Any, assert_type
 
-import numpy as np
-import numpy.typing as npt
-from numpy.random._generator import Generator
-from numpy.random._mt19937 import MT19937
-from numpy.random._pcg64 import PCG64
-from numpy.random._philox import Philox
-from numpy.random._sfc64 import SFC64
-from numpy.random.bit_generator import SeedlessSeedSequence, SeedSequence
+import rsnumpy as np
+import rsnumpy.typing as npt
+from rsnumpy.random._generator import Generator
+from rsnumpy.random._mt19937 import MT19937
+from rsnumpy.random._pcg64 import PCG64
+from rsnumpy.random._philox import Philox
+from rsnumpy.random._sfc64 import SFC64
+from rsnumpy.random.bit_generator import SeedlessSeedSequence, SeedSequence
 
 _1d: tuple[int]
 _2d: tuple[int, int]

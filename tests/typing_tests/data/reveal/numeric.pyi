@@ -7,8 +7,8 @@ Does not include tests which fall under ``array_constructors``.
 
 from typing import Any, assert_type
 
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 class SubClass(np.ndarray[tuple[Any, ...], np.dtype[np.int64]]): ...
 

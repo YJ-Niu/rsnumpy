@@ -1,8 +1,8 @@
 from types import EllipsisType
 from typing import Any, Literal, assert_type
 
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 AR_LIKE_b: list[bool]
 AR_LIKE_i: list[int]

@@ -1,4 +1,4 @@
-import numpy as np
+import rsnumpy as np
 
 f2: np.float16
 f8: np.float64
@@ -17,11 +17,11 @@ np.float32(3j)  # type: ignore[arg-type]
 #
 # See e.g. the discussion on the mailing list
 #
-# https://mail.python.org/pipermail/numpy-discussion/2020-April/080566.html
+# https://mail.python.org/pipermail/rsnumpy-discussion/2020-April/080566.html
 #
 # and the issue
 #
-# https://github.com/numpy/numpy-stubs/issues/41
+# https://github.com/rsnumpy/rsnumpy-stubs/issues/41
 #
 # for more context.
 np.float32([1.0, 0.0, 0.0])  # type: ignore[arg-type]

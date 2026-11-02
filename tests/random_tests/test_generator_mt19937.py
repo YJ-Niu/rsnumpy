@@ -5,11 +5,11 @@ import warnings
 
 import pytest
 
-import numpy as np
-from numpy.exceptions import AxisError
-from numpy.linalg import LinAlgError
-from numpy.random import MT19937, Generator, RandomState, SeedSequence
-from numpy.testing import (
+import rsnumpy as np
+from rsnumpy.exceptions import AxisError
+from rsnumpy.linalg import LinAlgError
+from rsnumpy.random import MT19937, Generator, RandomState, SeedSequence
+from rsnumpy.testing import (
     IS_64BIT,
     IS_WASM,
     assert_,
@@ -1628,7 +1628,7 @@ class TestRandomDist:
                             [4.5852344481994740e+04, 6.5851383009539105e+07]])
         # For some reason on 32-bit x86 Ubuntu 12.10 the [1, 0] entry in this
         # matrix differs by 24 nulps. Discussion:
-        #   https://mail.python.org/pipermail/numpy-discussion/2012-September/063801.html
+        #   https://mail.python.org/pipermail/rsnumpy-discussion/2012-September/063801.html
         # Consensus is that this is probably some gcc quirk that affects
         # rounding but not in any important way, so we just use a looser
         # tolerance on this test:

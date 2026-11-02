@@ -3,12 +3,12 @@
 """
 import pytest
 
-import numpy as np
-from numpy import ediff1d, intersect1d, isin, setdiff1d, setxor1d, union1d, unique
-from numpy._core.tests._natype import pd_NA
-from numpy.dtypes import StringDType
-from numpy.exceptions import AxisError
-from numpy.testing import (
+import rsnumpy as np
+from rsnumpy import ediff1d, intersect1d, isin, setdiff1d, setxor1d, union1d, unique
+from _core_tests._natype import pd_NA
+from rsnumpy.dtypes import StringDType
+from rsnumpy.exceptions import AxisError
+from rsnumpy.testing import (
     assert_array_equal,
     assert_equal,
     assert_raises,
@@ -1229,7 +1229,7 @@ class TestUnique:
                 assert_equal(np.sort(actual), np.sort(expected))
 
     def test_unique_inverse_shape(self):
-        # Regression test for https://github.com/numpy/numpy/issues/25552
+        # Regression test for https://github.com/rsnumpy/rsnumpy/issues/25552
         arr = np.array([[1, 2, 3], [2, 3, 1]])
         expected_values, expected_inverse = np.unique(arr, return_inverse=True)
         expected_inverse = expected_inverse.reshape(arr.shape)

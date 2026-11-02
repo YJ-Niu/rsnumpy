@@ -1,7 +1,7 @@
 from typing import Any, Literal, NoReturn, Self, assert_type, type_check_only
 
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 i8: np.int64
 AR_f8: npt.NDArray[np.float64]

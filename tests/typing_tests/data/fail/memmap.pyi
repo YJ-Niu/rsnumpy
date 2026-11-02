@@ -1,4 +1,4 @@
-import numpy as np
+import rsnumpy as np
 
 with open("file.txt", "r") as f:
     np.memmap(f)  # type: ignore[call-overload]

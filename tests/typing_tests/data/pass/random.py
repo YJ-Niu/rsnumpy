@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import numpy as np
+import rsnumpy as np
 
 SEED_NONE = None
 SEED_INT = 4579435749574957634658964293569

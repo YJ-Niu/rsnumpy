@@ -8,9 +8,9 @@ from numbers import Number
 
 import pytest
 
-import numpy as np
-from numpy.exceptions import RankWarning
-from numpy.polynomial import (
+import rsnumpy as np
+from rsnumpy.exceptions import RankWarning
+from rsnumpy.polynomial import (
     Chebyshev,
     Hermite,
     HermiteE,
@@ -18,7 +18,7 @@ from numpy.polynomial import (
     Legendre,
     Polynomial,
 )
-from numpy.testing import assert_, assert_almost_equal, assert_equal, assert_raises
+from rsnumpy.testing import assert_, assert_almost_equal, assert_equal, assert_raises
 
 #
 # fixtures

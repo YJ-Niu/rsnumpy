@@ -4,8 +4,8 @@ from decimal import Decimal
 from fractions import Fraction
 from typing import Any, Literal, LiteralString, assert_type
 
-import numpy as np
-from numpy.dtypes import StringDType
+import rsnumpy as np
+from rsnumpy.dtypes import StringDType
 
 # a combination of likely `object` dtype-like candidates (no `_co`)
 type _PyObjectLike = Decimal | Fraction | dt.datetime | dt.timedelta
@@ -106,7 +106,7 @@ assert_type(np.dtype("m8"), np.dtype[np.timedelta64])
 assert_type(np.dtype("m"), np.dtype[np.timedelta64])
 
 # ctypes
-assert_type(np.dtype(ct.c_double), np.dtype[np.float64])  # see numpy/numpy#29155
+assert_type(np.dtype(ct.c_double), np.dtype[np.float64])  # see rsnumpy/rsnumpy#29155
 assert_type(np.dtype(ct.c_longlong), np.dtype[np.longlong])
 assert_type(np.dtype(ct.c_uint32), np.dtype[np.uint32])
 assert_type(np.dtype(ct.c_bool), np.dtype[np.bool])

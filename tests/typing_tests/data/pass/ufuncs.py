@@ -1,4 +1,4 @@
-import numpy as np
+import rsnumpy as np
 
 np.sin(1)
 np.sin([1, 2, 3])

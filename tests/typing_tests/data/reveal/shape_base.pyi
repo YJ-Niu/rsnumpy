@@ -1,7 +1,7 @@
 from typing import Any, Self, assert_type
 
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 type _Array5D[ScalarT: np.generic] = np.ndarray[tuple[int, int, int, int, int], np.dtype[ScalarT]]
 type _Array6D[ScalarT: np.generic] = np.ndarray[tuple[int, int, int, int, int, int], np.dtype[ScalarT]]

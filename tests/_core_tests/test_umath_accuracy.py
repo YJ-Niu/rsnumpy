@@ -8,7 +8,7 @@ import pytest
 import rsnumpy as np
 from rsnumpy._core._multiarray_umath import __cpu_features__
 from rsnumpy.testing import assert_array_max_ulp
-from rsnumpy.testing._private.utils import _glibc_older_than
+from testing._private.utils import _glibc_older_than
 
 UNARY_UFUNCS = [obj for obj in np._core.umath.__dict__.values() if
         isinstance(obj, np.ufunc)]
@@ -21,7 +21,7 @@ UNARY_OBJECT_UFUNCS.remove(np.bitwise_count)
 IS_AVX = __cpu_features__.get('AVX512F', False) or \
         (__cpu_features__.get('FMA3', False) and __cpu_features__.get('AVX2', False))
 
-# only run on linux with AVX, also avoid old glibc (numpy/numpy#20448).
+# only run on linux with AVX, also avoid old glibc (rsnumpy/rsnumpy#20448).
 runtest = (sys.platform.startswith('linux')
            and IS_AVX and not _glibc_older_than("2.17"))
 platform_skip = pytest.mark.skipif(not runtest,

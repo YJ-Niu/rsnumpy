@@ -10,9 +10,9 @@ import itertools
 
 import pytest
 
-import numpy as np
-from numpy._core.numeric import normalize_axis_tuple
-from numpy.ma.core import (
+import rsnumpy as np
+from rsnumpy._core.numeric import normalize_axis_tuple
+from rsnumpy.ma.core import (
     MaskedArray,
     arange,
     array,
@@ -25,7 +25,7 @@ from numpy.ma.core import (
     shape,
     zeros,
 )
-from numpy.ma.extras import (
+from rsnumpy.ma.extras import (
     _covhelper,
     apply_along_axis,
     apply_over_axes,
@@ -63,7 +63,7 @@ from numpy.ma.extras import (
     unwrap,
     vstack,
 )
-from numpy.ma.testutils import (
+from ma_tests.testutils import (
     assert_,
     assert_almost_equal,
     assert_array_equal,
@@ -349,7 +349,7 @@ class TestAverage:
 
     def test_complex(self):
         # Test with complex data.
-        # (Regression test for https://github.com/numpy/numpy/issues/2684)
+        # (Regression test for https://github.com/rsnumpy/rsnumpy/issues/2684)
         mask = np.array([[0, 0, 0, 1, 0],
                          [0, 1, 0, 0, 0]], dtype=bool)
         a = masked_array([[0, 1 + 2j, 3 + 4j, 5 + 6j, 7 + 8j],
@@ -416,7 +416,7 @@ class TestAverage:
 
     def test_masked_weights(self):
         # Test with masked weights.
-        # (Regression test for https://github.com/numpy/numpy/issues/10438)
+        # (Regression test for https://github.com/rsnumpy/rsnumpy/issues/10438)
         a = np.ma.array(np.arange(9).reshape(3, 3),
                         mask=[[1, 0, 0], [1, 0, 0], [0, 0, 0]])
         weights_unmasked = masked_array([5, 28, 31], mask=False)
@@ -1820,7 +1820,7 @@ class TestShapeBase:
         name = fn.__name__
         assert getattr(np.ma, name) is fn
 
-        assert fn.__module__ == "numpy.ma.extras"
+        assert fn.__module__ == "rsnumpy.ma.extras"
 
         wrapped = getattr(np, fn.__name__)
         sig_wrapped = inspect.signature(wrapped)
@@ -1952,7 +1952,7 @@ class TestUnwrap:
     @staticmethod
     def _reference(p, discont=None, axis=-1, period=2 * np.pi):
         # unwrap the unmasked elements of every line on their own, with the
-        # ndarray `numpy.unwrap`, and put them back where they came from
+        # ndarray `rsnumpy.unwrap`, and put them back where they came from
         p = masked_array(p)
         mask = np.moveaxis(getmaskarray(p), axis, -1)
         data = np.moveaxis(p.filled(0), axis, -1)
@@ -2111,7 +2111,7 @@ class TestUnwrap:
         assert_almost_equal(unwrap(p, discont=1.0), unwrap(p))
 
     def test_object_dtype(self):
-        # object dtype takes the python fallback of `numpy.unwrap`
+        # object dtype takes the python fallback of `rsnumpy.unwrap`
         p = masked_array(np.array([0., 1., 2., 2 + 2 * np.pi, 3 + 2 * np.pi],
                                   dtype=object), mask=[0, 0, 1, 0, 0])
         out = unwrap(p)

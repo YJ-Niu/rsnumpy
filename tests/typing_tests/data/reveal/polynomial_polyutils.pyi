@@ -3,10 +3,10 @@ from decimal import Decimal
 from fractions import Fraction
 from typing import Any, assert_type
 
-import numpy as np
-import numpy.polynomial.polyutils as pu
-import numpy.typing as npt
-from numpy.polynomial._polytypes import _Tuple2
+import rsnumpy as np
+import rsnumpy.polynomial.polyutils as pu
+import rsnumpy.typing as npt
+from rsnumpy.polynomial._polytypes import _Tuple2
 
 num_int: int
 num_float: float

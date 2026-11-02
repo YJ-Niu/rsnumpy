@@ -1,4 +1,4 @@
-import numpy.exceptions as ex
+import rsnumpy.exceptions as ex
 
 ex.AxisError("test")
 ex.AxisError(1, ndim=2)

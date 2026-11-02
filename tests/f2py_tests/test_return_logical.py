@@ -1,6 +1,6 @@
 import pytest
 
-from numpy import array
+from rsnumpy import array
 
 from . import util
 

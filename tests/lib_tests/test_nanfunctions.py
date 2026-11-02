@@ -4,12 +4,12 @@ from functools import partial
 
 import pytest
 
-import numpy as np
-from numpy._core.numeric import normalize_axis_tuple
-from numpy.exceptions import AxisError, ComplexWarning
-from numpy.lib._function_base_impl import _QuantileMethods
-from numpy.lib._nanfunctions_impl import _divide_by_count, _nan_mask, _replace_nan
-from numpy.testing import (
+import rsnumpy as np
+from rsnumpy._core.numeric import normalize_axis_tuple
+from rsnumpy.exceptions import AxisError, ComplexWarning
+from rsnumpy.lib._function_base_impl import _QuantileMethods
+from rsnumpy.lib._nanfunctions_impl import _divide_by_count, _nan_mask, _replace_nan
+from rsnumpy.testing import (
     assert_,
     assert_almost_equal,
     assert_array_equal,
@@ -1179,7 +1179,7 @@ class TestNanFunctions_Percentile:
         res = nanpercentile(_ndat, 28, axis=1,
                             weights=gen_weights(_ndat), out=out)
         assert_almost_equal(res, tgt)
-        # Transpose the array to fit the output convention of numpy.percentile
+        # Transpose the array to fit the output convention of rsnumpy.percentile
         tgt = np.transpose([percentile(d, (28, 98), weights=gen_weights(d))
                             for d in _rdat])
         out = np.empty_like(tgt) if use_out else None

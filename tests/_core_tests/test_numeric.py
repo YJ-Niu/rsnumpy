@@ -28,8 +28,8 @@ from rsnumpy.testing import (
     assert_raises,
     assert_raises_regex,
 )
-from rsnumpy.testing._private.hypothesis_helpers import HAS_HYPOTHESIS, given, hynp, st
-from rsnumpy.testing._private.utils import longdouble_fpe_mark, requires_memory
+from testing._private.hypothesis_helpers import HAS_HYPOTHESIS, given, hynp, st
+from testing._private.utils import longdouble_fpe_mark, requires_memory
 
 
 class TestResize:
@@ -701,7 +701,7 @@ class TestIsscalar:
         assert_(np.isscalar(3.1))
         assert_(np.isscalar(np.int16(12345)))
         assert_(np.isscalar(False))
-        assert_(np.isscalar('numpy'))
+        assert_(np.isscalar('rsnumpy'))
         assert_(not np.isscalar([3.1]))
         assert_(not np.isscalar(None))
 
@@ -2302,7 +2302,7 @@ class TestArrayComparisons:
         assert_(type(res) is bool)
 
     def test_array_equal_different_scalar_types(self):
-        # https://github.com/numpy/numpy/issues/27271
+        # https://github.com/rsnumpy/rsnumpy/issues/27271
         a = np.array("foo")
         b = np.array(1)
         assert not np.array_equal(a, b)

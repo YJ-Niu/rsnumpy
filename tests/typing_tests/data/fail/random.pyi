@@ -1,5 +1,5 @@
-import numpy as np
-import numpy.typing as npt
+import rsnumpy as np
+import rsnumpy.typing as npt
 
 SEED_FLOAT: float = 457.3
 SEED_ARR_FLOAT: npt.NDArray[np.float64] = np.array([1.0, 2, 3, 4])

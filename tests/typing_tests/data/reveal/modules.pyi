@@ -1,8 +1,8 @@
 import types
 from typing import assert_type
 
-import numpy as np
-from numpy import f2py
+import rsnumpy as np
+from rsnumpy import f2py
 
 assert_type(np, types.ModuleType)
 
