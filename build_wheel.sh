@@ -216,12 +216,13 @@ if [[ "$INSTALLED" -eq 1 && "${SKIP_TESTS:-0}" != "1" ]]; then
   #   * RSNUMPY_COMPAT_SKIP_CRASHES=1：跳过已知会让 pytest 进程直接崩溃的用例；
   #     未在清单中的 crash 由 xdist worker 隔离（只损失该 worker 上的用例）。
   #
-  # 测试模式（--test all|debug，默认 all）：
-  #   all   —— 全量跑 ./tests（核心 7 文件已由门禁跑过，--ignore 去重），结束后
-  #            由 tests/_status_plugin.py 全量重建 tests/test_config.txt：
-  #            每个测试文件全通过 → 1，存在 failed/skipped/error → 0。
-  #   debug —— 只跑 test_config.txt 中标志为 0 的文件（上次没全过的），跑完把
-  #            这次全通过的文件翻回 1。修 bug 时的快速回归回路。
+  # 测试模式（--test all|debug，默认 debug）：
+  #   debug —— 只跑 test_config.txt 中标志为 0 的文件（上次没全过的），每个文件
+  #            跑完立即把标志写回 test_config.txt（边测边更新，中途退出也安全）。
+  #            修 bug 时的快速回归回路。
+  #   all   —— 全量跑 ./tests（核心 7 文件已由门禁跑过，--ignore 去重）：开场把
+  #            全部候选文件置 0，随后每跑完一个文件翻成实际结果，重建
+  #            tests/test_config.txt（全通过 → 1，存在 failed/skipped/error → 0）。
   echo "Running rsnumpy-compatibility check over ./tests (non-gating report, mode=$TEST_MODE) ..."
   # xdist 让 ~9800 个参照用例并行执行；更重要的是单用例把 rsnumpy C 扩展打崩
   # （Rust panic -> abort / segfault）时只损失一个 worker，其余用例继续，报告不会被
