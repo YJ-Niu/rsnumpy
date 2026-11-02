@@ -232,6 +232,31 @@ class NdArrayMethods:
                 return _fin(_res)
             except Exception:
                 pass
+        # object 目标：Rust 无 object 存储，按 Python 值重建（numpy 语义：
+        # 对象原样保留）。0-d object 源（_raw_data 单元素）与数值源都覆盖。
+        if name in ('object', 'O'):
+            try:
+                def _flo(x):
+                    if isinstance(x, list):
+                        out = []
+                        for v in x:
+                            out.extend(_flo(v))
+                        return out
+                    return [x]
+                src = getattr(arr, '_raw_data', None)
+                if src is not None:
+                    fv = list(src) if isinstance(src, (list, tuple)) else [src]
+                else:
+                    _t = arr.tolist()
+                    fv = _flo(_t) if isinstance(_t, list) else [_t]
+                tmp = ndarray_cls(fv, _dtype='object')
+                if getattr(arr, 'ndim', 0) == 0:
+                    tmp = tmp.reshape(())
+                elif tmp.ndim < arr.ndim and arr.shape:
+                    tmp = tmp.reshape(arr.shape)
+                return _fin(tmp)
+            except Exception:
+                pass
         return _fin(_wrap_result(arr._array.astype(name), dtype=name))
 
     @staticmethod
@@ -299,12 +324,17 @@ class NdArrayMethods:
         dtype = getattr(arr, '_dtype', "float64")
         fields = getattr(arr, '_fields', None)
         raw = getattr(arr, '_raw_data', None)
-        if len(axes) == 1 and isinstance(axes[0], (tuple, list)):
-            axes = axes[0]
+        if len(axes) == 1:
+            a0 = axes[0]
+            if isinstance(a0, (tuple, list)):
+                axes = a0
+            elif hasattr(a0, 'ndim') and getattr(a0, 'ndim', 1) == 1:
+                # numpy 接受一维数组作为轴置换
+                axes = [int(x) for x in a0.reshape((-1,)).tolist()]
         if len(axes) == 0:
             result = arr._array.T
         else:
-            result = _core.transpose_axes(arr._array, list(axes))
+            result = _core.transpose_axes(arr._array, [int(x) for x in axes])
         out = ndarray._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw)
         if raw is None:
             out.base = arr
@@ -517,17 +547,108 @@ class NdArrayMethods:
         return v
     
     @staticmethod
-    def take(arr, indices, axis=None):
-        """根据索引获取元素（保留输入数组 dtype）。"""
-        _, _ensure = _get_deps()
-        result = arr._array.take(_ensure(indices), axis)
-        return _wrap_result(result, getattr(arr, '_dtype', 'float64'))
+    def take(arr, indices, axis=None, mode='raise', out=None):
+        """根据索引获取元素（保留输入数组 dtype；numpy 兼容 mode 语义）。
+
+        越界索引抛 IndexError（直达 Rust 会 panic abort 整个进程）。
+        全部索引合法时走 Rust 快路径，否则 Python 回退（含 clip/wrap）。
+        """
+        ndarray, _ensure = _get_deps()
+        dt = getattr(arr, '_dtype', 'float64')
+
+        def _norm(i, size, ax):
+            if size == 0:
+                raise IndexError(
+                    f"index {i} is out of bounds for axis {ax} "
+                    f"with size {size}")
+            if mode == 'clip':
+                if i > size - 1:
+                    i = size - 1
+                if i < -size:
+                    i = -size
+            elif mode != 'wrap':
+                if i < -size or i >= size:
+                    raise IndexError(
+                        f"index {i} is out of bounds for axis {ax} "
+                        f"with size {size}")
+            return i % size
+
+        if isinstance(indices, int) and not isinstance(indices, bool):
+            # 标量索引：保持既有 Rust 行为
+            result = arr._array.take(_ensure(indices), axis)
+            return _wrap_result(result, dt)
+        idxs = indices.tolist() if hasattr(indices, 'tolist') else list(indices)
+        if axis is None:
+            n = 1
+            for d in arr.shape:
+                n *= d
+            norm = [_norm(i, n, 0) for i in idxs]
+            if mode == 'raise' and all(0 <= i < n for i in idxs):
+                result = arr._array.take(_ensure(list(idxs)), None)
+                return _wrap_result(result, dt)
+            flat = arr.ravel().tolist()
+            if not isinstance(flat, list):
+                flat = [flat]
+            return ndarray([flat[i] for i in norm], _dtype=dt)
+        ax = axis % arr.ndim
+        size = arr.shape[ax]
+        norm = [_norm(i, size, axis) for i in idxs]
+        if mode == 'raise' and all(0 <= i < size for i in idxs):
+            result = arr._array.take(_ensure(list(idxs)), axis)
+            return _wrap_result(result, dt)
+        other = tuple(arr.shape[i] for i in range(arr.ndim) if i != ax)
+        rows = (arr.moveaxis(ax, -1).reshape((-1, size)).tolist()
+                if size > 0 else [])
+        out_rows = [[row[i] for i in norm] for row in rows]
+        return ndarray(out_rows, _dtype=dt).reshape(other + (len(idxs),))
     
     @staticmethod
-    def put(arr, indices, values):
-        """将值放入数组的指定位置。"""
-        _, _ensure = _get_deps()
-        arr._array.put(_ensure(indices), _ensure(values))
+    def put(arr, indices, values, mode='raise'):
+        """将值放入数组的指定位置（numpy 兼容 mode 语义）。
+
+        空 values 为 no-op；越界索引抛 IndexError（避免 Rust panic abort）。
+        """
+        ndarray, _ensure = _get_deps()
+        vals = values.tolist() if hasattr(values, 'tolist') else list(values)
+        if not vals:
+            # numpy 语义：空 values 不修改数组
+            return
+        n = 1
+        for d in arr.shape:
+            n *= d
+        idxs = [int(v) for v in
+                (indices.tolist() if hasattr(indices, 'tolist')
+                 else list(indices))]
+
+        def _norm(i):
+            if n == 0:
+                raise IndexError(
+                    f"index {i} is out of bounds for axis 0 with size 0")
+            if mode == 'clip':
+                if i > n - 1:
+                    i = n - 1
+                if i < -n:
+                    i = -n
+            elif mode != 'wrap':
+                if i < -n or i >= n:
+                    raise IndexError(
+                        f"index {i} is out of bounds for axis 0 "
+                        f"with size {n}")
+            return i % n
+
+        norm = [_norm(i) for i in idxs]
+        if mode == 'raise' and all(0 <= i < n for i in idxs):
+            arr._array.put(_ensure(idxs), _ensure(values))
+            return
+        # 越界/clip/wrap：就地修改扁平缓冲
+        flat = arr.ravel().tolist()
+        if not isinstance(flat, list):
+            flat = [flat]
+        for i, v in zip(norm, vals):
+            flat[i] = v
+        dt = getattr(arr, '_dtype', 'float64')
+        arr._array = ndarray(flat, _dtype=dt).reshape(
+            tuple(arr.shape))._array
     
     @staticmethod
     def repeat(arr, repeats, axis=None):

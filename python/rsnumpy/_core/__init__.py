@@ -129,7 +129,18 @@ class flatiter:
             pass
 
 
-class ufunc:
+class _UFuncMeta(type):
+    """ufunc 元类：isinstance(x, ufunc) 识别 rsnumpy 标记过的 ufunc 函数。
+
+    rsnumpy 的 ufunc 是 Python 层函数对象（带 ``_rs_ufunc`` 标记与
+    ``.types`` 循环签名），NumPy 中则是 C 层 ufunc 类的实例。
+    """
+
+    def __instancecheck__(cls, inst):
+        return bool(getattr(inst, '_rs_ufunc', False))
+
+
+class ufunc(metaclass=_UFuncMeta):
     """ufunc 类型兼容占位（numpy._core.ufunc）。
 
     rsnumpy 的 ufunc 是 Python 层可调用对象；本类提供与 NumPy 兼容的
@@ -173,11 +184,19 @@ def __getattr__(name):
     if name == 'records':
         import rsnumpy
         return rsnumpy.rec
+    # 顶层常用名的 _core 级暴露（numpy._core 同样导出这些公共名，
+    # 移植测试按 numpy 路径从 _core 导入）
+    if name in ('arange', 'array', 'atleast_1d', 'atleast_2d', 'atleast_3d',
+                'block', 'concatenate', 'hstack', 'newaxis', 'stack',
+                'vstack', 'finfo', 'iinfo', 'swapaxes'):
+        import rsnumpy
+        return getattr(rsnumpy, name)
     # 子模块：惰性导入（`import rsnumpy._core.X` 由导入机制直接解析，
     # 属性访问走这里）
     if name in ('numerictypes', 'function_base', 'multiarray',
                 'shape_base', '_multiarray_umath', '_multiarray_tests',
-                '_rational_tests', 'umath', 'tests', 'numeric'):
+                '_rational_tests', 'umath', 'tests', 'numeric',
+                '_exceptions', 'arrayprint', 'fromnumeric', 'records'):
         from importlib import import_module
         return import_module(f'.{name}', __name__)
     raise AttributeError(f"module 'rsnumpy._core' has no attribute {name!r}")

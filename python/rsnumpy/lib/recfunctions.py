@@ -491,3 +491,218 @@ def find_duplicates(a, key=None, ignoremask=True, return_index=False):
     if return_index:
         return (dup_arr, np.array(dup_idx, dtype='int64'))
     return dup_arr
+
+
+# ---------------------------------------------------------------------------
+# append_fields / assign_fields_by_name / join_by（numpy.lib.recfunctions 兼容）
+# ---------------------------------------------------------------------------
+
+def _get_fieldspec(adtype):
+    """dtype → [(name, dtype, title), ...]（numpy.lib.recfunctions._get_fieldspec 兼容）。"""
+    dt = adtype if hasattr(adtype, 'names') else np.dtype(adtype)
+    if dt.names:
+        return [(n, dt.fields[n][0],
+                 dt.fields[n][2] if len(dt.fields[n]) > 2 else None)
+                for n in dt.names]
+    return [(None, dt, None)]
+
+
+def _zip_descr(seqarrays, flatten=False):
+    """由一维数组列表构造记录字段描述（numpy.lib.recfunctions._zip_descr 兼容）。"""
+    _ = flatten
+    if len(seqarrays) == 0:
+        return []
+    if len(np.asarray(seqarrays[0]).shape[1:]) != 0:
+        raise ValueError("only 1-dimensional arrays are supported")
+    return [('r%d' % i, np.asarray(a).dtype)
+            for i, a in enumerate(seqarrays)]
+
+
+def _zip_dtype(seqarrays, flatten=False):
+    """由一维数组列表构造记录 dtype（numpy.lib.recfunctions._zip_dtype 兼容）。"""
+    return np.dtype(_zip_descr(seqarrays, flatten=flatten))
+
+def _rec_info(a):
+    """返回 (底层数据, 平坦掩码列表或 None)。"""
+    import rsnumpy.ma as _ma
+    if _ma.isMaskedArray(a):
+        return a.data, list(a._mask)
+    return a, None
+
+
+def append_fields(rec1, rec2, dk1=None, dk2=None, usemask=True, fill_value=1,
+                  names=None, dtype=None, tobegin=False):
+    """按关键字段把 rec2 的字段追加到 rec1（numpy.append_fields 兼容）。
+
+    无键（dk1=dk2=[]）时按位置匹配；未匹配行以 fill_value 填充并掩码。
+    """
+    import rsnumpy
+    import rsnumpy.ma as ma
+    dk1 = list(dk1) if dk1 else []
+    dk2 = list(dk2) if dk2 else []
+    data1, mask1 = _rec_info(rec1)
+    data2, mask2 = _rec_info(rec2)
+    n1 = data1.dtype.names or ()
+    n2 = data2.dtype.names or ()
+    add_names = [n for n in n2 if n not in n1]
+    out_names = list(n1) + add_names if not tobegin else add_names + list(n1)
+
+    idx = {}
+    for j in range(data2.shape[0]):
+        key = tuple(data2[j][k] for k in dk2) if dk2 else j
+        idx.setdefault(key, []).append(j)
+
+    out_rows, out_mask = [], []
+    for i in range(data1.shape[0]):
+        row1 = data1[i]
+        key = tuple(row1[k] for k in dk1) if dk1 else i
+        j = idx.get(key, [None])[0]
+        vals, ms = {}, {}
+        for k, n in enumerate(n1):
+            vals[n] = row1[n]
+            ms[n] = (mask1[i * len(n1) + k] if mask1 else False)
+        if j is not None:
+            row2 = data2[j]
+            for k, n in enumerate(n2):
+                if n in add_names:
+                    vals[n] = row2[n]
+                    ms[n] = (mask2[j * len(n2) + k] if mask2 else False)
+        else:
+            for n in add_names:
+                vals[n] = fill_value
+                ms[n] = True
+        out_rows.append([vals[n] for n in out_names])
+        out_mask.append([ms[n] for n in out_names])
+
+    out_dtype = [(n, (data1.dtype.fields[n][0] if n in n1
+                      else data2.dtype.fields[n][0])) for n in out_names]
+    arr = rsnumpy.array(out_rows, dtype=out_dtype)
+    if usemask:
+        flat = [m for row in out_mask for m in row]
+        return ma.MaskedArray(arr, mask=flat)
+    return arr
+
+
+def assign_fields_by_name(rec1, rec2, usemask=True, overwrite=False,
+                          extra_fields='drop'):
+    """按字段名把 rec2 的值赋给 rec1（第 i 行 ↔ 第 i 行，numpy 兼容）。"""
+    import rsnumpy
+    data1, mask1 = _rec_info(rec1)
+    data2, mask2 = _rec_info(rec2)
+    n1 = data1.dtype.names or ()
+    n2 = data2.dtype.names or ()
+    out_rows, out_mask = [], []
+    for i in range(data1.shape[0]):
+        r1 = data1[i]
+        r2 = data2[i] if i < data2.shape[0] else None
+        vals = [r1[n] for n in n1]
+        ms = [mask1[i * len(n1) + k] if mask1 else False
+              for k in range(len(n1))]
+        if r2 is not None:
+            for k, n in enumerate(n1):
+                if n in n2:
+                    j = n2.index(n)
+                    src_mask = (mask2[i * len(n2) + j] if mask2 else False)
+                    if overwrite or not src_mask:
+                        vals[k] = r2[n]
+                    ms[k] = src_mask or ms[k]
+        out_rows.append(vals)
+        out_mask.append(ms)
+    arr = rsnumpy.array(out_rows, dtype=data1.dtype)
+    if usemask:
+        flat = [m for row in out_mask for m in row]
+        return rsnumpy.ma.MaskedArray(arr, mask=flat)
+    return arr
+
+
+def join_by(left, right, keys, join_type='inner', fill_value=None,
+            lsuffix=None, rsuffix=None):
+    """按键字段联接两个记录数组（SQL 风格，numpy.join_by 兼容）。
+
+    join_type: 'inner' / 'left' / 'right' / 'full'（'outer' 同 'full'）。
+    """
+    import rsnumpy
+    join_type = str(join_type).lower()
+    if join_type == 'outer':
+        join_type = 'full'
+    dl, ml = _rec_info(left)
+    dr, mr = _rec_info(right)
+    nl = dl.dtype.names or ()
+    nr = dr.dtype.names or ()
+    if isinstance(keys, str):
+        keys = [keys]
+    keys = list(keys)
+
+    right_out = {}
+    for n in nr:
+        if n in nl and n not in keys:
+            right_out[n] = f'{n}{rsuffix}' if rsuffix else n
+        else:
+            right_out[n] = n
+    spec = [(n, n, dl.dtype.fields[n][0]) for n in nl]
+    for n in nr:
+        if n in nl and n in keys:
+            continue
+        spec.append((right_out[n], n, dr.dtype.fields[n][0]))
+    out_names = [s[0] for s in spec]
+
+    idx = {}
+    for j in range(dr.shape[0]):
+        key = tuple(dr[j][k] for k in keys)
+        idx.setdefault(key, []).append(j)
+    right_lists = {k: list(v) for k, v in idx.items()}
+    consumed_r, consumed_l = set(), set()
+    out_rows, out_mask = [], []
+
+    def _emit(i, j):
+        row, mrow = [], []
+        if i is None:
+            for _ in nl:
+                row.append(fill_value)
+                mrow.append(True)
+        else:
+            for k, n in enumerate(nl):
+                row.append(dl[i][n])
+                mrow.append(ml[i * len(nl) + k] if ml else False)
+        for out_n, src_n, _fdt in spec[len(nl):]:
+            if j is None:
+                row.append(fill_value)
+                mrow.append(True)
+            else:
+                row.append(dr[j][src_n])
+                mrow.append(mr[j * len(nr) + nr.index(src_n)] if mr else False)
+        out_rows.append(row)
+        out_mask.append(mrow)
+
+    if join_type in ('inner', 'left', 'full'):
+        for i in range(dl.shape[0]):
+            key = tuple(dl[i][k] for k in keys)
+            ms = [j for j in right_lists.get(key, []) if j not in consumed_r]
+            if ms:
+                for j in ms:
+                    consumed_r.add(j)
+                    consumed_l.add(i)
+                    _emit(i, j)
+            elif join_type in ('left', 'full'):
+                _emit(i, None)
+    if join_type in ('right', 'full'):
+        for j in range(dr.shape[0]):
+            if j in consumed_r:
+                continue
+            key = tuple(dr[j][k] for k in keys)
+            i = next((x for x in range(dl.shape[0])
+                      if tuple(dl[x][k] for k in keys) == key
+                      and x not in consumed_l), None)
+            if i is not None:
+                consumed_l.add(i)
+                _emit(i, j)
+            else:
+                _emit(None, j)
+
+    out_dtype = [(n, fdt) for n, _src, fdt in spec]
+    arr = rsnumpy.array(out_rows, dtype=out_dtype)
+    import rsnumpy.ma as ma
+    if rsnumpy.ma.isMaskedArray(left) or rsnumpy.ma.isMaskedArray(right):
+        flat = [m for row in out_mask for m in row]
+        return ma.MaskedArray(arr, mask=flat)
+    return arr

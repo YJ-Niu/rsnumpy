@@ -269,6 +269,30 @@ def _mvn_sample(next_standard_normal, mean, cov, size):
     return np.asarray(out).reshape(shape + (d,))
 
 
+def _coerce_size_arg(args, kwargs):
+    """size 参数数组化 → int/tuple（numpy 接受 array-like size，Rust 后端不接受）。"""
+
+    def _conv(v):
+        if isinstance(v, bool) or isinstance(v, int):
+            return v
+        if isinstance(v, (tuple, list)):
+            return tuple(int(x) for x in v)
+        try:
+            arr = np.asarray(v)
+            if arr.ndim == 0:
+                return int(arr.item())
+            return tuple(int(x) for x in arr.reshape((-1,)).tolist())
+        except Exception:
+            return v
+
+    out_args = list(args)
+    if out_args:
+        out_args[0] = _conv(out_args[0])
+    if 'size' in kwargs:
+        kwargs['size'] = _conv(kwargs['size'])
+    return tuple(out_args), kwargs
+
+
 class _WrappedGenerator:
     """Generator 的薄包装，把核心返回的数组提升为 rsnumpy 数组。
 
@@ -490,6 +514,11 @@ class _WrappedGenerator:
 
     def random(self, *args, **kwargs):
         dtype = kwargs.pop('dtype', None)
+        args, kwargs = _coerce_size_arg(args, kwargs)
+        # Rust Generator.random 不接受位置 size，统一改走 size= 关键字
+        if args:
+            kwargs.setdefault('size', args[0])
+            args = args[1:]
         result = self._convert(self._inner.random(*args, **kwargs))
         if dtype is not None and hasattr(result, 'astype'):
             result = result.astype(dtype)
@@ -680,3 +709,16 @@ random_sample = _default_rng.random
 normal = _default_rng.normal
 randn_like = _default_rng.randn_like
 rand_like = _default_rng.rand_like
+
+
+_legacy_state = None
+
+
+def __getattr__(name):
+    """PEP 562：补齐遗留 np.random.* 函数名（permutation/shuffle 等）。"""
+    if name in ('permutation', 'shuffle'):
+        global _legacy_state
+        if _legacy_state is None:
+            _legacy_state = _RandomStateWrapper(None)
+        return _legacy_state.__getattr__(name)
+    raise AttributeError(f"module 'rsnumpy.random' has no attribute {name!r}")

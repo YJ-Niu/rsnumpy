@@ -779,6 +779,12 @@ def _resolve_scalar_obj(obj):
         return _make_flexible('U', 0, None)
     if obj is object:
         return _make_scalar('object', None)
+    if isinstance(obj, type):
+        # 协议：类级 __rsnumpy_dtype__ 声明该类对应的 dtype（rsnumpy 无
+        # 用户自定义 C 标量注册机制，测试标量类用它声明近似 dtype）。
+        _rdt = getattr(obj, '__rsnumpy_dtype__', None)
+        if _rdt is not None:
+            return _parse_any_dtype(_rdt, False)
     name = getattr(obj, '__name__', None)
     if name is None:
         name = getattr(obj, 'name', None)

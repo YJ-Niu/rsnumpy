@@ -302,3 +302,15 @@ def unpack_array_bytes(data, dt, n, byteorder=None):
         rec, _ = _unpack_record(chunk, dt, prefix, 0)
         recs.append(rec)
     return recs
+
+
+def dot(a, b):
+    """ndarray 点积（numpy._core.multiarray.dot 兼容）。"""
+    import rsnumpy
+    return rsnumpy.dot(a, b)
+
+
+def _get_ndarray_c_version(*args, **kwargs):
+    """C 层 ndarray 版本号桩：rsnumpy 无对应 C 实现（相关测试经 conftest skip）。"""
+    raise NotImplementedError(
+        "rsnumpy has no C _get_ndarray_c_version; test is expected to be skipped")

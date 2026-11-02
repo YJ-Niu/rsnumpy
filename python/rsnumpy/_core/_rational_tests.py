@@ -43,3 +43,9 @@ class rational2(rational):
 
     def __repr__(self):
         return f"rational2({self.real}, {self.imag})"
+
+
+# rsnumpy 不支持用户自定义 C 标量 dtype；通过 __rsnumpy_dtype__ 协议让
+# np.dtype(rational) 解析到 object dtype（_dtypes._resolve_scalar_obj 识别）。
+rational.__rsnumpy_dtype__ = 'O'
+rational2.__rsnumpy_dtype__ = 'O'

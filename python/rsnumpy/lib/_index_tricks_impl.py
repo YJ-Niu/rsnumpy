@@ -50,4 +50,20 @@ class _MGrid:
 
 mgrid = _MGrid()
 
-__all__ = ['mgrid']
+_REEXPORT_NAMES = (
+    'c_', 'diag_indices', 'diag_indices_from', 'fill_diagonal',
+    'index_exp', 'ix_', 'ndenumerate', 'ndindex', 'ogrid', 'r_', 's_',
+)
+
+
+def __getattr__(name):
+    # 惰性从 rsnumpy 顶层取回（lib 在 rsnumpy 初始化期间导入，
+    # 模块级取属性会撞上部分初始化的命名空间）。
+    if name in _REEXPORT_NAMES:
+        import rsnumpy
+        return getattr(rsnumpy, name)
+    raise AttributeError(f"module 'rsnumpy.lib._index_tricks_impl' has no "
+                         f"attribute {name!r}")
+
+
+__all__ = ['mgrid'] + list(_REEXPORT_NAMES)

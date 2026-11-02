@@ -1714,15 +1714,19 @@ def astype(x, dtype, copy=True, casting="unsafe"):
     return _asarray(x).astype(dtype, copy=copy)
 
 
-def ascontiguousarray(a, dtype=None):
-    """返回 C 连续数组（rsnumpy 数组始终连续）。"""
+def ascontiguousarray(a, dtype=None, copy=None, subok=True):
+    """返回 C 连续数组（rsnumpy 数组始终连续）。
+
+    copy/subok 为 numpy 2.x 兼容参数，当前实现忽略（数组恒连续）。
+    """
+    _ = copy, subok
     arr = _np().asarray(a)
     return arr.astype(dtype) if dtype is not None else arr
 
 
-def asfortranarray(a, dtype=None):
+def asfortranarray(a, dtype=None, copy=None, subok=True):
     """返回 Fortran 连续数组（rsnumpy 视为等价）。"""
-    return ascontiguousarray(a, dtype)
+    return ascontiguousarray(a, dtype, copy=copy, subok=subok)
 
 
 def asarray_chkfinite(a, dtype=None, order=None):
@@ -2750,8 +2754,9 @@ class errstate:
 
 
 # ========== 解析 / IO ==========
-def fromstring(string, dtype=float, count=-1, sep=''):
+def fromstring(string, dtype=float, count=-1, sep='', *, like=None):
     """从文本字符串解析一维数组。"""
+    _ = like
     np = _np()
     if sep == '':
         raise ValueError("fromstring() with binary data is not supported")
@@ -2773,9 +2778,9 @@ def savez_compressed(file, *args, **kwds):
 
 
 # ========== 由 Python 函数构造 ufunc / 向量化 ==========
-def frompyfunc(func, nin, nout, *, identity=None):
+def frompyfunc(func, nin, nout, *, kwargs=None):
     """将任意 Python 函数封装为逐元素的 ufunc 风格可调用对象。"""
-    _ = identity
+    _ = kwargs
     np = _np()
 
     def wrapper(*args):
@@ -4851,3 +4856,11 @@ __all__ = [
     "var_string_array", "bigint_array",
     "detect_integer_overflow", "smart_int_array",
 ]
+
+
+# ---- TestTextSignatures 兼容：numpy 2.x 风格 __text_signature__ 声明 ----
+fromstring.__text_signature__ = (
+    "(string, dtype='float64', count=-1, sep='', *, like=None)")
+frompyfunc.__text_signature__ = "(func, nin, nout, *, kwargs=None)"
+datetime_data.__text_signature__ = "(dtype,)"
+promote_types.__text_signature__ = "(type1, type2)"

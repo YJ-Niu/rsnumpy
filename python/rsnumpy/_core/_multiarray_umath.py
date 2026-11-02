@@ -5,7 +5,11 @@ MAXDIMS 与 rsnumpy 嵌套序列发现路径的实际维度上限一致（64）�
 
 MAXDIMS = 64
 
-__all__ = ['MAXDIMS', '_discover_array_parameters']
+# rsnumpy 无 SIMD 特性检测：空 dict 使按 CPU 特性分支的测试走通用路径。
+__cpu_features__ = {}
+
+__all__ = ['MAXDIMS', '_discover_array_parameters', '__cpu_features__',
+           '_array_converter', '_get_sfloat_dtype']
 
 
 def _rs():
@@ -102,3 +106,15 @@ def _discover_array_parameters(sequence, dtype=None, *args, **kwargs):
                 if dt is None:
                     raise
     return dt, _discover_shape(sequence)
+
+
+def _array_converter(*args, **kwargs):
+    """C 层数组转换器桩：rsnumpy 无对应实现（相关测试经 conftest skip）。"""
+    raise NotImplementedError(
+        "rsnumpy has no C _array_converter; test is expected to be skipped")
+
+
+def _get_sfloat_dtype():
+    """C 层 small-float dtype 桩：rsnumpy 无对应实现（相关测试经 conftest skip）。"""
+    raise NotImplementedError(
+        "rsnumpy has no C _get_sfloat_dtype; test is expected to be skipped")

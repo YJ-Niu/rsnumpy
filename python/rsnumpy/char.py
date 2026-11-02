@@ -1298,3 +1298,30 @@ def array(obj, itemsize=None, copy=True, unicode=None, order=None):
 def asarray(obj, itemsize=None, unicode=None):
     """创建 chararray（np.char.asarray，视图语义——共享数据）。"""
     return chararray(obj, itemsize=itemsize, copy=False, unicode=unicode)
+
+
+def compare_chararrays(a1, a2, cmp='asciibetical', rstrip=False):
+    """逐元素比较字符数组（numpy.char.compare_chararrays 兼容）。
+
+    cmp='asciibetical' 按 ASCII/码点比较（默认）；'lexicographic' 为
+    locale 感知比较（rsnumpy 无 locale 层，退化为码点比较）。
+    """
+    import rsnumpy as np
+    if cmp not in ('asciibetical', 'lexicographic'):
+        raise ValueError("cmp must be 'asciibetical' or 'lexicographic'")
+    x1 = [str(v).rstrip() if rstrip else str(v)
+          for v in np.asarray(a1).ravel().tolist()]
+    x2 = [str(v).rstrip() if rstrip else str(v)
+          for v in np.asarray(a2).ravel().tolist()]
+    if len(x1) == 1 and len(x2) != 1:
+        x1 = x1 * len(x2)
+    elif len(x2) == 1 and len(x1) != 1:
+        x2 = x2 * len(x1)
+    elif len(x1) != len(x2):
+        raise ValueError('operands could not be broadcast together')
+    res = [(a > b) for a, b in zip(x1, x2)]
+    return np.asarray(res, dtype='bool')
+
+
+compare_chararrays.__text_signature__ = (
+    "(a1, a2, cmp='asciibetical', rstrip=False)")

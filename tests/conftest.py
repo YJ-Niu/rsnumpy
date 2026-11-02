@@ -510,6 +510,17 @@ sys.modules["rsnumpy.exceptions"] = _ex
 sys.modules["rsnumpy._utils"] = _utils
 sys.modules["rsnumpy._utils._pep440"] = _pep440
 
+# rsnumpy.dtypes 是 _DTypeNamespace 类（非模块）：`import rsnumpy.dtypes`
+# 需要一个模块对象；属性访问 np.dtypes.X 仍走原类。
+_dtypes_mod = types.ModuleType("rsnumpy.dtypes")
+for _dn in [n for n in dir(rsnumpy.dtypes) if not n.startswith('_')]:
+    setattr(_dtypes_mod, _dn, getattr(rsnumpy.dtypes, _dn))
+if not hasattr(_dtypes_mod, '__all__'):
+    _dtypes_mod.__all__ = [n for n in dir(rsnumpy.dtypes)
+                           if not n.startswith('_')]
+sys.modules["rsnumpy.dtypes"] = _dtypes_mod
+del _dn
+
 
 # ---------------------------------------------------------------------------
 # 6. numpy.testing._private.{hypothesis_helpers, utils}
@@ -693,6 +704,11 @@ _SKIP_MARKERS = (
     "ncu.", "array_indexing", "rational", "rational2",
     "float16", "longdouble", "float128", "datetime64", "datetime_data",
     "timedelta64", "object_", "np.object",
+    # C 内部实现（rsnumpy 无对应 C 层）：桩函数存在但相关测试无意义
+    "incref_elide", "get_c_wrapping_array", "IsPythonScalar",
+    "npy_char_deprecation", "_get_sfloat_dtype", "_dtype_from_pep3118",
+    "_get_ndarray_c_version", "create_custom_field_dtype",
+    "_array_converter",
 )
 
 
