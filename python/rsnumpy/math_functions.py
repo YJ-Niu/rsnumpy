@@ -1,7 +1,6 @@
 """数学函数模块 - 所有实现位于 Rust，这里仅保留薄包装。"""
 
 import builtins
-import math
 
 import rsnumpy.num_core as _core
 
@@ -448,7 +447,6 @@ def _isclose_arrays(arr_a, arr_b, rtol, atol, equal_nan):
     双 NaN → equal_nan。atol/rtol 支持 list/tuple 数组。
     形状不可广播 → ValueError（numpy 语义，避免直达 Rust panic）。
     """
-    import builtins as _b
     import math as _m
     nd = _nd()
 
@@ -493,23 +491,12 @@ def _isclose_arrays(arr_a, arr_b, rtol, atol, equal_nan):
         arr_b = arr_b.reshape((1,))
     # 全 Python 广播 + 逐元素计算：Rust 广播算术对 (1,) vs (N,) 也会
     # 静默产出 size-1 结果，不可信
+
     def _shp(x):
         try:
             return builtins.tuple(x.shape)
         except Exception:
             return ()
-
-    def _flat(x):
-        if not isinstance(x, (list, tuple)):
-            # 0-d 数组 tolist() 返回标量
-            return [x]
-        o = []
-        for v in x:
-            if isinstance(v, list):
-                o.extend(_flat(v))
-            else:
-                o.append(v)
-        return o
 
     _sa, _sb = _shp(arr_a), _shp(arr_b)
     _at_is_arr = hasattr(_at, 'shape')

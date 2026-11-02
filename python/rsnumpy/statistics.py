@@ -294,6 +294,7 @@ def _flat_vals(x):
 def _values_equal(a, b):
     """逐元素比较（支持 0-d 标量与同形状数组）。"""
     try:
+        import builtins
         la = _flat_vals(a.tolist())
         lb = _flat_vals(b.tolist()) if hasattr(b, 'tolist') else _flat_vals([b])
         if len(la) != len(lb):

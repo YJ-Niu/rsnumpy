@@ -164,7 +164,7 @@ def _wrap_str(vals, shape, was_bytes=False):
     裸 'S'/'U' dtype 按内容推断最小宽度（保留 bytes/str 类别：S 输入→
     S 结果，U 输入→U 结果），宽度随内容增长（如 replace 变宽）。
     """
-    from .__init__ import ndarray, array as _array
+    from .__init__ import array as _array
     kind = 'S' if was_bytes else 'U'
     if not shape:
         return _array([vals[0] if vals else ''], dtype=kind)

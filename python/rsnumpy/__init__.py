@@ -22,7 +22,8 @@ from . import array_ops as _array_ops_module
 from .io import save, load, loadtxt, savetxt, savez, load_npz, genfromtxt
 from .polynomial import Poly, polyval, polyfit, polyder, polyint, polyroots
 from .linalg import linalg_module as _linalg_module
-from .random import random_module as _random_module
+from .random import random_module as _random_module  # noqa: F401
+import collections.abc as _collections_abc
 from . import char as _char_module
 from . import matlib as _matlib_module
 # ========== rec / ma 子模块（在顶层完全初始化后导入以避免循环依赖） ==========
@@ -53,6 +54,12 @@ from ._dtypes import (
     DType, dtype, _make_flexible, _make_subarray,
     _build_struct, _scalar_typestr_short,
 )
+from . import random  # np.random 指向 random 模块本身（numpy 中 np.random 是模块，from rsnumpy.random import rand 必须可用）
+import operator as _operator
+import warnings as _warnings
+from ._dtypes import _set_type_hook as _set_dtype_type_hook
+from .exceptions import AxisError  # noqa E401
+
 _current_module = _sys.modules[__name__]
 _sys.modules['rsnumpy'] = _current_module
 _sys.modules['rsnumpy.__init__'] = _current_module
@@ -179,6 +186,8 @@ class ArrayFlags:
             'OWNDATA': self.OWNDATA, 'WRITEABLE': self.WRITEABLE,
             'ALIGNED': self.ALIGNED, 'WRITEBACKIFCOPY': self.WRITEBACKIFCOPY,
             'UPDATEIFCOPY': self.UPDATEIFCOPY,
+            'CONTIGUOUS': self.C_CONTIGUOUS or self.F_CONTIGUOUS,
+            'FORTRAN': self.F_CONTIGUOUS,
         }
         if key in mapping:
             return mapping[key]
@@ -803,10 +812,27 @@ class ndarray:
             return ndarray(filtered)
         # 布尔掩码索引：a[bool_mask]。掩码形状需与 self 的前若干维一致，
         # 返回被掩码选中的元素（按 C 序展开），剩余维度保留。
-        if (_is_ndarray(key) and getattr(key, '_dtype', None) == 'bool' and key.ndim >= 1):
-            mask_shape = tuple(key.shape)
+        # 注意 _dtype 可能是 'bool' 字符串，也可能是 bool 类本身（zeros_like(dtype=bool)
+        # 产物），两者都须识别，否则掩码落入花式索引路径致结果形状错误。
+        # 布尔掩码可能以单个 ndarray（a[mask]）或单元素元组（a[(mask,)]）传入，
+        # numpy 中两者等价；归一化到掩码对象本身。
+        _mask_key = key
+        if isinstance(key, tuple) and len(key) == 1:
+            _mask_key = key[0]
+        _kdt = getattr(_mask_key, '_dtype', None)
+        if (_is_ndarray(_mask_key) and (_kdt == 'bool' or _kdt is _py_bool) and _mask_key.ndim >= 1):
+            mask_shape = tuple(_mask_key.shape)
             self_shape = tuple(self.shape)
             k = len(mask_shape)
+            # newaxis 掩码：mask 维数多于 self（如 mask[None,...]）时，前导多出的维是
+            # newaxis（size 1）。numpy 将其视为广播（不计入掩码覆盖维数）。masked_select
+            # 按扁平数据工作（mask 与 self 扁平长度一致），故原始 mask 可直接使用，
+            # 仅需从 mask_shape 剥离前导 newaxis 维用于形状计算。
+            if k > len(self_shape):
+                _extra = k - len(self_shape)
+                if _py_all(d == 1 for d in mask_shape[:_extra]):
+                    mask_shape = mask_shape[_extra:]
+                    k = len(mask_shape)
             if mask_shape != self_shape[:k] and k <= len(self_shape):
                 # numpy 语义：布尔掩码维度必须与数组前若干轴严格一致
                 for _bi in range(builtins.min(k, len(self_shape))):
@@ -821,7 +847,7 @@ class ndarray:
                 block = 1
                 for s in rest:
                     block *= s
-                raw = np.masked_select(self._array, key._array, block)
+                raw = np.masked_select(self._array, _mask_key._array, block)
                 result = ndarray._wrap(raw, _dtype=self._dtype)
                 if rest:
                     return result.reshape((len(result) // block,) + rest)
@@ -1247,28 +1273,30 @@ class ndarray:
                     target_shape.append(dim_size)
             # 广播支持：value 形状必须能广播到目标形状（numpy 语义），
             # 否则报 "could not broadcast input array from shape ... into shape ..."
+            # key 含花式索引（list/ndarray）时 target_shape 的逐维近似不正确
+            # （相邻 fancy 索引按广播合并成单个块，如 V[g1,g2]→(15,) 而非
+            # (15,15)），此时用 self[key] 的真实选择形状判定广播。
+            _sel_shape = tuple(target_shape)
+            if any(_is_ndarray(k) or isinstance(k, (list, tuple)) for k in key):
+                try:
+                    _sel_shape = tuple(getattr(self[key], 'shape', _sel_shape))
+                except Exception:
+                    pass
             if _is_ndarray(value):
                 try:
-                    bcast_shape = _broadcast_shape(tuple(target_shape), value.shape)
+                    bcast_shape = _broadcast_shape(_sel_shape, value.shape)
                 except ValueError:
                     bcast_shape = None
-                if bcast_shape != tuple(target_shape):
-                    if not target_shape and value.size == 1:
+                if bcast_shape != _sel_shape:
+                    if not _sel_shape and value.size == 1:
                         pass  # size-1 数组 → 标量目标：允许
                     else:
-                        # 消息用实际选择形状（相邻 fancy 索引有广播语义，
-                        # target_shape 的逐维近似会多出一个维度）
-                        try:
-                            _sel_t = tuple(getattr(self[key], 'shape',
-                                                   tuple(target_shape)))
-                        except Exception:
-                            _sel_t = tuple(target_shape)
                         def _ns(_s):
                             return "(" + ",".join(map(str, _s)) + ")"
                         raise ValueError(
                             "could not broadcast input array from shape "
                             f"{_ns(value.shape)} into shape "
-                            f"{_ns(_sel_t)}")
+                            f"{_ns(_sel_shape)}")
                 elif bcast_shape != value.shape:
                     value = broadcast_to(value, bcast_shape)
             val = _cast_setitem_value(_setitem_value(value), self._dtype)
@@ -1344,7 +1372,7 @@ class ndarray:
         return out
 
     def __rmul__(self, other):
-        dt = _promote_dtype(self._dtype, other)
+        dt = _promote_dtype(self._dtype, other)  # noqa: F841
         if self.size == 0:
             return self.copy()
         return self.__mul__(other)
@@ -2346,7 +2374,6 @@ class ndarray:
         """交换数组中每个元素的字节顺序（大小端转换）。"""
         data = self._array.flatten().tolist()
         dtype = getattr(self, '_dtype', 'float64')
-        
         swapped = []
         for v in data:
             if isinstance(v, float):
@@ -2362,7 +2389,7 @@ class ndarray:
             else:
                 swapped_val = v
             swapped.append(swapped_val)
-        
+
         if inplace:
             arr = np.ndarray(swapped)
             arr = arr.reshape(self._array.shape)
@@ -2545,10 +2572,35 @@ class recarray(ndarray):
         return self[names[i]]
 
     def __getitem__(self, key):
+        # 1-d 整数索引：返回带字段访问的记录对象（numpy recarray[0] → rec/void）
+        if isinstance(key, int) and not isinstance(key, bool) and len(self.shape) == 1:
+            try:
+                return _get_record(self, key)
+            except Exception:
+                pass
         res = ndarray.__getitem__(self, key)
         if (isinstance(res, ndarray) and res.__class__ is ndarray and getattr(res, '_dtype_obj', None) is not None):
             res.__class__ = recarray
         return res
+
+    def __iter__(self):
+        # 1-d recarray 迭代产出带字段访问的记录（numpy: for x in recarray → rec/void）；
+        # CPython 的 match 序列模式经迭代器协议取元素，故须在此层产出记录而非元组。
+        # 多维迭代产出行（子 recarray），走基类路径。
+        if len(self.shape) == 1:
+            for i in range(len(self)):
+                try:
+                    yield _get_record(self, i)
+                except Exception:
+                    yield ndarray.__getitem__(self, i)
+            return
+        yield from ndarray.__iter__(self)
+
+
+# PEP 634 结构模式匹配：ndarray 需被识别为序列（case [a, b, c] 等序列模式）。
+# numpy 的 ndarray 在 C 层设置了 sq_item slot；纯 Python 类无法直接设置该 C slot，
+# 故以 collections.abc.Sequence 虚拟注册实现等价语义（CPython 的 match 序列模式认该 ABC）。
+_collections_abc.Sequence.register(ndarray)
 
 
 def _as_recarray(arr):
@@ -2715,25 +2767,25 @@ def _matmul_fallback(a, b):
     """Fallback for batch matrix multiplication when Rust matmul doesn't support the shapes."""
     a_shape = a.shape
     b_shape = b.shape
-    
+
     if len(a_shape) == 3 and len(b_shape) == 3:
         batch_size = a_shape[0]
         result = empty((batch_size, a_shape[1], b_shape[2]), dtype=a._dtype)
         for i in range(batch_size):
             result[i] = a[i] @ b[i]
         return result
-    
+
     if len(a_shape) == 3 and len(b_shape) == 2:
         batch_size = a_shape[0]
         a_rows, a_cols = a_shape[1], a_shape[2]
         b_rows, b_cols = b_shape[0], b_shape[1]
-        
+
         if a_cols == b_rows:
             result = empty((batch_size, a_rows, b_cols), dtype=a._dtype)
             for i in range(batch_size):
                 result[i] = a[i] @ b
             return result
-        
+
         if batch_size == b_rows and a_cols == b_cols:
             result = empty((batch_size, a_rows, 1), dtype=a._dtype)
             for i in range(batch_size):
@@ -2741,7 +2793,7 @@ def _matmul_fallback(a, b):
                 bi = b[i:i+1].T
                 result[i] = ai @ bi
             return result
-        
+
         if b_rows == 1 and a_cols == b_cols:
             result = empty((batch_size, a_rows, 1), dtype=a._dtype)
             for i in range(batch_size):
@@ -2751,17 +2803,17 @@ def _matmul_fallback(a, b):
                         s += a[i, r, c] * b[0, c]
                     result[i, r, 0] = s
             return result
-    
+
     if len(a_shape) == 2 and len(b_shape) == 3:
         batch_size = b_shape[0]
         result = empty((batch_size, a_shape[0], b_shape[2]), dtype=a._dtype)
         for i in range(batch_size):
             result[i] = a @ b[i]
         return result
-    
+
     if len(a_shape) == 2 and len(b_shape) == 2:
         return np.linalg.matmul(a._array, b._array)
-    
+
     raise ValueError(f"Unsupported shapes for matmul: {a_shape} and {b_shape}")
 
 
@@ -3243,7 +3295,7 @@ _numpy_type_names = {}
 def _init_numpy_types():
     """尝试导入 rsnumpy 并注册其标量类型名称。"""
     try:
-        import rsnnumpy as np
+        import rsnumpy as np
     except ImportError:
         return
     for name in dir(np):
@@ -3645,6 +3697,17 @@ def _get_field(arr, name):
             res._rs_unaligned = True
     except Exception:
         pass
+    # 多字段结构化数组的字段访问是 strided 视图（非 C/F 连续、不拥有数据、
+    # 对齐性跟随父记录布局、可写性继承父数组），与 numpy field view 一致。
+    if dt._names and len(dt._names) > 1:
+        res._rs_strided = True
+        res._rs_unaligned = True
+        try:
+            res._base = arr
+        except Exception:
+            pass
+        if not getattr(arr, '_rs_writeable', True):
+            res._rs_writeable = False
     return res
 
 
@@ -4113,14 +4176,17 @@ def _fmt_record(rec, dt):
     return "(" + ", ".join(parts) + ")"
 
 
-class _Record:
-    """结构化数组的记录标量（对应 rsnumpy.void 记录），支持字段名/整数索引读写。"""
+class _Record(tuple):
+    """结构化数组的记录标量（对应 rsnumpy.void 记录），支持字段名/整数索引读写。
+    tuple 子类：兼容元组比较/迭代/len（numpy.void 语义），字段访问经 __getattr__。"""
 
-    def __init__(self, values, dt, parent=None, flat_index=None):
-        self._values = list(values)
-        self._dtype_obj = dt
-        self._parent = parent
-        self._flat_index = flat_index
+    def __new__(cls, values, dt, parent=None, flat_index=None):
+        obj = tuple.__new__(cls, tuple(values))
+        obj._values = list(values)
+        obj._dtype_obj = dt
+        obj._parent = parent
+        obj._flat_index = flat_index
+        return obj
 
     @property
     def dtype(self):
@@ -4263,10 +4329,6 @@ class character(flexible):
     """字符标量的抽象基类。"""
 
 
-import operator as _operator
-import warnings as _warnings
-
-
 def _scalarize(r):
     """0-d ndarray → 同 dtype 的 rsnumpy 标量；非 0-d 或非数值 dtype 原样返回。"""
     if not _is_ndarray(r):
@@ -4376,13 +4438,17 @@ def _scalar_dunder_ns(pybase, is_int=False):
 
     # numpy 语义：round(np.float64(x)) 返回同类型标量（而非 Python float）
     if pybase is float:
-        _round_impl = lambda self, ndigits=None: type(self)(round(float(self), ndigits))
+        def _round_impl(self, ndigits=None):
+            return type(self)(round(float(self), ndigits))
     elif pybase is int:
-        _round_impl = lambda self, ndigits=None: type(self)(round(int(self), ndigits))
+        def _round_impl(self, ndigits=None):
+            return type(self)(round(int(self), ndigits))
     elif pybase is complex:
-        _round_impl = lambda self, ndigits=None: round(complex(self), ndigits)
+        def _round_impl(self, ndigits=None):
+            return round(complex(self), ndigits)
     else:
-        _round_impl = lambda self, ndigits=None: round(float(self), ndigits)
+        def _round_impl(self, ndigits=None):
+            return round(float(self), ndigits)
     d = {
         "__round__": _round_impl,
         "round": _round_impl,
@@ -4592,6 +4658,7 @@ bool = bool_
 _bool_cache = {}
 _bool_new_orig = bool_.__new__
 
+
 def _bool_new_cached(cls, *args, **kwargs):
     # 注意：模块级 bool 已被 bool_ 遮蔽，必须用 builtins.bool
     key = builtins.bool(args[0]) if args else False
@@ -4779,7 +4846,6 @@ def _dtype_type_hook(dt):
         return None
 
 
-from ._dtypes import _set_type_hook as _set_dtype_type_hook
 _set_dtype_type_hook(_dtype_type_hook)
 
 
@@ -5736,8 +5802,7 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
                 if _dtype.startswith('uint') and v < 0:
                     v += 1 << (8 * _INT_ITEMSIZES[_dtype])
                 if v < lo or v > hi:
-                    raise OverflowError(
-                        f"Python int too large to convert to C integer")
+                    raise OverflowError("Python int too large to convert to C integer")
     # 字符串/字节/void dtype（S/U/V）：存为原始 Python 数据，避免数值化。
     if dtype is not None:
         sd = _parse_str_dtype(dtype)
@@ -7619,13 +7684,13 @@ def meshgrid(*xi, copy=True, sparse=False, indexing='xy'):
             arrays.append([int(v) for v in x])
         else:
             arrays.append([int(x)])
-    
+
     n = len(arrays)
     if n == 0:
         return []
-    
+
     shapes = [len(a) for a in arrays]
-    
+
     if sparse:
         result = []
         for i in range(n):
@@ -7635,9 +7700,9 @@ def meshgrid(*xi, copy=True, sparse=False, indexing='xy'):
                 grid = ndarray([arrays[i]])
             result.append(grid)
         return result
-    
+
     result = []
-    
+
     for i in range(n):
         if indexing == 'xy' and n == 2:
             if i == 0:
@@ -7660,7 +7725,6 @@ def meshgrid(*xi, copy=True, sparse=False, indexing='xy'):
         else:
             grid = ndarray([[arrays[i][j] for _ in range(shapes[1])] for j in range(shapes[0])])
         result.append(grid)
-    
     return result
 
 
@@ -7745,9 +7809,9 @@ class _NdFlatIter:
         return self._sel_vals(range(self._size))
 
     @staticmethod
-    def _flat_list(l):
+    def _flat_list(l_):
         out = []
-        for v in l:
+        for v in l_:
             if isinstance(v, list):
                 out.extend(_NdFlatIter._flat_list(v))
             else:
@@ -7755,9 +7819,9 @@ class _NdFlatIter:
         return out
 
     @staticmethod
-    def _list_shape(l):
+    def _list_shape(l_):
         s = []
-        cur = l
+        cur = l_
         while isinstance(cur, list) and cur:
             s.append(builtins.len(cur))
             cur = cur[0]
@@ -8010,7 +8074,7 @@ dtypes = _DTypeNamespace
 
 
 # numpy 兼容：np.dtype 既是类型（isinstance 可用）又可调用（np.dtype('int64')）
-dtype = DType
+# dtype = DType
 
 
 def top_k(a, k, axis=-1, **kwargs):
@@ -8212,6 +8276,7 @@ def nditer(a, order='C', op_flags=None, flags=None):
             val = flat_arr[i].item()
             yield _to_val(val, i)
 
+
 def isnan(x):
     """逐元素检测是否为 NaN。"""
     arr = ndarray(x)
@@ -8248,7 +8313,6 @@ def iscomplex(x):
 
 # AxisError 统一来源：rsnumpy.exceptions（测试自该模块导入）；
 # 顶层 np.AxisError 为同一类（numpy 语义）。
-from .exceptions import AxisError  # noqa: E402
 
 
 def _broadcast_shape(*shapes):
@@ -8296,7 +8360,7 @@ def broadcast(*arrays, **kwargs):
             _s = getattr(np.array(_a), 'shape', ())
         _shapes.append(tuple(_s))
     try:
-        _bshape = _broadcast_shape(*_shapes)
+        _bshape = _broadcast_shape(*_shapes) # noqa E401
     except ValueError:
         # numpy 风格错误消息：指出第一个互不兼容的参数对
         for _i in range(len(_shapes)):
@@ -8306,12 +8370,12 @@ def broadcast(*arrays, **kwargs):
                 _p = (1,) * (_k - len(_si)) + _si
                 _q = (1,) * (_k - len(_sj)) + _sj
                 if builtins.any(x != y and x != 1 and y != 1
-                       for x, y in zip(_p, _q)):
+                                for x, y in zip(_p, _q)):
                     raise ValueError(
                         f"arg {_i} with shape {_si} and arg {_j} "
                         f"with shape {_sj} cannot be broadcast "
                         f"to a single shape")
-        raise
+        raise ValueError("operands could not be broadcast together")
     return _Broadcast(*_flat)
 
 
@@ -8466,6 +8530,7 @@ delete = _array_ops_module.delete
 unique = _array_ops_module.unique
 resize = _array_ops_module.resize
 
+
 # 位运算
 def _to_raw(a):
     """将输入转为 Rust ndarray，返回 (ndarray, dtype) 元组。"""
@@ -8476,11 +8541,13 @@ def _to_raw(a):
         return raw, 'int64'
     return raw, 'float64'
 
+
 def bitwise_and(x1, x2):
     """按位与"""
     r1, dt = _to_raw(x1)
     r2, _ = _to_raw(x2)
     return _wrap_result(np.bitwise_and(r1, r2), dt)
+
 
 def bitwise_or(x1, x2):
     """按位或"""
@@ -8488,11 +8555,13 @@ def bitwise_or(x1, x2):
     r2, _ = _to_raw(x2)
     return _wrap_result(np.bitwise_or(r1, r2), dt)
 
+
 def bitwise_xor(x1, x2):
     """按位异或"""
     r1, dt = _to_raw(x1)
     r2, _ = _to_raw(x2)
     return _wrap_result(np.bitwise_xor(r1, r2), dt)
+
 
 def bitwise_not(x):
     """按位取反（等效于 ~ 运算符，对布尔数组使用逻辑取反）"""
@@ -8514,6 +8583,7 @@ def bitwise_not(x):
 
 # invert 与 bitwise_not 行为完全一致，直接作为别名，避免重复实现。
 invert = bitwise_not
+
 
 def _int_width(dt):
     return {'bool': 8,
@@ -8563,6 +8633,7 @@ def left_shift(x1, x2):
     if _int_width(dt) is not None:
         return _python_shift(x1, x2, False, dt)
     return _wrap_result(np.left_shift(r1, r2), dt)
+
 
 def right_shift(x1, x2):
     """右移"""
@@ -8661,7 +8732,7 @@ def clip(a, a_min=_CLIP_NOVALUE, a_max=_CLIP_NOVALUE, out=None,
         return out
     return result
 
-    
+
 sinc = _math_functions_module.sinc
 heaviside = _math_functions_module.heaviside
 add = _math_functions_module.add
@@ -8729,7 +8800,6 @@ def cumprod(a, axis=None):
 
 
 linalg = _linalg_module()
-from . import random  # np.random 指向 random 模块本身（numpy 中 np.random 是模块，from rsnumpy.random import rand 必须可用）
 matlib = _matlib_module
 
 dot = linalg.dot
@@ -8837,6 +8907,7 @@ add.reduce = _make_ufunc_reduce(lambda a, ax: sum(a, ax))
 multiply.reduce = _make_ufunc_reduce(lambda a, ax: _extra_module.prod(a, ax))
 add.accumulate = _make_ufunc_accumulate(lambda a, ax: cumsum(a, ax))
 multiply.accumulate = _make_ufunc_accumulate(lambda a, ax: cumprod(a, ax))
+
 
 class _NamespaceInfo:
     """Array-API ``__array_namespace_info__`` payload (CPU-only)."""

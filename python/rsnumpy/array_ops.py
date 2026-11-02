@@ -887,9 +887,27 @@ def resize(a, new_shape):
 
     if isinstance(new_shape, int) or _scalar_idx(new_shape):
         new_shape = (int(new_shape),)
-    
-    result = _core.resize_rs(arr._array, list(new_shape))
-    return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
+    new_shape = [builtins.int(d) for d in new_shape]
+    # numpy 语义：负尺寸非法
+    if builtins.any(d < 0 for d in new_shape):
+        raise ValueError("negative dimensions are not allowed")
+    _size = 1
+    for d in new_shape:
+        _size *= d
+    if _size == 0 or getattr(arr, 'size', 0) == 0:
+        # 目标含 0 维或源为空数组 → 零填充（numpy 语义）
+        _dt = getattr(arr, 'dtype', None)
+        result = _np().zeros(tuple(new_shape), dtype=_dt)
+    else:
+        result = nd._wrap(_core.resize_rs(arr._array, list(new_shape)),
+                          _dtype=dtype, _fields=fields, _raw_data=raw_data)
+    # numpy 语义：resize 保留输入的子类类型
+    if isinstance(a, nd) and builtins.type(a) is not nd:
+        try:
+            result = result.view(builtins.type(a))
+        except Exception:
+            pass
+    return result
 
 
 def append(arr, values, axis=None):

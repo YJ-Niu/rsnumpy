@@ -1740,9 +1740,70 @@ def asarray_chkfinite(a, dtype=None, order=None):
 
 
 def require(a, dtype=None, requirements=None, *, like=None):
-    """返回满足要求的数组（rsnumpy 恒为连续、可写）。"""
-    _ = requirements, like
-    return ascontiguousarray(a, dtype)
+    """返回满足要求的数组（numpy require 语义）。
+
+    requirements 接受单个标志名或标志名列表；未知标志抛 KeyError，
+    同时要求 C 与 F 连续抛 ValueError；已满足的标志不产生副本
+    （幂等：np.require(b, None, [flag]) is b）。
+    """
+    _ = like
+    np = _np()
+    if requirements is None:
+        reqs = []
+    elif isinstance(requirements, (str, bytes)):
+        reqs = [requirements]
+    else:
+        reqs = list(requirements)
+
+    arr = np.asarray(a)
+    if dtype is not None:
+        arr = arr.astype(dtype)
+
+    need_c = need_f = need_contiguous = False
+    need_a = need_w = need_o = need_e = False
+    for r in reqs:
+        if isinstance(r, bytes):
+            r = r.decode()
+        key = r.upper()
+        if key in ('C', 'C_CONTIGUOUS'):
+            need_c = True
+        elif key == 'CONTIGUOUS':
+            need_contiguous = True
+        elif key in ('F', 'F_CONTIGUOUS', 'FORTRAN'):
+            need_f = True
+        elif key in ('A', 'ALIGNED'):
+            need_a = True
+        elif key in ('W', 'WRITEABLE'):
+            need_w = True
+        elif key in ('O', 'OWNDATA'):
+            need_o = True
+        elif key == 'E':
+            need_e = True
+        else:
+            raise KeyError(f"{r} is not a valid flag")
+
+    if need_c and need_f:
+        raise ValueError(
+            "cannot be both C and F contiguous at the same time")
+
+    if need_e and type(arr) is not np.ndarray:
+        # 'E'：确保返回基类 ndarray（剥离子类）
+        arr = arr.view(np.ndarray)
+    if need_c and not arr.flags.c_contiguous:
+        arr = arr.copy()
+    elif need_f and not arr.flags.f_contiguous:
+        arr = arr.copy()
+        # rsnumpy 存储为扁平 C 序缓冲：以 _rs_order 标记 F 布局（flags/strides 语义）
+        arr._rs_order = 'F'
+    elif need_contiguous and not (arr.flags.c_contiguous or arr.flags.f_contiguous):
+        arr = arr.copy()
+    if need_a and not arr.flags.aligned:
+        arr = arr.copy()
+    if need_w and not arr.flags.writeable:
+        arr = arr.copy()
+    if need_o and not arr.flags.own_data:
+        arr = arr.copy()
+    return arr
 
 
 def isfortran(a):
