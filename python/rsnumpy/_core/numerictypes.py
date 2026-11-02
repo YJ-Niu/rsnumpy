@@ -85,6 +85,10 @@ def _sctypes_table():
     )
     table = {key: [] for key, _ in groups}
     for t in _concrete_scalar_types():
+        # object_ 不可带参构造（dtype('O').type(0) 会崩），不入 sctypes
+        # 'others'（numpy sctypes 语义下 object 亦非数值分组成员）。
+        if getattr(t, '__name__', '') in ('object_', 'object'):
+            continue
         for key, abstract in groups:
             if issubclass(t, abstract):
                 table[key].append(t)

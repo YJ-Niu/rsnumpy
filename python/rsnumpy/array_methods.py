@@ -294,7 +294,7 @@ class NdArrayMethods:
     
     @staticmethod
     def transpose(arr, *axes):
-        """转置数组。"""
+        """转置数组（视图：标记 base 供 flags.OWNDATA 判定）。"""
         ndarray, _ = _get_deps()
         dtype = getattr(arr, '_dtype', "float64")
         fields = getattr(arr, '_fields', None)
@@ -305,22 +305,34 @@ class NdArrayMethods:
             result = arr._array.T
         else:
             result = _core.transpose_axes(arr._array, list(axes))
-        return ndarray._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw)
+        out = ndarray._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw)
+        if raw is None:
+            out.base = arr
+        return out
     
     @staticmethod
     def swapaxes(arr, axis1, axis2):
-        """交换两个轴的位置。"""
+        """交换两个轴的位置（视图：标记 base 供 flags.OWNDATA 判定）。"""
         ndarray, _ = _get_deps()
         dtype = getattr(arr, '_dtype', "float64")
         fields = getattr(arr, '_fields', None)
         raw_data = getattr(arr, '_raw_data', None)
         result = _core.swapaxes(arr._array, axis1, axis2)
-        return ndarray._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
+        out = ndarray._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
+        if raw_data is None:
+            out.base = arr
+        return out
     
     @staticmethod
     def squeeze(arr, axis=None):
-        """移除长度为1的轴。"""
-        return _wrap_result(arr._array.squeeze())
+        """移除长度为1的轴（视图：标记 base 供 flags.OWNDATA 判定）。"""
+        result = arr._array.squeeze()
+        if getattr(arr, '_raw_data', None) is not None:
+            return _wrap_result(result)
+        out = _wrap_result(result)
+        if hasattr(out, 'base'):
+            out.base = arr
+        return out
     
     @staticmethod
     def max(arr, axis=None, out=None, keepdims=False):

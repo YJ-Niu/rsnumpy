@@ -13,6 +13,8 @@ import rsnumpy as np
 def __getattr__(name):
     if name == 'recarray':
         return np.recarray
+    if name == 'record':
+        return np.record
     raise AttributeError("module 'rsnumpy.rec' has no attribute %r" % name)
 
 
@@ -38,6 +40,43 @@ def _read_bytes(file):
         return f.read()
 
 
+def _infer_scalar_dtype(v):
+    """从标量值推断类型（numpy rec.array 推断语义）。"""
+    if isinstance(v, bool):
+        return '?'
+    if isinstance(v, int):
+        return 'i8'
+    if isinstance(v, float):
+        return 'f8'
+    if isinstance(v, complex):
+        return 'c16'
+    if isinstance(v, str):
+        return 'U' + str(max(1, len(v)))
+    if isinstance(v, (bytes, bytearray)):
+        return 'S' + str(max(1, len(v)))
+    return 'f8'
+
+
+def _infer_struct_dtype(obj, names):
+    """从数据与字段名推断结构化 dtype（numpy rec.array 语义：仅给 names、
+    无 formats 时按首条记录推断各字段类型）。"""
+    if isinstance(names, str):
+        names = [n.strip() for n in names.split(',')]
+    try:
+        first = obj[0]
+    except Exception:
+        first = obj
+    if isinstance(first, (list, tuple)):
+        vals = list(first)
+    else:
+        vals = [first] * len(names)
+    fields = []
+    for i, n in enumerate(names):
+        v = vals[i] if i < len(vals) else 0
+        fields.append((n, _infer_scalar_dtype(v)))
+    return fields
+
+
 def array(obj, dtype=None, shape=None, formats=None, names=None, **kwargs):
     """从数据构造一个 recarray（支持属性方式访问字段）。
 
@@ -51,6 +90,10 @@ def array(obj, dtype=None, shape=None, formats=None, names=None, **kwargs):
     if isinstance(obj, (bytes, bytearray)) and dt is not None:
         return _as_recarray(fromstring(bytes(obj), dtypes=dt, shape=shape,
                                        **kwargs))
+    # numpy 语义：仅给 names（无 dtype/formats）→ 从数据推断各字段类型构造
+    # 结构化 dtype（否则 np.array 会推断成浮点数组、丢失结构）
+    if dt is None and names is not None:
+        dt = _infer_struct_dtype(obj, names)
     a = np.array(obj, dtype=dt)
     return np._as_recarray(a)
 
@@ -65,16 +108,29 @@ def fromrecords(recList, dtype=None, shape=None, formats=None, names=None,
 def fromarrays(itemsets, dtypes=None, names=None, shape=None, **kwargs):
     """从字段数组列表构造 recarray（数据拷贝，numpy rec.fromarrays 兼容）。"""
     rs = np
+    # dtype 关键字（numpy 兼容）：单个结构化 dtype，取其字段名与各字段类型
+    dt_kw = kwargs.get('dtype', None)
     if names is not None and isinstance(names, str):
         names = [n.strip() for n in names.split(',')]
-    if dtypes is None:
+    if dt_kw is not None:
+        _d = rs.dtype(dt_kw)
+        names = list(_d.names) if _d.names \
+            else ['f%d' % i for i in range(len(itemsets))]
+        dtypes = [_d.fields[n][0] for n in names]
+        dt = _d
+    elif dtypes is None:
+        if names is None:
+            names = ['f%d' % i for i in range(len(itemsets))]
         dtypes = []
         for a in itemsets:
             arr = a if isinstance(a, rs.ndarray) else rs.asarray(a)
             dtypes.append(arr.dtype)
+        dt = rs.dtype(list(zip(names, dtypes)))
     else:
         dtypes = list(dtypes)
-    dt = rs.dtype(list(zip(names, dtypes)))
+        if names is None:
+            names = ['f%d' % i for i in range(len(dtypes))]
+        dt = rs.dtype(list(zip(names, dtypes)))
     n = len(itemsets[0])
     recs = []
     for i in range(n):

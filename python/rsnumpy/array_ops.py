@@ -10,6 +10,11 @@ def _nd():
     return _n
 
 
+def _np():
+    import rsnumpy as _m
+    return _m
+
+
 def _wrap(result):
     return _nd()(result)
 
@@ -77,23 +82,74 @@ def ravel(a, order='C'):
 
 
 def moveaxis(a, source, destination):
-    """将数组的轴从 source 移动到 destination。"""
-    arr = a if hasattr(a, '_array') else _wrap(a)
-    nd = _nd()
-    dtype = getattr(arr, '_dtype', "float64")
-    fields = getattr(arr, '_fields', None)
-    raw_data = getattr(arr, '_raw_data', None)
-    if isinstance(source, int) or _scalar_idx(source):
-        source = [int(source)]
-    if isinstance(destination, int) or _scalar_idx(destination):
-        destination = [int(destination)]
-    result = _core.moveaxis(arr._array, list(source), list(destination))
-    return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
+    """将数组的轴从 source 移动到 destination（numpy 语义，纯 Python 实现）。
+
+    校验与 numpy normalize_axis_tuple 一致：AxisError（source/destination
+    越界）、ValueError（repeated axis、source/destination 数量不一致）。
+    非 ndarray 输入（MaskedArray/list）计算后转换回原类型。
+    """
+    np = _np()
+    if getattr(a, 'ndim', None) is None:
+        a = np.array(a)
+    ndim = a.ndim
+
+    def _norm(axes, what):
+        if isinstance(axes, int) or _scalar_idx(axes):
+            axes = [int(axes)]
+        else:
+            axes = [int(x) for x in axes]
+        if len(set(axes)) != len(axes):
+            raise ValueError(f"repeated axis in `{what}`")
+        for ax in axes:
+            if not (-ndim <= ax < ndim):
+                raise np.AxisError(
+                    f"{what} axis {ax} is out of bounds for array "
+                    f"of dimension {ndim}")
+        return axes
+
+    source = _norm(source, 'source')
+    destination = _norm(destination, 'destination')
+    if len(source) != len(destination):
+        raise ValueError("source and destination must have the same number of values")
+    # numpy 官方算法（先归一化非负）：剩余轴 + 按 destination 位置插入 source 轴
+    source_n = [s % ndim for s in source]
+    dest_n = [d % ndim for d in destination]
+    order = [n for n in range(ndim) if n not in source_n]
+    for dest, src in sorted(zip(dest_n, source_n)):
+        order.insert(dest, src)
+    if isinstance(a, _nd()):
+        return a.transpose(order)
+    # 非 ndarray（MaskedArray/list 等）：ndarray 计算后转回原类型
+    result = np.array(a).transpose(order)
+    if not isinstance(a, (list, tuple)):
+        try:
+            result = type(a)(result)
+        except Exception:
+            pass
+    return result
 
 
 def rollaxis(a, axis, start=0):
-    """滚动数组的轴到指定位置（简化实现）。"""
-    return moveaxis(a, axis, start)
+    """滚动指定轴到 start 位置（numpy rollaxis 语义）。
+
+    与 moveaxis 的区别（numpy 语义）：start 可取 [ -ndim, ndim ]；
+    归一化后若 start > axis 则 start -= 1（轴"越过自己"时不占位）。
+    等价：moveaxis(a, axis, start if start <= axis else start - 1)。
+    """
+    np = _np()
+    arr = a if getattr(a, 'ndim', None) is not None else np.array(a)
+    ndim = arr.ndim
+    if not (-ndim <= axis < ndim):
+        raise np.AxisError(
+            f"axis {axis} is out of bounds for array of dimension {ndim}")
+    if not (-ndim <= start <= ndim):
+        raise np.AxisError(
+            f"start {start} is out of bounds for array of dimension {ndim}")
+    axis_n = axis % ndim
+    start_n = start % (ndim + 1)
+    if start_n > axis_n:
+        start_n -= 1
+    return moveaxis(arr, axis_n, start_n)
 
 
 def broadcast_to(a, shape, subok=None, device=None):
@@ -263,7 +319,8 @@ def _check_cast_allowed(arr_list, dtype, casting):
         return
     try:
         from .__init__ import dtype as _dtype_fn, can_cast as _can_cast
-        _dst = _dtype_fn(dtype).name
+        _dst_dt = _dtype_fn(dtype)
+        _dst = _dst_dt.name
         _srcs = arr_list if isinstance(arr_list, (builtins.list, builtins.tuple)) \
             else [arr_list]
         # 纯 Python 标量走 copyto 标量语义（pyscalar casting），不参与 can_cast
@@ -277,9 +334,10 @@ def _check_cast_allowed(arr_list, dtype, casting):
                 _src_kind = getattr(_dtype_fn(_src), 'kind', None)
             except Exception:
                 _src_kind = None
-            if _src_kind in ('S', 'U') and getattr(_dtype_fn(dtype), 'kind', None) in ('S', 'U'):
+            if _src_kind in ('S', 'U') and getattr(_dst_dt, 'kind', None) in ('S', 'U'):
                 continue  # 字符串类别间转换自由（string_→U5 等名称差异不算降级）
-            if not _can_cast(_src, _dst, casting=casting):
+            # 传 DType 实例（保留字节序）：'no' 模式须字节序敏感（f8→>f8 拒）
+            if not _can_cast(_src, _dst_dt, casting=casting):
                 raise TypeError(
                     f"Cannot cast array data from dtype('{_src}') to "
                     f"dtype('{_dst}') according to the rule '{casting}'")
@@ -768,12 +826,50 @@ def flipud(m):
 
 
 def roll(a, shift, axis=None):
-    """沿指定轴滚动数组。"""
+    """沿指定轴滚动数组（numpy 语义）。
+
+    axis=None：滚动整个展平数组；axis 为 list/tuple：各轴独立滚动
+    （shift 可为标量广播或等长 tuple）。标量 shift 先在 Python 层按
+    size 取模（size 是各轴长度的公倍数，(s % size) % len_i == s % len_i），
+    规避 Rust 侧 Python 大整数 / uint64(>2^63) 转 C long 的溢出。
+    """
     arr = a if hasattr(a, '_array') else _wrap(a)
     # 空数组 roll 是恒等映射：Rust 侧 shift % 0 会 panic（除零）。
     if getattr(arr, 'size', 0) == 0:
         return arr.copy()
-    return _wrap(_core.roll(_ensure_raw(a), shift, axis))
+
+    def _to_int(v):
+        return int(v) if (isinstance(v, int) or _scalar_idx(v)) else v
+
+    if isinstance(axis, (list, tuple)):
+        axes = [_to_int(x) % arr.ndim for x in axis]
+        if isinstance(shift, (list, tuple)):
+            shifts = [_to_int(s) for s in shift]
+        else:
+            shifts = [_to_int(shift)] * len(axes)
+        if len(shifts) != len(axes):
+            raise ValueError("shift and axis must have the same length")
+        result = arr
+        for sh, ax in zip(shifts, axes):
+            result = _roll_axis(result, sh, ax)
+        return result
+    if axis is None:
+        # numpy 语义：滚动整个展平数组
+        flat = arr.ravel()
+        s = _to_int(shift)
+        if s % flat.size != 0:
+            r = _wrap(_core.roll(_ensure_raw(flat), s % flat.size, None))
+            return r.reshape(arr.shape)
+        return arr.copy()
+    return _roll_axis(arr, _to_int(shift), _to_int(axis) % arr.ndim)
+
+
+def _roll_axis(arr, shift, axis):
+    """沿单轴滚动（Rust 实现 + Python 层取模）。"""
+    size = arr.size
+    if shift % size != 0:
+        return _wrap(_core.roll(_ensure_raw(arr), shift % size, axis))
+    return arr.copy()
 
 
 def rot90(m, k=1, axes=(0, 1)):

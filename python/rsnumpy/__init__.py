@@ -67,6 +67,9 @@ _py_all = all
 _py_any = any
 _py_max = max
 _py_min = min
+# bool/int 在模块后段被 rsnumpy 标量类遮蔽（bool=bool_ 等），此处先捕获内建引用
+_py_bool = bool
+_py_int = int
 
 
 def _flatten_vals(x):
@@ -115,7 +118,8 @@ class ArrayFlags:
 
     @property
     def OWNDATA(self):
-        return True
+        # 视图（transpose/view 等）不拥有数据：_base 由视图创建点标记。
+        return getattr(self._arr, '_base', None) is None
 
     @property
     def WRITEABLE(self):
@@ -1097,6 +1101,13 @@ class ndarray:
                     return
                 except Exception:
                     pass
+        # 字符串数组（S/U）赋值：直接写回 flat _raw_data（Rust 无字符串存储）
+        # 用 dtype.kind（'U'/'S'）判定，_dtype 是规范名（'string_' 等）不含宽度前缀
+        _sd_kind = getattr(getattr(self, 'dtype', None), 'kind', None)
+        if _sd_kind in ('U', 'S'):
+            _raw_s = getattr(self, '_raw_data', None)
+            if _raw_s is not None and _string_setitem_raw(self, key, value, _raw_s):
+                return
         # 布尔掩码空选择：numpy 语义下为 no-op，避免 Rust 端空索引 panic
         if _empty_bool_mask_key(key):
             return
@@ -1572,6 +1583,18 @@ class ndarray:
             result = ndarray(flat_result)
             result._dtype = "bool"
             return result.reshape(self.shape)
+        if isinstance(other, (bytes, bytearray)) and not isinstance(other, bool):
+            # bytes 标量：字符串/任意数组按元素值比较（Rust 层不支持）
+            def _to_b(x):
+                if isinstance(x, (bytes, bytearray)):
+                    return bytes(x)
+                return str(x).encode('utf-8')
+            _ob = bytes(other)
+            flat_list = self.flatten().tolist()
+            flat_result = [_to_b(x) == _ob for x in flat_list]
+            result = ndarray(flat_result)
+            result._dtype = "bool"
+            return result.reshape(self.shape)
         if _is_ndarray(other):
             return _wrap_result(self._array.__eq__(other._array), "bool")
         if isinstance(other, complex):
@@ -1610,6 +1633,17 @@ class ndarray:
                 return out.reshape(self.shape)
         if _is_ndarray(other):
             return _wrap_result(self._array.__ne__(other._array), "bool")
+        if isinstance(other, (bytes, bytearray)) and not isinstance(other, bool):
+            def _to_b(x):
+                if isinstance(x, (bytes, bytearray)):
+                    return bytes(x)
+                return str(x).encode('utf-8')
+            _ob = bytes(other)
+            flat_list = self.flatten().tolist()
+            flat_result = [_to_b(x) != _ob for x in flat_list]
+            result = ndarray(flat_result)
+            result._dtype = "bool"
+            return result.reshape(self.shape)
         if isinstance(other, complex):
             o = ndarray(other)
             if self.shape and o.shape != self.shape:
@@ -1807,6 +1841,25 @@ class ndarray:
             return _make_flexible(kind, width, None)
         return DType(getattr(self, '_dtype', "float64"))
 
+    @dtype.setter
+    def dtype(self, value):
+        """赋值 dtype（numpy 语义：recarray 保持 record 标记并发 DeprecationWarning）。"""
+        import warnings as _w
+        _is_rec = (self.__class__ is recarray or
+                   (getattr(self, '_dtype_obj', None) is not None and
+                    getattr(self._dtype_obj, '_type_override', None) is not None))
+        if _is_rec:
+            _w.warn("Setting the dtype attribute is deprecated; use "
+                    "astype() or view() instead.",
+                    DeprecationWarning, stacklevel=2)
+        new_dt = value if isinstance(value, DType) else DType(value)
+        if _is_rec:
+            _c = DType.__new__(DType)
+            _c._copy_from(new_dt)
+            _c._type_override = _Record
+            new_dt = _c
+        self._dtype_obj = new_dt
+
     def __array_namespace__(self, api_version=None):
         """Array API 标准命名空间方法，返回 rsnumpy 模块自身。"""
         import rsnumpy as np
@@ -1822,9 +1875,16 @@ class ndarray:
 
     @property
     def strides(self):
-        """C 连续布局下各维度的字节步长。"""
+        """各维度字节步长。_rs_order='F' 时按 F（列主序）布局，否则 C（行主序）。"""
         itemsize = self.itemsize
         shape = self.shape
+        if getattr(self, '_rs_order', None) == 'F':
+            strides = []
+            acc = itemsize
+            for s in shape:
+                strides.append(acc)
+                acc *= s
+            return tuple(strides)
         strides = []
         acc = itemsize
         for s in reversed(shape):
@@ -2315,6 +2375,8 @@ class ndarray:
         """创建一个新的数组对象，共享相同的数据但拥有不同的视图。"""
         # 注意：参数名 type 遮蔽了内建 type，判断必须用 builtins.type
         if dtype is not None:
+            if dtype is recarray:
+                return _view_as_recarray(self)
             if isinstance(dtype, builtins.type) and issubclass(dtype, ndarray):
                 # numpy 的 view(子类)：返回共享数据的该子类实例
                 return dtype._wrap(self._array, _dtype=self._dtype)
@@ -2326,6 +2388,8 @@ class ndarray:
                     pass
             return _view_dtype(self, dtype)
         if type is not None:
+            if type is recarray:
+                return _view_as_recarray(self)
             if isinstance(type, builtins.type) and issubclass(type, ndarray):
                 return type._wrap(self._array, _dtype=self._dtype)
             if isinstance(type, builtins.type):
@@ -2437,6 +2501,49 @@ class recarray(ndarray):
         raise AttributeError(
             "'recarray' object has no attribute %r" % name)
 
+    def __setattr__(self, name, value):
+        # 下划线前缀（内部状态）走常规路径
+        if name.startswith('_'):
+            object.__setattr__(self, name, value)
+            return
+        dt = self.__dict__.get('_dtype_obj')
+        if dt is not None and dt._names and name in dt._names:
+            # 字段赋值：检查 writeable 再写（numpy setfield 语义）
+            if not self.flags.writeable:
+                raise ValueError("assignment destination is read-only")
+            self.setfield(value, dt._fields[name][0])
+            return
+        object.__setattr__(self, name, value)
+
+    def setfield(self, val, dt, off=0):
+        """设置字段（numpy recarray.setfield 兼容）：writeable 检查 + 字段写回。"""
+        if not self.flags.writeable:
+            raise ValueError("assignment destination is read-only")
+        names = self._dtype_obj._names
+        if isinstance(off, str):
+            i = names.index(off)
+        else:
+            i = int(off)
+        fdt = self._dtype_obj._fields[names[i]][0]
+        raw = self._raw_data
+        if raw is None:
+            return
+        is_seq = hasattr(val, '__len__') and not isinstance(val, (str, bytes))
+        for k in range(len(raw)):
+            v = val[k] if is_seq else val
+            rec = list(raw[k])
+            rec[i] = _coerce_field_value(v, fdt)
+            raw[k] = tuple(rec)
+
+    def getfield(self, dt, off=0):
+        """读取字段（numpy recarray.getfield 兼容）。"""
+        names = self._dtype_obj._names
+        if isinstance(off, str):
+            i = names.index(off)
+        else:
+            i = int(off)
+        return self[names[i]]
+
     def __getitem__(self, key):
         res = ndarray.__getitem__(self, key)
         if (isinstance(res, ndarray) and res.__class__ is ndarray and getattr(res, '_dtype_obj', None) is not None):
@@ -2445,10 +2552,38 @@ class recarray(ndarray):
 
 
 def _as_recarray(arr):
-    """将结构化 ndarray 就地提升为 recarray。"""
+    """将结构化 ndarray 就地提升为 recarray（并把其 dtype 标记为 record-view）。"""
     if isinstance(arr, ndarray) and getattr(arr, '_dtype_obj', None) is not None:
         arr.__class__ = recarray
+        _mark_dtype_record(arr)
     return arr
+
+
+def _mark_dtype_record(arr):
+    """复制 arr 的结构化 DType 并标记为 record-view（.type=record）。
+
+    复制以避免污染共享的 DType（引用同一 dtype 的其他数组应保持普通结构化、
+    .type=void）。numpy 语义：record 标记随 recarray 的 dtype 副本走。"""
+    _dt = getattr(arr, '_dtype_obj', None)
+    if _dt is None:
+        return
+    _c = DType.__new__(DType)
+    _c._copy_from(_dt)
+    _c._type_override = _Record
+    arr._dtype_obj = _c
+
+
+def _view_as_recarray(src):
+    """view 成 recarray：共享数据并继承结构化标记，把 dtype 标记为 record-view。"""
+    res = ndarray.__new__(ndarray)
+    res._array = src._array
+    res._dtype = src._dtype
+    res._dtype_obj = getattr(src, '_dtype_obj', None)
+    res._fields = getattr(src, '_fields', None)
+    res._raw_data = getattr(src, '_raw_data', None)
+    res.__class__ = recarray
+    _mark_dtype_record(res)
+    return res
 
 
 # ---------- 内部数组判定与结果包装 ----------
@@ -3667,6 +3802,99 @@ def _struct_setitem(arr, key, value):
     return False
 
 
+def _string_setitem_raw(arr, key, value, raw):
+    """字符串数组（S/U）赋值：直接写回 flat C-order ``_raw_data``。
+
+    Rust 内部无字符串存储（全 f64 占位），字符串数组赋值须经 _raw_data；
+    否则落到 setitem_multi 会报 Unsupported data type / 字符串转 float 失败。
+    返回 True 表示已处理，False 表示未处理（回退原路径）。
+    """
+    shape = tuple(getattr(arr, 'shape', ()))
+    ndim = len(shape)
+    size = 1
+    for _d in shape:
+        size *= int(_d)
+    if raw is None or len(raw) != size:
+        return False
+
+    def _to_sv(v):
+        if isinstance(v, (bytes, str)):
+            return v
+        return str(v)
+
+    def _as_seq(v, n):
+        if _is_ndarray(v):
+            t = v.tolist()
+            return t if isinstance(t, list) else [t] * n
+        if isinstance(v, (list, tuple)):
+            return list(v)
+        return [v] * n
+
+    keyseq = key if isinstance(key, tuple) else (key,)
+    # 情形 1：纯整数 key（N-d）→ C-order flat 索引
+    if (ndim >= 1 and len(keyseq) <= ndim
+            and _py_all(isinstance(k, _py_int) and not isinstance(k, _py_bool)
+                        for k in keyseq)):
+        pad = keyseq + (0,) * (ndim - len(keyseq))
+        strides = [1] * ndim
+        for i in range(ndim - 2, -1, -1):
+            strides[i] = strides[i + 1] * int(shape[i + 1])
+        flat = 0
+        for i in range(ndim):
+            ki = int(pad[i])
+            if ki < 0:
+                ki += int(shape[i])
+            if ki < 0 or ki >= int(shape[i]):
+                return False
+            flat += ki * strides[i]
+        raw[flat] = _to_sv(value)
+        return True
+    if ndim != 1:
+        return False
+    n0 = int(shape[0])
+    # 情形 2：1-d list/fancy key（整数或 bool 掩码）
+    if isinstance(key, list) or _is_ndarray(key):
+        try:
+            idxs = key.tolist() if _is_ndarray(key) else list(key)
+        except Exception:
+            return False
+        if idxs and _py_all(isinstance(i, _py_bool) for i in idxs):
+            if len(idxs) != n0:
+                return False
+            vals = _as_seq(value, sum(idxs))
+            vi = 0
+            for i, m in enumerate(idxs):
+                if m:
+                    if vi >= len(vals):
+                        return False
+                    raw[i] = _to_sv(vals[vi])
+                    vi += 1
+            return True
+        if not idxs or not _py_all(isinstance(i, _py_int) for i in idxs):
+            return False
+        vals = _as_seq(value, len(idxs))
+        if len(vals) != len(idxs):
+            return False
+        for i, v in zip(idxs, vals):
+            ii = int(i)
+            if ii < 0:
+                ii += n0
+            if ii < 0 or ii >= n0:
+                return False
+            raw[ii] = _to_sv(v)
+        return True
+    # 情形 3：1-d slice
+    if isinstance(key, slice):
+        rng = range(*key.indices(n0))
+        vals = _as_seq(value, len(rng))
+        if len(vals) != len(rng):
+            return False
+        for i, v in zip(rng, vals):
+            raw[i] = _to_sv(v)
+        return True
+    return False
+
+
 # ---------- 字节打包/解包（供 view 重解释使用） ----------
 
 def _pack_scalar(buf, off, val, fdt):
@@ -3911,6 +4139,18 @@ class _Record:
             return _field_leaf_to_scalar(self.__dict__['_values'][i], dt._fields[name][0])
         raise AttributeError(name)
 
+    def __setattr__(self, name, value):
+        # 下划线前缀（内部状态 _values/_dtype_obj/_parent/_flat_index）走常规路径
+        if name.startswith('_'):
+            object.__setattr__(self, name, value)
+            return
+        dt = self.__dict__.get('_dtype_obj')
+        if dt is not None and dt._names and name in dt._names:
+            self[name] = value
+            return
+        # 不存在的字段 → AttributeError（numpy record 语义）
+        raise AttributeError("'record' object has no field %r" % (name,))
+
     def item(self):
         return _record_to_pytuple(tuple(self._values), self._dtype_obj)
 
@@ -3935,6 +4175,10 @@ class _Record:
 
     def __str__(self):
         return _fmt_record(tuple(self._values), self._dtype_obj)
+
+
+# numpy record 标量类（np.record / np.rec.record）：结构化 dtype 的 .type
+record = _Record
 
 
 def _record_to_pytuple(rec, dt):
@@ -4244,6 +4488,8 @@ int8 = _make_scalar_type('int8', signedinteger, int, 1, 0)
 int16 = _make_scalar_type('int16', signedinteger, int, 2, 0)
 int32 = _make_scalar_type('int32', signedinteger, int, 4, 0)
 int64 = _make_scalar_type('int64', signedinteger, int, 8, 0)
+# 平台别名 docstring（numpy 语义：int_/longlong 指向 int64，其 doc 含 'int64'）
+int64.__doc__ = 'int64'
 uint8 = _make_scalar_type('uint8', unsignedinteger, int, 1, 0)
 uint16 = _make_scalar_type('uint16', unsignedinteger, int, 2, 0)
 uint32 = _make_scalar_type('uint32', unsignedinteger, int, 4, 0)
@@ -4270,8 +4516,20 @@ def _bool_new(cls, val=False, *args):
     return inst
 
 
-string_ = type('string_', (character, bytes), {})
-unicode_ = type('unicode_', (character, str), {})
+def _string_new(cls, v=b'', *args):
+    """string_ 构造：bytes 子类不接受 str（需 encoding），此处按 utf-8 编码。"""
+    if isinstance(v, str):
+        v = v.encode('utf-8')
+    return bytes.__new__(cls, v)
+
+
+string_ = type('string_', (character, bytes), {
+    '__new__': staticmethod(_string_new),
+    'dtype': property(lambda self: DType('S%d' % builtins.len(self))),
+})
+unicode_ = type('unicode_', (character, str), {
+    'dtype': property(lambda self: DType('U%d' % builtins.len(self))),
+})
 bytes_ = string_  # rsnumpy 中 bytes_ 为字节字符串类型
 str_ = unicode_   # rsnumpy 中 str_ 为 unicode 字符串类型
 _bool_ns = {
@@ -4870,6 +5128,11 @@ class timedelta64:
         self._unit = u
         self._days = float(value) * _TD_UNIT_DAYS.get(u, _TD_UNIT_DAYS['us'])
 
+    @property
+    def dtype(self):
+        # numpy 语义：timedelta64 标量的 .dtype = m8（时间间隔 dtype）
+        return DType('m8')
+
     @classmethod
     def _from_days(cls, days, unit='us'):
         obj = cls.__new__(cls)
@@ -4961,6 +5224,11 @@ class datetime64:
             self._unit = unit or 'D'
             return
         self._days, self._unit = _parse_datetime_to_days(value, unit)
+
+    @property
+    def dtype(self):
+        # numpy 语义：datetime64 标量的 .dtype = M8（日期时间 dtype）
+        return DType('M8')
 
     @classmethod
     def _from_days(cls, days, unit='D'):
@@ -5384,6 +5652,16 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
                 _arr = ndarray([_c]).reshape(())
                 if dtype is not None:
                     _arr = _arr.astype(_resolve_dtype(dtype))
+                if ndmin > _arr.ndim:
+                    _arr = _arr.reshape((1,) * (ndmin - _arr.ndim) + _arr.shape)
+                return _arr
+            # 字符串/字节标量（S/U）：用标量+显式 dtype 走 0-d 字符串构造路径
+            # （否则回退慢路径会把 str 标量数值化为 float64）；不能用
+            # array([data]).reshape(())——reshape(()) 会抹掉字符串宽度成 S0。
+            _dt_s = str(_dtype)
+            if (_dt_s.startswith('U') or _dt_s.startswith('S')
+                    or _dt_s.startswith('<U') or _dt_s.startswith('|S')):
+                _arr = array(data, dtype=_dt_s)
                 if ndmin > _arr.ndim:
                     _arr = _arr.reshape((1,) * (ndmin - _arr.ndim) + _arr.shape)
                 return _arr
@@ -5901,14 +6179,22 @@ def _parse_str_dtype(dtype):
         return ('U', 0)
     if not isinstance(dtype, str):
         return None
-    s = dtype.lstrip('<>=|')
+    s = dtype.lstrip('<>=|').strip()
+    # 类型名记法（与 dtype 解析侧一致）：bytes 族 → S，str 族 → U
+    if s in ('bytes_', 'string', 'string_'):
+        return ('S', 0)
+    if s in ('str_', 'unicode', 'unicode_'):
+        return ('U', 0)
     if not s:
         return None
     k = s[0]
     if k in ('S', 'U', 'V', 'a'):
         kind = 'S' if k == 'a' else k
         rest = s[1:]
-        width = int(rest) if rest.isdigit() else 0
+        if rest and not rest.isdigit():
+            # 非法宽度（如 'S-1'/'Sabc'）：numpy 报 TypeError
+            raise TypeError(f"data type '{dtype}' not understood")
+        width = int(rest) if rest else 0
         return (kind, width)
     return None
 
@@ -6199,8 +6485,17 @@ def _make_structured_zeros(shape, fields):
 
 
 def _maybe_native_complex(raw, _dtype):
-    """dtype 为复数时，把实数 Rust 数组提升为原生复数（零虚部）。"""
+    """dtype 为复数时，把实数 Rust 数组提升为原生复数（零虚部）。
+
+    0-size 数组跳过复数广播（Rust 0-size 广播报 Broadcasting failed）：
+    无元素数据，dtype 由调用方 _dtype 参数标记即可。
+    """
     if _dtype in ('complex128', 'complex64'):
+        try:
+            if raw.size == 0:
+                return raw
+        except Exception:
+            pass
         return raw + 0j
     return raw
 
@@ -6224,13 +6519,16 @@ def _attach_byteorder(arr, dtype):
 
 
 def _string_dtype_spec(dtype):
-    """dtype 是带宽度/裸的 S/U 字符串简写（'U5'/'S4'/'S'/'U0'）时原样返回，
-    否则 None。供 zeros/ones/empty 走字符串数组构造。"""
+    """dtype 是带宽度/裸的 S/U 字符串简写（'U5'/'S4'/'S'/'U0'）或 S/U DType 实例
+    时返回可构造的 dtype 字符串，否则 None。供 zeros/ones/empty/full 走字符串数组构造。"""
     if isinstance(dtype, str):
         core = dtype[1:] if dtype and dtype[0] in '<>|=' else dtype
         if core and core[0] in 'SU' \
                 and (len(core) == 1 or core[1:].isdigit()):
             return dtype
+    if isinstance(dtype, DType) and dtype.kind in 'SU':
+        # DType 实例：dtype.name（'str4'）不可往返，用 dtype.str（'<U1'）
+        return dtype.str
     return None
 
 
@@ -6249,55 +6547,124 @@ def zeros(shape, dtype=None, order='C', buffer=None, *, device=None, like=None):
     """返回指定形状的零数组。"""
     dt_obj = _as_struct_dtype(dtype)
     if dt_obj is not None:
-        return _wrap_structured(dt_obj, _make_struct_filled(shape, dt_obj, _zero_scalar_for))
-    _su = _string_dtype_spec(dtype)
-    if _su is not None:
-        return _string_filled(shape, '', _su)
-    _dtype = _resolve_dtype(dtype)
-    raw = _maybe_native_complex(np.zeros(shape), _dtype)
-    return _attach_byteorder(
-        ndarray(raw._array if hasattr(raw, '_array') else raw, _dtype=_dtype),
-        dtype)
+        result = _wrap_structured(dt_obj, _make_struct_filled(shape, dt_obj, _zero_scalar_for))
+    else:
+        _su = _string_dtype_spec(dtype)
+        if _su is not None:
+            result = _string_filled(shape, '', _su)
+        else:
+            _dtype = _resolve_dtype(dtype)
+            raw = _maybe_native_complex(np.zeros(shape), _dtype)
+            result = _attach_byteorder(
+                ndarray(raw._array if hasattr(raw, '_array') else raw, _dtype=_dtype),
+                dtype)
+    if order == 'F':
+        result._rs_order = 'F'
+    return result
 
 
 def ones(shape, dtype=None, order='C', buffer=None, *, device=None, like=None):
     """返回指定形状的1数组。"""
     dt_obj = _as_struct_dtype(dtype)
     if dt_obj is not None:
-        return _wrap_structured(dt_obj, _make_struct_filled(shape, dt_obj, _one_scalar_for))
-    _su = _string_dtype_spec(dtype)
-    if _su is not None:
-        return _string_filled(shape, '1', _su)
-    _dtype = _resolve_dtype(dtype)
-    raw = _maybe_native_complex(np.ones(shape), _dtype)
-    return _attach_byteorder(
-        ndarray(raw._array if hasattr(raw, '_array') else raw, _dtype=_dtype),
-        dtype)
+        result = _wrap_structured(dt_obj, _make_struct_filled(shape, dt_obj, _one_scalar_for))
+    else:
+        _su = _string_dtype_spec(dtype)
+        if _su is not None:
+            result = _string_filled(shape, '1', _su)
+        else:
+            _dtype = _resolve_dtype(dtype)
+            raw = _maybe_native_complex(np.ones(shape), _dtype)
+            result = _attach_byteorder(
+                ndarray(raw._array if hasattr(raw, '_array') else raw, _dtype=_dtype),
+                dtype)
+    if order == 'F':
+        result._rs_order = 'F'
+    return result
 
 
 def empty(shape, dtype=None, order='C', buffer=None, *, device=None, like=None):
     """返回指定形状的空数组。"""
     dt_obj = _as_struct_dtype(dtype)
     if dt_obj is not None:
-        return _wrap_structured(dt_obj, _make_struct_filled(shape, dt_obj, _zero_scalar_for))
-    _su = _string_dtype_spec(dtype)
-    if _su is not None:
-        return _string_filled(shape, '', _su)
-    _dtype = _resolve_dtype(dtype)
-    raw = _maybe_native_complex(np.empty(shape), _dtype)
-    arr = ndarray(raw._array if hasattr(raw, '_array') else raw, _dtype=_dtype)
-    arr._is_empty = True
-    return _attach_byteorder(arr, dtype)
+        result = _wrap_structured(dt_obj, _make_struct_filled(shape, dt_obj, _zero_scalar_for))
+    else:
+        _su = _string_dtype_spec(dtype)
+        if _su is not None:
+            result = _string_filled(shape, '', _su)
+        else:
+            _dtype = _resolve_dtype(dtype)
+            raw = _maybe_native_complex(np.empty(shape), _dtype)
+            result = _attach_byteorder(
+                ndarray(raw._array if hasattr(raw, '_array') else raw, _dtype=_dtype),
+                dtype)
+            result._is_empty = True
+    if order == 'F':
+        result._rs_order = 'F'
+    return result
 
 
 def full(shape, fill_value, dtype=None, order='C', *, device=None, like=None):
     """返回指定形状的填充数组。"""
-    _dtype = _resolve_dtype(dtype)
-    if isinstance(fill_value, complex) or _dtype in ('complex128', 'complex64'):
-        c = complex(fill_value)
-        raw = np.full(shape, c.real) + complex(0.0, c.imag)
-        return ndarray(raw, _dtype='complex128' if _dtype not in ('complex128', 'complex64') else _dtype)
-    return ndarray(np.full(shape, fill_value), _dtype=_dtype)
+    _su = _string_dtype_spec(dtype)
+    if _su is not None:
+        result = _string_filled(shape, str(fill_value), _su)
+    else:
+        _dtype = _resolve_dtype(dtype)
+        if _dtype in ('bytes_', 'string_'):
+            result = _string_filled(shape, str(fill_value), _dtype)
+        elif isinstance(fill_value, complex) or _dtype in ('complex128', 'complex64'):
+            c = complex(fill_value)
+            try:
+                raw = np.full(shape, c.real) + complex(0.0, c.imag)
+            except Exception:
+                raw = np.full(shape, c.real)
+            result = ndarray(raw, _dtype='complex128' if _dtype not in ('complex128', 'complex64') else _dtype)
+        else:
+            _fv = fill_value
+            _dtd = _dtype if isinstance(_dtype, DType) else None
+            if _dtd is None:
+                try:
+                    _dtd = DType(str(_dtype))
+                except Exception:
+                    _dtd = None
+            if _dtd is not None and getattr(_dtd, 'kind', None) in ('i', 'u'):
+                _bits = _dtd.itemsize * 8
+                if _dtd.kind == 'i':
+                    _lo, _hi = -(1 << (_bits - 1)), (1 << (_bits - 1)) - 1
+                else:
+                    _lo, _hi = 0, (1 << _bits) - 1
+                if isinstance(_fv, int) and not isinstance(_fv, bool):
+                    if _fv < _lo or _fv > _hi:
+                        raise OverflowError("Python int too large to convert to C integer")
+                else:
+                    # 数组标量/float：截断为 int，越界按位宽回绕（numpy C cast 语义）
+                    try:
+                        _ivi = int(_fv)
+                    except (TypeError, ValueError, OverflowError):
+                        _ivi = None
+                    if _ivi is not None:
+                        if _ivi < _lo or _ivi > _hi:
+                            _ivi = _ivi & ((1 << _bits) - 1)
+                            if _dtd.kind == 'i' and _ivi >= 1 << (_bits - 1):
+                                _ivi -= 1 << _bits
+                        _fv = _ivi
+            # 浮点/复数精度对齐（同 full_like，按 _dtd kind+itemsize）
+            if _dtd is not None and getattr(_dtd, 'kind', None) == 'f' and isinstance(_fv, float) \
+                    and not isinstance(_fv, bool) and _dtd.itemsize in (2, 4):
+                import struct as _st
+                _fc = 'e' if _dtd.itemsize == 2 else 'f'
+                _fv = _st.unpack(_fc, _st.pack(_fc, _fv))[0]
+            elif _dtd is not None and getattr(_dtd, 'kind', None) == 'c' and isinstance(_fv, complex) \
+                    and _dtd.itemsize == 8:
+                import struct as _st
+                _r = _st.unpack('f', _st.pack('f', _fv.real))[0]
+                _i = _st.unpack('f', _st.pack('f', _fv.imag))[0]
+                _fv = complex(_r, _i)
+            result = ndarray(np.full(shape, _fv), _dtype=_dtype)
+    if order == 'F':
+        result._rs_order = 'F'
+    return result
 
 
 def _like_str_width(dtype):
@@ -6313,52 +6680,143 @@ def _like_str_width(dtype):
     return None
 
 
+def _like_subok_result(result, a, subok):
+    """like 函数 subok 语义：subok=True 时结果保留输入子类（numpy 语义）。"""
+    if subok and type(a) is not ndarray:
+        try:
+            return result.view(type(a))
+        except Exception:
+            return result
+    return result
+
+
 def zeros_like(a, dtype=None, order='K', subok=True, shape=None, device=None):
-    """返回与输入形状相同的零数组。"""
+    """返回与输入形状相同的零数组（shape 参数可覆盖目标形状）。"""
     arr = ndarray(a)
+    if isinstance(dtype, str):
+        _parse_str_dtype(dtype)  # 校验 dtype 字符串（非法宽度如 'S-1' → TypeError）
+    _f_ok = order == 'F' or (order in ('K', 'A') and arr.flags.f_contiguous and not arr.flags.c_contiguous)
+    if shape is not None:
+        _shp = (shape,) if isinstance(shape, int) else tuple(shape)
+        _dt = dtype if dtype is not None else getattr(arr, '_dtype', 'float64')
+        return _like_subok_result(zeros(_shp, dtype=_dt, order='F' if _f_ok else 'C'), a, subok)
     _ssd = _like_str_width(dtype)
     if _ssd is not None:
-        obj = ndarray._wrap(np.zeros_like(arr._array), _dtype='string_')
-        obj._str_dtype = _ssd
-        return obj
-    _dtype = dtype if dtype is not None else getattr(arr, '_dtype', 'float64')
-    return ndarray(np.zeros_like(arr._array), _dtype=_dtype)
+        result = ndarray._wrap(np.zeros_like(arr._array), _dtype='string_')
+        result._str_dtype = _ssd
+    else:
+        _dtype = dtype if dtype is not None else getattr(arr, '_dtype', 'float64')
+        result = ndarray(np.zeros_like(arr._array), _dtype=_dtype)
+    if _f_ok:
+        result._rs_order = 'F'
+    return _like_subok_result(result, a, subok)
 
 
 def ones_like(a, dtype=None, order='K', subok=True, shape=None, device=None):
-    """返回与输入形状相同的1数组。"""
+    """返回与输入形状相同的1数组（shape 参数可覆盖目标形状）。"""
     arr = ndarray(a)
+    if isinstance(dtype, str):
+        _parse_str_dtype(dtype)  # 校验 dtype 字符串（非法宽度如 'S-1' → TypeError）
+    _f_ok = order == 'F' or (order in ('K', 'A') and arr.flags.f_contiguous and not arr.flags.c_contiguous)
+    if shape is not None:
+        _shp = (shape,) if isinstance(shape, int) else tuple(shape)
+        _dt = dtype if dtype is not None else getattr(arr, '_dtype', 'float64')
+        return _like_subok_result(ones(_shp, dtype=_dt, order='F' if _f_ok else 'C'), a, subok)
     _ssd = _like_str_width(dtype)
     if _ssd is not None:
-        obj = ndarray._wrap(np.zeros_like(arr._array), _dtype='string_')
-        obj._str_dtype = _ssd
-        return obj
-    _dtype = dtype if dtype is not None else getattr(arr, '_dtype', 'float64')
-    return ndarray(np.ones_like(arr._array), _dtype=_dtype)
+        result = ndarray._wrap(np.zeros_like(arr._array), _dtype='string_')
+        result._str_dtype = _ssd
+    else:
+        _dtype = dtype if dtype is not None else getattr(arr, '_dtype', 'float64')
+        result = ndarray(np.ones_like(arr._array), _dtype=_dtype)
+    if _f_ok:
+        result._rs_order = 'F'
+    return _like_subok_result(result, a, subok)
 
 
 def empty_like(a, dtype=None, order='K', subok=True, shape=None, device=None):
-    """返回与输入形状相同的空数组。"""
+    """返回与输入形状相同的空数组（shape 参数可覆盖目标形状）。"""
     arr = ndarray(a)
+    if isinstance(dtype, str):
+        _parse_str_dtype(dtype)  # 校验 dtype 字符串（非法宽度如 'S-1' → TypeError）
+    _f_ok = order == 'F' or (order in ('K', 'A') and arr.flags.f_contiguous and not arr.flags.c_contiguous)
+    if shape is not None:
+        _shp = (shape,) if isinstance(shape, int) else tuple(shape)
+        _dt = dtype if dtype is not None else getattr(arr, '_dtype', 'float64')
+        return _like_subok_result(empty(_shp, dtype=_dt, order='F' if _f_ok else 'C'), a, subok)
     _ssd = _like_str_width(dtype)
     if _ssd is not None:
-        obj = ndarray._wrap(np.empty_like(arr._array), _dtype='string_')
-        obj._str_dtype = _ssd
-        return obj
-    _dtype = dtype if dtype is not None else getattr(arr, '_dtype', 'float64')
-    return ndarray(np.empty_like(arr._array), _dtype=_dtype)
+        result = ndarray._wrap(np.empty_like(arr._array), _dtype='string_')
+        result._str_dtype = _ssd
+    else:
+        _dtype = dtype if dtype is not None else getattr(arr, '_dtype', 'float64')
+        result = ndarray(np.empty_like(arr._array), _dtype=_dtype)
+    if _f_ok:
+        result._rs_order = 'F'
+    return _like_subok_result(result, a, subok)
 
 
 def full_like(a, fill_value, dtype=None, order='K', subok=True, shape=None, device=None):
-    """返回与输入形状相同的填充数组。"""
+    """返回与输入形状相同的填充数组（shape 参数可覆盖目标形状）。"""
     arr = ndarray(a)
+    if isinstance(dtype, str):
+        _parse_str_dtype(dtype)  # 校验 dtype 字符串（非法宽度如 'S-1' → TypeError）
+    _f_ok = order == 'F' or (order in ('K', 'A') and arr.flags.f_contiguous and not arr.flags.c_contiguous)
+    if shape is not None:
+        _shp = (shape,) if isinstance(shape, int) else tuple(shape)
+        _dt = dtype if dtype is not None else getattr(arr, '_dtype', 'float64')
+        return _like_subok_result(full(_shp, fill_value, dtype=_dt, order='F' if _f_ok else 'C'), a, subok)
     _ssd = _like_str_width(dtype)
     if _ssd is not None:
-        obj = ndarray._wrap(np.zeros_like(arr._array), _dtype='string_')
-        obj._str_dtype = _ssd
-        return obj
-    _dtype = dtype if dtype is not None else getattr(arr, '_dtype', 'float64')
-    return ndarray(np.full_like(arr._array, float(fill_value)), _dtype=_dtype)
+        result = ndarray._wrap(np.zeros_like(arr._array), _dtype='string_')
+        result._str_dtype = _ssd
+    else:
+        _dtype = dtype if dtype is not None else getattr(arr, '_dtype', 'float64')
+        _fv = fill_value
+        _dtd = _dtype if isinstance(_dtype, DType) else None
+        if _dtd is None:
+            try:
+                _dtd = DType(str(_dtype))
+            except Exception:
+                _dtd = None
+        if _dtd is not None and getattr(_dtd, 'kind', None) in ('i', 'u'):
+            _bits = _dtd.itemsize * 8
+            if _dtd.kind == 'i':
+                _lo, _hi = -(1 << (_bits - 1)), (1 << (_bits - 1)) - 1
+            else:
+                _lo, _hi = 0, (1 << _bits) - 1
+            if isinstance(_fv, int) and not isinstance(_fv, bool):
+                if _fv < _lo or _fv > _hi:
+                    raise OverflowError("Python int too large to convert to C integer")
+            else:
+                # 数组标量/float：截断为 int，越界按位宽回绕（numpy C cast 语义）
+                try:
+                    _ivi = int(_fv)
+                except (TypeError, ValueError, OverflowError):
+                    _ivi = None
+                if _ivi is not None:
+                    if _ivi < _lo or _ivi > _hi:
+                        _ivi = _ivi & ((1 << _bits) - 1)
+                        if _dtd.kind == 'i' and _ivi >= 1 << (_bits - 1):
+                            _ivi -= 1 << _bits
+                    _fv = _ivi
+        # 浮点/复数精度对齐：按目标 dtype 精度 round-trip，使 full 产物与
+        # astype 一致（f8 标签存 f8 数据会在 == 比较时与 f4 产物分歧）。
+        if _dtd is not None and getattr(_dtd, 'kind', None) == 'f' and isinstance(_fv, float) \
+                and not isinstance(_fv, bool) and _dtd.itemsize in (2, 4):
+            import struct as _st
+            _fc = 'e' if _dtd.itemsize == 2 else 'f'
+            _fv = _st.unpack(_fc, _st.pack(_fc, _fv))[0]
+        elif _dtd is not None and getattr(_dtd, 'kind', None) == 'c' and isinstance(_fv, complex) \
+                and _dtd.itemsize == 8:
+            import struct as _st
+            _r = _st.unpack('f', _st.pack('f', _fv.real))[0]
+            _i = _st.unpack('f', _st.pack('f', _fv.imag))[0]
+            _fv = complex(_r, _i)
+        result = ndarray(np.full_like(arr._array, float(_fv)), _dtype=_dtype)
+    if _f_ok:
+        result._rs_order = 'F'
+    return _like_subok_result(result, a, subok)
 
 
 def eye(N, M=None, k=0, dtype=None, order='C'):
@@ -6481,6 +6939,10 @@ def _linspace_convert(start, stop):
     from . import _extra as _ex
     dt = _ex.result_type(start_a, stop_a, float)
     dt_name = str(getattr(dt, 'name', dt))
+    # object 端点：linspace 须按 inexact 计算（numpy 语义），强制 float64
+    # （object 参与算术在 rsnumpy 中不可靠；astype 到 float64 数值一致）
+    if dt_name in ('object', 'O'):
+        dt_name = 'float64'
     return start_a, stop_a, dt_name, wrap_type
 
 
@@ -7480,28 +7942,47 @@ flatiter = _NdFlatIter
 
 
 class _DTypeNamespace:
-    """numpy 2.x 风格 dtypes 命名空间（兼容子集）。"""
-    VoidDType = type('VoidDType', (), {})
-    BoolDType = type('BoolDType', (), {})
-    Int8DType = type('Int8DType', (), {})
-    Int16DType = type('Int16DType', (), {})
-    Int32DType = type('Int32DType', (), {})
-    Int64DType = type('Int64DType', (), {})
-    UInt8DType = type('UInt8DType', (), {})
-    UInt16DType = type('UInt16DType', (), {})
-    UInt32DType = type('UInt32DType', (), {})
-    UInt64DType = type('UInt64DType', (), {})
-    Float16DType = type('Float16DType', (), {})
-    Float32DType = type('Float32DType', (), {})
-    Float64DType = type('Float64DType', (), {})
-    Complex64DType = type('Complex64DType', (), {})
-    Complex128DType = type('Complex128DType', (), {})
-    StrDType = type('StrDType', (), {})
+    """numpy 2.x 风格 dtypes 命名空间（兼容子集）。
+
+    具体类携带 _dt_name（供 _canon_dt_type/isdtype 识别）；abstract 类携带
+    _kind_set（kind 字符集合，供 isdtype 按类别判定）。
+    """
+    VoidDType = type('VoidDType', (), {'_dt_name': 'void0'})
+    BoolDType = type('BoolDType', (), {'_dt_name': 'bool'})
+    Int8DType = type('Int8DType', (), {'_dt_name': 'int8'})
+    Int16DType = type('Int16DType', (), {'_dt_name': 'int16'})
+    Int32DType = type('Int32DType', (), {'_dt_name': 'int32'})
+    Int64DType = type('Int64DType', (), {'_dt_name': 'int64'})
+    UInt8DType = type('UInt8DType', (), {'_dt_name': 'uint8'})
+    UInt16DType = type('UInt16DType', (), {'_dt_name': 'uint16'})
+    UInt32DType = type('UInt32DType', (), {'_dt_name': 'uint32'})
+    UInt64DType = type('UInt64DType', (), {'_dt_name': 'uint64'})
+    Float16DType = type('Float16DType', (), {'_dt_name': 'float16'})
+    Float32DType = type('Float32DType', (), {'_dt_name': 'float32'})
+    Float64DType = type('Float64DType', (), {'_dt_name': 'float64'})
+    Complex64DType = type('Complex64DType', (), {'_dt_name': 'complex64'})
+    Complex128DType = type('Complex128DType', (), {'_dt_name': 'complex128'})
+    StrDType = type('StrDType', (), {'_dt_name': 'str0'})
     StringDType = StrDType  # numpy 2.x 变长字符串 dtype 别名
-    BytesDType = type('BytesDType', (), {})
-    ObjectDType = type('ObjectDType', (), {})
-    DatetimeDType = type('DatetimeDType', (), {})
-    TimedeltaDType = type('TimedeltaDType', (), {})
+    BytesDType = type('BytesDType', (), {'_dt_name': 'bytes0'})
+    ObjectDType = type('ObjectDType', (), {'_dt_name': 'object'})
+    DatetimeDType = type('DatetimeDType', (), {'_dt_name': 'datetime64'})
+    TimedeltaDType = type('TimedeltaDType', (), {'_dt_name': 'timedelta64'})
+    # ---- abstract DType 类（Array API）：_kind_set 为其覆盖的 kind 字符集合 ----
+    NumberAbstractDType = type('NumberAbstractDType', (),
+                               {'_kind_set': frozenset('iufc')})
+    IntegerAbstractDType = type('IntegerAbstractDType', (),
+                                {'_kind_set': frozenset('iu')})
+    SignedIntegerAbstractDType = type('SignedIntegerAbstractDType', (),
+                                      {'_kind_set': frozenset('i')})
+    UnsignedIntegerAbstractDType = type('UnsignedIntegerAbstractDType', (),
+                                        {'_kind_set': frozenset('u')})
+    FloatingAbstractDType = type('FloatingAbstractDType', (),
+                                 {'_kind_set': frozenset('f')})
+    ComplexFloatingAbstractDType = type('ComplexFloatingAbstractDType', (),
+                                        {'_kind_set': frozenset('c')})
+    RealNumberAbstractDType = type('RealNumberAbstractDType', (),
+                                   {'_kind_set': frozenset('iuf')})
 
 
 dtypes = _DTypeNamespace
@@ -7744,8 +8225,15 @@ def iscomplex(x):
     return ndarray(np.zeros(shape))
 
 
+# AxisError 统一来源：rsnumpy.exceptions（测试自该模块导入）；
+# 顶层 np.AxisError 为同一类（numpy 语义）。
+from .exceptions import AxisError  # noqa: E402
+
+
 def _broadcast_shape(*shapes):
     """计算多个数组的广播形状。"""
+    if not shapes:
+        return ()
     max_ndim = np.imax([len(s) for s in shapes])
     result = []
     for i in range(max_ndim):
@@ -7762,12 +8250,26 @@ def _broadcast_shape(*shapes):
     return tuple(result)
 
 
-def broadcast(*arrays):
-    """产生模仿广播的对象，将多个数组广播到相同形状。"""
-    if not arrays:
-        raise ValueError("broadcast requires at least one argument")
-    _shapes = []
+def broadcast(*arrays, **kwargs):
+    """产生模仿广播的对象，将多个数组广播到相同形状。
+
+    numpy 语义：0 个参数合法（shape ()）；>64 个参数 ValueError；
+    关键字参数 ValueError（gh-13455）；支持嵌套 broadcast 对象参数
+    （gh-5881，内部展开后统一计算）。
+    """
+    if kwargs:
+        raise ValueError("broadcast() takes no keyword arguments")
+    # 嵌套 broadcast 对象展开（gh-5881）
+    _flat = []
     for _a in arrays:
+        if isinstance(_a, _Broadcast):
+            _flat.extend(_a._arrays)
+        else:
+            _flat.append(_a)
+    if len(_flat) > 64:
+        raise ValueError("broadcast requires at most 64 arguments")
+    _shapes = []
+    for _a in _flat:
         _s = getattr(_a, 'shape', None)
         if _s is None:
             _s = getattr(np.array(_a), 'shape', ())
@@ -7789,7 +8291,21 @@ def broadcast(*arrays):
                         f"with shape {_sj} cannot be broadcast "
                         f"to a single shape")
         raise
-    return _Broadcast(*arrays)
+    return _Broadcast(*_flat)
+
+
+# numpy 语义：inspect.signature 只见 (*arrays,)——真实签名带 **kwargs
+# 仅为把关键字参数转为 ValueError（gh-13455）；numpy 的 C 版同样只暴露
+# 一个 VAR_POSITIONAL 参数。
+try:
+    from inspect import signature as _sig_fn
+
+    def _broadcast_sig_ref(*arrays):  # 仅作 __signature__ 模板
+        pass
+
+    broadcast.__signature__ = _sig_fn(_broadcast_sig_ref)
+except ImportError:  # pragma: no cover
+    pass
 
 
 def _broadcast_reset(self, /):
@@ -7804,7 +8320,10 @@ class _Broadcast:
     """广播对象，将多个数组广播到相同形状。"""
 
     def __init__(self, *args):
-        self._arrays = [ndarray(a) for a in args]
+        # ndarray 直通（保留 base 引用，numpy `a is mit.iters[0].base` 语义）；
+        # 其他（list 等）转换后引用转换结果。
+        self._arrays = [a if isinstance(a, ndarray) else ndarray(a)
+                        for a in args]
         # 计算广播形状
         shapes = [a.shape for a in self._arrays]
         self._shape = _broadcast_shape(*shapes)
@@ -7825,9 +8344,14 @@ class _Broadcast:
     nd = ndim  # numpy broadcast 对象的旧别名
 
     @property
-    def numiter(self):
-        """广播后的总元素数。"""
+    def size(self):
+        """广播后的元素总数（numpy broadcast.size 语义）。"""
         return self._size
+
+    @property
+    def numiter(self):
+        """参与广播的数组个数（numpy numiter 语义，非元素总数）。"""
+        return len(self._arrays)
 
     @property
     def iters(self):

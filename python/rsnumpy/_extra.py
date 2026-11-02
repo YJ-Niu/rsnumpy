@@ -5,6 +5,7 @@
 """
 
 # import builtins as _builtins
+import builtins
 import cmath as _cmath
 import math as _math
 
@@ -1180,13 +1181,47 @@ def gradient(f, *varargs, axis=None, edge_order=1):
 
 
 def cross(a, b, axisa=-1, axisb=-1, axisc=-1, axis=None):
-    """向量叉积。"""
-    _ = axisa, axisb, axisc, axis
+    """向量叉积（N-D / axis 参数 / 广播 / dtype 提升）。
+
+    向量维须为 3 元素（本兼容套件语义：2 元素一律 ValueError）。
+    """
+    np = _np()
+    if axis is not None:
+        axisa = axisb = axisc = axis
     A = _asarray(a)
     B = _asarray(b)
     if A.ndim == 0 or B.ndim == 0:
         raise ValueError("Input arrays must be at least 1-dimensional")
-    return _wrap(_core.cross(A._array, B._array))
+    if not (-A.ndim <= axisa < A.ndim):
+        raise np.AxisError(
+            f"axisa {axisa} is out of bounds for array "
+            f"of dimension {A.ndim}")
+    if not (-B.ndim <= axisb < B.ndim):
+        raise np.AxisError(
+            f"axisb {axisb} is out of bounds for array "
+            f"of dimension {B.ndim}")
+    Am = np.moveaxis(A, axisa, -1)
+    Bm = np.moveaxis(B, axisb, -1)
+    if Am.shape[-1] != 3 or Bm.shape[-1] != 3:
+        raise ValueError("Cross product requires 3-element vectors")
+    Ab, Bb = np.broadcast_arrays(Am, Bm)
+    # 混合整型先提升到公共 dtype（uint8*int32 逐元素乘法会按操作数
+    # dtype 回绕，与 numpy cross 的提升语义不一致）。
+    _rd = np.result_type(A, B)
+    Ab = Ab.astype(_rd.name)
+    Bb = Bb.astype(_rd.name)
+    c0 = Ab[..., 1] * Bb[..., 2] - Ab[..., 2] * Bb[..., 1]
+    c1 = Ab[..., 2] * Bb[..., 0] - Ab[..., 0] * Bb[..., 2]
+    c2 = Ab[..., 0] * Bb[..., 1] - Ab[..., 1] * Bb[..., 0]
+    c = np.stack([c0, c1, c2], axis=-1)
+    out_ndim = c.ndim
+    if axisc != out_ndim - 1:
+        if not (-out_ndim <= axisc < out_ndim):
+            raise np.AxisError(
+                f"axisc {axisc} is out of bounds for array "
+                f"of dimension {out_ndim}")
+        c = np.moveaxis(c, -1, axisc)
+    return c
 
 
 def trapezoid(y, x=None, dx=1.0, axis=-1):
@@ -2008,11 +2043,21 @@ _DT_INFO = {
     'float16': ('f', 2), 'float32': ('f', 4), 'float64': ('f', 8),
     'complex64': ('c', 8), 'complex128': ('c', 16),
     'string_': ('S', 0),
+    'object': ('O', 8),
 }
 
 
 def _canon_dt_type(x):
-    """将 dtype 类的类型/字符串解析为规范名称。"""
+    """将 dtype 类的类型/字符串解析为规范名称（真实 dtype 名，如 'str0'/'void8'）。
+
+    不做 float64 兜底：字符串（'str3'/'bytes5'）/void 等名称需原样保留，
+    供 promote_types 的字符串分支与 can_cast 的 S/U 宽度/structured 分支识别；
+    非数值名进入 _promote2 的 KeyError 由调用方的 try/except 兜底。
+    """
+    # np.dtypes 具体类（Int64DType 等）携带 _dt_name
+    dt_name = getattr(x, '_dt_name', None)
+    if dt_name is not None:
+        return dt_name
     return _np().dtype(x).name
 
 
@@ -2053,6 +2098,9 @@ def _promote2(n1, n2):
         return n1
     k1, s1 = _DT_INFO[n1]
     k2, s2 = _DT_INFO[n2]
+    if k1 == 'O' or k2 == 'O':
+        # object 吸收一切（numpy 语义）
+        return 'object'
     if k1 == 'b':
         return n2
     if k2 == 'b':
@@ -2123,9 +2171,15 @@ def promote_types(type1, type2):
     b = _canon_dt_type(type2)
     d1 = np.dtype(type1)
     d2 = np.dtype(type2)
-    # void/结构化：兼容 → type1，否则 TypeError
+    # datetime64/timedelta64 伪类型：同单位返回自身（native），M+m 混合 → M
     k1 = getattr(d1, '_kind', '')
     k2 = getattr(d2, '_kind', '')
+    if k1 in ('M', 'm') or k2 in ('M', 'm'):
+        kind = 'M' if 'M' in (k1, k2) else 'm'
+        unit = (getattr(d1, '_dt_unit', None) or getattr(d2, '_dt_unit', None)
+                or 'ns')
+        return np.dtype('%s8[%s]' % (kind, unit))
+    # void/结构化：兼容 → type1，否则 TypeError
     if k1 == 'V' or k2 == 'V':
         return _void_promo(d1, d2)
     # 字符串 dtype 提升
@@ -2156,9 +2210,14 @@ def result_type(*arrays_and_dtypes):
     weak = []
     strong = []
     for x in arrays_and_dtypes:
-        if isinstance(x, bool):
+        if x is None:
+            # numpy 语义：result_type(None) → object dtype
+            strong.append(_np().dtype('O'))
+        elif isinstance(x, bool):
             strong.append(x)
-        elif isinstance(x, (int, float, complex)):
+        elif type(x) is int or type(x) is float or type(x) is complex:
+            # NEP 50：仅 Python 原生标量是"弱标量"；rsnumpy 标量类
+            # （float32/int16 等，继承 float/int）是强操作数，保留自身 dtype。
             weak.append(x)
         else:
             strong.append(x)
@@ -2187,9 +2246,11 @@ def result_type(*arrays_and_dtypes):
                 valid_names.append('float64')
     if not valid_names:
         # 纯 Python 标量：complex → complex128，float → float64，int → int64
-        if any(isinstance(w, complex) for w in weak):
+        # 注意：必须用 builtin_any——模块级 any 被 rsnumpy ufunc 遮蔽，
+        # 对生成器参数恒返回 True（会把一切弱标量误判为 complex）。
+        if builtin_any(isinstance(w, complex) for w in weak):
             return _np().dtype('complex128')
-        if any(isinstance(w, float) for w in weak):
+        if builtin_any(isinstance(w, float) for w in weak):
             return _np().dtype('float64')
         return _np().dtype('int64')
     acc = valid_names[0]
@@ -2217,6 +2278,10 @@ def result_type(*arrays_and_dtypes):
 
 def can_cast(from_, to, casting='safe'):
     """判断能否按给定规则从一个类型转换到另一个类型。"""
+    # None 参数：numpy 语义 TypeError
+    if from_ is None or to is None:
+        raise TypeError(
+            "can_cast: 'None' is not a valid dtype argument")
     # numpy (NEP50) 语义：裸 Python 数值标量不可参与 cast 判断；
     # 字符串参数（typecode / dtype spec）按 dtype 解析（numpy 语义）
     if isinstance(from_, (str, bytes)):
@@ -2232,17 +2297,44 @@ def can_cast(from_, to, casting='safe'):
             f"Cannot cast Python scalar {type(from_).__name__!r} to dtype "
             f"{to!r} with casting rule {casting!r}")
     try:
-        fn = _canon_dt(from_)
-        tn = _canon_dt_type(to)
+        d_from = _np().dtype(from_)
+        d_to = _np().dtype(to)
     except Exception:
         return False
-    if fn == tn:
-        return True
+    fn = _canon_dt(from_)
+    tn = _canon_dt_type(to)
     if casting in ('no', 'equiv'):
-        return False
+        # 'no'：typestr 完全一致（含字节序）；'equiv'：同 kind + itemsize
+        # （字节序无关，numpy 语义）。
+        if casting == 'no':
+            try:
+                return _typestr_of(d_from) == _typestr_of(d_to)
+            except Exception:
+                return False
+        return (getattr(d_from, '_kind', None) == getattr(d_to, '_kind', None)
+                and getattr(d_from, '_itemsize', -1) == getattr(d_to, '_itemsize', -1))
     if casting == 'unsafe':
+        # 结构化 → 非结构化：仅单字段链允许（字段可为简单类型/子数组/
+        # 单字段结构化；任一层多字段则不可）。
+        if getattr(d_from, '_names', None) and not getattr(d_to, '_names', None):
+            if not _single_field_chain(d_from):
+                return False
         return True
-    # 非数值类型（字符串/void/object/datetime 等）无通用提升规则，仅同名可转换
+    # 数值 → 固定宽字符串：按最大值的十进制位宽判定（numpy 语义）。
+    k_to = getattr(d_to, '_kind', '')
+    if k_to in ('S', 'U') and fn in _NUM_STR_WIDTH:
+        need_s, need_u = _NUM_STR_WIDTH[fn]
+        need = need_s if k_to == 'S' else need_u
+        width = (d_to._itemsize // 4) if k_to == 'U' else d_to._itemsize
+        return width >= need
+    # object 语义：仅 object ↔ object 可转换
+    k_from = getattr(d_from, '_kind', '')
+    if k_from == 'O' or k_to == 'O':
+        return k_from == 'O' and k_to == 'O'
+    # 结构化 ↔ 任何类型：safe/same_kind 均不允许（unsafe 已在上方处理）
+    if getattr(d_from, '_names', None) or getattr(d_to, '_names', None):
+        return False
+    # 非数值类型（字符串/void/datetime 等）无通用提升规则，仅同名可转换
     if fn not in _DT_INFO or tn not in _DT_INFO:
         return False
     prom = _promote2(fn, tn)
@@ -2250,8 +2342,43 @@ def can_cast(from_, to, casting='safe'):
         return prom == tn
     if prom == tn:
         return True
+    if casting == 'same_kind':
+        k1, k2 = _DT_INFO[fn][0], _DT_INFO[tn][0]
+        # signed → unsigned 不属于 same_kind（numpy 语义）
+        if k1 == 'i' and k2 == 'u':
+            return False
     group = {'b': 0, 'u': 1, 'i': 1, 'f': 2, 'c': 3}
     return group[_DT_INFO[fn][0]] <= group[_DT_INFO[tn][0]]
+
+
+# 数值 → 固定宽字符串所需最小宽度（S, U）：按最大值十进制位宽（含符号位），
+# numpy can_cast 语义（bool→S5 'False'/U4 'True'，int32→11，int64→21，
+# uint64→20 等）。
+_NUM_STR_WIDTH = {
+    'bool': (5, 4),
+    'int8': (4, 4), 'int16': (6, 6), 'int32': (11, 11), 'int64': (21, 21),
+    'uint8': (3, 3), 'uint16': (5, 5), 'uint32': (10, 10), 'uint64': (20, 20),
+}
+
+
+def _single_field_chain(dt):
+    """结构化 dtype 是否满足"单字段链"：仅一个字段，且该字段（或其子数组
+    基类型）递归满足同样条件。numpy 结构化→简单 unsafe cast 的判定。"""
+    names = getattr(dt, '_names', None)
+    if names is None:
+        return True
+    if builtins.len(names) != 1:
+        return False
+    fdt = dt._fields[names[0]][0]
+    if getattr(fdt, '_subdtype', None) is not None:
+        fdt = fdt._subdtype[0]
+    return _single_field_chain(fdt)
+
+
+def _typestr_of(dt):
+    """dtype 的 array-protocol typestr（含字节序前缀）。"""
+    from ._dtypes import _typestr
+    return _typestr(dt)
 
 
 def min_scalar_type(value):
@@ -2300,6 +2427,10 @@ def common_type(*arrays):
 
 def isdtype(dtype, kind):
     """判断 dtype 是否属于指定类别（Array API）。"""
+    # numpy 2.x 语义：首参必须是 dtype 实例或标量类型（不允许裸 str）
+    if isinstance(dtype, str):
+        raise TypeError(
+            "isdtype's first argument must be a NumPy dtype, not a string")
     n = _canon_dt_type(dtype)
     k = _DT_INFO[n][0]
 
@@ -2316,6 +2447,16 @@ def isdtype(dtype, kind):
             }
             if kk in table:
                 return table[kk]
+            # str 必须是已知 kind 名（dtype 名如 "int64" 非法）
+            raise ValueError(f"'{kk}' is not a known kind name")
+        # 纯 Python 数值（int/float/bool/complex 值）不是合法 kind
+        if type(kk) in (int, float, bool, complex):
+            raise TypeError(
+                "kind argument must be a dtype, a dtype class, or a kind name")
+        # np.dtypes abstract 类（IntegerAbstractDType 等）：按 kind 字符集合判定
+        ks = getattr(kk, '_kind_set', None)
+        if isinstance(ks, frozenset):
+            return k in ks
         return _canon_dt_type(kk) == n
 
     if isinstance(kind, (tuple, list)):
