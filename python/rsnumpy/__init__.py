@@ -852,6 +852,32 @@ class ndarray:
                 if rest:
                     return result.reshape((len(result) // block,) + rest)
                 return result
+        # 尾部布尔掩码：a[:, mask] / a[i, mask]（key 为元组、末元素为布尔
+        # ndarray、覆盖末尾 mask.ndim 轴、前面全是简单索引）。numpy 语义：
+        # 掩码作用于最后若干轴，前面的切片/整数索引先应用。
+        if isinstance(key, tuple):
+            _last_k = key[-1]
+            if _is_ndarray(_last_k):
+                _ldt = getattr(_last_k, '_dtype', None)
+                if (_ldt == 'bool' or _ldt is _py_bool) and _last_k.ndim >= 1:
+                    _mshape = tuple(_last_k.shape)
+                    _mk = len(_mshape)
+                    _n_dim = len(self.shape)
+                    if (_mk <= _n_dim and len(key) - 1 == _n_dim - _mk and
+                            _mshape == tuple(self.shape)[_n_dim - _mk:] and
+                            builtins.all(
+                                isinstance(x, slice) or
+                                (isinstance(x, int) and not isinstance(x, builtins.bool))
+                                for x in key[:-1])):
+                        _lead = key[:_n_dim - _mk]
+                        _sub = self[_lead] if _lead else self
+                        _tidx = [i for i, v in
+                                 enumerate(_last_k.flatten().tolist()) if v]
+                        if _sub.ndim > _mk:
+                            _lsh = _sub.shape[:_sub.ndim - _mk]
+                            _s2 = _sub.reshape(_lsh + (-1,))
+                            return _s2[(slice(None),) * len(_lsh) + (_tidx,)]
+                        return _sub.reshape(-1)[_tidx]
         # np.newaxis (None) 支持：a[np.newaxis, :] / a[:, np.newaxis]
         # 先用去掉 None 的键做常规索引，再在结果的相应输出位置插入 size-1 维度。
         _key_seq = key if isinstance(key, tuple) else (key,)
@@ -8074,7 +8100,7 @@ dtypes = _DTypeNamespace
 
 
 # numpy 兼容：np.dtype 既是类型（isinstance 可用）又可调用（np.dtype('int64')）
-# dtype = DType
+dtype = DType
 
 
 def top_k(a, k, axis=-1, **kwargs):

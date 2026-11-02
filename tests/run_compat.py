@@ -98,7 +98,7 @@ def main(files):
         futures = [ex.submit(run_one, n) for n in nodeids]
         for i, fut in enumerate(cf.as_completed(futures), 1):
             status, nodeid = fut.result()
-            key = status if status in tally else "error"
+            # key = status if status in tally else "error"
             if status in tally:
                 tally[status] += 1
             else:

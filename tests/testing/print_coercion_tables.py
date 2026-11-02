@@ -21,6 +21,7 @@ class GenericObject:
 
     dtype = np.dtype('O')
 
+
 def print_cancast_table(ntypes):
     print('X', end=' ')
     for char in ntypes:
@@ -41,6 +42,7 @@ def print_cancast_table(ntypes):
                 cast = " "
             print(cast, end=' ')
         print()
+
 
 def print_coercion_table(ntypes, inputfirstvalue, inputsecondvalue, firstarray,
                          use_promote_types=False):
@@ -103,8 +105,8 @@ def print_new_cast_table(*, can_cast=True, legacy=False, flags=False):
     flags_table = {
         0: "▗", 7: "█",
         1: "▚", 2: "▐", 4: "▄",
-                3: "▜", 5: "▙",
-                        6: "▟",
+        3: "▜", 5: "▙",
+        6: "▟",
     }
 
     cast_info = namedtuple("cast_info", ["can_cast", "legacy", "flags"])

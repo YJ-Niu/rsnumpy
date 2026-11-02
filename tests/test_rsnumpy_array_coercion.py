@@ -147,8 +147,8 @@ def is_parametric_dtype(dtype):
 
 class TestStringDiscovery:
     @pytest.mark.parametrize("obj",
-            [object(), 1.2, 10**43, None, "string"],
-            ids=["object", "1.2", "10**43", "None", "string"])
+                             [object(), 1.2, 10**43, None, "string"],
+                             ids=["object", "1.2", "10**43", "None", "string"])
     def test_basic_stringlength(self, obj):
         length = len(str(obj))
         expected = np.dtype(f"S{length}")
@@ -167,8 +167,8 @@ class TestStringDiscovery:
         assert arr.astype(type(np.dtype("S"))).dtype == expected
 
     @pytest.mark.parametrize("obj",
-            [object(), 1.2, 10**43, None, "string"],
-            ids=["object", "1.2", "10**43", "None", "string"])
+                             [object(), 1.2, 10**43, None, "string"],
+                             ids=["object", "1.2", "10**43", "None", "string"])
     def test_nested_arrays_stringlength(self, obj):
         length = len(str(obj))
         expected = np.dtype(f"S{length}")
@@ -252,7 +252,7 @@ class TestScalarDiscovery:
                 dt1, dt2 = sc1.dtype, sc2.dtype
                 expected_dtype = np.promote_types(dt1, dt2)
                 assert arr.dtype == expected_dtype
-            except TypeError as e:
+            except TypeError:
                 # Will currently always go to object dtype
                 assert arr.dtype == np.dtype("O")
 
@@ -370,8 +370,8 @@ class TestScalarDiscovery:
 
     @pytest.mark.parametrize("dtype", np.typecodes["Integer"])
     @pytest.mark.parametrize(["scalar", "error"],
-            [(np.float64(np.nan), ValueError),
-             (np.array(-1).astype(np.ulonglong)[()], OverflowError)])
+                             [(np.float64(np.nan), ValueError),
+                             (np.array(-1).astype(np.ulonglong)[()], OverflowError)])
     def test_scalar_to_int_coerce_does_not_cast(self, dtype, scalar, error):
         """
         Signed integers are currently different in that they do not cast other
@@ -397,8 +397,8 @@ class TestScalarDiscovery:
 class TestTimeScalars:
     @pytest.mark.parametrize("dtype", [np.int64, np.float32])
     @pytest.mark.parametrize("scalar",
-            [param(np.timedelta64(123, "s"), id="timedelta64[s]"),
-             param(np.datetime64(1, "D"), id="datetime64[D]")],)
+                             [param(np.timedelta64(123, "s"), id="timedelta64[s]"),
+                              param(np.datetime64(1, "D"), id="datetime64[D]")],)
     def test_coercion_basic(self, dtype, scalar):
         # Note the `[scalar]` is there because np.array(scalar) uses stricter
         # `scalar.__int__()` rules for backward compatibility right now.
@@ -432,7 +432,7 @@ class TestTimeScalars:
 
     @pytest.mark.parametrize("dtype", [np.int64, np.float32])
     @pytest.mark.parametrize("value, unit",
-            [param(12, "generic", id="timedelta64[generic]")])
+                             [param(12, "generic", id="timedelta64[generic]")])
     def test_coercion_generic_timedelta_convert_to_number(self, dtype, value, unit):
         with pytest.warns(
             DeprecationWarning,
@@ -449,11 +449,12 @@ class TestTimeScalars:
 
     @pytest.mark.parametrize("dtype", ["S6", "U6"])
     @pytest.mark.parametrize(["val", "unit"],
-            [param(123, "s", id="[s]"), param(123, "D", id="[D]")])
+                             [param(123, "s", id="[s]"),
+                              param(123, "D", id="[D]")])
     def test_coercion_assignment_datetime(self, val, unit, dtype):
         # String from datetime64 assignment is currently special cased to
         # never use casting.  This is because casting will error in this
-        # case, and traditionally in most cases the behaviour is maintained
+        # case, and traditionally in most cases the behaviour is
         # like this.  (`np.array(scalar, dtype="U6")` would have failed before)
         # TODO: This discrepancy _should_ be resolved, either by relaxing the
         #       cast, or by deprecating the first part.
@@ -474,7 +475,8 @@ class TestTimeScalars:
             np.array(scalar).astype(dtype)
 
     @pytest.mark.parametrize(["val", "unit"],
-            [param(123, "s", id="[s]"), param(123, "D", id="[D]")])
+                             [param(123, "s", id="[s]"),
+                              param(123, "D", id="[D]")])
     def test_coercion_assignment_timedelta(self, val, unit):
         scalar = np.timedelta64(val, unit)
 
@@ -486,6 +488,7 @@ class TestTimeScalars:
         expected = scalar.astype("S")[:6]
         assert cast[()] == expected
         assert ass[()] == expected
+
 
 class TestNested:
     def test_nested_simple(self):
@@ -509,13 +512,13 @@ class TestNested:
 
     def test_pathological_self_containing(self):
         # Test that this also works for two nested sequences
-        l = []
-        l.append(l)
-        arr = np.array([l, l, l], dtype=object)
+        l_ = []
+        l_.append(l_)
+        arr = np.array([l_, l_, l_], dtype=object)
         assert arr.shape == (3,) + (1,) * (ncu.MAXDIMS - 1)
 
         # Also check a ragged case:
-        arr = np.array([l, [None], l], dtype=object)
+        arr = np.array([l_, [None], l_], dtype=object)
         assert arr.shape == (3, 1)
 
     @pytest.mark.parametrize("arraylike", arraylikes())
@@ -738,7 +741,7 @@ class TestArrayLikes:
                 np.array([arr])
 
     @pytest.mark.parametrize("attribute",
-        ["__array_interface__", "__array__", "__array_struct__"])
+                             ["__array_interface__", "__array__", "__array_struct__"])
     @pytest.mark.parametrize("error", [RecursionError, MemoryError])
     def test_bad_array_like_attributes(self, attribute, error):
         # RecursionError and MemoryError are considered fatal. All errors
@@ -920,7 +923,8 @@ def test_empty_string():
 
 @pytest.mark.parametrize("dtype", ["S", "U", object])
 @pytest.mark.parametrize("res_dt,hug_val",
-    [("float16", "1e30"), ("float32", "1e200")])
+                         [("float16", "1e30"),
+                          ("float32", "1e200")])
 def test_string_to_float_coercion_errors(dtype, res_dt, hug_val):
     # This test primarily tests setitem
     val = np.array(["3M"], dtype=dtype)[0]  # use the scalar

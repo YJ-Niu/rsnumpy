@@ -79,6 +79,7 @@ def get_overridable_numpy_array_functions():
     from rsnumpy.lib import recfunctions  # noqa: F401
     return _array_functions.copy()
 
+
 def allows_array_function_override(func):
     """Determine if a rsnumpy function can be overridden via `__array_function__`
 

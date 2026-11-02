@@ -29,12 +29,12 @@ class NpzFile:
     """用于表示加载的 .npz 文件的类。"""
     def __init__(self, data):
         self._data = data
-    
+
     @property
     def files(self):
         """返回文件中所有数组的名称列表。"""
         return list(self._data.keys())
-    
+
     def __getitem__(self, key):
         """通过键名获取数组。"""
         return self._data[key]

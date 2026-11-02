@@ -20,6 +20,7 @@ def _f(x):
     return out
 
 
+@pytest.mark.slow
 def test_comparison_ops():
     a = np.array([1.0, 2.0, 3.0])
     b = np.array([2.0, 2.0, 2.0])
@@ -29,6 +30,7 @@ def test_comparison_ops():
     assert _f(a >= b) == [0.0, 1.0, 1.0]
 
 
+@pytest.mark.slow
 def test_eq_ne():
     a = np.array([1.0, 2.0, 3.0])
     c = np.array([1.0, 0.0, 3.0])
@@ -36,6 +38,7 @@ def test_eq_ne():
     assert _f(a != c) == [0.0, 1.0, 0.0]
 
 
+@pytest.mark.slow
 def test_all_any():
     assert bool(np.array([1.0, 2.0]).all()) is True
     assert bool(np.array([0.0, 1.0]).all()) is False
@@ -43,6 +46,7 @@ def test_all_any():
     assert bool(np.array([0.0, 1.0]).any()) is True
 
 
+@pytest.mark.slow
 def test_isnan_isfinite():
     a = np.array([1.0, float("nan"), 3.0])
     assert _f(np.isnan(a)) == [0.0, 1.0, 0.0]

@@ -680,12 +680,12 @@ def isreal(x):
     if imag_data is None:
         return np.array(_map_nested(lambda v: True, arr.tolist()), dtype="bool")
     imag_list = imag_data.tolist()
-    
+
     def check_zero(val):
         if isinstance(val, (list, tuple)):
             return [check_zero(v) for v in val]
         return abs(val) < 1e-15
-    
+
     return np.array(check_zero(imag_list), dtype="bool")
 
 
@@ -699,12 +699,12 @@ def iscomplex(x):
     if imag_data is None:
         return np.array(_map_nested(lambda v: False, arr.tolist()), dtype="bool")
     imag_list = imag_data.tolist()
-    
+
     def check_nonzero(val):
         if isinstance(val, (list, tuple)):
             return [check_nonzero(v) for v in val]
         return abs(val) >= 1e-15
-    
+
     return np.array(check_nonzero(imag_list), dtype="bool")
 
 
@@ -3302,9 +3302,9 @@ def einsum(subscripts, *operands, **kwargs):
                                 self._arr[i, j, j] = value
                 else:
                     raise NotImplementedError('Complex slice assignment not supported')
-        
+
         return _DiagView(arr, result)
-    
+
     if subscripts == 'ijj->ij,':
         arr = _asarray(operands[0])
         n, m, _ = arr.shape

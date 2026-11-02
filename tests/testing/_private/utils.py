@@ -24,6 +24,7 @@ from io import StringIO
 from tempfile import mkdtemp, mkstemp
 from unittest.case import SkipTest
 from warnings import WarningMessage
+import unittest
 
 import rsnumpy as np
 try:
@@ -54,7 +55,7 @@ __all__ = [
         'suppress_warnings', 'assert_array_compare',
         'assert_no_gc_cycles', 'break_cycles', 'HAS_LAPACK64', 'HAS_SUBPROCESSES',
         'IS_PYSTON', 'IS_MUSL', 'check_support_sve', 'NOGIL_BUILD',
-        'IS_EDITABLE', 'IS_INSTALLED', 'NUMPY_ROOT', 'run_threaded', 'IS_64BIT',
+        'IS_EDITABLE', 'IS_INSTALLED', 'RSNUMPY_ROOT', 'run_threaded', 'IS_64BIT',
         'BLAS_SUPPORTS_FPE',
         ]
 
@@ -80,7 +81,7 @@ else:
     )
 
 
-NUMPY_ROOT = pathlib.Path(np.__file__).parent
+RSNUMPY_ROOT = pathlib.Path(np.__file__).parent
 
 try:
     np_dist = importlib.metadata.distribution('numpy')
@@ -109,7 +110,7 @@ else:
     # might already be installed on the environment, causing us to find its
     # metadata, even though we are not actually loading that package.
     # Work around this issue by checking if the rsnumpy root matches.
-    if not IS_EDITABLE and np_dist.locate_file('numpy') != rsnumpy_ROOT:
+    if not IS_EDITABLE and np_dist.locate_file('numpy') != RSNUMPY_ROOT:
         IS_INSTALLED = False
 
 IS_WASM = platform.machine() in ["wasm32", "wasm64"]
@@ -144,6 +145,7 @@ IS_64BIT = np.dtype(np.intp).itemsize == 8
 LONG_DOUBLE_IS_IBM_DOUBLE_DOUBLE = (platform.machine().startswith("ppc")
                                     and str(np.finfo(np.longdouble).max)
                                     == "1.79769313486231580793728971405301e+308")
+
 
 def assert_(val, msg=''):
     """
@@ -211,8 +213,8 @@ elif sys.platform[:5] == 'linux':
         _proc_pid_stat = _proc_pid_stat or f'/proc/{os.getpid()}/stat'
         try:
             with open(_proc_pid_stat, encoding='utf-8') as f:
-                l = f.readline().split(' ')
-            return int(l[22])
+                l_stat = f.readline().split(' ')
+            return int(l_stat[22])
         except Exception:
             return
 else:
@@ -240,8 +242,8 @@ if sys.platform[:5] == 'linux':
             _load_time.append(time.time())
         try:
             with open(_proc_pid_stat, encoding='utf-8') as f:
-                l = f.readline().split(' ')
-            return int(l[13])
+                l_jiffies = f.readline().split(' ')
+            return int(l_jiffies[13])
         except Exception:
             return int(100 * (time.time() - _load_time[0]))
 else:
@@ -806,7 +808,7 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
         result = x == y
         if not hasattr(result, "all") or not callable(result.all):
             result = np.bool(result)
-        return result.all() != True
+        return not result.all()
 
     def func_assert_same_pos(x, y, func=isnan, hasval='nan'):
         """Handling nan/inf.
@@ -888,7 +890,8 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
             if equal_inf:
                 # If equal_nan=True, skip comparing nans below for equality if they are
                 # also infs (e.g. inf+nanj) since that would always fail.
-                isinf_func = lambda xy: np.logical_and(np.isinf(xy), np.invert(flagged))
+                def isinf_func(xy):
+                    return np.logical_and(np.isinf(xy), np.invert(flagged))
                 infs_mask = func_assert_same_pos(
                     x, y,
                     func=isinf_func,
@@ -931,7 +934,7 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
         # results, for which val.ravel().all() returns np.ma.masked,
         # do not trigger a failure (np.ma.masked != True evaluates as
         # np.ma.masked, which is falsy).
-        if cond != True:
+        if not cond:
             n_mismatch = reduced.size - reduced.sum(dtype=intp)
             n_elements = flagged.size if flagged.ndim != 0 else reduced.size
             percent_mismatch = 100 * n_mismatch / n_elements
@@ -1253,8 +1256,8 @@ def assert_array_almost_equal(actual, desired, decimal=6, err_msg='',
         return z < 1.5 * 10.0**(-decimal)
 
     assert_array_compare(compare, actual, desired, err_msg=err_msg, verbose=verbose,
-             header=f'Arrays are not almost equal to {decimal} decimals',
-             precision=decimal)
+                         header=f'Arrays are not almost equal to {decimal} decimals',
+                         precision=decimal)
 
 
 def assert_array_less(x, y, err_msg='', verbose=True, *, strict=False):
@@ -1423,23 +1426,23 @@ def assert_string_equal(actual, desired):
         if d1.startswith('  '):
             continue
         if d1.startswith('- '):
-            l = [d1]
+            l_diff = [d1]
             d2 = diff.pop(0)
             if d2.startswith('? '):
-                l.append(d2)
+                l_diff.append(d2)
                 d2 = diff.pop(0)
             if not d2.startswith('+ '):
                 raise AssertionError(repr(d2))
-            l.append(d2)
+            l_diff.append(d2)
             if diff:
                 d3 = diff.pop(0)
                 if d3.startswith('? '):
-                    l.append(d3)
+                    l_diff.append(d3)
                 else:
                     diff.insert(0, d3)
             if d2[2:] == d1[2:]:
                 continue
-            diff_list.extend(l)
+            diff_list.extend(l_diff)
             continue
         raise AssertionError(repr(d1))
     if not diff_list:
@@ -1520,7 +1523,6 @@ def check_support_sve(__cache=[]):
 #
 # assert_raises and assert_raises_regex are taken from unittest.
 #
-import unittest
 
 
 class _Dummy(unittest.TestCase):
@@ -1688,7 +1690,7 @@ def _assert_valid_refcount(op):
     try:
         rc = sys.getrefcount(i)
         for j in range(15):
-            d = op(b, c)
+            op(b, c)
         assert_(sys.getrefcount(i) >= rc)
     finally:
         gc.enable()
@@ -1795,7 +1797,7 @@ def assert_allclose(actual, desired, rtol=1e-7, atol=0, equal_nan=True,
 
     def compare(x, y):
         return np._core.numeric.isclose(x, y, rtol=rtol, atol=atol,
-                                       equal_nan=equal_nan)
+                                        equal_nan=equal_nan)
 
     actual, desired = np.asanyarray(actual), np.asanyarray(desired)
     if isinstance(atol, np.timedelta64):
@@ -2024,9 +2026,9 @@ def integer_repr(x):
 def _assert_warns_context(warning_class, name=None):
     __tracebackhide__ = True  # Hide traceback for py.test
     with suppress_warnings(_warn=False) as sup:
-        l = sup.record(warning_class)
+        warnings = sup.record(warning_class)
         yield
-        if not len(l) > 0:
+        if not len(warnings) > 0:
             name_str = f' when calling {name}' if name is not None else ''
             raise AssertionError("No warning raised" + name_str)
 
@@ -2103,12 +2105,12 @@ def assert_warns(warning_class, *args, **kwargs):
 @contextlib.contextmanager
 def _assert_no_warnings_context(name=None):
     __tracebackhide__ = True  # Hide traceback for py.test
-    with warnings.catch_warnings(record=True) as l:
+    with warnings.catch_warnings(record=True) as l_w:
         warnings.simplefilter('always')
         yield
-        if len(l) > 0:
+        if len(l_w) > 0:
             name_str = f' when calling {name}' if name is not None else ''
-            raise AssertionError(f'Got warnings{name_str}: {[e.message for e in l]}')
+            raise AssertionError(f'Got warnings{name_str}: {[e.message for e in l_w]}')
 
 
 def assert_no_warnings(*args, **kwargs):
@@ -2175,7 +2177,7 @@ def _gen_alignment_data(dtype=float32, type='binary', max_size=24):
     for o in range(3):
         for s in range(o + 2, max(o + 3, max_size)):
             if type == 'unary':
-                inp = lambda: arange(s, dtype=dtype)[o:]
+                inp = lambda: arange(s, dtype=dtype)[o:]  # noqa E731
                 out = empty((s,), dtype=dtype)[o:]
                 yield out, inp(), ufmt % (o, o, s, dtype, 'out of place')
                 d = inp()
@@ -2189,8 +2191,8 @@ def _gen_alignment_data(dtype=float32, type='binary', max_size=24):
                 yield inp()[1:], inp()[:-1], ufmt % \
                     (o + 1, o, s - 1, dtype, 'aliased')
             if type == 'binary':
-                inp1 = lambda: arange(s, dtype=dtype)[o:]
-                inp2 = lambda: arange(s, dtype=dtype)[o:]
+                inp1 = lambda: arange(s, dtype=dtype)[o:]  # noqa E731
+                inp2 = lambda: arange(s, dtype=dtype)[o:]  # noqa E731
                 out = empty((s,), dtype=dtype)[o:]
                 yield out, inp1(), inp2(), bfmt % \
                     (o, o, o, s, dtype, 'out of place')
@@ -2838,7 +2840,7 @@ def _get_glibc_version():
 
 
 _glibcver = _get_glibc_version()
-_glibc_older_than = lambda x: (_glibcver != '0.0' and _glibcver < x)
+_glibc_older_than = lambda x: (_glibcver != '0.0' and _glibcver < x)  # noqa E731
 
 
 def run_threaded(func, max_workers=8, pass_count=False,

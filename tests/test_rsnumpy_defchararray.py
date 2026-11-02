@@ -90,6 +90,7 @@ class TestBasic:
         assert_equal(A.itemsize, 4)
         assert_(issubclass(A.dtype.type, np.str_))
 
+
 class TestVecString:
     def test_non_existent_method(self):
 
@@ -140,6 +141,7 @@ class TestVecString:
 
         assert_raises(ValueError, fail)
 
+
 @ignore_charray_deprecation
 class TestWhitespace:
     def test1(self):
@@ -154,12 +156,14 @@ class TestWhitespace:
         assert_(not np.any(A < B))
         assert_(not np.any(A != B))
 
+
 @ignore_charray_deprecation
 class TestChar:
     def test_it(self):
         A = np.array('abc1', dtype='c').view(np.char.chararray)
         assert_equal(A.shape, (4,))
         assert_equal(A.upper()[:2].tobytes(), b'AB')
+
 
 @ignore_charray_deprecation
 class TestComparisons:
@@ -208,6 +212,7 @@ class TestComparisons:
         assert_(isinstance(out1, np.ndarray))
         assert_(isinstance(out2, np.ndarray))
 
+
 @ignore_charray_deprecation
 class TestComparisonsMixed1(TestComparisons):
     """Ticket #1276"""
@@ -217,6 +222,7 @@ class TestComparisonsMixed1(TestComparisons):
             [['efg', 'efg', '123  '],
              ['051', 'efgg', 'tuv']], np.str_).view(np.char.chararray)
 
+
 @ignore_charray_deprecation
 class TestComparisonsMixed2(TestComparisons):
     """Ticket #1276"""
@@ -225,6 +231,7 @@ class TestComparisonsMixed2(TestComparisons):
         return np.array(
             [['abc', 'abcc', '123'],
              ['789', 'abc', 'xyz']], np.str_).view(np.char.chararray)
+
 
 @ignore_charray_deprecation
 class TestInformation:
@@ -284,8 +291,7 @@ class TestInformation:
         assert_array_equal(A.find([encode('1'), encode('P')]),
                            [[-1, -1], [0, -1], [0, 1]])
         C = (np.array(['ABCDEFGHIJKLMNOPQRSTUVWXYZ',
-                       '01234567890123456789012345'])
-                       .view(np.char.chararray)).astype(dtype)
+                       '01234567890123456789012345']).view(np.char.chararray)).astype(dtype)
         assert_array_equal(C.find(encode('M')), [12, -1])
 
     def test_index(self):
@@ -368,13 +374,13 @@ class TestInformation:
 
         assert_raises(TypeError, fail)
 
+
 @ignore_charray_deprecation
 class TestMethods:
     def A(self):
         return np.array([[' abc ', ''],
                          ['12345', 'MixedCase'],
-                         ['123 \t 345 \0 ', 'UPPER']],
-                         dtype='S').view(np.char.chararray)
+                         ['123 \t 345 \0 ', 'UPPER']], dtype='S').view(np.char.chararray)
 
     def B(self):
         return np.array([[' \u03a3 ', ''],
@@ -499,7 +505,7 @@ class TestMethods:
     def test_replace(self):
         A = self.A()
         R = A.replace([b'3', b'a'],
-                           [b'##########', b'@'])
+                      [b'##########', b'@'])
         tgt = [[b' abc ', b''],
                [b'12##########45', b'MixedC@se'],
                [b'12########## \t ##########45 \x00 ', b'UPPER']]
@@ -704,6 +710,7 @@ class TestMethods:
         assert_array_equal(B.isdecimal(), [
                 [False, False], [True, False], [False, False]])
 
+
 @ignore_charray_deprecation
 class TestOperations:
     def A(self):
@@ -811,6 +818,7 @@ class TestOperations:
         # or does not have length 0.
         assert_equal(a[1], a.dtype.type())
 
+
 class TestMethodsEmptyArray:
     def test_encode(self):
         res = np.char.encode(np.array([], dtype='U'))
@@ -825,6 +833,7 @@ class TestMethodsEmptyArray:
     def test_decode_with_reshape(self):
         res = np.char.decode(np.array([], dtype='S').reshape((1, 0, 1)))
         assert_(res.shape == (1, 0, 1))
+
 
 class TestMethodsScalarValues:
     def test_mod(self):
@@ -869,6 +878,7 @@ class TestMethodsScalarValues:
     def test_replace(self):
         assert_equal(np.char.replace('Python is good', 'good', 'great'),
                      'Python is great')
+
 
 @ignore_charray_deprecation
 def test_empty_indexing():

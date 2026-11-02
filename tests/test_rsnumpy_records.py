@@ -24,7 +24,7 @@ from rsnumpy.testing._private.utils import requires_memory
 class TestFromrecords:
     def test_fromrecords(self):
         r = np.rec.fromrecords([[456, 'dbe', 1.2], [2, 'de', 1.3]],
-                            names='col1,col2,col3')
+                               names='col1,col2,col3')
         assert_equal(r[0].item(), (456, 'dbe', 1.2))
         assert_equal(r['col1'].dtype.kind, 'i')
         assert_equal(r['col2'].dtype.kind, 'U')
@@ -192,8 +192,8 @@ class TestFromrecords:
 
         record = arr_0d[()]
         assert_equal(repr(record),
-            "np.record((1, 2.0, '2003'), "
-            "dtype=[('f0', '<i4'), ('f1', '<f8'), ('f2', '<M8[Y]')])")
+                     "np.record((1, 2.0, '2003'), "
+                     "dtype=[('f0', '<i4'), ('f1', '<f8'), ('f2', '<M8[Y]')])")
         # 1.13 converted to python scalars before the repr
         try:
             np.set_printoptions(legacy='1.13')
@@ -305,8 +305,8 @@ class TestFromrecords:
 
     def test_recarray_conflict_fields(self):
         ra = np.rec.array([(1, 'abc', 2.3), (2, 'xyz', 4.2),
-                        (3, 'wrs', 1.3)],
-                       names='field, shape, mean')
+                          (3, 'wrs', 1.3)],
+                          names='field, shape, mean')
         ra.mean = [1.1, 2.2, 3.3]
         assert_array_almost_equal(ra['mean'], [1.1, 2.2, 3.3])
         assert_(type(ra.mean) is type(ra.var))
@@ -322,7 +322,7 @@ class TestFromrecords:
 
     def test_fromrecords_with_explicit_dtype(self):
         a = np.rec.fromrecords([(1, 'a'), (2, 'bbb')],
-                                dtype=[('a', int), ('b', object)])
+                               dtype=[('a', int), ('b', object)])
         assert_equal(a.a, [1, 2])
         assert_equal(a[0].a, 1)
         assert_equal(a.b, ['a', 'bbb'])
@@ -404,8 +404,8 @@ class TestPathUsage:
 class TestRecord:
     def _create_data(self):
         return np.rec.fromrecords([(1, 2, 3), (4, 5, 6)],
-                            dtype=[("col1", "<i4"),
-                                   ("col2", "<i4"),
+                                  dtype=[("col1", "<i4"),
+                                  ("col2", "<i4"),
                                    ("col3", "<i4")])
 
     def test_assignment1(self):
@@ -528,7 +528,8 @@ class TestRecord:
             np.arange(10),
             np.ones(10, dtype=[('a', '<u2'), ('b', '<f4')]),
         ]
-        arr = np.rec.fromarrays(arrays)  # ValueError?
+        with assert_raises(ValueError):
+            np.rec.fromarrays(arrays)  # ValueError?
 
     @pytest.mark.parametrize('nfields', [0, 1, 2])
     def test_assign_dtype_attribute(self, nfields):

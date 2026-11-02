@@ -747,7 +747,7 @@ def _parse_dict_dtype(d, align):
         titles = d.get('titles', None)
         aligned = align or bool(d.get('aligned', False))
         return _build_struct(names, formats, offsets, itemsize, titles, aligned)
-    
+
     # 字典推导：一次提取 (name, typ, offset, title) 四元组
     def _parse_dict_item(name, spec):
         typ = spec[0]

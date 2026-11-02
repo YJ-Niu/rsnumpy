@@ -6,6 +6,7 @@ import rsnumpy as np
 
 _VT_co = TypeVar("_VT_co", default=object, covariant=True)
 
+
 # undocumented
 class GenericObject(Generic[_VT_co]):
     dtype: ClassVar[np.dtype[np.object_]] = ...
@@ -15,7 +16,10 @@ class GenericObject(Generic[_VT_co]):
     def __add__(self, other: object, /) -> Self: ...
     def __radd__(self, other: object, /) -> Self: ...
 
+
 def print_cancast_table(ntypes: Iterable[str]) -> None: ...
+
+
 def print_coercion_table(
     ntypes: Iterable[str],
     inputfirstvalue: int,

@@ -16,20 +16,24 @@ def _f(x):
     return out
 
 
+@pytest.mark.slow
 def _scalar(x):
     """Coerce a 0-dim array / scalar index result to a Python scalar."""
     return x.tolist() if hasattr(x, "tolist") else x
 
-
+    
+@pytest.mark.slow
 def test_getitem_slice():
     assert _f(np.array([10.0, 20.0, 30.0, 40.0])[1:3]) == [20.0, 30.0]
 
 
+@pytest.mark.slow
 def test_getitem_negative_scalar():
     assert _scalar(np.array([10.0, 20.0, 30.0])[-1]) == 30.0
     assert _scalar(np.array([10.0, 20.0, 30.0])[-3]) == 10.0
 
 
+@pytest.mark.slow
 def test_getitem_2d_row_and_element():
     m = np.array([[1.0, 2.0], [3.0, 4.0]])
     assert _f(m[1]) == [3.0, 4.0]

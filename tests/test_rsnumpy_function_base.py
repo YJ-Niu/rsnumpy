@@ -36,6 +36,7 @@ def _is_armhf():
     architecture = platform.architecture()
     return platform.machine().startswith('arm') and architecture[0] == '32bit'
 
+
 class PhysicalQuantity(float):
     def __new__(cls, value):
         return float.__new__(cls, value)
@@ -82,8 +83,7 @@ class PhysicalQuantity2(ndarray):
         args = [np.asarray(a) for a in args]
 
         res = super().__array_ufunc__(ufunc, method, *args, **kwargs)
-        if ((dtype := getattr(res, "dtype", None)) is not None
-            and dtype.kind != "b"):
+        if ((dtype := getattr(res, "dtype", None)) is not None and dtype.kind != "b"):
             res = res[...].view(PhysicalQuantity2)
         return res
 
@@ -288,8 +288,8 @@ class TestGeomspace:
         y = np.exp(1j * (np.pi - .1)) * x
         z = np.geomspace(x, y, 5)
         expected = np.array([1.2 + 3.4j, -1.47384 + 3.2905616j,
-                        -3.33577588 + 1.36842949j, -3.36011056 - 1.30753855j,
-                        -1.53343861 - 3.26321406j])
+                            -3.33577588 + 1.36842949j, -3.36011056 - 1.30753855j,
+                            -1.53343861 - 3.26321406j])
         np.testing.assert_array_almost_equal(z, expected)
 
     def test_dtype(self):

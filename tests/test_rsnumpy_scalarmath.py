@@ -66,7 +66,7 @@ class TestTypes:
         for k, atype in enumerate(types):
             a_scalar = atype(3)
             a_array = np.array([3], dtype=atype)
-            for l, btype in enumerate(types):
+            for l_, btype in enumerate(types):
                 b_scalar = btype(1)
                 b_array = np.array([1], dtype=btype)
                 c_scalar = a_scalar + b_scalar
@@ -79,7 +79,7 @@ class TestTypes:
                 # does not produce properly symmetric results...
                 assert_equal(c_scalar.dtype, c_array.dtype,
                              f"error with types ({k}/{np.dtype(atype).char!r} + "
-                             f"{l}/{np.dtype(btype).char!r})")
+                             f"{l_}/{np.dtype(btype).char!r})")
 
     def test_type_create(self):
         for atype in types:
@@ -286,7 +286,8 @@ class TestPower:
         a = 5
         b = 4
         c = 10
-        expected = pow(a, b, c)
+        with assert_raises(ValueError):
+            pow(a, b, c)
         for t in (np.int32, np.float32, np.complex64):
             # note that 3-operand power only dispatches on the first argument
             assert_raises(TypeError, operator.pow, t(a), b, c)
@@ -387,8 +388,8 @@ class TestModulus:
                 rem = operator.mod(fone, fzer)
                 assert_(np.isnan(rem), f'dt: {dt}')
                 # MSVC 2008 returns NaN here, so disable the check.
-                #rem = operator.mod(fone, finf)
-                #assert_(rem == fone, 'dt: %s' % dt)
+                # rem = operator.mod(fone, finf)
+                # assert_(rem == fone, 'dt: %s' % dt)
                 rem = operator.mod(fone, fnan)
                 assert_(np.isnan(rem), f'dt: {dt}')
                 rem = operator.mod(finf, fone)
@@ -403,9 +404,9 @@ class TestModulus:
         # promotes to float which does not fit
         a = np.array([1, 2], np.int64)
         b = np.array([1, 2], np.uint64)
-        with pytest.raises(TypeError,
-                match=r"Cannot cast ufunc 'floor_divide' output from"):
+        with assert_raises(TypeError, match=r"Cannot cast ufunc 'floor_divide' output from"):
             a //= b
+
 
 class TestComparison:
     def test_comparison_different_types(self):
@@ -441,14 +442,14 @@ class TestComplexDivision:
                 # tupled (numerator, denominator, expected)
                 # for testing as expected == numerator/denominator
                 data = (
-                    (( 0.0, -1.0), ( 0.0, 1.0), (-1.0, -0.0)),
-                    (( 0.0, -1.0), ( 0.0, -1.0), ( 1.0, -0.0)),
-                    (( 0.0, -1.0), (-0.0, -1.0), ( 1.0, 0.0)),
-                    (( 0.0, -1.0), (-0.0, 1.0), (-1.0, 0.0)),
-                    (( 0.0, 1.0), ( 0.0, -1.0), (-1.0, 0.0)),
-                    (( 0.0, -1.0), ( 0.0, -1.0), ( 1.0, -0.0)),
-                    ((-0.0, -1.0), ( 0.0, -1.0), ( 1.0, -0.0)),
-                    ((-0.0, 1.0), ( 0.0, -1.0), (-1.0, -0.0))
+                    ((0.0, -1.0), (0.0, 1.0), (-1.0, -0.0)),
+                    ((0.0, -1.0), (0.0, -1.0), (1.0, -0.0)),
+                    ((0.0, -1.0), (-0.0, -1.0), (1.0, 0.0)),
+                    ((0.0, -1.0), (-0.0, 1.0), (-1.0, 0.0)),
+                    ((0.0, 1.0), (0.0, -1.0), (-1.0, 0.0)),
+                    ((0.0, -1.0), (0.0, -1.0), (1.0, -0.0)),
+                    ((-0.0, -1.0), (0.0, -1.0), (1.0, -0.0)),
+                    ((-0.0, 1.0), (0.0, -1.0), (-1.0, -0.0))
                 )
                 for cases in data:
                     n = cases[0]
@@ -469,7 +470,7 @@ class TestComplexDivision:
 
                 # trigger branch: real(fabs(denom)) > imag(fabs(denom))
                 # followed by else condition as neither are == 0
-                data.append((( 2.0, 1.0), ( 2.0, 1.0), (1.0, 0.0)))
+                data.append(((2.0, 1.0), (2.0, 1.0), (1.0, 0.0)))
 
                 # trigger branch: real(fabs(denom)) > imag(fabs(denom))
                 # followed by if condition as both are == 0
@@ -491,13 +492,13 @@ class TestComplexDivision:
 
 class TestConversion:
     def test_int_from_long(self):
-        l = [1e6, 1e12, 1e18, -1e6, -1e12, -1e18]
+        l_ = [1e6, 1e12, 1e18, -1e6, -1e12, -1e18]
         li = [10**6, 10**12, 10**18, -10**6, -10**12, -10**18]
         for T in [None, np.float64, np.int64]:
-            a = np.array(l, dtype=T)
+            a = np.array(l_, dtype=T)
             assert_equal([int(_m) for _m in a], li)
 
-        a = np.array(l[:3], dtype=np.uint64)
+        a = np.array(l_[:3], dtype=np.uint64)
         assert_equal([int(_m) for _m in a], li[:3])
 
     def test_iinfo_long_values(self):
@@ -612,7 +613,7 @@ class TestConversion:
         assert_(np.equal(np.datetime64('NaT', 'D'), None))
 
 
-#class TestRepr:
+# class TestRepr:
 #    def test_repr(self):
 #        for t in types:
 #            val = t(1197346475.0137341)
@@ -742,6 +743,7 @@ class TestNegative:
                 else:
                     assert_equal(operator.neg(a) + a, 0)
 
+
 class TestSubtract:
     def test_exceptions(self):
         a = np.ones((), dtype=np.bool)[()]
@@ -807,11 +809,11 @@ class TestAbs:
             )
         self._test_abs_func(np.abs, dtype)
 
+
 class TestBitShifts:
 
     @pytest.mark.parametrize('type_code', np.typecodes['AllInteger'])
-    @pytest.mark.parametrize('op',
-        [operator.rshift, operator.lshift], ids=['>>', '<<'])
+    @pytest.mark.parametrize('op', [operator.rshift, operator.lshift], ids=['>>', '<<'])
     def test_shift_all_bits(self, type_code, op):
         """Shifts where the shift amount is the width of the type or wider """
         # gh-2449
@@ -986,8 +988,7 @@ def test_scalar_integer_operation_overflow(dtype, operation):
         lambda min, neg_1: -min,
         lambda min, neg_1: abs(min),
         lambda min, neg_1: min * neg_1,
-        pytest.param(lambda min, neg_1: min // neg_1,
-            marks=pytest.mark.skip(reason="broken on some platforms"))],
+        pytest.param(lambda min, neg_1: min // neg_1, marks=pytest.mark.skip(reason="broken on some platforms"))],
         ids=["neg", "abs", "*", "//"])
 def test_scalar_signed_integer_overflow(dtype, operation):
     # The minimum signed integer can "overflow" for some additional operations
@@ -1007,6 +1008,7 @@ def test_scalar_unsigned_integer_overflow(dtype):
 
     zero = np.dtype(dtype).type(0)
     -zero  # does not warn
+
 
 @pytest.mark.parametrize("dtype", np.typecodes["AllInteger"])
 @pytest.mark.parametrize("operation", [
@@ -1113,7 +1115,7 @@ def test_pyscalar_subclasses(subtype, __op__, __rop__, op, cmp):
 
     # When no deferring is indicated, subclasses are handled normally.
     myt = type("myt", (subtype,), {__rop__: rop_func})
-    behaves_like = lambda x: np.array(subtype(x))[()]
+    behaves_like = lambda x: np.array(subtype(x))[()]  # noqa: E731
 
     # Check for float32, as a float subclass float64 may behave differently
     res = op(myt(1), np.float16(2))
@@ -1144,8 +1146,8 @@ def test_truediv_int():
 
 @pytest.mark.slow
 @pytest.mark.parametrize("op",
-    # TODO: Power is a bit special, but here mostly bools seem to behave oddly
-    [op for op in binary_operators_for_scalars if op is not operator.pow])
+                         # TODO: Power is a bit special, but here mostly bools seem to behave oddly
+                         [op for op in binary_operators_for_scalars if op is not operator.pow])
 @pytest.mark.parametrize("sctype", types)
 @pytest.mark.parametrize("other_type", [float, int, complex])
 @pytest.mark.parametrize("rop", [True, False])
@@ -1156,7 +1158,7 @@ def test_scalar_matches_array_op_with_pyscalar(op, sctype, other_type, rop):
 
     if rop:
         _op = op
-        op = lambda x, y: _op(y, x)
+        op = lambda x, y: _op(y, x)  # noqa: E731
 
     try:
         res = op(val1, val2)

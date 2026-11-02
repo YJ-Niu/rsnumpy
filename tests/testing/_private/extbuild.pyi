@@ -4,6 +4,7 @@ from collections.abc import Sequence
 
 __all__ = ["build_and_import_extension", "compile_extension_module"]
 
+
 def build_and_import_extension(
     modname: str,
     functions: Sequence[tuple[str, str, str]],
@@ -14,7 +15,7 @@ def build_and_import_extension(
     more_init: str = "",
 ) -> types.ModuleType: ...
 
-#
+
 def compile_extension_module(
     name: str,
     builddir: pathlib.Path,

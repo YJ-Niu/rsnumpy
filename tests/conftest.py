@@ -38,12 +38,15 @@ import sys
 import types
 import warnings
 
-faulthandler.enable()  # print a Python traceback if a numpy test crashes the C ext
+import contextlib as _ctxlib
+import tempfile as _tempfile
+
 
 import pytest
 import rsnumpy
 import rsnumpy._core as _real_core
 
+faulthandler.enable()  # print a Python traceback if a numpy test crashes the C ext
 
 # ---------------------------------------------------------------------------
 # 1. Alias top-level numpy -> rsnumpy; map real submodules to rsnumpy's.
@@ -458,8 +461,6 @@ for _nm, _mod in (
     setattr(_real_core, _nm, _mod)
 
 # testing 补 temppath/tempdir/requires_memory（records 等移植测试用）
-import contextlib as _ctxlib
-import tempfile as _tempfile
 
 
 @_ctxlib.contextmanager
