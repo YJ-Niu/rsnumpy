@@ -951,9 +951,10 @@ class TestUnique:
         # the result varies depending on the impl of std::unordered_set,
         # so we check them by sorting
 
-        # a1 should have exactly one na_object
+        # numpy 语义：equal_nan=True 时 NA 合并为一个；equal_nan=False 时
+        # 每个 NA 独立（本数据含 6 个 NA）
         count_na = sum(x is na_object for x in a1)
-        assert_equal(count_na, 1)
+        assert_equal(count_na, 1 if equal_nan else 6)
 
         a1_wo_na = sorted(x for x in a1 if x is not na_object)
         assert_array_equal(a1_wo_na, unq_sorted_wo_na)

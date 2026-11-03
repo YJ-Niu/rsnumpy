@@ -33,7 +33,7 @@ _seen = {}     # relpath -> 已出过报告的 nodeid 集合（setup/call/teardo
 _config = None  # pytest.Config（pytest_configure 里保存）
 
 _HEADER = (
-    "# rsnumpy 测试配置: <测试文件> <标志>\n"
+    "# rsnumpy 测试配置: <测试文件> <标志> <passed>/<failed>/<skipped>\n"
     "#   1 = 上次全部通过   0 = 存在 failed/skipped/error（或尚未跑通）\n"
     "# 由 build_wheel.sh 的测试阶段自动维护：每跑完一个文件立即更新（边测边更新），\n"
     "# --test debug 只跑标志为 0 的文件；--test all 全量重建。\n"
@@ -66,6 +66,7 @@ def _cfg_path():
 
 
 def _read_entries(cfg):
+    """entries: rel -> (flag, rest)；rest 是第三列计数（可能为空）。"""
     entries = {}
     if os.path.exists(cfg):
         with open(cfg, encoding="utf-8") as f:
@@ -73,9 +74,10 @@ def _read_entries(cfg):
                 line = line.strip()
                 if not line or line.startswith("#"):
                     continue
-                parts = line.split()
-                if len(parts) == 2 and parts[1] in ("0", "1"):
-                    entries[parts[0]] = parts[1]
+                parts = line.split(None, 2)
+                if len(parts) >= 2 and parts[1] in ("0", "1"):
+                    rest = parts[2] if len(parts) > 2 else ""
+                    entries[parts[0]] = (parts[1], rest)
     return entries
 
 
@@ -84,19 +86,21 @@ def _write_all(cfg, entries):
     with open(tmp, "w", encoding="utf-8") as f:
         f.write(_HEADER)
         for rel in sorted(entries):
-            f.write(f"{rel} {entries[rel]}\n")
+            flag, rest = entries[rel]
+            f.write(f"{rel} {flag}" + (f" {rest}" if rest else "") + "\n")
     os.replace(tmp, cfg)
 
 
 def _flush_file(rel):
-    """立即把单个文件标志写盘（原子替换；中途退出也安全）。"""
+    """立即把单个文件标志写盘（原子替换；中途退出也安全；保留计数列）。"""
     if not _is_controller() or rel not in _status:
         return
     cfg = _cfg_path()
     if not cfg:
         return
     entries = _read_entries(cfg)
-    entries[rel] = "1" if _status[rel] == "passed" else "0"
+    _old = entries.get(rel, ("0", ""))
+    entries[rel] = ("1" if _status[rel] == "passed" else "0", _old[1])
     _write_all(cfg, entries)
 
 
@@ -108,7 +112,8 @@ def _flush_all():
         return
     entries = _read_entries(cfg)
     for rel, outcome in _status.items():
-        entries[rel] = "1" if outcome == "passed" else "0"
+        _old = entries.get(rel, ("0", ""))
+        entries[rel] = ("1" if outcome == "passed" else "0", _old[1])
     _write_all(cfg, entries)
 
 
@@ -130,7 +135,7 @@ def pytest_configure(config):
         for fn in files:
             if fn.startswith("test_") and fn.endswith(".py"):
                 rel = os.path.join(root, fn).replace(os.sep, "/")
-                entries[rel] = "0"
+                entries[rel] = ("0", "0/0/0")
     _write_all(cfg, entries)
 
 

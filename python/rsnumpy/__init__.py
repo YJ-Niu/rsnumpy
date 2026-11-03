@@ -245,8 +245,26 @@ class ndarray:
 
     def __init__(self, data=None, _dtype="float64", _fields=None, _raw_data=None,
                  shape=None, dtype=None, buffer=None, offset=0, strides=None,
-                 order=None):
-        _ = buffer, offset, strides, order
+                 order=None, _na_object=None, _vstring=False):
+        # numpy 兼容的 buffer 视图构造：Subclass(shape, dtype=..., buffer=arr)
+        # —— 第一参是形状而非数据，复用 buffer 的值。
+        if buffer is not None:
+            _buf = buffer if _is_ndarray(buffer) else ndarray(buffer)
+            _vals = _buf.ravel().tolist()
+            if not isinstance(_vals, list):
+                _vals = [_vals]
+            _shp = tuple(data) if isinstance(data, (tuple, list)) else tuple(_buf.shape)
+            _dt = dtype if dtype is not None else _buf._dtype
+            _res = ndarray(_vals, _dtype=_dt)
+            if tuple(getattr(_res, 'shape', ())) != _shp:
+                _res = _res.reshape(_shp)
+            self._array = _res._array
+            self._dtype = _res._dtype
+            self._fields = _res._fields
+            self._raw_data = getattr(_res, '_raw_data', None)
+            self._complex_data = getattr(_res, '_complex_data', None)
+            return
+        _ = offset, strides, order
         # NumPy 的底层构造器 `np.ndarray(shape=(0, 0), dtype=...)`：按形状与
         # 类型造一个数组。rsnumpy 原本只接受数据，这类调用会直接 TypeError。
         # NumPy 此处返回的是未初始化内存；rsnumpy 没有该语义，用零填充，
@@ -356,15 +374,32 @@ class ndarray:
                                 (len(v) for v in _vals), default=0))
                         else:
                             # str 存储（U）：bytes utf-8 解码（numpy 语义），
-                            # 其余非 str 按 str() 转换。
+                            # 其余非 str 按 str() 转换；StringDType（可空字符串）
+                            # 的 NA 对象按身份原样保留（下游需 is 语义）。
+                            def _keep_na(v):
+                                # 可空字符串：NA 类值原样保留（None / 任意浮点
+                                # 型 NaN / na_object 实例），不 str() 字符串化
+                                if not _vstring:
+                                    return False
+                                if v is None or v is _na_object:
+                                    return True
+                                try:
+                                    if v != v:
+                                        return True
+                                except Exception:
+                                    pass
+                                return False
+
                             _vals = [
-                                (v if isinstance(v, str)
-                                 else (v.decode('utf-8', 'surrogateescape')
-                                       if isinstance(v, (bytes, bytearray))
-                                       else str(v)))
+                                v if _keep_na(v)
+                                else (v if isinstance(v, str)
+                                      else (v.decode('utf-8', 'surrogateescape')
+                                            if isinstance(v, (bytes, bytearray))
+                                            else str(v)))
                                 for v in _vals]
                             self._str_dtype = ('U', _py_max(
-                                (len(v) for v in _vals), default=0))
+                                (len(v) if isinstance(v, str) else 0
+                                 for v in _vals), default=0))
                         self._raw_data = _vals
                         # 保留嵌套形状（flat 值数 == 嵌套元素数）：
                         # np.array([["a","b"],["c","d"]], dtype='U') → (2, 2)
@@ -372,6 +407,8 @@ class ndarray:
                                        if _scalar_in
                                        else np.zeros(_nested_shape(data)))
                         _dtype = "string_"
+                        if _vstring:
+                            self._na_object = _na_object
                     elif has_c:
                         # 包含复数 → 交由 Rust 原生复数解析（保留形状与虚部）
                         self._array = np.ndarray(data)
@@ -762,6 +799,11 @@ class ndarray:
         _rd = getattr(self, '_raw_data', None)
         if _rd is not None and builtins.len(_rd) > 0:
             _sk = getattr(getattr(self, 'dtype', None), 'kind', '')
+            if _sk not in ('S', 'U'):
+                # 可空字符串（StringDType）实例无 kind 属性：回退 _str_dtype
+                _sd0 = getattr(self, '_str_dtype', None)
+                if _sd0 is not None:
+                    _sk = _sd0[0]
             if _sk in ('S', 'U'):
                 _sh = self.shape
                 _nd = self.ndim
@@ -784,6 +826,36 @@ class ndarray:
                         _idx = _idx * _d + (_k % _d)
                     if _idx < builtins.len(_rd):
                         return _rd[_idx]
+                # 1-d 负步长切片 / 花式整数索引：Rust 路径对字符串数组返回
+                # 占位值（zeros），从 _raw_data 取值重建（保留可空字符串
+                # 元数据：NA 对象身份与原始 dtype 实例）。
+                if _nd == 1:
+                    _src_na = getattr(self, '_na_object', None)
+                    _src_dobj = getattr(self, '_dtype_obj', None)
+
+                    def _rebuild(_vals):
+                        _res = ndarray(list(_vals), _dtype='string_',
+                                       _na_object=_src_na,
+                                       _vstring=(_src_na is not None
+                                                 or _src_dobj is not None))
+                        _res._dtype_obj = _src_dobj
+                        _res._na_object = _src_na
+                        return _res
+
+                    if (isinstance(key, slice) and key.step is not None
+                            and key.step < 0):
+                        return _rebuild(_rd[key])
+                    if isinstance(key, list) and builtins.all(
+                            builtins.isinstance(_k, int)
+                            and not builtins.isinstance(_k, bool)
+                            for _k in key):
+                        return _rebuild([_rd[_k % _sh[0]] for _k in key])
+                    if (_is_ndarray(key) and getattr(key, 'ndim', 0) == 1
+                            and str(getattr(key, '_dtype', '')) in
+                            ('int64', 'int32', 'int16', 'int8', 'uint8',
+                             'uint16', 'uint32', 'uint64')):
+                        return _rebuild(
+                            [_rd[int(_k) % _sh[0]] for _k in key.tolist()])
         # 结构化数组索引：字段 / 多字段 / 记录标量 / 子结构切片
         if getattr(self, '_dtype_obj', None) is not None:
             handled, res = _struct_getitem(self, key)
@@ -2101,6 +2173,7 @@ class ndarray:
         result._fields = getattr(self, '_fields', None)
         result._complex_data = getattr(self, '_complex_data', None)
         result._dtype_obj = getattr(self, '_dtype_obj', None)
+        result._na_object = getattr(self, '_na_object', None)
         if thread_safe:
             # 标记为线程安全副本（文档性标记）
             result._thread_safe = True
@@ -5964,6 +6037,16 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
                 _dtype = _infer_smart_dtype(flat)
     else:
         _dtype = _resolve_dtype(dtype)
+        # StringDType（可空字符串）：构造器 _vstring 路径保留 NA 对象身份，
+        # 直接返回（不能走 _coerce_dtype：'string_' 标签 vs 解析出的
+        # 'float64' 会触发 astype 重建，丢失 NA 语义）。
+        if dtype is not None and type(dtype).__name__ == 'StrDType':
+            _vstr_na = getattr(dtype, 'na_object', None)
+            _vstr_arr = ndarray(data, _dtype='string_', _na_object=_vstr_na,
+                                _vstring=True)
+            _vstr_arr._dtype_obj = dtype
+            _vstr_arr._na_object = _vstr_na
+            return _vstr_arr
         # numpy 语义：float NaN/inf → 整数 dtype：0-d 标量允许 cast（警告并给 0），
         # 与 astype 路径值一致
         if _dtype in _INT_DTYPES and isinstance(data, float) and \
@@ -8335,8 +8418,12 @@ class _DTypeNamespace:
     Float64DType = type('Float64DType', (), {'_dt_name': 'float64'})
     Complex64DType = type('Complex64DType', (), {'_dt_name': 'complex64'})
     Complex128DType = type('Complex128DType', (), {'_dt_name': 'complex128'})
-    StrDType = type('StrDType', (), {'_dt_name': 'str0',
-                                     '__init__': lambda self, *a, **k: None})
+    StrDType = type('StrDType', (), {
+        '_dt_name': 'str0',
+        # numpy StringDType(na_object)：保存 NA 对象（None/nan/str/任意对象）
+        '__init__': lambda self, *a, **k: self.__dict__.__setitem__(
+            'na_object', k.get('na_object', a[0] if a else None)),
+    })
     StringDType = StrDType  # numpy 2.x 变长字符串 dtype 别名
     BytesDType = type('BytesDType', (), {'_dt_name': 'bytes0',
                                          '__init__': lambda self, *a, **k: None})
@@ -8827,6 +8914,10 @@ append = _array_ops_module.append
 insert = _array_ops_module.insert
 delete = _array_ops_module.delete
 unique = _array_ops_module.unique
+unique_values = _array_ops_module.unique_values
+unique_counts = _array_ops_module.unique_counts
+unique_inverse = _array_ops_module.unique_inverse
+unique_all = _array_ops_module.unique_all
 resize = _array_ops_module.resize
 
 
@@ -9123,7 +9214,8 @@ __all__ = [
     'split', 'hsplit', 'vsplit', 'dsplit',
     'tile', 'repeat', 'LazyArray',
     'flip', 'fliplr', 'flipud', 'roll', 'rot90',
-    'append', 'insert', 'delete', 'unique', 'resize',
+    'append', 'insert', 'delete', 'unique', 'unique_values', 'unique_counts',
+    'unique_inverse', 'unique_all', 'resize',
     'where', 'take', 'put', 'select', 'nonzero', 'argwhere', 'flatnonzero',
     'binary_repr',
     'sin', 'cos', 'tan', 'arcsin', 'arccos', 'arctan', 'arctan2',

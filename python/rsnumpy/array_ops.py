@@ -1,4 +1,6 @@
 import builtins
+import itertools
+import math
 
 """数组操作模块 - 所有实现位于 Rust，这里仅保留薄包装。"""
 
@@ -1067,27 +1069,52 @@ def insert(arr, obj, values, axis=None):
 
 def unique(a, return_index=False, return_inverse=False, return_counts=False,
            axis=None, *, equal_nan=True, sorted=True):
-    """查找数组内的唯一元素。
+    """查找数组内的唯一元素（纯 Python 实现，对齐 numpy 语义）。
 
-    axis 为 None 时展平后去重；为整数时，将该轴移到最前、其余维度展平，
-    把每个子数组视为一个元素按字典序去重（唯一“行”）。
+    axis=None 展平后去重；axis=k 将该轴上的每个子数组视为一个元素去重
+    （按元素字典序）。equal_nan=True 时全部 NaN 视为相等只留一个；
+    False 时各 NaN 互不相等各占一席。return_inverse 在 axis=None 时
+    按输入形状展平，axis=k 时为沿该轴的一维数组。
     """
-    arr = a if hasattr(a, '_array') else _wrap(a)
+    npmod = _np()
     nd = _nd()
+
+    # MaskedArray 输入：对 data 计算 unique，结果再挂回掩码。
+    _ma_input = None
+    if (not hasattr(a, '_array')) and type(a).__name__ == 'MaskedArray':
+        _ma_input = a
+        a = a.data
+    arr = a if hasattr(a, '_array') else _wrap(a)
     dtype = getattr(arr, '_dtype', "float64")
     fields = getattr(arr, '_fields', None)
-    raw_data = getattr(arr, '_raw_data', None)
+    shape = tuple(getattr(arr, 'shape', ()))
+    ndim = len(shape)
+
+    # ---------- axis 校验（numpy 语义：非整数 -> TypeError，越界 -> AxisError） ----------
+    if axis is not None:
+        if not (isinstance(axis, int) and not isinstance(axis, bool)):
+            if hasattr(axis, '__index__'):
+                axis = axis.__index__()
+            else:
+                raise TypeError(
+                    f"unique(): axis={axis!r} cannot be interpreted as an integer")
+        if axis >= ndim or axis < -ndim:
+            from .exceptions import AxisError
+            raise AxisError(
+                f"axis {axis} is out of bounds for array of dimension {ndim}")
+        _ax = axis + ndim if axis < 0 else axis
+    else:
+        _ax = None
+
     if int(getattr(arr, 'size', 0)) == 0:
-        # numpy 语义（issue 15559）：零尺寸数组各切片全为空且相等；
+        # numpy 语义（issue 15559）：零尺寸数组沿轴的各切片全为空且相等；
         # Python 层处理避免 Rust 崩溃。
-        npmod = _np()
-        _shp = tuple(getattr(arr, 'shape', ()))
+        _shp = shape
         _intp = "int64"
-        if axis is None:
+        if _ax is None:
             uniq = npmod.empty((0,), dtype=dtype)
             idx = inv = cnt = npmod.empty((0,), dtype=_intp)
         else:
-            _ax = axis + len(_shp) if axis < 0 else axis
             n_axis = _shp[_ax]
             if n_axis == 0:
                 uniq = npmod.empty(_shp, dtype=dtype)
@@ -1112,49 +1139,253 @@ def unique(a, return_index=False, return_inverse=False, return_counts=False,
             outputs.append(cnt)
         return tuple(outputs)
 
-    if axis is None:
+    # object 类型（及含 object 字段的结构化）不支持 axis 路径（numpy 抛 TypeError）。
+    if _ax is not None:
+        _obj = (dtype in ('object', 'O')
+                or getattr(dtype, 'name', '') in ('object', 'O'))
+        if not _obj and fields:
+            for _nm, _fd in fields:
+                if _fd in ('object', 'O') or 'object' in str(_fd):
+                    _obj = True
+                    break
+        if _obj:
+            raise TypeError("unique() with axis is not supported for object arrays")
+
+    # ---------- 取行：axis=k 时行 = 沿轴的子数组（C 序下为连续块）；None 时每个标量一行 ----------
+    def _flat_of(x):
+        out = []
+
+        def rec(v):
+            if isinstance(v, (list, tuple)):
+                for w in v:
+                    rec(w)
+            else:
+                out.append(v)
+
+        rec(x.tolist())
+        return out
+
+    if fields is not None:
+        flat = [tuple(r) for r in arr.tolist()]
+    else:
+        flat = _flat_of(arr)
+    if _ax is None:
+        rows = [[v] for v in flat]
+        n_rows = len(rows)
+    else:
+        # axis=k 的元素 = “固定第 k 轴位置的切片”（如 2D 数组 axis=1 是列），
+        # C 序下不一定连续，按索引分解采样。
+        _strides = [1] * ndim
+        for _d in range(ndim - 2, -1, -1):
+            _strides[_d] = _strides[_d + 1] * shape[_d + 1]
+        n_rows = shape[_ax]
+        rows = []
+        for _p in range(n_rows):
+            _row = []
+            for _idx in itertools.product(*[range(_s) for _s in shape]):
+                if _idx[_ax] == _p:
+                    _row.append(
+                        flat[sum(_i * _st for _i, _st in zip(_idx, _strides))])
+            rows.append(_row)
+
+    # ---------- NA / NaN 判定与相等性 ----------
+    # StringDType（可空字符串）：NA 对象可为 None / 任意 NaN / 任意身份对象；
+    # 字符串 na_object 按普通字符串值处理（无 NA 语义）。
+    _vstr_dt = getattr(arr, '_dtype_obj', None)
+    _is_vstr = _vstr_dt is not None and type(_vstr_dt).__name__ == 'StrDType'
+    _na_obj = getattr(arr, '_na_object', None)
+    _na_semantics = _is_vstr and not isinstance(_na_obj, str)
+    # numpy 语义：na_object=None 时 equal_nan=False 仅支持 hash 路径
+    # （sorted=False）；默认排序路径抛 ValueError。
+    if _na_semantics and not equal_nan and _na_obj is None and sorted:
+        raise ValueError(
+            "unique with equal_nan=False is not supported for StringDType "
+            "arrays with na_object=None when sorted")
+
+    def _is_nan(v):
+        if isinstance(v, float):
+            return v != v
+        if isinstance(v, complex):
+            return v.real != v.real or v.imag != v.imag
+        return False
+
+    def _is_na_obj(v):
+        if not _na_semantics:
+            return False
+        if v is _na_obj or v is None:
+            return True
+        try:
+            if v != v:  # 任意浮点型 NaN 都视为 NA
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _same_elem(x, y):
+        # NA 对象 / NaN：仅 equal_nan=True 时相等——先于身份短路判定，
+        # 使 equal_nan=False 时多个 NA 保持独立（即使是同一实例）
+        if _is_na_obj(x) or _is_na_obj(y):
+            return bool(equal_nan) and _is_na_obj(x) and _is_na_obj(y)
+        if x is y:
+            return True
+        if _is_nan(x) or _is_nan(y):
+            return bool(equal_nan) and _is_nan(x) and _is_nan(y)
+        try:
+            r = x == y
+        except Exception:
+            return False
+        try:
+            return bool(r)
+        except Exception:
+            return False
+
+    def _same_row(ra, rb):
+        return all(_same_elem(x, y) for x, y in zip(ra, rb))
+
+    # ---------- 去重（记录首次出现位置） ----------
+    _uniq_rows, _first, _inv, _cnt = [], [], [], []
+    for _i, _row in enumerate(rows):
+        for _j, _urow in enumerate(_uniq_rows):
+            if _same_row(_row, _urow):
+                _inv.append(_j)
+                _cnt[_j] += 1
+                break
+        else:
+            _inv.append(len(_uniq_rows))
+            _uniq_rows.append(_row)
+            _first.append(_i)
+            _cnt.append(1)
+    _k = len(_uniq_rows)
+
+    # ---------- 排序（NaN 最后；-0.0 在 0.0 前；复数按 (实部, 虚部) 字典序） ----------
+    def _key_elem(v):
+        if _is_na_obj(v) or _is_nan(v):
+            return (1, 0.0)
+        if isinstance(v, complex):
+            return (0, 0.0, _key_elem(v.real), _key_elem(v.imag))
+        return (0, 0.0, v)
+
+    def _key_row(row):
+        return tuple(_key_elem(v) for v in row)
+
+    if sorted:
+        order = list(range(_k))
+        try:
+            order.sort(key=lambda _j: _key_row(_uniq_rows[_j]))
+        except TypeError:
+            order = list(range(_k))  # 不可比较类型（object 等）：保持首次出现序
+    else:
+        order = list(range(_k))
+    _pos = [0] * _k
+    for _new, _old in enumerate(order):
+        _pos[_old] = _new
+    uniq_rows = [_uniq_rows[_j] for _j in order]
+    idx_arr = [_first[_j] for _j in order]
+    inv_arr = [_pos[_j] for _j in _inv]
+    cnt_arr = [_cnt[_j] for _j in order]
+
+    # ---------- 结果数组 ----------
+    # 结果数组布局：第 k 轴换成唯一数，其余位置按 C 序收集各唯一“行”的值。
+    def _layout_axis(res_rows):
+        _So = 1
+        for _d in shape[:_ax]:
+            _So *= _d
+        _St = 1
+        for _d in shape[_ax + 1:]:
+            _St *= _d
+        _L = _So * _St
+        _fr = [None] * (_k * _L)
+        for _j, _row in enumerate(res_rows):
+            for _r in range(_L):
+                _o = _r // _St
+                _t = _r % _St
+                _fr[_o * (_k * _St) + _j * _St + _t] = _row[_r]
+        return _fr
+
+    if fields is not None:
+        # 结构化：每条记录是一个元素
+        _recs = [list(r) for r in uniq_rows]
+        if _ax is None:
+            uniq_arr = npmod.array(_recs, dtype=list(fields))
+        else:
+            _shp_us = shape[:_ax] + (_k,) + shape[_ax + 1:]
+            uniq_arr = npmod.array(_flat_to_nested(_layout_axis(_recs), _shp_us),
+                                   dtype=list(fields))
+    else:
+        if _ax is None:
+            if _is_vstr:
+                # 保留 NA 对象身份，并把原始 dtype 实例挂回结果
+                uniq_arr = nd([v for r in uniq_rows for v in r],
+                              _dtype='string_', _na_object=_na_obj,
+                              _vstring=True)
+                uniq_arr._dtype_obj = _vstr_dt
+            else:
+                uniq_arr = nd([v for r in uniq_rows for v in r], _dtype=dtype)
+        else:
+            _shp_us = shape[:_ax] + (_k,) + shape[_ax + 1:]
+            uniq_arr = nd(_flat_to_nested(_layout_axis(uniq_rows), _shp_us),
+                          _dtype=dtype)
+
+    def _intp_arr(lst, shp=None):
+        if shp and len(shp) > 1:
+            return nd(_flat_to_nested(list(lst), shp), _dtype='int64')
+        return nd(list(lst), _dtype='int64')
+
+    # numpy 语义：结果保持输入的数组子类型（如 Subclass）
+    if uniq_arr.__class__ is not arr.__class__:
+        uniq_arr.__class__ = arr.__class__
+
+    def _assemble(res0):
         if not (return_index or return_inverse or return_counts):
-            # 纯去重走纯 Python：NaN 按 numpy 语义处理——默认 equal_nan=True
-            # 全部 NaN 视为相等只留一个；False 时各 NaN 互不相等各占一席。
-            # Rust _core.unique_full 不做 NaN 去重，无法区分两种语义。
-            _flat = []
+            return res0
+        _outs = [res0]
+        if return_index:
+            _outs.append(_intp_arr(idx_arr))
+        if return_inverse:
+            _outs.append(_intp_arr(inv_arr, shape if _ax is None else None))
+        if return_counts:
+            _outs.append(_intp_arr(cnt_arr))
+        return _outs[0] if len(_outs) == 1 else tuple(_outs)
 
-            def _rec(x):
-                if isinstance(x, (list, tuple)):
-                    for _y in x:
-                        _rec(_y)
-                else:
-                    _flat.append(x)
+    if _ma_input is not None:
+        from .ma.core import MaskedArray
+        # 每个唯一值的掩码：其任一出现位置被掩码则整体被掩码
+        _mflat = list(_ma_input._mask)
+        _um_old = [builtins.any(_mflat[_i] for _i, _j in enumerate(_inv)
+                                if _j == _t) for _t in range(_k)]
+        _umask = [_um_old[_j] for _j in order]
+        return _assemble(MaskedArray(uniq_arr, mask=_umask))
 
-            _rec(arr._array.tolist())
-            _seen, _uniq = set(), []
-            for v in _flat:
-                if isinstance(v, float) and v != v:
-                    if equal_nan:
-                        if not any(isinstance(w, float) and w != w for w in _uniq):
-                            _uniq.append(v)
-                    else:
-                        _uniq.append(v)
-                    continue
-                if v in _seen:
-                    continue
-                _seen.add(v)
-                _uniq.append(v)
-            _nans = [v for v in _uniq if isinstance(v, float) and v != v]
-            _reals = [v for v in _uniq if not (isinstance(v, float) and v != v)]
-            try:
-                _reals = sorted(_reals)
-            except TypeError:
-                pass
-            return nd(_reals + _nans, _dtype=dtype)
-        results = _core.unique_full(arr._array, return_index, return_inverse, return_counts)
-        wrapped = [nd._wrap(r, _dtype=dtype, _fields=fields, _raw_data=raw_data) for r in results]
-        return tuple(wrapped)
+    return _assemble(uniq_arr)
 
-    results = _core.unique_axis(
-        arr._array, axis, return_index, return_inverse, return_counts, sorted)
-    unique_arr = nd._wrap(results[0], _dtype=dtype, _fields=fields, _raw_data=raw_data)
-    if not (return_index or return_inverse or return_counts):
-        return unique_arr
-    outputs = [unique_arr] + [nd._wrap(r, _dtype="int64") for r in results[1:]]
-    return tuple(outputs)
+
+# ========== Array API 风格的 unique 包装 ==========
+from collections import namedtuple
+
+_UniqueInv = namedtuple("UniqueAll", ["values", "inverse_indices"])
+_UniqueAll = namedtuple("UniqueAll", ["values", "indices",
+                                      "inverse_indices", "counts"])
+
+
+def unique_values(x):
+    """Array API：唯一值（equal_nan=False 语义）。"""
+    return unique(x, equal_nan=False)
+
+
+def unique_counts(x):
+    """Array API：唯一值与计数（equal_nan=False 语义）。"""
+    v, c = unique(x, return_counts=True, equal_nan=False)
+    return v, c
+
+
+def unique_inverse(x):
+    """Array API：唯一值与逆映射（按输入形状，equal_nan=False 语义）。"""
+    v, inv = unique(x, return_inverse=True, equal_nan=False)
+    return _UniqueInv(values=v, inverse_indices=inv)
+
+
+def unique_all(x):
+    """Array API：唯一值 / 索引 / 逆映射 / 计数（equal_nan=False 语义）。"""
+    v, idx, inv, c = unique(x, return_index=True, return_inverse=True,
+                            return_counts=True, equal_nan=False)
+    return _UniqueAll(values=v, indices=idx, inverse_indices=inv, counts=c)

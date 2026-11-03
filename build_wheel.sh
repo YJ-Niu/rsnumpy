@@ -8,8 +8,11 @@ set -euo pipefail
 # （venv 布局会自动切换为 Scripts/python.exe）。
 #
 # 测试参数 --test：
-#   debug 只跑 test_config.txt 里标志为 0 的文件（上次 failed/skipped/error 的）（默认）
+#   debug 只跑 test_config.txt 里标志为 0 的文件（上次没全过的）（默认）
 #   all   全量跑 ./tests 并重建 tests/test_config.txt
+# 每个文件一个独立 pytest 子进程（文件内 xdist 并行）：崩溃只损失该文件，
+# 跑完一个文件立即写回 test_config.txt（边测边更新）：
+#   <测试文件> <标志 0/1> <passed>/<failed>/<skipped>（进程崩溃标 crash）
 
 # ========== 从 Cargo.toml 读取元信息 ==========
 NAME=$(grep -m1 '^name = ' Cargo.toml | sed 's/name = "\(.*\)"/\1/')
@@ -69,7 +72,14 @@ PYTHON_EXEC_SET=""
 # ========== 平台探测：Windows(Git Bash/MSYS/Cygwin) 的 venv 是 Scripts/ 且解释器带 .exe ==========
 case "$(uname -s 2>/dev/null || echo unknown)" in
   MINGW*|MSYS*|CYGWIN*) VENV_BIN=".venv/Scripts"; VENV_PY=".venv/Scripts/python.exe" ;;
-  *)                    VENV_BIN=".venv/bin";     VENV_PY=".venv/bin/python" ;VENV_PY="venv/bin/python";
+  *)
+    # 不同机器上本地 venv 目录名不同（.venv 或 venv）：存在哪个就用哪个。
+    if [[ -d "venv/bin" && ! -d ".venv/bin" ]]; then
+      VENV_BIN="venv/bin"; VENV_PY="venv/bin/python"
+    else
+      VENV_BIN=".venv/bin"; VENV_PY=".venv/bin/python"
+    fi
+    ;;
 esac
 
 # 若存在本地 venv 则激活（让其中的 maturin 进入 PATH）；不存在也不报错。
@@ -217,97 +227,196 @@ if [[ "$INSTALLED" -eq 1 && "${SKIP_TESTS:-0}" != "1" ]]; then
   #     未在清单中的 crash 由 xdist worker 隔离（只损失该 worker 上的用例）。
   #
   # 测试模式（--test all|debug，默认 debug）：
-  #   debug —— 只跑 test_config.txt 中标志为 0 的文件（上次没全过的），每个文件
-  #            跑完立即把标志写回 test_config.txt（边测边更新，中途退出也安全）。
+  #   debug —— 只跑 test_config.txt 中标志为 0 的文件（上次没全过的）。
   #            修 bug 时的快速回归回路。
-  #   all   —— 全量跑 ./tests（核心 7 文件已由门禁跑过，--ignore 去重）：开场把
-  #            全部候选文件置 0，随后每跑完一个文件翻成实际结果，重建
+  #   all   —— 全量跑 ./tests（核心 7 文件已由门禁跑过，候选列表里排除去重）：
+  #            开场把全部候选文件置 0，随后每跑完一个文件翻成实际结果，重建
   #            tests/test_config.txt（全通过 → 1，存在 failed/skipped/error → 0）。
+  #
+  # 执行架构：每个测试文件一个独立 pytest 子进程（文件内 xdist 并行，默认 4 worker）：
+  #   * 崩溃隔离 —— 用例把 rsnumpy C 扩展打崩（Rust panic -> abort / segfault）
+  #     只损失该文件的进程，不再杀掉整份报告（旧的单个 xdist controller 在 worker
+  #     或 controller 自身崩溃时会让整个运行被 abort 截断）。
+  #   * 边测边更新 —— 每个文件跑完立即把计数（passed/failed/skipped）原子写回
+  #     test_config.txt：跑的过程中就能实时看到进度，中途退出清单也已是最新。
+  #   * 配置格式：<测试文件> <标志> <passed>/<failed>/<skipped>（进程崩溃时计数列为 crash）。
   echo "Running rsnumpy-compatibility check over ./tests (non-gating report, mode=$TEST_MODE) ..."
-  # xdist 让 ~9800 个参照用例并行执行；更重要的是单用例把 rsnumpy C 扩展打崩
-  # （Rust panic -> abort / segfault）时只损失一个 worker，其余用例继续，报告不会被
-  # 整进程 abort 截断（依赖在上面的核心测试步骤里已尽力安装）。
-  # 并行度默认 4（COMPAT_WORKERS 可覆盖，设为 0 强制单进程）——并行度过高时
-  # 每个用例都是数组的重计算，机器会满载发烫；4 个 worker 既能隔离 crash 又留有余量。
-  COMPAT_JOBS=""
-  if "$VENV_PY" -c "import xdist" >/dev/null 2>&1; then
-    COMPAT_WORKERS_N="${COMPAT_WORKERS:-4}"
-    if [[ "$COMPAT_WORKERS_N" != "0" ]]; then
-      COMPAT_JOBS="-n $COMPAT_WORKERS_N"
-    else
-      echo "  -> COMPAT_WORKERS=0; single-process report (a crash may truncate it)."
-    fi
-  else
-    echo "  -> pytest-xdist unavailable; single-process report (a crash may truncate it)."
+  # 文件内并行度默认 4（COMPAT_WORKERS 可覆盖，设为 0 强制单进程）——按文件起子进程
+  # 后总并行度仍是 4：每个用例都是数组的重计算，并行度过高机器会满载发烫。
+  COMPAT_WORKERS_N="${COMPAT_WORKERS:-4}"
+  if ! "$VENV_PY" -c "import xdist" >/dev/null 2>&1; then
+    echo "  -> pytest-xdist unavailable; single-process per file (a crash may truncate that file's report)."
+    COMPAT_WORKERS_N=0
   fi
-  # 边测边显示：pytest 输出直接流式打印（tee 同时落盘），不再先捕获后 tail——
-  # 全量要跑几分钟，全程静默会让人以为卡住了。完整日志存 debug_test/ 下。
   mkdir -p debug_test
   CONFIG_FILE="tests/test_config.txt"
 
-  # 给 pytest 挂上状态收集插件（PYTHONPATH 使 -p _status_plugin 可导入）。
-  STATUS_ENV=(RSNUMPY_TEST_CONFIG="$CONFIG_FILE" PYTHONPATH="$PWD/tests" RSNUMPY_COMPAT_SKIP_CRASHES=1 PYTHONUNBUFFERED=1)
-  if [[ "$TEST_MODE" == "all" ]]; then
-    STATUS_ENV+=(RSNUMPY_TEST_CONFIG_FULL=1)
-  fi
+  CFG_HEADER='# rsnumpy 测试配置: <测试文件> <标志> <passed>/<failed>/<skipped>
+#   1 = 上次全部通过   0 = 存在 failed/skipped/error（或尚未跑通）
+# 由 build_wheel.sh 的测试阶段自动维护：每个文件一个 pytest 子进程，跑完立即
+# 写回结果（边测边更新；崩溃只影响该文件，计数列标 crash）。
+# --test debug 只跑标志为 0 的文件；--test all 全量重建。
+'
 
-  # 核心门禁的 7 个文件刚在上面跑过且已通过，全量报告里 --ignore 排除，避免跑两遍。
-  COMPAT_IGNORES=()
-  for _f in "${CORE_TEST_FILES[@]}"; do
-    COMPAT_IGNORES+=(--ignore="$_f")
+  # 全部候选文件（排除 __pycache__ 与上面刚门禁通过的核心 7 文件，避免跑两遍）。
+  CANDIDATES=()
+  while IFS= read -r _cf; do
+    CANDIDATES+=("$_cf")
+  done < <(find tests -name 'test_*.py' -not -path '*/__pycache__/*' | sort)
+  RUN_CANDIDATES=()
+  for _cf in "${CANDIDATES[@]}"; do
+    _skip=0
+    for _core in "${CORE_TEST_FILES[@]}"; do
+      [[ "$_cf" == "$_core" ]] && _skip=1
+    done
+    [[ $_skip -eq 0 ]] && RUN_CANDIDATES+=("$_cf")
   done
 
-  # debug 模式：从配置里挑出标志为 0 的文件；没有配置文件则回退全量（首次引导）。
-  TARGETS=("tests")
-  if [[ "$TEST_MODE" == "debug" ]]; then
-    if [[ ! -f "$CONFIG_FILE" ]]; then
-      echo "  -> $CONFIG_FILE not found; bootstrap with a full run first."
-      echo "     Run './build_wheel.sh --test all' once to generate it."
-      STATUS_ENV+=(RSNUMPY_TEST_CONFIG_FULL=1)
-    else
-      DEBUG_FILES=()
-      while read -r _line_f _line_flag; do
-        [[ "$_line_f" == \#* || -z "${_line_f:-}" ]] && continue
-        if [[ "$_line_flag" == "0" && -f "$_line_f" ]]; then
-          DEBUG_FILES+=("$_line_f")
-        fi
-      done < "$CONFIG_FILE"
-      if [[ ${#DEBUG_FILES[@]} -eq 0 ]]; then
-        echo "  -> every test file is green in $CONFIG_FILE; nothing to debug."
-        echo "     Run './build_wheel.sh --test all' to refresh the flags."
-        TARGETS=()
-      else
-        echo "  -> ${#DEBUG_FILES[@]} file(s) flagged 0 in $CONFIG_FILE:"
-        printf '     %s\n' "${DEBUG_FILES[@]}"
-        TARGETS=("${DEBUG_FILES[@]}")
+  # 把一行结果原子写进 test_config.txt：保留头部注释与既有行，
+  # 替换（或追加）该文件一行，临时文件 + os.replace。
+  _update_cfg() {
+    "$VENV_PY" - "$CONFIG_FILE" "$1" "$2" <<'PYEOF'
+import os, sys
+cfg, f, line = sys.argv[1], sys.argv[2], sys.argv[3]
+entries = {}
+if os.path.exists(cfg):
+    with open(cfg, encoding="utf-8") as fh:
+        for ln in fh:
+            ln = ln.rstrip("\n")
+            if not ln or ln.startswith("#"):
+                continue
+            key = ln.split()[0]
+            if key not in entries:
+                entries[key] = ln
+entries[f] = line
+tmp = cfg + ".tmp"
+with open(tmp, "w", encoding="utf-8") as fh:
+    if os.path.exists(cfg):
+        with open(cfg, encoding="utf-8") as src:
+            for ln in src:
+                if ln.startswith("#"):
+                    fh.write(ln)
+                else:
+                    break
+    for k in sorted(entries):
+        fh.write(entries[k] + "\n")
+os.replace(tmp, cfg)
+PYEOF
+  }
+
+  TARGETS=()
+  if [[ ! -f "$CONFIG_FILE" || "$TEST_MODE" == "all" ]]; then
+    # all 模式（含无配置文件时的首次引导）：先把全部候选置 0 落盘（未跑 = 明确的 0），
+    # 随后全量跑 RUN_CANDIDATES（核心 7 文件已门禁通过，不重复跑）。
+    {
+      printf '%s' "$CFG_HEADER"
+      for _cf in "${CANDIDATES[@]}"; do
+        printf '%s 0 0/0/0\n' "$_cf"
+      done
+    } > "$CONFIG_FILE"
+    TARGETS=("${RUN_CANDIDATES[@]}")
+    echo "  -> ${#TARGETS[@]} candidate file(s); full run."
+  else
+    # debug 模式：从配置里挑出标志为 0 的文件
+    while read -r _line_f _line_flag _line_rest; do
+      [[ "$_line_f" == \#* || -z "${_line_f:-}" ]] && continue
+      if [[ "$_line_flag" == "0" && -f "$_line_f" ]]; then
+        TARGETS+=("$_line_f")
       fi
+    done < "$CONFIG_FILE"
+    if [[ ${#TARGETS[@]} -eq 0 ]]; then
+      echo "  -> every test file is green in $CONFIG_FILE; nothing to debug."
+      echo "     Run './build_wheel.sh --test all' to refresh the flags."
+    else
+      echo "  -> ${#TARGETS[@]} file(s) flagged 0 in $CONFIG_FILE:"
+      printf '     %s\n' "${TARGETS[@]}"
     fi
   fi
 
-  COMPAT_LOG="tests/${TEST_MODE}_report.log"
+  COMPAT_LOG="${COMPAT_LOG:-tests/${TEST_MODE}_report.log}"
+  COMPAT_RC=0
   if [[ ${#TARGETS[@]} -gt 0 ]]; then
-    set +e
-    env "${STATUS_ENV[@]}" "$VENV_PY" -m pytest "${TARGETS[@]}" \
-      -q -p no:cacheprovider --continue-on-collection-errors \
-      -p _status_plugin "${COMPAT_IGNORES[@]}" $COMPAT_JOBS 2>&1 \
-      | tee "$COMPAT_LOG"
-    COMPAT_RC=${PIPESTATUS[0]}
-    set -e
+    RUN_DIR=$(mktemp -d "${TMPDIR:-/tmp}/rsnumpy_compat.XXXXXX")
+    : > "$COMPAT_LOG"
+    _N=${#TARGETS[@]}
+    _idx=0
+    for f in "${TARGETS[@]}"; do
+      _idx=$((_idx + 1))
+      if [[ "$COMPAT_WORKERS_N" -gt 0 ]]; then
+        JFLAGS="-n $COMPAT_WORKERS_N"
+      else
+        JFLAGS=""
+      fi
+      echo "  [$_idx/$_N] $f"
+      set +e
+      # 边测边显示：输出流式打印到终端（tee 同时追加完整日志），另存本文件输出供解析。
+      env RSNUMPY_COMPAT_SKIP_CRASHES=1 PYTHONUNBUFFERED=1 \
+        "$VENV_PY" -m pytest "$f" \
+        -q -p no:cacheprovider --continue-on-collection-errors $JFLAGS \
+        2>&1 | tee -a "$COMPAT_LOG" > "$RUN_DIR/out.log"
+      rc=${PIPESTATUS[0]}
+      set -e
+      if [[ $rc -ge 128 ]] || grep -q 'Fatal Python error' "$RUN_DIR/out.log"; then
+        # 进程/worker 被信号杀死或致命错误（Rust panic -> abort / segfault 等）：
+        # 只损失该文件的结果（xdist 下 worker 阵亡时 controller 可能以 rc=5 退出）。
+        _status="CRASHED (rc=$rc); this file's result is lost"
+        _update_cfg "$f" "$f 0 crash"
+      else
+        # 解析末行汇总 "N failed, M passed, K skipped ... in Xs ="（行尾 = 前有空格）
+        _counts=$("$VENV_PY" - "$RUN_DIR/out.log" <<'PYEOF'
+import re, sys
+text = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+summ = None
+for line in text.splitlines():
+    if re.search(r" in \d+(?:\.\d+)?s", line) and re.search(
+        r"\d+ (passed|failed|skipped|error)", line
+    ):
+        summ = line
+p = fa = s = 0
+if summ:
+    for m in re.finditer(r"(\d+) (passed|failed|skipped|error)", summ):
+        n, k = int(m.group(1)), m.group(2)
+        if k == "passed":
+            p = n
+        elif k == "skipped":
+            s = n
+        else:
+            fa += n
+print(f"{p}/{fa}/{s}")
+PYEOF
+)
+        if [[ "$_counts" == "0/0/0" && $rc -ne 0 ]]; then
+          # 没有可解析的汇总行（collection error / 早期退出等）
+          _status="no summary (rc=$rc)"
+          _update_cfg "$f" "$f 0 0/0/0"
+        else
+          flag=0
+          if [[ $_counts == */0/0 && ${_counts%%/*} -gt 0 ]]; then
+            flag=1
+          fi
+          _status="$_counts (rc=$rc)"
+          _update_cfg "$f" "$f $flag $_counts"
+        fi
+      fi
+      echo "      -> $_status"
+      [[ $rc -ne 0 ]] && COMPAT_RC=1
+    done
+    rm -rf "$RUN_DIR"
     echo
     echo "  -> full log: $COMPAT_LOG"
     echo "  -> rsnumpy compatibility report above (failed/error = rsnumpy bugs/gaps vs the numpy reference; non-gating, rc=$COMPAT_RC)."
 
-    # all 模式：核心 7 文件被 --ignore 排除、不进插件统计，但门禁已确认通过，
-    # 在配置里直接置 1（否则 debug 模式会重复跑它们）。
+    # all 模式：核心 7 文件不进本轮运行，但门禁已确认通过，配置里直接置 1
+    # （否则 debug 模式会重复跑它们）。
     if [[ "$TEST_MODE" == "all" && -f "$CONFIG_FILE" ]]; then
       for _f in "${CORE_TEST_FILES[@]}"; do
-        sed -i.bak "s|^$_f 0\$|$_f 1|" "$CONFIG_FILE"
+        sed -i.bak -E "s|^$_f 0 |$_f 1 |" "$CONFIG_FILE"
         rm -f "$CONFIG_FILE.bak"
       done
     fi
     if [[ -f "$CONFIG_FILE" ]]; then
-      _n1=$(grep -c ' 1$' "$CONFIG_FILE" || true)
-      _n0=$(grep -c ' 0$' "$CONFIG_FILE" || true)
+      _n1=$(awk '$1 !~ /^#/ && $2 == "1" {n++} END {print n+0}' "$CONFIG_FILE")
+      _n0=$(awk '$1 !~ /^#/ && $2 == "0" {n++} END {print n+0}' "$CONFIG_FILE")
       echo "  -> $CONFIG_FILE updated: $_n1 file(s) green (1), $_n0 file(s) flagged 0."
     fi
   fi

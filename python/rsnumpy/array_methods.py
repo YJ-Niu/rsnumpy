@@ -29,6 +29,16 @@ class NdArrayMethods:
     @staticmethod
     def astype(arr, dtype, copy=True):
         """将数组转换为指定的数据类型。"""
+        # 结构化目标含 object 字段：底层 float 存储无法表示，显式拒绝
+        # （静默降级会损坏数据；numpy 对 object 字段的 axis 运算同样抛
+        # TypeError）。
+        if isinstance(dtype, (list, tuple)) and dtype and builtins.all(
+                isinstance(f, (list, tuple)) and len(f) >= 2 for f in dtype):
+            if builtins.any(f[1] is object or f[1] in ('object', 'O')
+                            for f in dtype):
+                raise TypeError(
+                    "cannot astype to a structured dtype containing object "
+                    "fields (rsnumpy cannot represent object fields)")
         if isinstance(dtype, str):
             try:
                 import rsnumpy as _rn_asm
@@ -666,14 +676,39 @@ class NdArrayMethods:
             n = 1
             for d in arr.shape:
                 n *= d
-            norm = [_norm(i, n, 0) for i in idxs]
-            if mode == 'raise' and all(0 <= i < n for i in idxs):
-                result = arr._array.take(_ensure(list(idxs)), None)
+            # indices 可以是多维：结果与 indices 同形状（numpy 语义：沿展平取）。
+            _idx_shape = getattr(indices, 'shape', None)
+            _is_nd_idx = _idx_shape is not None and len(tuple(_idx_shape)) > 1
+            _flat_idxs = []
+
+            def _rec_idx(x):
+                if isinstance(x, (list, tuple)):
+                    for w in x:
+                        _rec_idx(w)
+                else:
+                    _flat_idxs.append(x)
+
+            _rec_idx(idxs)
+            norm = [_norm(i, n, 0) for i in _flat_idxs]
+            if (mode == 'raise' and all(0 <= i < n for i in _flat_idxs)
+                    and not _is_nd_idx):
+                result = arr._array.take(_ensure(list(_flat_idxs)), None)
                 return _wrap_result(result, dt)
             flat = arr.ravel().tolist()
             if not isinstance(flat, list):
                 flat = [flat]
-            return ndarray([flat[i] for i in norm], _dtype=dt)
+            res = [flat[i] for i in norm]
+            if _is_nd_idx:
+                def _shp(flatv, sh):
+                    if len(sh) == 1:
+                        return list(flatv)
+                    _sub = 1
+                    for _x in sh[1:]:
+                        _sub *= _x
+                    return [_shp(flatv[_i * _sub:(_i + 1) * _sub], sh[1:])
+                            for _i in range(sh[0])]
+                return ndarray(_shp(res, tuple(_idx_shape)), _dtype=dt)
+            return ndarray(res, _dtype=dt)
         ax = axis % arr.ndim
         size = arr.shape[ax]
         norm = [_norm(i, size, axis) for i in idxs]
