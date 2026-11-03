@@ -7,8 +7,8 @@ set -euo pipefail
 # 跨平台：macOS / Linux 直接运行；Windows 请在 Git Bash 或 WSL 中运行
 # （venv 布局会自动切换为 Scripts/python.exe）。
 #
-# 测试参数 --test：
-#   debug 只跑 test_config.txt 里标志为 0 的文件（上次没全过的）（默认）
+# 测试参数 --test（不给 = 快测：只跑核心门禁 + 冒烟测试，总时长 2 分钟内）：
+#   debug 只跑 test_config.txt 里标志为 0 的文件（上次没全过的）
 #   all   全量跑 ./tests 并重建 tests/test_config.txt
 # 每个文件一个独立 pytest 子进程（文件内 xdist 并行）：崩溃只损失该文件，
 # 跑完一个文件立即写回 test_config.txt（边测边更新）：
@@ -57,7 +57,9 @@ fi
 
 RELEASE=true
 OUT_DIR="wheelhouse"
-TEST_MODE="debug"
+# 无 --test 参数：快测模式（核心门禁 + 冒烟测试，2 分钟内）；
+# --test debug|all：额外跑全量 compat 报告（见下方测试阶段）。
+TEST_MODE="off"
 
 # 如果 wheelhouse 目录存在, 则删除
 if [[ -d "$OUT_DIR" ]]; then
@@ -226,7 +228,7 @@ if [[ "$INSTALLED" -eq 1 && "${SKIP_TESTS:-0}" != "1" ]]; then
   #   * RSNUMPY_COMPAT_SKIP_CRASHES=1：跳过已知会让 pytest 进程直接崩溃的用例；
   #     未在清单中的 crash 由 xdist worker 隔离（只损失该 worker 上的用例）。
   #
-  # 测试模式（--test all|debug，默认 debug）：
+  # 测试模式（--test all|debug；本段仅在给出 --test 时到达）：
   #   debug —— 只跑 test_config.txt 中标志为 0 的文件（上次没全过的）。
   #            修 bug 时的快速回归回路。
   #   all   —— 全量跑 ./tests（核心 7 文件已由门禁跑过，候选列表里排除去重）：
@@ -240,6 +242,9 @@ if [[ "$INSTALLED" -eq 1 && "${SKIP_TESTS:-0}" != "1" ]]; then
   #   * 边测边更新 —— 每个文件跑完立即把计数（passed/failed/skipped）原子写回
   #     test_config.txt：跑的过程中就能实时看到进度，中途退出清单也已是最新。
   #   * 配置格式：<测试文件> <标志> <passed>/<failed>/<skipped>（进程崩溃时计数列为 crash）。
+  # 仅显式 --test debug|all 时跑全量 compat 报告（默认 off：无参 = 快测，
+  # 只有上方核心门禁 + 下方冒烟测试，总时长 2 分钟内）。
+  if [[ "$TEST_MODE" != "off" ]]; then
   echo "Running rsnumpy-compatibility check over ./tests (non-gating report, mode=$TEST_MODE) ..."
   # 文件内并行度默认 4（COMPAT_WORKERS 可覆盖，设为 0 强制单进程）——按文件起子进程
   # 后总并行度仍是 4：每个用例都是数组的重计算，并行度过高机器会满载发烫。
@@ -419,6 +424,10 @@ PYEOF
       _n0=$(awk '$1 !~ /^#/ && $2 == "0" {n++} END {print n+0}' "$CONFIG_FILE")
       echo "  -> $CONFIG_FILE updated: $_n1 file(s) green (1), $_n0 file(s) flagged 0."
     fi
+  fi
+  else
+    echo "Skipping the full rsnumpy-compatibility report (no --test given)."
+    echo "      './build_wheel.sh --test debug' 只重跑未通过文件；'--test all' 全量并重建清单。"
   fi
 
   # ========== 冒烟测试：run_test.py / run_test2.py（非门禁报告） ==========
