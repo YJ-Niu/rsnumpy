@@ -69,7 +69,7 @@ PYTHON_EXEC_SET=""
 # ========== 平台探测：Windows(Git Bash/MSYS/Cygwin) 的 venv 是 Scripts/ 且解释器带 .exe ==========
 case "$(uname -s 2>/dev/null || echo unknown)" in
   MINGW*|MSYS*|CYGWIN*) VENV_BIN=".venv/Scripts"; VENV_PY=".venv/Scripts/python.exe" ;;
-  *)                    VENV_BIN=".venv/bin";     VENV_PY=".venv/bin/python" ;;
+  *)                    VENV_BIN=".venv/bin";     VENV_PY=".venv/bin/python" ;VENV_PY="venv/bin/python";
 esac
 
 # 若存在本地 venv 则激活（让其中的 maturin 进入 PATH）；不存在也不报错。

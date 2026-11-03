@@ -6592,7 +6592,8 @@ def _resolve_dtype(dtype):
         return "bool"
     # 单字符类型码（numpy typecode）
     _CHARCODES = {'b': 'int8', 'h': 'int16', 'i': 'int32', 'l': 'int64',
-                  'q': 'int64', 'p': 'int64', 'B': 'uint8', 'H': 'uint16',
+                  'q': 'int64', 'p': 'int64', 'P': 'uint64',
+                  'B': 'uint8', 'H': 'uint16',
                   'I': 'uint32', 'L': 'uint64', 'Q': 'uint64',
                   'e': 'float16', 'f': 'float32', 'd': 'float64',
                   'F': 'complex64', 'D': 'complex128', '?': 'bool'}

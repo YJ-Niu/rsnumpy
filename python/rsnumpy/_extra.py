@@ -631,7 +631,7 @@ def setdiff1d(ar1, ar2, assume_unique=False):
                 continue
             _seen.add(v)
         except TypeError:
-            if any(v == w for w in out):
+            if builtins.any(v == w for w in out):
                 continue
         out.append(v)
     if not out:
@@ -703,7 +703,7 @@ def isin(element, test_elements, assume_unique=False, invert=False, kind=None):
                         f"table range {_rng} for dtype {_base!r} would exceed "
                         f"the maximum number of representable values")
 
-    _nan_in_b = any(isinstance(v, float) and v != v for v in fb)
+    _nan_in_b = builtins.any(isinstance(v, float) and v != v for v in fb)
     try:
         _sb = set(fb)
         _sb_ok = True
@@ -719,7 +719,7 @@ def isin(element, test_elements, assume_unique=False, invert=False, kind=None):
                     return True
             except TypeError:
                 pass
-        return any(v == w for w in fb)
+        return builtins.any(v == w for w in fb)
 
     res = [_hit(v) for v in fa]
     if invert:
@@ -3291,7 +3291,7 @@ class vectorize:
 
         arrs = [_asarray(a) for a in args]
 
-        # 排除excluded参数（不参与广播）
+        # 排除excluded参数（不参与广播，按原值传入 pyfunc）
         excluded_indices = set()
         excluded_values = {}
         if self.excluded:
@@ -3302,11 +3302,14 @@ class vectorize:
                     excluded_values[ex] = kwargs.pop(ex)
 
         # 参与广播的参数
-        active_arrs = [arrs[i] for i in range(len(arrs)) if i not in excluded_indices]
+        active_idx = [i for i in range(len(arrs)) if i not in excluded_indices]
+        active_arrs = [arrs[i] for i in active_idx]
 
         if not active_arrs:
-            # 所有参数都被排除
-            return self.pyfunc(**kwargs, **excluded_values)
+            # 所有参数都被排除：按原样调用
+            _kw = {**excluded_values, **kwargs}
+            return self.pyfunc(*[args[i] for i in range(len(args))
+                                 if i in excluded_indices], **_kw)
 
         # 广播所有输入数组到相同形状
         shp = broadcast_shapes(*[a.shape for a in active_arrs])
@@ -3318,8 +3321,20 @@ class vectorize:
         pyfunc = self.pyfunc
         kwargs_copy = kwargs.copy()
 
-        # 【核心性能优化】使用列表推导 + 预绑定
-        if len(flats) == 1:
+        if excluded_indices:
+            # 有排除的位置参数：逐元素按原位置重组（排除位传原值）
+            def _mkargs(i):
+                out_a = []
+                ai = 0
+                for k in range(len(args)):
+                    if k in excluded_indices:
+                        out_a.append(args[k])
+                    else:
+                        out_a.append(flats[ai][i])
+                        ai += 1
+                return out_a
+            res = [pyfunc(*_mkargs(i), **kwargs_copy) for i in range(n)]
+        elif len(flats) == 1:
             # 单参数快速路径
             flat0 = flats[0]
             res = [pyfunc(flat0[i], **kwargs_copy) for i in range(n)]
