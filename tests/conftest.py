@@ -95,6 +95,14 @@ rsnumpy.errstate = _errstate
 # ---------------------------------------------------------------------------
 def _flatten(x):
     """Flatten an rsnumpy/scalar value to a nested Python list (handles 0-dim)."""
+    # 带 __array__ 的 array-like（numpy 2.x）：先转换，与 numpy 的
+    # asarray 语义一致（官方 assert helper 对 array-like 走 asarray）。
+    if (not hasattr(x, "tolist") and not isinstance(x, (list, tuple))
+            and hasattr(x, "__array__")):
+        try:
+            x = numpy.asarray(x)
+        except Exception:
+            pass
     if hasattr(x, "tolist"):
         try:
             x = x.tolist()

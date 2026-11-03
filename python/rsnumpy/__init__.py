@@ -873,6 +873,51 @@ class ndarray:
                     return cur
                 except Exception:
                     pass
+        # object 数组纯切片：Rust 路径返回 f64 占位（0.0），从 _raw_data 取值重建
+        # （numpy 保持对象身份，含 tuple 等任意 Python 对象）。
+        if (str(self._dtype) == 'object'
+                and getattr(self, '_raw_data', None) is not None):
+            _sh_o = self.shape
+            _key_o = key if isinstance(key, tuple) else (key,)
+            _prod_o = 1
+            for _d in _sh_o:
+                _prod_o *= _d
+            # 仅当 _raw_data 是 flat C-order（长度 == prod(shape)）时处理；
+            # 嵌套 _raw_data（构造器保留嵌套结构的多维 object 数组）落回
+            # 原路径，避免 flat 索引错乱。
+            if (0 < len(_key_o) == len(_sh_o)
+                    and builtins.all(isinstance(k, slice) for k in _key_o)
+                    and builtins.len(self._raw_data) == _prod_o):
+                # 按 C-order flat 索引直接取值（避免嵌套结构解析把
+                # tuple/list 元素误当子结构）。
+                _nsh = [len(range(0, _d)[_s])
+                        for _d, _s in builtins.zip(_sh_o, _key_o)]
+                _st_o = [1] * len(_sh_o)
+                for _i in range(len(_sh_o) - 2, -1, -1):
+                    _st_o[_i] = _st_o[_i + 1] * _sh_o[_i + 1]
+                _norms = [_s.indices(_d)
+                          for _d, _s in builtins.zip(_sh_o, _key_o)]
+                _new_flat = []
+
+                def _emit(pos, dim):
+                    if dim == len(_sh_o):
+                        _idx = 0
+                        for _j in range(len(_sh_o)):
+                            _orig = _norms[_j][0] + pos[_j] * _norms[_j][2]
+                            _idx += _orig * _st_o[_j]
+                        _new_flat.append(self._raw_data[_idx])
+                        return
+                    for _p in range(_nsh[dim]):
+                        pos[dim] = _p
+                        _emit(pos, dim + 1)
+
+                _emit([0] * len(_sh_o), 0)
+                # 不能走嵌套构造器（tuple 元素会被解析成子结构致形状错误）：
+                # 直接 _wrap 占位 raw + _raw_data 真实值 + shape 覆盖。
+                _res = ndarray._wrap(self._array, _dtype='object',
+                                     _raw_data=list(_new_flat))
+                _res._rs_shape_override = tuple(_nsh)
+                return _res
         # 字符串/字节/void（S/U/V）dtype 数组的整数索引：返回标量。
         # S→去尾零 bytes，U→去尾零 str，V→void。
         sd = getattr(self, '_str_dtype', None)
@@ -5929,6 +5974,16 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
     # str 数据 + 'c' dtype：legacy numpy char 语义 → 逐字符 1-d S1。
     if isinstance(data, str) and dtype is not None and str(dtype) == 'c':
         return array(list(data), dtype='S1')
+    # numpy 2.x：带 __array__ 的 array-like 先转换（无参调用，兼容旧
+    # __array__(dtype) / 新 __array__(dtype, copy) 两种签名）。
+    # 覆盖 dtype=None 与显式 dtype 两条路径。
+    if not _is_ndarray(data) and hasattr(data, '__array__'):
+        _conv = data.__array__()
+        if _conv is not data:
+            data = _conv
+            if _is_ndarray(data):
+                return array(data, dtype=dtype, copy=copy, order=order,
+                             subok=subok, ndmin=ndmin)
     if dtype is None:
         # ndarray 输入快速路径：直接沿用其 dtype，避免走回退路径产生 object dtype 警告。
         if _is_ndarray(data):
@@ -6273,6 +6328,10 @@ def asarray(a, dtype=None, order=None):
         # An explicit dtype must cast even when the input is already an
         # ndarray (matching np.asarray semantics).
         return array(a, dtype=dtype, copy=False)
+    # numpy 2.x：带 __array__ 的 array-like 先转换（经 array() 统一处理，
+    # 显式 dtype 的 cast 也正确）。
+    if hasattr(a, '__array__'):
+        return array(a, dtype=dtype, copy=False, order=order)
     if dtype is not None:
         # 显式 dtype：委托给 array()。array() 里统一处理字符串 (S/U/V) 与结构化
         # dtype；若在此处自行 _resolve_dtype + _coerce_dtype，字符串数据会被

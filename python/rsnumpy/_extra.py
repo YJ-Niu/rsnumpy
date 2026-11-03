@@ -578,9 +578,68 @@ def unique_all(x):
 
 
 def intersect1d(ar1, ar2, assume_unique=False, return_indices=False):
-    """返回两个数组的交集（升序去重）。"""
-    _ = assume_unique, return_indices
-    return _wrap(_core.intersect1d(_asarray(ar1)._array, _asarray(ar2)._array))
+    """返回两个数组的交集（升序去重，dtype 为两者提升类型）。
+
+    return_indices：另返回 i1/i2（flat C-order 首现索引），
+    ar1[i1] / ar2[i2]（flat 索引）等于交集结果。
+    """
+    _ = assume_unique  # 纯 Python 去重，两种参数行为一致
+    npmod = _np()
+    a = _asarray(ar1)
+    b = _asarray(ar2)
+
+    def _flat_vals(x):
+        t = x.ravel().tolist()
+        return list(t) if isinstance(t, (list, tuple)) else [t]
+
+    def _eq(v, w):
+        if v is w:
+            return True
+        try:
+            if v == w:
+                return True
+        except Exception:
+            pass
+        return (isinstance(v, float) and isinstance(w, float)
+                and v != v and w != w)
+
+    def _dedup_first(vals):
+        seen, out_v, out_i = [], [], []
+        for i, v in enumerate(vals):
+            if builtin_any(_eq(v, w) for w in seen):
+                continue
+            seen.append(v)
+            out_v.append(v)
+            out_i.append(i)
+        return out_v, out_i
+
+    fa, fb = _flat_vals(a), _flat_vals(b)
+    va, ia = _dedup_first(fa)
+    vb, ib = _dedup_first(fb)
+    common = [v for v in va if builtin_any(_eq(v, w) for w in vb)]
+    try:
+        common.sort()
+    except TypeError:
+        pass  # object 等不可比较元素保持首现顺序
+
+    def _idx_of(v, vals, idxs):
+        for i, w in enumerate(vals):
+            if _eq(v, w):
+                return idxs[i]
+        return 0
+
+    i1 = [_idx_of(v, va, ia) for v in common]
+    i2 = [_idx_of(v, vb, ib) for v in common]
+    try:
+        dt = npmod.result_type(a, b)
+    except Exception:
+        dt = a.dtype
+    res = npmod.array(common, dtype=dt) if common else npmod.array([], dtype=dt)
+    if not return_indices:
+        return res
+    i1a = npmod.array(i1, dtype='int64') if i1 else npmod.array([], dtype='int64')
+    i2a = npmod.array(i2, dtype='int64') if i2 else npmod.array([], dtype='int64')
+    return (res, i1a, i2a)
 
 
 def union1d(ar1, ar2):
@@ -673,6 +732,19 @@ def isin(element, test_elements, assume_unique=False, invert=False, kind=None):
         if not isinstance(t, (list, tuple)):
             return [t]
         out = []
+        # object 数组：tuple/list 元素是数据而非容器，只按 shape 维数展平，
+        # 不递归进元素内部（否则会腐化 (1,) 这类 1 元素 tuple）。
+        if (getattr(x, '_dtype', None) == 'object'
+                or str(getattr(x, 'dtype', '')) == 'object'):
+            def rec_o(v, depth):
+                if depth == 0:
+                    out.append(v)
+                    return
+                for w in v:
+                    rec_o(w, depth - 1)
+
+            rec_o(t, len(getattr(x, 'shape', ())))
+            return out
 
         def rec(v):
             if isinstance(v, (list, tuple)):
@@ -1396,11 +1468,48 @@ def trim_zeros(filt, trim="fb"):
 
 
 def ediff1d(ary, to_end=None, to_begin=None):
-    """一维相邻元素差分，可选拼接首尾。"""
-    arr = _asarray(ary)
-    te = _flat(to_end) if to_end is not None else None
-    tb = _flat(to_begin) if to_begin is not None else None
-    return _wrap(_core.ediff1d(arr._array, te, tb))
+    """一维相邻元素差分，可选 to_begin/to_end 前后拼接。
+
+    语义（numpy 2.x）：diff = ary[1:] - ary[:-1]（一维），结果 =
+    to_begin + diff + to_end。to_begin/to_end 可为标量或一维数组；
+    dtype 须与 ary same_kind 可转（float→int 等禁止，抛 TypeError），
+    Python int 标量按 ary dtype 补码回绕（如 int16 上 2**16 → 0）。
+    """
+    npmod = _np()
+    a = _asarray(ary).ravel()
+    adt = getattr(a, '_dtype', 'float64')
+
+    def _prep(v, name):
+        if v is None:
+            return None
+        if isinstance(v, (int, float, bool)):
+            arr = npmod.array([v])
+        else:
+            arr = _asarray(v).ravel()
+        sk = getattr(getattr(arr, 'dtype', None), 'kind', '')
+        dk = getattr(getattr(a, 'dtype', None), 'kind', '')
+        if sk and dk and not ((sk == dk) or (sk in 'iu' and dk == 'f')):
+            raise TypeError(
+                f"dtype of `{name}` must be compatible with {a.dtype}")
+        if getattr(arr, '_dtype', 'float64') != adt:
+            arr = arr.astype(adt)
+        return arr
+
+    tb = _prep(to_begin, 'to_begin')
+    te = _prep(to_end, 'to_end')
+    if int(getattr(a, 'size', 0)) >= 2:
+        d = a[1:] - a[:-1]
+    else:
+        d = npmod.array([], dtype=adt)
+    parts = []
+    if tb is not None:
+        parts.append(tb)
+    parts.append(d)
+    if te is not None:
+        parts.append(te)
+    if len(parts) == 1:
+        return d
+    return npmod.concatenate(parts, axis=0)
 
 
 def diff(a, n=1, axis=-1):

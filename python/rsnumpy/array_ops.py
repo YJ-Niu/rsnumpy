@@ -75,6 +75,13 @@ def reshape(a, shape=None, order='C', *, newshape=None, copy=None):
     else:
         shape = tuple(shape)
     arr = a if hasattr(a, '_array') else _wrap(a)
+    _tot = 1
+    for _s in shape:
+        _tot *= int(_s)
+    if _tot == 0:
+        # Rust _core.reshape 拒绝零尺寸：直接构造同 dtype 零尺寸数组
+        # （复用非零 raw 占位 + shape 覆盖会导致 tolist 读取不一致）。
+        return _np().array([], dtype=getattr(arr, '_dtype', 'float64'))
     if order == 'F':
         flat = arr.ravel(order='F')
         out = _wrap(_core.reshape(flat._array, shape))

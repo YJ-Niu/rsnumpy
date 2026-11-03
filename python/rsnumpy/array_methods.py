@@ -118,7 +118,7 @@ class NdArrayMethods:
                     _t = arr.tolist()
                     fv = _rec(_t) if isinstance(_t, list) else [_t]
                     bits = _INT_BITS[name]
-                    signed = name.startswith('int')
+                    signed = name.startswith('int')  # noqa: F841
                     mask = (1 << bits) - 1
                     half = 1 << (bits - 1)
                     out = []
@@ -282,9 +282,16 @@ class NdArrayMethods:
         for _d in shape:
             _sz *= _d
         if _sz == 0:
+            # Rust 拒绝零尺寸：直接构造同 dtype 零尺寸数组（与 np.reshape 模块
+            # 函数路径一致；旧占位 + override 方案的 tolist 读取不一致）。
             import rsnumpy as _rn
+            _dt = getattr(arr, '_dtype', "float64")
+            try:
+                return _rn.array([], dtype=_dt)
+            except Exception:
+                pass
             out = ndarray._wrap(_rn.zeros((1,)),
-                                _dtype=getattr(arr, '_dtype', "float64"),
+                                _dtype=_dt,
                                 _fields=getattr(arr, '_fields', None),
                                 _raw_data=getattr(arr, '_raw_data', None))
             out._rs_shape_override = shape
