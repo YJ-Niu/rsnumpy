@@ -188,7 +188,9 @@ def __getattr__(name):
     # 移植测试按 numpy 路径从 _core 导入）
     if name in ('arange', 'array', 'atleast_1d', 'atleast_2d', 'atleast_3d',
                 'block', 'concatenate', 'hstack', 'newaxis', 'stack',
-                'vstack', 'finfo', 'iinfo', 'swapaxes'):
+                'vstack', 'finfo', 'iinfo', 'swapaxes',
+                'isscalar', 'ndarray', 'signbit'):
+        # testing/_private/utils.py 按 numpy 路径从 _core 导入这三个公共名
         import rsnumpy
         return getattr(rsnumpy, name)
     # 子模块：惰性导入（`import rsnumpy._core.X` 由导入机制直接解析，

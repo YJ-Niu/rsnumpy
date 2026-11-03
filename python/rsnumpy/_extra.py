@@ -1595,18 +1595,29 @@ def outer(a, b, out=None):
 def kron(a, b):
     """Kronecker 积（支持 1D/2D）。"""
     np = _np()
+    _nd = np.ndarray
+    # 官方语义：两输入为同一 ndarray 子类（如 matrix）时，结果保持子类
+    _subcls = (type(a) if (isinstance(a, _nd) and isinstance(b, type(a))
+                           and type(a) is not _nd) else None)
     A = _asarray(a)
     B = _asarray(b)
     if A.ndim == 1 and B.ndim == 1:
-        return outer(A, B).ravel()
-    A2 = A if A.ndim == 2 else np.reshape(A, (1, A.size))
-    B2 = B if B.ndim == 2 else np.reshape(B, (1, B.size))
-    ia, ja = A2.shape
-    ib, jb = B2.shape
-    ar = np.reshape(A2, (ia, 1, ja, 1))
-    br = np.reshape(B2, (1, ib, 1, jb))
-    prod4 = np.multiply(ar, br)
-    return np.reshape(prod4, (ia * ib, ja * jb))
+        res = outer(A, B).ravel()
+    else:
+        A2 = A if A.ndim == 2 else np.reshape(A, (1, A.size))
+        B2 = B if B.ndim == 2 else np.reshape(B, (1, B.size))
+        ia, ja = A2.shape
+        ib, jb = B2.shape
+        ar = np.reshape(A2, (ia, 1, ja, 1))
+        br = np.reshape(B2, (1, ib, 1, jb))
+        prod4 = np.multiply(ar, br)
+        res = np.reshape(prod4, (ia * ib, ja * jb))
+    if _subcls is not None:
+        try:
+            return _subcls(res.tolist())
+        except Exception:
+            pass
+    return res
 
 
 def tensordot(a, b, axes=2):

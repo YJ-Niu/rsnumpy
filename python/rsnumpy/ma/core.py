@@ -4,6 +4,9 @@
 直接引用的公共名与辅助函数。
 """
 
+import builtins
+import warnings
+
 import rsnumpy as np
 
 
@@ -38,6 +41,10 @@ class MaskError(Exception):
 
 class MaskedArrayFutureWarning(FutureWarning):
     """numpy.ma.core.MaskedArrayFutureWarning 兼容占位。"""
+
+
+_ma_argsort_default = object()
+_ma_reduce_default = object()
 
 
 class MaskedArray:
@@ -75,6 +82,15 @@ class MaskedArray:
     def dtype(self):
         return self._data.dtype
 
+    @dtype.setter
+    def dtype(self, value):
+        # gh-31192：设置 dtype 为弃用行为（发警告但仍生效）
+        warnings.warn(
+            "Setting the dtype on a MaskedArray is deprecated and will be "
+            "removed in a future version.",
+            DeprecationWarning, stacklevel=2)
+        self._data = self._data.astype(value)
+
     @property
     def shape(self):
         return self._data.shape
@@ -110,6 +126,45 @@ class MaskedArray:
 
     def _mask_flat(self):
         return list(self._mask)
+
+    def tolist(self):
+        """numpy.ma 语义：返回值（masked 位置保留原数据）。"""
+        return self._data.tolist()
+
+    # ------------------------------------------------------------------
+    # 转置族（numpy.ma 语义：结果保留掩码）
+    # ------------------------------------------------------------------
+    def _ma_rebuild(self, data, mask_flat):
+        out = MaskedArray(data, mask=False)
+        out._mask = list(mask_flat)
+        out.fill_value = self.fill_value
+        return out
+
+    def transpose(self, *axes):
+        data_t = self._data.transpose(*axes) if axes else self._data.T
+        m = np.asarray(self._mask, dtype='bool').reshape(self.shape)
+        mask_t = m.transpose(*axes) if axes else m.T
+        return self._ma_rebuild(data_t, mask_t.reshape((-1,)).tolist())
+
+    def swapaxes(self, axis1, axis2):
+        data_t = self._data.swapaxes(axis1, axis2)
+        m = np.asarray(self._mask, dtype='bool').reshape(self.shape)
+        mask_t = m.swapaxes(axis1, axis2)
+        return self._ma_rebuild(data_t, mask_t.reshape((-1,)).tolist())
+
+    @property
+    def T(self):
+        return self.transpose()
+
+    @property
+    def mT(self):
+        if self.ndim < 2:
+            raise ValueError("matrix transpose with ndim < 2 is undefined")
+        return self.swapaxes(self.ndim - 2, self.ndim - 1)
+
+    def argsort(self, axis=_ma_argsort_default, kind=None, order=None):
+        """掩码感知 argsort（numpy.ma.argsort 兼容，gh-8701 警告语义）。"""
+        return _ma_argsort_impl(self, axis, kind, order)
 
     # ------------------------------------------------------------------
     # 算术/比较 dunder：掩码按位或传播（numpy.ma 语义的核心子集）
@@ -711,6 +766,99 @@ def _copy_names():
 for _n, _v in _copy_names().items():
     globals()[_n] = _v
 del _copy_names, _n, _v
+
+
+# ---- 掩码感知 argsort / minmax（numpy.ma 语义；覆盖上面从 np 拷贝的同名函数）----
+
+def _ma_argsort_impl(a, axis, kind=None, order=None):
+    # gh-8701：>1-d 的默认 axis（None/展平）未来将变为 -1
+    if axis is _ma_argsort_default:
+        axis = None
+        if a.ndim > 1:
+            warnings.warn(
+                "the default axis of argsort for 2-d arrays is not going to "
+                "be the same as the axis of sort in the future; values will "
+                "be sorted along the last axis instead.",
+                MaskedArrayFutureWarning, stacklevel=3)
+    if axis is not None:
+        ax = axis % a.ndim
+        res = np.argsort(a.data, axis=ax)
+        return MaskedArray(res, mask=False, fill_value=a.fill_value)
+    # axis=None：展平 argsort，masked 元素排末尾
+    flat = a.data.reshape((-1,)).tolist()
+    if not isinstance(flat, list):
+        flat = [flat]
+    mask_flat = ([bool(x) for x in a._mask]
+                 if a._mask is not nomask else [False] * len(flat))
+    idx = sorted(range(len(flat)), key=lambda i: (mask_flat[i], flat[i]))
+    return MaskedArray(np.array(idx, dtype='int64'), mask=False,
+                       fill_value=a.fill_value)
+
+
+def argsort(a, axis=_ma_argsort_default, kind=None, order=None):
+    """掩码感知 argsort（numpy.ma.argsort 兼容；gh-8701 警告语义）。"""
+    return _ma_argsort_impl(asarray(a), axis, kind, order)
+
+
+class _ma_minmax:
+    """numpy.ma.minimum/maximum：可调二元算子 + .reduce（1.13 axis 警告语义）。"""
+
+    def __init__(self, name, use_min):
+        self.__name__ = name
+        self._use_min = use_min
+        self.__doc__ = "mask-aware %s (numpy.ma.%s compatible)" % (name, name)
+
+    def __call__(self, a, b, **kw):
+        return (np.minimum(a, b, **kw) if self._use_min
+                else np.maximum(a, b, **kw))
+
+    def reduce(self, a, axis=_ma_reduce_default, **kw):
+        a = asarray(a)
+        if axis is _ma_reduce_default:
+            axis = None
+            if a.ndim > 1:
+                warnings.warn(
+                    "the default axis of reduce for 2-d arrays is not going "
+                    "to be the same as the axis of sum in the future.",
+                    MaskedArrayFutureWarning, stacklevel=3)
+        op = builtins.min if self._use_min else builtins.max
+        fill = a.fill_value
+
+        def _fill0():
+            return fill if fill is not None else 0
+
+        if a.ndim <= 1 or axis is None:
+            flat = a.data.reshape((-1,)).tolist()
+            if not isinstance(flat, list):
+                flat = [flat]
+            mask_flat = ([bool(x) for x in a._mask]
+                         if a._mask is not nomask else [False] * len(flat))
+            vals = [v for v, mm in zip(flat, mask_flat) if not mm]
+            if not vals:
+                return _fill0()
+            return op(vals)
+        # per-axis（2-d 简化：沿行/列取 min/max，masked 元素不参与）
+        ax = axis % a.ndim
+        d = a.data.tolist()
+        rows, cols = len(d), len(d[0])
+        mask_flat = ([bool(x) for x in a._mask]
+                     if a._mask is not nomask else [False] * (rows * cols))
+        out = []
+        if ax == 1:
+            for i in range(rows):
+                vals = [d[i][j] for j in range(cols)
+                        if not mask_flat[i * cols + j]]
+                out.append(op(vals) if vals else _fill0())
+        else:
+            for j in range(cols):
+                vals = [d[i][j] for i in range(rows)
+                        if not mask_flat[i * cols + j]]
+                out.append(op(vals) if vals else _fill0())
+        return np.array(out, dtype=a.data.dtype)
+
+
+minimum = _ma_minmax('minimum', True)
+maximum = _ma_minmax('maximum', False)
 
 # numpy 遗留别名：product = prod。np.product 在顶层于 ma 导入之后才挂载，
 # _copy_names 时尚不可见，这里显式补齐。

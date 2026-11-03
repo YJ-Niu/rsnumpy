@@ -595,7 +595,31 @@ class NdArrayMethods:
         _cpx_i = getattr(arr, '_complex_data', None)
         if _cpx_i is not None:
             return _cpx_i[0] if _cpx_i else 0j
-        v = arr._array.item(*args)
+        # numpy item 语义：item(0, 0) 与 item((0, 0)) 等价；越界索引抛
+        # IndexError（Python 层预检——Rust item 只收扁平 int，传 tuple 会
+        # TypeError 而非 numpy 的 IndexError）。
+        if len(args) == 1 and isinstance(args[0], (tuple, list)):
+            idx = tuple(int(i) for i in args[0])
+        else:
+            idx = tuple(int(i) for i in args)
+        shp = tuple(arr.shape)
+        if len(idx) > len(shp):
+            raise IndexError(
+                f"too many indices for array: array is {len(shp)}-dimensional, "
+                f"but {len(idx)} were indexed")
+        for _ai, (_i, _d) in enumerate(zip(idx, shp)):
+            if _d == 0 or _i < -_d or _i >= _d:
+                raise IndexError(
+                    f"index {_i} is out of bounds for axis {_ai} with size {_d}")
+        if len(idx) == 1:
+            v = arr._array.item(idx[0])
+        elif idx:
+            _flat = 0
+            for _i, _d in zip(idx, shp):
+                _flat = _flat * _d + _i
+            v = arr._array.item(_flat)
+        else:
+            v = arr._array.item()
         # 无符号高位值以 i64 补码负值存储：还原无符号值
         _u_bits = {'uint8': 8, 'uint16': 16, 'uint32': 32,
                    'uint64': 64}.get(str(getattr(arr, '_dtype', '')))
@@ -735,16 +759,32 @@ class NdArrayMethods:
         空 values 为 no-op；越界索引抛 IndexError（避免 Rust panic abort）。
         """
         ndarray, _ensure = _get_deps()
+        n = 1
+        for d in arr.shape:
+            n *= d
+        # indices 可为标量 int / ndarray 标量 / 数组 / list（numpy put 语义）
+        if hasattr(indices, 'tolist'):
+            _t = indices.tolist()
+            if isinstance(_t, (bool, int, float)):
+                idxs = [int(_t)]
+            else:
+                idxs = [int(v) for v in _t]
+        elif isinstance(indices, (bool, int)):
+            idxs = [int(indices)]
+        else:
+            idxs = [int(v) for v in list(indices)]
+        # values 可为标量（填到全部索引，numpy put 语义）——先展开，避免
+        # list(scalar) 报 'int' object is not iterable
+        if hasattr(values, 'tolist'):
+            _vt = values.tolist()
+        else:
+            _vt = values
+        if isinstance(_vt, (bool, int, float, complex)):
+            values = [_vt] * len(idxs)
         vals = values.tolist() if hasattr(values, 'tolist') else list(values)
         if not vals:
             # numpy 语义：空 values 不修改数组
             return
-        n = 1
-        for d in arr.shape:
-            n *= d
-        idxs = [int(v) for v in
-                (indices.tolist() if hasattr(indices, 'tolist')
-                 else list(indices))]
 
         def _norm(i):
             if n == 0:

@@ -1364,6 +1364,13 @@ class ndarray:
                 f"too many indices for array: array is {self.ndim}-dimensional, "
                 f"but {len(key)} were indexed")
         # 越界整数索引：numpy 语义 IndexError（与 getitem 一致）
+        # 纯 int key（非 tuple）同样要查 axis 0：a[10] = 1 静默落到
+        # Rust setitem 不抛错（官方测试 test_mapping 覆盖）。
+        if isinstance(key, int) and not isinstance(key, builtins.bool):
+            _ns0 = self.shape[0] if self.shape else 0
+            if _ns0 == 0 or key < -_ns0 or key >= _ns0:
+                raise IndexError(
+                    f"index {key} is out of bounds for axis 0 with size {_ns0}")
         if isinstance(key, tuple):
             for _ax_i, _vi in builtins.enumerate(key):
                 if _ax_i >= len(self.shape):
@@ -2606,21 +2613,41 @@ class ndarray:
     def view(self, dtype=None, type=None):
         """创建一个新的数组对象，共享相同的数据但拥有不同的视图。"""
         # 注意：参数名 type 遮蔽了内建 type，判断必须用 builtins.type
+
+        def _apply_view_type(arr, t):
+            """numpy 语义：view(..., type=T) 把结果实例化为 T（共享数据，
+            不经子类 __init__——与 numpy view 的 C 层行为一致）。"""
+            if isinstance(t, builtins.type) and issubclass(t, ndarray):
+                return t._wrap(arr._array, _dtype=arr._dtype,
+                               _fields=getattr(arr, '_fields', None))
+            if isinstance(t, builtins.type):
+                try:
+                    return t(arr)
+                except Exception:
+                    pass
+            return arr
+
         if dtype is not None:
             if dtype is recarray:
-                return _view_as_recarray(self)
-            if isinstance(dtype, builtins.type) and issubclass(dtype, ndarray):
+                res = _view_as_recarray(self)
+            elif isinstance(dtype, builtins.type) and issubclass(dtype, ndarray):
                 # numpy 的 view(子类)：返回共享数据的该子类实例
-                return dtype._wrap(self._array, _dtype=self._dtype)
-            if isinstance(dtype, builtins.type) and not issubclass(dtype, generic):
+                res = dtype._wrap(self._array, _dtype=self._dtype)
+            elif isinstance(dtype, builtins.type) and not issubclass(dtype, generic):
                 # 组合包装类（如 char.chararray）：接受 ndarray 构造。
                 # rsnumpy 标量类型类（np.uint32 等）不算包装类——
                 # numpy 语义下它们是 dtype 视图（.view(np.uint32)）。
                 try:
-                    return dtype(self)
+                    res = dtype(self)
                 except Exception:
-                    pass
-            return _view_dtype(self, dtype)
+                    res = None
+            else:
+                res = None
+            if res is None:
+                res = _view_dtype(self, dtype)
+            if type is not None:
+                res = _apply_view_type(res, type)
+            return res
         if type is not None:
             if type is recarray:
                 return _view_as_recarray(self)
@@ -4742,6 +4769,12 @@ def _make_scalar_type(name, base, pybase, itemsize, zero):
     is_int_scalar = pybase is int
 
     def _new(cls, val=zero, *args):
+        # numpy 语义：标量构造最多 1 个位置参数（C 层 slot 行为），
+        # 多参抛 TypeError（官方测试 test_gh_15395）。
+        if args:
+            raise TypeError(
+                f'{cls.__name__}() takes at most 1 argument '
+                f'({1 + len(args)} given)')
         if isinstance(val, ndarray):
             if val.size == 1:
                 if is_int_scalar:
@@ -4777,7 +4810,11 @@ def _make_scalar_type(name, base, pybase, itemsize, zero):
             '__complex__': lambda self: builtins.complex(self._value),
             '__bool__': lambda self: builtins.bool(self._value),
             '__index__': lambda self: builtins.int(self._value),
-            '__repr__': lambda self: 'np.{}({})'.format(name, self._value),
+            # numpy 语义：内建标量类显示 np. 前缀；子类显示子类名（gh-27106）。
+            '__repr__': lambda self: (
+                'np.{}({})'.format(name, self._value)
+                if self.__class__.__name__ == name
+                else '{}({})'.format(self.__class__.__name__, self._value)),
             '__str__': lambda self: builtins.str(self._value),
             '__format__': lambda self, fmt: format(self._value, fmt),
         })
@@ -4829,11 +4866,16 @@ def _string_new(cls, v=b'', *args):
     return bytes.__new__(cls, v)
 
 
+# numpy char_ 语义：__radd__ 恒返回 NotImplemented——b'x' + bytes_ /
+# 'x' + str_ 的拼接由 bytes/str 基类提供（子类实例可直接被基类 __add__ 接受）。
+_radd_impl = lambda self, other: NotImplemented
 string_ = type('string_', (character, bytes), {
     '__new__': staticmethod(_string_new),
+    '__radd__': _radd_impl,
     'dtype': property(lambda self: DType('S%d' % builtins.len(self))),
 })
 unicode_ = type('unicode_', (character, str), {
+    '__radd__': _radd_impl,
     'dtype': property(lambda self: DType('U%d' % builtins.len(self))),
 })
 bytes_ = string_  # rsnumpy 中 bytes_ 为字节字符串类型
@@ -6322,7 +6364,11 @@ def _has_rscalar_leaf(x):
 
 def asarray(a, dtype=None, order=None):
     """转换输入为数组。"""
-    if _is_ndarray(a):
+    # isinstance 而非 _is_ndarray 的 hasattr 鸭子检查：__getattr__ 透传的
+    # 包装对象会让 hasattr(obj, '_array') 为真，asarray 会误当作 ndarray 原样
+    # 返回——numpy 的 asarray 应走 __array__ 协议（透传包装对象的警告/异常，
+    # gh-14735）。
+    if isinstance(a, ndarray):
         if dtype is None:
             return a
         # An explicit dtype must cast even when the input is already an
@@ -6446,13 +6492,21 @@ class matrix(ndarray):
     """NumPy 的 ``np.matrix`` 等价物：二维 ndarray 子类。
 
     保留 0-d/1-d 输入自动升为 2-d 的 NumPy 语义；``isinstance``/``issubclass``
-    检查因此可以正常工作。算术运算沿用基类（逐元素）语义。
+    检查因此可以正常工作。
     """
 
     def __init__(self, data=None, dtype=None, copy=True):
         if isinstance(data, str):
-            rows = data.split(';')
-            data = [[float(e.strip()) for e in row.split(',')] for row in rows]
+            # 官方 matrix 字符串形式：'[1 0; 1 0]'（分号分行、空白/逗号分元素）
+            s = data.strip()
+            if s.startswith('[') and s.endswith(']'):
+                s = s[1:-1]
+            rows = []
+            for row in s.split(';'):
+                elems = [e for e in row.replace(',', ' ').split()]
+                if elems:
+                    rows.append([float(e) for e in elems])
+            data = rows
         arr = asarray(data, dtype=dtype)
         if arr.ndim == 0:
             arr = arr.reshape(1, 1)
@@ -6461,6 +6515,50 @@ class matrix(ndarray):
         elif arr.ndim > 2:
             raise ValueError("matrix must be 2-dimensional")
         super().__init__(arr)
+
+    def __mul__(self, other):
+        # 官方 matrix 语义：2-d matrix 与 1-d 向量不可直接相乘（ndarray 的
+        # 广播规则不适用于 matrix，numpy 抛 ValueError）。
+        if hasattr(other, 'ndim'):
+            if self.ndim == 2 and other.ndim == 1:
+                raise ValueError(
+                    "matmul: Input operand 1 has a mismatch in its core "
+                    "dimension 0, with gufunc signature (n?,k),(k,m?)->"
+                    f"(n?,m), size must be {self.shape[-1]} but is 1")
+            if self.ndim == 1 and other.ndim == 2:
+                raise ValueError(
+                    "matmul: Input operand 0 has a mismatch in its core "
+                    "dimension 0, with gufunc signature (n?,k),(k,m?)->"
+                    f"(n?,m), size must be {other.shape[0]} but is 1")
+        return super().__mul__(other)
+
+    @property
+    def real(self):
+        r = super().real
+        return r if isinstance(r, matrix) else matrix(r.tolist())
+
+    @property
+    def imag(self):
+        r = super().imag
+        return r if isinstance(r, matrix) else matrix(r.tolist())
+
+    def diagonal(self, offset=0):
+        """返回矩阵对角线，作为 1-d 行矩阵（numpy asmatrix 语义）。"""
+        d = super().diagonal(offset)
+        return matrix(d.tolist())
+
+    def std(self, axis=None, **kwargs):
+        # 官方 matrix 语义：axis=None 时返回 0-d 结果（shape 为 ()）。
+        v = super().std(axis=axis, **kwargs)
+        if hasattr(v, 'shape'):
+            return v if v.ndim == 0 else matrix(v.tolist())
+        return ndarray(v)
+
+    def argmax(self, axis=None):
+        v = super().argmax(axis=axis)
+        if hasattr(v, 'shape'):
+            return v if v.ndim == 0 else matrix(v.tolist())
+        return ndarray(v)
 
 
 def asmatrix(data, dtype=None):
@@ -9450,6 +9548,19 @@ class _NamespaceInfo:
 def __array_namespace_info__():
     return _NamespaceInfo()
 
+
+# ABC 注册（官方 numpy 语义）：标量类型类作为 numbers 模块的虚拟子类，
+# 使 isinstance(np.int64(1), numbers.Integral) / issubclass(np.floating,
+# numbers.Real) 等检查成立。
+import numbers as _numbers  # noqa: E402
+
+_numbers.Number.register(number)
+_numbers.Complex.register(inexact)
+_numbers.Complex.register(complexfloating)
+_numbers.Real.register(floating)
+_numbers.Integral.register(integer)
+_numbers.Integral.register(signedinteger)
+_numbers.Integral.register(unsignedinteger)
 
 # ma 子包：模块级引用 np.bool_ 与顶层公共名（_copy_names），必须在顶层
 # 定义全部完成后导入，否则循环导入得到部分初始化的命名空间。

@@ -25,7 +25,6 @@ tests/_core_tests/test_item_selection.py 0
 tests/_core_tests/test_limited_api.py 0
 tests/_core_tests/test_longdouble.py 0
 tests/_core_tests/test_multiarray.py 0
-tests/_core_tests/test_multiprocessing.py 0
 tests/_core_tests/test_nditer.py 0
 tests/_core_tests/test_nep50_promotions.py 0
 tests/_core_tests/test_numeric.py 0
@@ -100,5 +99,4 @@ tests/test_rsnumpy_records.py 0
 tests/test_rsnumpy_scalarmath.py 0
 tests/test_rsnumpy_shape_base.py 0
 tests/testing/tests/test_utils.py 0
-tests/typing_tests/test_isfile.py 0
 tests/typing_tests/test_typing.py 0

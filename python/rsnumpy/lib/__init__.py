@@ -16,32 +16,44 @@ def add_newdoc(where, obj, doc):
 class NumpyVersion:
     """NumPy 版本字符串比较器（numpy.lib.NumpyVersion 兼容）。
 
-    支持 '1.21.0'、'1.21.0rc1'、'1.21.0.dev0+git...' 等形式；
-    与字符串或其他 NumpyVersion 比较（<, <=, >, >=, ==, !=）。
+    支持 '1.21.0'、'1.21.0rc1'、'1.21.0.dev0+git...'、'1.21.0.dev-<hash>'
+    等形式；与字符串或其他 NumpyVersion 比较（<, <=, >, >=, ==, !=）。
     """
 
     def __init__(self, version, strict=False):
+        import re
         self.vstring = str(version)
         self.strict = strict
-        v = self.vstring
-        # 去掉 git/构建后缀
-        for sep in ('+', '.', '-'):
-            if sep in v and not v.count(sep) == 2 and sep == '+':
-                v = v.split('+', 1)[0]
-        # 开发/预发布标记：'1.21.0rc1' → (1,21,0, 'rc1')
-        import re
-        m = re.match(r'^(\d+)(?:\.(\d+))?(?:\.(\d+))?(.*)$', v)
+        # 官方语义：x.y.z 三段基线必须完整，可选预发布（aN/bN/rcN）、
+        # dev 后缀（.dev0 / .dev-<hash>）与本地后缀（+<...>）；
+        # '1.9'、'1,9.0'、'1.7.x' 等非法形式抛 ValueError。
+        m = re.match(
+            r'^(\d+)\.(\d+)\.(\d+)'
+            r'(?:(a|b|rc)(\d+))?'
+            r'((?:\.dev[-\w]*)?)'
+            r'(?:\+.*)?$', self.vstring)
         if not m:
             raise ValueError(f"invalid version string: {version!r}")
-        self._parts = (int(m.group(1)),
-                       int(m.group(2)) if m.group(2) else 0,
-                       int(m.group(3)) if m.group(3) else 0)
-        self._tail = m.group(4) or ''
+        self._parts = (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        self._pre = m.group(4)              # None / 'a' / 'b' / 'rc'
+        self._pre_num = int(m.group(5)) if m.group(5) else 0
+        self._is_dev = bool(m.group(6))
 
     def _key(self):
-        # 预发布/开发版排在正式版之前：'rc1'/'dev0' → 0，无尾缀 → 1
-        pre = 0 if self._tail else 1
-        return (self._parts, pre, self._tail)
+        # 次序（同一 x.y.z 内）：
+        #   final.dev < aN.dev < aN < aN+1.dev < ... < bN.dev < bN <
+        #   rcN.dev < rcN < final
+        # - dev 版本比其所属基线低半步；
+        # - final 基线的 dev 版本低于所有预发布（官方 1.0.dev0 < 1.0a1）；
+        # - dev 后缀（hash 等）不参与比较（'1.9.0.dev-a' == '1.9.0.dev-b'，
+        #   官方语义）。
+        if self._pre is None:
+            base = (4, 0)
+        else:
+            base = ({'a': 1, 'b': 2, 'rc': 3}[self._pre], self._pre_num)
+        if self._is_dev:
+            base = (0, 0) if self._pre is None else (base[0], base[1] - 0.5)
+        return (self._parts, base)
 
     def __str__(self):
         return self.vstring

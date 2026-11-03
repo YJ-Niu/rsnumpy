@@ -948,10 +948,17 @@ class linalg_module:
         Rust 内核只覆盖 2x2 与 3x3 的方阵；其余形状或非默认 `mode` 走纯 Python
         的 Householder 反射实现 `_qr_householder`，两者约定一致。
         """
+        # NumPy >= 1.8：弃用别名 'full'/'f'/'economic'/'e' 已移除。
+        if mode in ('full', 'f'):
+            raise ValueError(
+                f"mode {mode!r} is deprecated in NumPy 1.8, use 'complete'")
+        if mode in ('economic', 'e'):
+            raise ValueError(
+                f"mode {mode!r} is deprecated in NumPy 1.8, use 'reduced'")
         core_a = _ensure(a)
         shape = tuple(core_a.shape)
         square_small = len(shape) == 2 and shape[0] == shape[1] and shape[0] in (2, 3)
-        if square_small and mode in ('reduced', 'economic'):
+        if square_small and mode == 'reduced':
             try:
                 q, r = _core.linalg.qr(core_a)
                 q = _round_array(q)
@@ -969,14 +976,14 @@ class linalg_module:
 
         from ..__init__ import ndarray
 
-        if mode in ('reduced', 'economic'):
+        if mode == 'reduced':
             want_complete = False
-        elif mode in ('complete', 'full'):
+        elif mode == 'complete':
             want_complete = True
         else:
             raise ValueError(
-                "mode must be one of 'reduced', 'economic', 'complete', "
-                f"'full', got {mode!r}")
+                "mode must be one of 'reduced' or 'complete', "
+                f"got {mode!r}")
 
         rows = [list(row) for row in _ensure(a).tolist()]
         m = len(rows)

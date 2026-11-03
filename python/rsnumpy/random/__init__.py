@@ -591,6 +591,15 @@ class _SeedSequence:
     """
 
     def __init__(self, entropy=None):
+        # 官方语义：entropy 为 int 或 1-d int 序列；嵌套序列（含 SeedSequence
+        # 自身与循环引用）拒绝——numpy 抛 TypeError。
+        if isinstance(entropy, _SeedSequence):
+            raise TypeError("SeedSequence does not accept nested sequences.")
+        if isinstance(entropy, (list, tuple)):
+            for _item in entropy:
+                if isinstance(_item, (list, tuple, _SeedSequence)):
+                    raise TypeError(
+                        "SeedSequence does not accept nested sequences.")
         self.entropy = entropy
 
 
