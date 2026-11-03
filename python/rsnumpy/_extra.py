@@ -648,11 +648,98 @@ def setxor1d(ar1, ar2, assume_unique=False):
     return _wrap(_core.setxor1d(_asarray(ar1)._array, _asarray(ar2)._array))
 
 
-def isin(element, test_elements, assume_unique=False, invert=False):
-    """逐元素判断是否属于 test_elements。"""
+def isin(element, test_elements, assume_unique=False, invert=False, kind=None):
+    """逐元素判断 element 是否属于 test_elements（numpy 语义；NaN 视为相等）。
+
+    kind：None/'sort' 不限制；'table' 仅支持整数/布尔（float/object/timedelta
+    报 ValueError），整数表范围超出 dtype 表示范围时 RuntimeError。
+    """
     _ = assume_unique
-    raw = _core.isin(_asarray(element)._array, _asarray(test_elements)._array, invert)
-    return _wrap(raw, "bool")
+    if kind is not None and kind not in ("sort", "table"):
+        raise ValueError(
+            f"kind must be None, 'sort' or 'table', got {kind!r}")
+    npmod = _np()
+    a = _asarray(element)
+    b = _asarray(test_elements)
+
+    def _values(x):
+        """展平为 Python 值列表；结构化数组保留整条记录（不拆字段）。"""
+        if getattr(x, '_fields', None):
+            t = x.tolist()
+            return list(t) if isinstance(t, (list, tuple)) else [t]
+        if tuple(getattr(x, 'shape', ())) == ():
+            return [x.item()]
+        t = x.tolist()
+        if not isinstance(t, (list, tuple)):
+            return [t]
+        out = []
+
+        def rec(v):
+            if isinstance(v, (list, tuple)):
+                for w in v:
+                    rec(w)
+            else:
+                out.append(v)
+
+        rec(t)
+        return out
+
+    fa, fb = _values(a), _values(b)
+
+    if kind == "table":
+        _base = str(getattr(b, '_dtype', '')).split('[')[0]
+        if _base != 'bool' and not (_base.startswith('int') or _base.startswith('uint')):
+            raise ValueError(
+                f"kind='table' only supports integer/bool dtypes, got {_base!r}")
+        if _base != 'bool':
+            _digits = _base[4:] if _base.startswith('uint') else _base[3:]
+            _bits = int(_digits) if _digits.isdigit() else None
+            if _bits and fb:
+                _rng = max(fb) - min(fb)
+                _max_range = (1 << _bits) - 1 if _base.startswith('uint') \
+                    else (1 << (_bits - 1)) - 1
+                if _rng > _max_range:
+                    raise RuntimeError(
+                        f"table range {_rng} for dtype {_base!r} would exceed "
+                        f"the maximum number of representable values")
+
+    _nan_in_b = any(isinstance(v, float) and v != v for v in fb)
+    try:
+        _sb = set(fb)
+        _sb_ok = True
+    except TypeError:
+        _sb, _sb_ok = None, False
+
+    def _hit(v):
+        if isinstance(v, float) and v != v:
+            return _nan_in_b
+        if _sb_ok:
+            try:
+                if v in _sb:
+                    return True
+            except TypeError:
+                pass
+        return any(v == w for w in fb)
+
+    res = [_hit(v) for v in fa]
+    if invert:
+        res = [not x for x in res]
+    shp = tuple(getattr(a, 'shape', ()))
+    if shp == ():
+        return npmod.array(res[0])
+    if not res:
+        return npmod.array([])
+
+    def _nest(vals, shape):
+        if len(shape) == 1:
+            return list(vals)
+        n = 1
+        for s in shape[1:]:
+            n *= s
+        return [_nest(vals[i * n:(i + 1) * n], shape[1:])
+                for i in range(shape[0])]
+
+    return npmod.array(_nest(res, shp))
 
 
 # ========== introspection / 复数 ==========
