@@ -1153,8 +1153,19 @@ def atleast_2d(*arys):
 
 
 def atleast_3d(*arys):
-    """确保输入至少为三维。"""
-    out = [_atleast_n(_asarray(a), 3) for a in arys]
+    """确保输入至少为三维（numpy 语义：0-d→(1,1,1)；1-d→(1,n,1)；
+    2-d→(n,m,1)——第 3 维追加在末尾，非前置补 1）。"""
+    out = []
+    for a in arys:
+        arr = _asarray(a)
+        nd = getattr(arr, 'ndim', 0)
+        if nd == 0:
+            arr = arr.reshape((1, 1, 1))
+        elif nd == 1:
+            arr = arr.reshape((1,) + tuple(arr.shape) + (1,))
+        elif nd == 2:
+            arr = arr.reshape(tuple(arr.shape) + (1,))
+        out.append(arr)
     return out[0] if len(out) == 1 else out
 
 

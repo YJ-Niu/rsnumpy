@@ -394,6 +394,23 @@ def assert_equal(actual, desired, err_msg='', verbose=True, *, strict=False):
      DESIRED: array([2., 2., 2.], dtype=float32)
     """
     __tracebackhide__ = True  # Hide traceback for py.test
+    # dtype 对象特判：不能当序列迭代（numpy asanyarray(dtype) 是 0-d
+    # 对象数组），直接比较相等性
+    def _is_dtype_obj(x):
+        if not (hasattr(x, '_names') and hasattr(x, 'itemsize')):
+            return False
+        if hasattr(x, '_array'):
+            return False
+        # numpy dtype 也有 .shape（空元组），不能因此排除
+        shp = getattr(x, 'shape', None)
+        return shp is None or (hasattr(shp, '__len__') and len(shp) == 0)
+    if _is_dtype_obj(actual) or _is_dtype_obj(desired):
+        if not (_is_dtype_obj(actual) and _is_dtype_obj(desired)
+                and actual == desired):
+            raise AssertionError(
+                f'dtypes {actual!r}, {desired!r} mismatch'
+                + (f'\n{err_msg}' if err_msg else ''))
+        return
     if isinstance(desired, dict):
         if not isinstance(actual, dict):
             raise AssertionError(repr(type(actual)))

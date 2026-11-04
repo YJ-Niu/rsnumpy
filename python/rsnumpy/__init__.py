@@ -2885,6 +2885,15 @@ class ndarray:
 
         # 通过校验后，调用正常构造逻辑
         self.__init__(data, _dtype, _fields, _raw_data)
+        # 结构化数组：重建 _dtype_obj（__init__ 的字符串 dtype 路径不会
+        # 设置它；缺失会让 _struct_eq 等结构化路径被跳过）。注意模块级
+        # `np` 是 num_core，这里的 dtype 是 Python 层 np.dtype。
+        if _dtype == 'void' and _fields:
+            try:
+                import rsnumpy as _rs
+                self._dtype_obj = _rs.dtype(_fields)
+            except Exception:
+                pass
 
 
 class recarray(ndarray):
@@ -4204,7 +4213,16 @@ def _build_plain_array(nested, base_dt, shape):
     k = base_dt._kind
     if k in ('S', 'U', 'V'):
         flat = _flatten_data(nested) if isinstance(nested, list) else [nested]
-        arr = ndarray._wrap(np.zeros((len(flat),) if flat else (0,)),
+        # 按目标形状包装（reshape 后的结构化字段访问须保持外层形状，
+        # 如 (1,3) 数组的 S 字段访问应得 (1,3) 而非平铺 (3,)）
+        _n = 1
+        for _d in (shape or ()):
+            _n *= int(_d)
+        if shape and _n == len(flat):
+            _shape = tuple(int(s) for s in shape)
+        else:
+            _shape = (len(flat),) if flat else (0,)
+        arr = ndarray._wrap(np.zeros(_shape),
                             _dtype='string_', _raw_data=list(flat))
         width = base_dt._itemsize // 4 if k == 'U' else base_dt._itemsize
         arr._str_dtype = (k, width)
@@ -9951,10 +9969,15 @@ def bitwise_not(x):
     r, dt = _to_raw(x)
     # dtype 可能是字符串 'bool'，也可能是类对象（zeros_like(dtype=xp.bool)
     # 产生的 rsnumpy.bool），两者都要识别为布尔并走逻辑取反。
-    if dt == 'bool' or 'bool' in getattr(dt, '__name__', str(dt)).lower():
+    # bool 标量经 _to_raw 后 dtype 丢失为 'float64'，需按输入类型兜底识别。
+    _x_bool = isinstance(x, bool) or type(x).__name__ == 'bool'
+    if (_x_bool or dt == 'bool'
+            or 'bool' in getattr(dt, '__name__', str(dt)).lower()):
         # 布尔数组：逻辑取反（numpy 语义）。np.invert 是补码位取反，会把
         # 0/1 表示的 bool 变成 -1/-2；对 0/1 值异或 1 才是逻辑非。
-        r = np.bitwise_xor(r, np.ndarray([1]))
+        # 用同形 ones_like：0-d 标量与 (1,) 形状的 [1] 广播会失败。
+        r = np.bitwise_xor(r, np.ones_like(r))
+        dt = 'bool'
     elif dt == 'uint8':
         raw = np.bitwise_not(r)
         r = np.bitwise_and(raw, np.ndarray([255]))
