@@ -329,10 +329,23 @@ class NdArrayMethods:
         except ValueError:
             result = arr._array.flatten().reshape(shape)
         out = ndarray._wrap(result, _dtype=getattr(arr, '_dtype', "float64"), _fields=getattr(arr, '_fields', None), _raw_data=getattr(arr, '_raw_data', None))
+        # 继承结构化 DType（缺失会导致字段访问/属性查找失效）
+        out._dtype_obj = getattr(arr, '_dtype_obj', None)
         try:
             out._rs_parent = arr
         except Exception:
             pass
+        # 子类保持（numpy 语义：recarray.reshape → recarray；其余子类
+        # 如 matrix/chararray 有各自语义，不在此统一保持）
+        _src_cls = builtins.type(arr)
+        if _src_cls is not ndarray:
+            try:
+                import rsnumpy as _rn_rs
+                _rec_cls = _rn_rs.recarray
+                if issubclass(_src_cls, _rec_cls):
+                    out.__class__ = _src_cls
+            except Exception:
+                pass
         return out
     
     @staticmethod
@@ -612,6 +625,15 @@ class NdArrayMethods:
     @staticmethod
     def fill(arr, value):
         """用指定值填充数组。"""
+        kind = getattr(getattr(arr, 'dtype', None), 'kind', None)
+        if kind in ('S', 'U'):
+            # Rust 层 fill 只收数值；字符串 dtype 走 setitem 强转
+            if arr.ndim == 0:
+                arr[()] = value
+            else:
+                for _i in range(int(arr.size)):
+                    arr[_i] = value
+            return
         arr._array.fill(value)
     
     @staticmethod

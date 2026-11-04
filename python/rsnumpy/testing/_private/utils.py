@@ -771,6 +771,33 @@ def assert_approx_equal(actual, desired, significant=7, err_msg='',
         raise AssertionError(msg)
 
 
+def _fmt_err(v):
+    """numpy array2string 风格的标量错误值格式：8 位有效数字、去尾零、
+    科学计数保留 '1.e-04' 形式、整值浮点保留 '1.' 形式。"""
+    if isinstance(v, bool):
+        return str(v)
+    if isinstance(v, int):
+        return str(v)
+    try:
+        fv = float(v)
+    except (TypeError, ValueError):
+        return str(v)
+    if fv != fv or fv in (float('inf'), float('-inf')):
+        return str(v)
+    if fv == int(fv) and abs(fv) < 1e16:
+        # 整值：numpy 数组打印带小数点（563766. → '563766.'）
+        return f'{int(fv)}.'
+    s = f'{fv:.8g}'
+    if 'e' in s:
+        mant, exp = s.split('e')
+        if '.' not in mant:
+            mant += '.'
+        return mant + 'e' + exp
+    if '.' not in s:
+        s += '.'
+    return s
+
+
 def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
                          precision=6, equal_nan=True, equal_inf=True,
                          *, strict=False, names=('ACTUAL', 'DESIRED')):
@@ -784,7 +811,8 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
     ox, oy = x, y
 
     def isnumber(x):
-        return type(x.dtype)._is_numeric
+        # rsnumpy 所有数值 dtype 共用一个 DType 类，_is_numeric 按实例 kind 判定
+        return getattr(x.dtype, '_is_numeric', False)
 
     def istime(x):
         return x.dtype.char in "Mm"
@@ -847,13 +875,18 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
         """
         __tracebackhide__ = True  # Hide traceback for py.test
 
-        if not infs_mask.any():
+        # infs_mask 可能是标量（rsnumpy 的 bool 标量类名也是 'bool'，
+        # 不能用 isinstance 判别），按是否有 .any() 鸭子类型区分
+        if not hasattr(infs_mask, 'any'):
+            if not infs_mask:
+                return
+        elif not infs_mask.any():
             return
         if x.ndim > 0 and y.ndim > 0:
             x = x[infs_mask]
             y = y[infs_mask]
         else:
-            assert infs_mask.all()
+            assert infs_mask
 
         if robust_any_difference(x, y):
             msg = build_err_msg(
@@ -935,7 +968,7 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
         # do not trigger a failure (np.ma.masked != True evaluates as
         # np.ma.masked, which is falsy).
         if not cond:
-            n_mismatch = reduced.size - reduced.sum(dtype=intp)
+            n_mismatch = int(reduced.size - reduced.sum(dtype=intp))
             n_elements = flagged.size if flagged.ndim != 0 else reduced.size
             percent_mismatch = 100 * n_mismatch / n_elements
             remarks = [(f'Mismatched elements: {n_mismatch} / {n_elements} '
@@ -945,10 +978,15 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
                     positions = np.argwhere(np.asarray(~flagged))[invalids]
                 else:
                     positions = np.argwhere(np.asarray(invalids))
+                # rsnumpy 内部 f64 存储：argwhere 行元素取出来是 float，
+                # 直接 tuple(p) 会触发 float 索引保护（numpy 收 int）。
+                def _pos(p):
+                    return tuple(int(i) for i in p)
                 s = "\n".join(
                     [
-                        f" {p.tolist()}: {ox if ox.ndim == 0 else ox[tuple(p)]} "
-                        f"({names[0]}), {oy if oy.ndim == 0 else oy[tuple(p)]} "
+                        f" {[int(i) for i in p]}: "
+                        f"{ox if ox.ndim == 0 else ox[_pos(p)]} "
+                        f"({names[0]}), {oy if oy.ndim == 0 else oy[_pos(p)]} "
                         f"({names[1]})"
                         for p in positions[:5]
                     ]
@@ -983,12 +1021,12 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
                     else:
                         remarks.append(
                             'Max absolute difference among violations: '
-                            + array2string(max_abs_error))
+                            + _fmt_err(max_abs_error))
 
                     # note: this definition of relative error matches that one
                     # used by assert_allclose (found in np.isclose)
                     # Filter values where the divisor would be zero
-                    nonzero = np.bool(y != np.zeros_like(y))
+                    nonzero = y != np.zeros_like(y)
                     nonzero_and_invalid = np.logical_and(invalids, nonzero)
 
                     if all(~nonzero_and_invalid):
@@ -1007,7 +1045,7 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
                     else:
                         remarks.append(
                             'Max relative difference among violations: '
-                            + array2string(max_rel_error))
+                            + _fmt_err(max_rel_error))
             err_msg = str(err_msg)
             err_msg += '\n' + '\n'.join(remarks)
             msg = build_err_msg([ox, oy], err_msg,
@@ -1796,7 +1834,8 @@ def assert_allclose(actual, desired, rtol=1e-7, atol=0, equal_nan=True,
     import rsnumpy as np
 
     def compare(x, y):
-        return np._core.numeric.isclose(x, y, rtol=rtol, atol=atol,
+        from rsnumpy.math_functions import isclose
+        return isclose(x, y, rtol=rtol, atol=atol,
                                         equal_nan=equal_nan)
 
     actual, desired = np.asanyarray(actual), np.asanyarray(desired)

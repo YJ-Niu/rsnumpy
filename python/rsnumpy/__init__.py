@@ -478,6 +478,10 @@ class ndarray:
         return obj
 
     def __repr__(self):
+        # recarray 类 → numpy rec.array 格式。recordview（ndarray 类 +
+        # record 标记 dtype）走结构化 repr（array(...) + dtype=(type, descr)）。
+        if issubclass(builtins.type(self), recarray):
+            return _recarray_repr(self)
         fields = getattr(self, '_fields', None)
         if fields:
             return _format_structured_repr(self)
@@ -746,6 +750,18 @@ class ndarray:
         t = builtins.type(self)
         if (t is not ndarray and t is not matrix and _is_ndarray(res)
                 and issubclass(t, ndarray)):
+            # recarray 及其子类：仅结构化结果保持子类（嵌套字段 → recarray）；
+            # 标量/子数组字段访问返回基类 ndarray（numpy 语义）。
+            if issubclass(t, recarray):
+                # 嵌套结构 / 子数组字段保持子类（numpy: r['c'] → recarray）；
+                # 标量字段（含 S/U）返回基类 ndarray（numpy 语义）。
+                _rdo = getattr(res, '_dtype_obj', None)
+                _rstruct = (_rdo is not None
+                            and (getattr(_rdo, '_names', None) is not None
+                                 or getattr(_rdo, '_subdtype', None)
+                                 is not None))
+                if not _rstruct:
+                    return res
             res = res.view(t)
         return res
 
@@ -754,6 +770,19 @@ class ndarray:
         # indexing applied). 0-d 数组：arr[()] 返回标量（numpy 语义）。
         if isinstance(key, tuple) and len(key) == 0:
             if self.ndim == 0:
+                # 0-d 结构化 a[()] → record 标量（numpy 语义）
+                _dt_0s = _struct_dt_of(self)
+                if _dt_0s is not None and _dt_0s._names is not None:
+                    _raw_0s = getattr(self, '_raw_data', None)
+                    if (isinstance(_raw_0s, list) and len(_raw_0s) == 1
+                            and isinstance(_raw_0s[0], (list, tuple))):
+                        return _Record(tuple(_raw_0s[0]), _dt_0s)
+                    if isinstance(_raw_0s, (list, tuple)):
+                        return _Record(tuple(_raw_0s), _dt_0s)
+                    _t_0s = self.tolist()
+                    _r_0s = (tuple(_t_0s) if isinstance(_t_0s, (list, tuple))
+                             else (_t_0s,))
+                    return _Record(_r_0s, _dt_0s)
                 _dt_0 = str(getattr(self, '_dtype', 'float64'))
                 _raw_0 = getattr(self, '_raw_data', None)
                 if _raw_0 is not None:
@@ -779,7 +808,10 @@ class ndarray:
                     return _cls_0(_v_0)
                 except Exception:
                     return _v_0
-            return self.copy()
+            # numpy 语义：N-d (N>=1) 数组空元组索引 → IndexError
+            raise IndexError(
+                "too many indices for array: array is %d-dimensional, "
+                "but 0 were indexed" % self.ndim)
         # numpy 语义：Ellipsis 展开为全切片（Rust 不支持 ... 索引）。
         # 注意必须用身份检查（`is`）：`in` 会触发 ndarray.__eq__ 崩溃。
         if key is Ellipsis:
@@ -885,8 +917,10 @@ class ndarray:
                              'uint16', 'uint32', 'uint64')):
                         return _rebuild(
                             [_rd[int(_k) % _sh[0]] for _k in key.tolist()])
-        # 结构化数组索引：字段 / 多字段 / 记录标量 / 子结构切片
-        if getattr(self, '_dtype_obj', None) is not None:
+        # 结构化数组索引：字段 / 多字段 / 记录标量 / 子结构切片。
+        # 用 _struct_dt_of（_dtype_obj 缺失时从 _fields 重建）：reshape 等
+        # 路径可能只保留 _fields，直接判 _dtype_obj 会漏判字段访问。
+        if _struct_dt_of(self) is not None:
             handled, res = _struct_getitem(self, key)
             if handled:
                 return res
@@ -1314,7 +1348,8 @@ class ndarray:
                 _e_n = self.ndim - (len(key) - 1)
                 key = key[:_e_i] + (slice(None),) * _e_n + key[_e_i + 1:]
         # 结构化数组赋值：字段 / 多字段 / 记录 / 切片
-        if getattr(self, '_dtype_obj', None) is not None:
+        # （_struct_dt_of：reshape 后仅保留 _fields 时仍可判定）
+        if _struct_dt_of(self) is not None:
             if _struct_setitem(self, key, value):
                 return
         # object 数组赋值：直接写入 _raw_data 引用（Rust 无 object 存储）
@@ -1528,6 +1563,24 @@ class ndarray:
             np.setitem_multi(self._array, key, list(self.shape), val)
         else:
             self._array[key] = value
+        # 字段视图写回（numpy field view 语义：a['f'][i] = v 反映到父数组）
+        _rp = getattr(self, '_rec_parent', None)
+        _rf = getattr(self, '_rec_field', None)
+        if _rp is not None and _rf is not None:
+            try:
+                _dt_p = _struct_dt_of(_rp)
+                if (_dt_p is not None and _rf in _dt_p._names
+                        and getattr(_rp, 'ndim', 1) == 1):
+                    _fi = _dt_p._names.index(_rf)
+                    _fdt_p = _dt_p._fields[_rf][0]
+                    _vals = self.tolist()
+                    for _i in range(len(_rp)):
+                        _old = _get_flat_record(_rp, _i)
+                        _lst = list(_old)
+                        _lst[_fi] = _coerce_field_value(_vals[_i], _fdt_p)
+                        _set_flat_record(_rp, _i, tuple(_lst))
+            except Exception:
+                pass
 
     def __add__(self, other):
         dt = _promote_dtype(self._dtype, other)
@@ -2263,11 +2316,14 @@ class ndarray:
         if getattr(self, '_rs_shape_override', None) is not None:
             _check_alloc_size(self.shape)  # 广播视图 copy = 物化 → 超限 MemoryError
         result = _wrap_result(self._array.copy(), self._dtype)
-        # 携带字符串/object/结构化/复数元数据，保证 copy 后语义不变
-        result._raw_data = getattr(self, '_raw_data', None)
+        # 携带字符串/object/结构化/复数元数据，保证 copy 后语义不变。
+        # 列表类存储必须复制：共享同一 list 会让副本/原数组的写操作互相可见。
+        _rd = getattr(self, '_raw_data', None)
+        result._raw_data = list(_rd) if isinstance(_rd, list) else _rd
         result._str_dtype = getattr(self, '_str_dtype', None)
         result._fields = getattr(self, '_fields', None)
-        result._complex_data = getattr(self, '_complex_data', None)
+        _cd = getattr(self, '_complex_data', None)
+        result._complex_data = list(_cd) if isinstance(_cd, list) else _cd
         result._dtype_obj = getattr(self, '_dtype_obj', None)
         result._na_object = getattr(self, '_na_object', None)
         if thread_safe:
@@ -2667,7 +2723,18 @@ class ndarray:
             不经子类 __init__——与 numpy view 的 C 层行为一致）。"""
             if isinstance(t, builtins.type) and issubclass(t, ndarray):
                 inst = t._wrap(arr._array, _dtype=arr._dtype,
-                               _fields=getattr(arr, '_fields', None))
+                               _fields=getattr(arr, '_fields', None),
+                               _raw_data=getattr(arr, '_raw_data', None))
+                _d_t = getattr(arr, '_dtype_obj', None)
+                # type=T（T 非 recarray 子类）→ 去 record 标记（numpy 语义：
+                # rec.view(dt, np.ndarray) → 普通 ndarray，dtype.type=void）
+                if _d_t is not None and not issubclass(t, recarray) and \
+                        getattr(_d_t, '_type_override', None) is not None:
+                    _c_t = DType.__new__(DType)
+                    _c_t._copy_from(_d_t)
+                    _c_t._type_override = None
+                    _d_t = _c_t
+                inst._dtype_obj = _d_t
                 _finalize_view(inst, arr)
                 return inst
             if isinstance(t, builtins.type):
@@ -2681,8 +2748,14 @@ class ndarray:
             if dtype is recarray:
                 res = _view_as_recarray(self)
             elif isinstance(dtype, builtins.type) and issubclass(dtype, ndarray):
-                # numpy 的 view(子类)：返回共享数据的该子类实例
-                res = dtype._wrap(self._array, _dtype=self._dtype)
+                # numpy 的 view(子类)：返回共享数据的该子类实例。
+                # _raw_data/_fields/_dtype_obj 必须继承——结构化数据存
+                # _raw_data，缺失会导致字段访问落 Rust 或 _flatten_records
+                # 对 None 下标崩溃。
+                res = dtype._wrap(self._array, _dtype=self._dtype,
+                                  _fields=getattr(self, '_fields', None),
+                                  _raw_data=getattr(self, '_raw_data', None))
+                res._dtype_obj = getattr(self, '_dtype_obj', None)
                 _finalize_view(res, self)
             elif isinstance(dtype, builtins.type) and not issubclass(dtype, generic):
                 # 组合包装类（如 char.chararray）：接受 ndarray 构造。
@@ -2696,6 +2769,16 @@ class ndarray:
                 res = None
             if res is None:
                 res = _view_dtype(self, dtype)
+            # 子类保持（numpy 语义：recarray.view('f8') → recarray，
+            # dtype 变更后重新标记 record；matrix/chararray 等其余子类
+            # 有各自语义，不在此统一保持）。仅覆盖基类结果——view(子类)
+            # 路径已产出该子类实例，不能被覆盖回 recarray。
+            _t_src = builtins.type(self)
+            if (_t_src is not ndarray and _is_ndarray(res)
+                    and issubclass(_t_src, recarray)
+                    and builtins.type(res) is ndarray):
+                res.__class__ = _t_src
+                _mark_dtype_record(res)
             if type is not None:
                 res = _apply_view_type(res, type)
             return res
@@ -2807,8 +2890,45 @@ class ndarray:
 class recarray(ndarray):
     """结构化数组，支持以属性方式访问字段（numpy.recarray 兼容子集）。"""
 
+    def __new__(cls, *args, **kwargs):
+        # numpy ndarray(shape, dtype) 构造器语义：第一参为 int / 全 int 元组
+        # → 形状（零填充），不是数据（np.recarray((2,), dtype=...)）。
+        _shape = None
+        if args:
+            _a0 = args[0]
+            if isinstance(_a0, int) and not isinstance(_a0, bool):
+                _shape = (_a0,)
+            elif (isinstance(_a0, tuple) and _a0 and builtins.all(
+                    isinstance(s, int) and not isinstance(s, bool)
+                    for s in _a0)):
+                _shape = tuple(_a0)
+        if _shape is not None:
+            _dt = kwargs.get('dtype')
+            if _dt is None and len(args) >= 2 and \
+                    not isinstance(args[1], (list, ndarray)):
+                _dt = args[1]
+            import rsnumpy as _np_rec
+            obj = _np_rec.zeros(_shape, dtype=_dt)
+            obj.__class__ = cls
+            _mark_dtype_record(obj)
+            object.__setattr__(obj, '_rec_built', True)
+            return obj
+        return super().__new__(cls)
+
+    def __init__(self, *args, **kwargs):
+        # shape 构造路径已在 __new__ 完成（_rec_built 标记）
+        if getattr(self, '_rec_built', False):
+            return
+        super().__init__(*args, **kwargs)
+
     def __getattr__(self, name):
-        dt = self.__dict__.get('_dtype_obj')
+        # 下划线属性不做字段查找：_struct_dt_of 内部 getattr('_dtype_obj')
+        # 在属性缺失时会回调本方法，不加守卫即无限递归。
+        if name.startswith('_'):
+            raise AttributeError(name)
+        # 用 _struct_dt_of（_dtype_obj 缺失时从 _fields 重建）：reshape 等
+        # 路径不继承 _dtype_obj 仅保留 _fields，直接读 __dict__ 会漏判字段。
+        dt = _struct_dt_of(self)
         if dt is not None and dt._names and name in dt._names:
             return self[name]
         raise AttributeError(
@@ -2819,25 +2939,46 @@ class recarray(ndarray):
         if name.startswith('_'):
             object.__setattr__(self, name, value)
             return
-        dt = self.__dict__.get('_dtype_obj')
+        dt = _struct_dt_of(self)
         if dt is not None and dt._names and name in dt._names:
             # 字段赋值：检查 writeable 再写（numpy setfield 语义）
             if not self.flags.writeable:
                 raise ValueError("assignment destination is read-only")
-            self.setfield(value, dt._fields[name][0])
+            if name == 'shape':
+                # numpy 语义：字段名 shape 与 ndarray.shape 属性冲突时，
+                # 赋值发 DeprecationWarning 并写入字段（gh-29536）。
+                import warnings as _w_rec
+                _w_rec.warn(
+                    "Setting the shape attribute of a recarray with a "
+                    "'shape' field is deprecated; use indexing "
+                    "(arr['shape']) instead.",
+                    DeprecationWarning, stacklevel=2)
+            self.setfield(value, dt._fields[name][0], name)
             return
         object.__setattr__(self, name, value)
+
+    def field(self, name, offset=0):
+        """numpy recarray.field：按名取字段（'field' 字段名冲突时保持
+        属性可调用——ra.field 是方法，ra['field'] 才是字段数据）。"""
+        return self[name]
 
     def setfield(self, val, dt, off=0):
         """设置字段（numpy recarray.setfield 兼容）：writeable 检查 + 字段写回。"""
         if not self.flags.writeable:
             raise ValueError("assignment destination is read-only")
-        names = self._dtype_obj._names
+        _dt_p = _struct_dt_of(self)
+        names = _dt_p._names
         if isinstance(off, str):
             i = names.index(off)
         else:
-            i = int(off)
-        fdt = self._dtype_obj._fields[names[i]][0]
+            # numpy 语义：off 为字节偏移 → 按偏移定位字段；无匹配时回退为索引
+            _i_off = None
+            for _j, _nm in enumerate(names):
+                if _dt_p._fields[_nm][1] == off:
+                    _i_off = _j
+                    break
+            i = _i_off if _i_off is not None else int(off)
+        fdt = _dt_p._fields[names[i]][0]
         raw = self._raw_data
         if raw is None:
             return
@@ -2850,7 +2991,7 @@ class recarray(ndarray):
 
     def getfield(self, dt, off=0):
         """读取字段（numpy recarray.getfield 兼容）。"""
-        names = self._dtype_obj._names
+        names = _struct_dt_of(self)._names
         if isinstance(off, str):
             i = names.index(off)
         else:
@@ -2890,8 +3031,9 @@ _collections_abc.Sequence.register(ndarray)
 
 
 def _as_recarray(arr):
-    """将结构化 ndarray 就地提升为 recarray（并把其 dtype 标记为 record-view）。"""
-    if isinstance(arr, ndarray) and getattr(arr, '_dtype_obj', None) is not None:
+    """将 ndarray 就地提升为 recarray（numpy: rec.array 恒返回 recarray，
+    含非结构化 dtype——此时不打 record 标记，dtype.type 保持原类型）。"""
+    if isinstance(arr, ndarray):
         arr.__class__ = recarray
         _mark_dtype_record(arr)
     return arr
@@ -2901,9 +3043,12 @@ def _mark_dtype_record(arr):
     """复制 arr 的结构化 DType 并标记为 record-view（.type=record）。
 
     复制以避免污染共享的 DType（引用同一 dtype 的其他数组应保持普通结构化、
-    .type=void）。numpy 语义：record 标记随 recarray 的 dtype 副本走。"""
+    .type=void）。numpy 语义：record 标记随 recarray 的 dtype 副本走。
+    非结构化数组不打 record 标记（dtype.type 保持原类型，如 int64）。"""
     _dt = getattr(arr, '_dtype_obj', None)
     if _dt is None:
+        return
+    if getattr(_dt, '_names', None) is None:
         return
     _c = DType.__new__(DType)
     _c._copy_from(_dt)
@@ -3337,8 +3482,10 @@ def _format_structured_field_column(col, code):
     return _format_float_field_column(col)
 
 
-def _format_structured_str(arr):
-    """__str__ 用于结构化数组：基于富 DType 递归格式化，支持嵌套/子数组。"""
+def _format_structured_str(arr, sep=" "):
+    """__str__ 用于结构化数组：基于富 DType 递归格式化，支持嵌套/子数组。
+
+    sep 控制记录间分隔符：str 用空格（numpy 显示），repr 用逗号（可 eval）。"""
     dt = getattr(arr, '_dtype_obj', None)
     if dt is None:
         return _format_structured_str_legacy(arr)
@@ -3346,7 +3493,7 @@ def _format_structured_str(arr):
     def build(o):
         if isinstance(o, tuple):
             return _fmt_record(o, dt)
-        return "[" + " ".join(build(x) for x in o) + "]"
+        return "[" + sep.join(build(x) for x in o) + "]"
 
     raw = arr._raw_data
     if arr.ndim == 0:
@@ -3404,9 +3551,97 @@ def _format_structured_str_legacy(arr):
 
 
 def _format_structured_repr(arr):
-    """__repr__ 用于结构化数组。"""
-    inner = _format_structured_str(arr)
+    """__repr__ 用于结构化数组。
+
+    ndarray 类 + record 标记 dtype（numpy recordview 语义）→
+    `array([...], dtype=(rsnumpy.record, [descr]))`；普通结构化 → `array([...])`。
+    记录间用逗号分隔，保证 eval("np." + repr) 可还原（numpy 语义）。
+    """
+    inner = _format_structured_str(arr, sep=", ")
+    _dt = getattr(arr, '_dtype_obj', None)
+    _ovr = getattr(_dt, '_type_override', None) if _dt is not None else None
+    if _ovr is not None and not issubclass(builtins.type(arr), recarray):
+        _dtype_str = "(rsnumpy.record, %s)" % repr(list(_dt.descr))
+        return "array(%s,\n      dtype=%s)" % (inner, _dtype_str)
     return f"array({inner})"
+
+
+def _fmt_pyfloat(v):
+    """numpy 数组 repr 的浮点格式：2.0 → '2.'，0.1 → '0.1'，科学计数/inf/nan 原样。"""
+    s = repr(v)
+    if 'e' in s or 'E' in s or 'inf' in s or 'nan' in s:
+        return s
+    if '.' in s:
+        s = s.rstrip('0').rstrip('.')
+        if '.' not in s:
+            s += '.'
+    else:
+        s += '.'
+    return s
+
+
+def _fmt_val(v):
+    """recarray repr 的标量格式化（numpy 数组风格）。"""
+    if isinstance(v, float):
+        return _fmt_pyfloat(v)
+    if isinstance(v, str):
+        return repr(v)
+    if isinstance(v, (bytes, bytearray)):
+        return repr(bytes(v))
+    return str(v)
+
+
+def _fmt_record_tuple(rec, dt, py_float=False):
+    """记录 tuple 的格式化。
+
+    py_float=True 用 Python repr（record 标量：2.0 保持 '2.0'）；
+    False 用 numpy 数组风格（2.0 → '2.'）。嵌套结构化字段递归。"""
+    parts = []
+    for i, n in enumerate(dt._names):
+        fdt = dt._fields[n][0]
+        v = rec[i]
+        if fdt._names is not None and isinstance(v, (list, tuple)):
+            parts.append(_fmt_record_tuple(tuple(v), fdt, py_float))
+        elif py_float:
+            parts.append(repr(v))
+        else:
+            parts.append(_fmt_val(v))
+    return "(" + ", ".join(parts) + ")"
+
+
+def _recarray_repr(arr):
+    """recarray / record 标记数组的 repr（numpy rec.array 格式）。
+
+    结构化：rec.array([(1, 0.1), (2, 0.2)],
+             dtype=[('foo', '<i4'), ('bar', '<f8')])
+    非结构化：rec.array([1., 1., 1., 1.],
+             dtype=float64)"""
+    _dt = _struct_dt_of(arr)
+    if _dt is not None and _dt._names is not None:
+        _dtype_str = repr(list(_dt.descr))
+        _raw = getattr(arr, '_raw_data', None)
+        if arr.ndim == 0:
+            if (isinstance(_raw, list) and len(_raw) == 1
+                    and isinstance(_raw[0], (list, tuple))):
+                _rec = tuple(_raw[0])
+            elif isinstance(_raw, (list, tuple)):
+                _rec = tuple(_raw)
+            else:
+                _t = arr.tolist()
+                _rec = tuple(_t) if isinstance(_t, (list, tuple)) else (_t,)
+            return "rec.array(%s,\n          dtype=%s)" % (
+                _fmt_record_tuple(_rec, _dt), _dtype_str)
+        _recs = _flatten_records(_raw) if _raw is not None else []
+        _parts = ", ".join(
+            _fmt_record_tuple(tuple(r), _dt) for r in _recs)
+        return "rec.array([%s],\n          dtype=%s)" % (_parts, _dtype_str)
+    # 非结构化：rec.array([1., 1., ...],\n          dtype=float64)
+    _vals = arr.tolist()
+    if not isinstance(_vals, list):
+        _vals = [_vals]
+    _parts = ", ".join(_fmt_val(v) for v in _vals)
+    return "rec.array([%s],\n          dtype=%s)" % (
+        _parts, getattr(arr.dtype, 'name', 'float64'))
 
 
 # ---------- 不规则/嵌套数组格式化 ----------
@@ -3788,6 +4023,9 @@ def _coerce_subarray(val, base, shape):
 
 
 def _coerce_record(rec, dt):
+    if getattr(dt, '_names', None) is None:
+        # 非结构化 dtype（如 StringDType）：整条记录按单值收敛
+        return _coerce_field_value(rec, dt)
     seq = tuple(rec) if isinstance(rec, (list, tuple)) else (rec,)
     return tuple(_coerce_field_value(seq[i], dt._fields[n][0])
                  for i, n in enumerate(dt._names))
@@ -3801,13 +4039,19 @@ def _coerce_struct_data(data, dt):
         # 记录列表：所有字段均为标量（无子数组/嵌套）且每个元素是
         # 长度等于字段数的序列 → 每元素是一条记录（fromrecords 场景）。
         # 含子数组字段的 2-d 嵌套数据仍走逐元素递归，避免误判。
-        _scalar_fields = all(
+        # 注意：模块级 all/any 被 rsnumpy ufunc 遮蔽（对生成器恒 True），
+        # 必须用捕获的内建别名 _py_all。
+        _scalar_fields = _py_all(
             dt._fields[_nm][0]._subdtype is None
             and dt._fields[_nm][0]._names is None
             for _nm in dt._names)
+        # 元素首项本身是长度 n 的序列 → 记录在更深层（多维记录行），
+        # 走逐元素递归而非记录列表（否则 (2,2) 结构被误判成 (2,) 记录）。
         if (_scalar_fields and len(data) > 0
-                and all(isinstance(x, (list, tuple)) and len(x) == n
-                        for x in data)):
+                and _py_all(isinstance(x, (list, tuple)) and len(x) == n
+                            for x in data)
+                and not _py_all(isinstance(x[0], (list, tuple))
+                                and len(x[0]) == n for x in data)):
             return [_coerce_record(list(x), dt) for x in data]
         return [_coerce_struct_data(x, dt) for x in data]
     # 标量广播到单字段记录
@@ -4011,6 +4255,31 @@ def _get_field(arr, name):
     recs = _flatten_records(arr._raw_data)
     values = [r[fi] for r in recs]
     res = _field_values_to_array(values, fdt, arr.shape)
+    # numpy 语义：recarray 的嵌套结构化字段访问保持 record
+    # （r.a (a='f4,f4'→结构化) → dtype.type = record）；元组子数组字段
+    # （c=('f4',2)）→ 基类型（float32），不打 record 标记。
+    # 用副本标记，避免污染共享的 DType。
+    if fdt._names is not None:
+        try:
+            _parent_dt = _struct_dt_of(arr)
+            _parent_marked = (
+                getattr(_parent_dt, '_type_override', None) is not None
+                or issubclass(builtins.type(arr), recarray))
+            _d_r = getattr(res, '_dtype_obj', None)
+            if _parent_marked and _d_r is not None:
+                _c_r = DType.__new__(DType)
+                _c_r._copy_from(_d_r)
+                _c_r._type_override = _Record
+                res._dtype_obj = _c_r
+        except Exception:
+            pass
+    # 字段视图写回标记（numpy field view 语义：a['f'][i] = v 反映到父数组，
+    # 由 ndarray.__setitem__ 检测该标记后写回）
+    try:
+        res._rec_parent = arr
+        res._rec_field = name
+    except Exception:
+        pass
     # numpy 语义：字段字节偏移未按字段宽度对齐时 flags.aligned 为 False
     try:
         off = dt._fields[name][1]
@@ -4445,6 +4714,20 @@ def _view_dtype(arr, target):
     if tdt._names is not None:
         records = [_unpack_record(raw, i * tsize, tdt) for i in range(count)]
         return _wrap_structured(tdt, records)
+    if tdt._subdtype is not None:
+        # subarray 目标（如 r.view(('i4',2))）：按基类型逐元素解包，
+        # 形状 = src_shape + sub_shape（numpy: (4,) view (i4,(2,)) → (4,2)）
+        _base_v = tdt._subdtype[0]
+        _sub_shp = tdt._subdtype[1]
+        _n_sub = 1
+        for _sd in _sub_shp:
+            _n_sub *= _sd
+        vals = []
+        for i in range(count):
+            vals.append([_unpack_field(
+                raw, i * tsize + j * _base_v._itemsize, _base_v)
+                for j in range(_n_sub)])
+        return _build_plain_array(vals, _base_v, tuple(src_shape) + _sub_shp)
     vals = [_unpack_field(raw, i * tsize, tdt) for i in range(count)]
     return _build_plain_array(vals, tdt, new_shape)
 
@@ -4511,9 +4794,23 @@ def _fmt_record(rec, dt):
     return "(" + ", ".join(parts) + ")"
 
 
+class _RecordFlags:
+    """0-d 记录标量的 flags（numpy void/record 标量语义：全 True）。"""
+    c_contiguous = True
+    f_contiguous = True
+    writeable = True
+    aligned = True
+    owndata = False
+
+
 class _Record(tuple):
     """结构化数组的记录标量（对应 rsnumpy.void 记录），支持字段名/整数索引读写。
     tuple 子类：兼容元组比较/迭代/len（numpy.void 语义），字段访问经 __getattr__。"""
+
+    @property
+    def flags(self):
+        # numpy 0-d 标量有 .flags（c/f_contiguous、writeable、aligned 均 True）
+        return _RecordFlags()
 
     def __new__(cls, values, dt, parent=None, flat_index=None):
         obj = tuple.__new__(cls, tuple(values))
@@ -4593,7 +4890,33 @@ class _Record(tuple):
         return (multiarray.scalar, (self._dtype_obj, tuple(self._values)))
 
     def __repr__(self):
-        return _fmt_record(tuple(self._values), self._dtype_obj)
+        # legacy='1.13' → 裸 tuple，M8 字段先转 Python 标量（datetime）再 repr
+        # （numpy: "1.13 converted to python scalars before the repr"）。
+        try:
+            import rsnumpy as _rn_lp
+            _legacy = _rn_lp.get_printoptions().get('legacy')
+        except Exception:
+            _legacy = False
+        if _legacy:
+            _vals = []
+            try:
+                _names = self._dtype_obj._names
+                for _i, _n in enumerate(_names):
+                    _fdt = self._dtype_obj._fields[_n][0]
+                    _v = self._values[_i]
+                    if _fdt._kind in ('M', 'm') and \
+                            getattr(_fdt, '_dt_unit', None):
+                        _v = _m8_to_py(_v, _fdt._dt_unit)
+                    _vals.append(_v)
+            except Exception:
+                _vals = list(self._values)
+            return repr(tuple(_vals))
+        # numpy 格式：np.record((1, 2.0, '2003'), dtype=[...])（float 用
+        # Python repr：2.0 保持 '2.0'，区别于数组 repr 的 '2.'）
+        return "np.record(%s, dtype=%s)" % (
+            _fmt_record_tuple(tuple(self._values), self._dtype_obj,
+                              py_float=True),
+            repr(list(self._dtype_obj.descr)))
 
     def __str__(self):
         return _fmt_record(tuple(self._values), self._dtype_obj)
@@ -4613,6 +4936,39 @@ def _record_to_pytuple(rec, dt):
         else:
             out.append(v)
     return tuple(out)
+
+
+def _m8_to_py(value, unit):
+    """M8/m8 数值 → Python datetime 对象（numpy legacy 1.13 的 repr 语义：
+    '1.13 converted to python scalars before the repr'）。失败回退原值。"""
+    try:
+        from datetime import date, datetime, timedelta
+        n = int(value)
+        if unit == 'Y':
+            return date(n, 1, 1)
+        if unit == 'M':
+            y, m = divmod(n, 12)
+            return date(y, m + 1, 1)
+        base = datetime(1970, 1, 1)
+        if unit == 'W':
+            return base + timedelta(weeks=n)
+        if unit == 'D':
+            return base + timedelta(days=n)
+        if unit == 'h':
+            return base + timedelta(hours=n)
+        if unit == 'm':
+            return base + timedelta(minutes=n)
+        if unit == 's':
+            return base + timedelta(seconds=n)
+        if unit == 'ms':
+            return base + timedelta(milliseconds=n)
+        if unit == 'us':
+            return base + timedelta(microseconds=n)
+        if unit == 'ns':
+            return base + timedelta(microseconds=n / 1000.0)
+    except Exception:
+        pass
+    return value
 
 
 # ========== 标量类型别名 ==========
@@ -8388,6 +8744,15 @@ def _decode_buffer_bytes(buffer, dtype, count):
     """按 dtype 把字节缓冲解码为数值序列（支持小端/大端）。"""
     import struct as _struct
     dt = dtype
+    # 结构化 dtype：逐记录 unpack（multiarray.unpack_array_bytes，
+    # 子数组字段按基类型逐元素解包）
+    if getattr(dt, 'names', None) is not None:
+        from rsnumpy._core import multiarray as _ma_buf
+        _is = int(getattr(dt, 'itemsize', 0) or 0)
+        _n = (len(buffer) // _is) if _is > 0 else 0
+        if count is not None and count >= 0:
+            _n = min(_n, count)
+        return _ma_buf.unpack_array_bytes(buffer, dt, _n)
     bo = '<'  # 文件缓冲（WAV/MAT 等）默认小端；目标平台均为小端
     if isinstance(dt, str) and dt and dt[0] in '<>=':
         bo = '<' if dt[0] == '<' else ('>' if dt[0] == '>' else '=')
@@ -8426,13 +8791,22 @@ def frombuffer(buffer, dtype=None, count=-1, offset=0, *, like=None):
             raw = [buffer[i * elem_size:(i + 1) * elem_size] for i in range(total)]
             return ndarray(np.zeros((len(raw),)), _dtype=dtype, _raw_data=raw)
         values = _decode_buffer_bytes(buffer, dtype, count)
+        # 结构化：显式传 dtype（保证构造出的结构化数组 dtype 正确）
+        if getattr(dtype, 'names', None) is not None:
+            return array(values, dtype=dtype)
         return ndarray(values)
     return ndarray(list(buffer))
 
 
 def _dtype_itemsize(dtype):
-    """返回 dtype 的元素字节大小（complex 为对应 float 的两倍）。"""
+    """dtype → 元素字节数（用于 tofile/fromfile 的 offset/count 换算）。"""
     dt = dtype
+    # 结构化 dtype：返回实际 itemsize（字段字节总和）
+    if getattr(dt, 'names', None) is not None:
+        try:
+            return int(dt.itemsize)
+        except Exception:
+            pass
     if isinstance(dt, str) and dt and dt[0] in '<>=':
         name = _PREFIX_DTYPE_NAMES.get(dt[1:])
     else:
@@ -9034,6 +9408,11 @@ class _DTypeNamespace:
     Complex128DType = type('Complex128DType', (), {'_dt_name': 'complex128'})
     StrDType = type('StrDType', (), {
         '_dt_name': 'str0',
+        # 与 DType 接口对齐（非结构化语义）：_coerce_field_value 等按
+        # _names/_fields/_subdtype 判定结构化，变长字符串均为 None/空
+        '_names': None, '_fields': {}, '_subdtype': None,
+        '_is_numeric': False, '_kind': 'T', 'char': 'T',
+        '_has_nan_na': False,
         # numpy StringDType(na_object)：保存 NA 对象（None/nan/str/任意对象）
         '__init__': lambda self, *a, **k: self.__dict__.__setitem__(
             'na_object', k.get('na_object', a[0] if a else None)),

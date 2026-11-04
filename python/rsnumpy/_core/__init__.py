@@ -186,7 +186,10 @@ def __getattr__(name):
         return rsnumpy.rec
     # 顶层常用名的 _core 级暴露（numpy._core 同样导出这些公共名，
     # 移植测试按 numpy 路径从 _core 导入）
-    if name in ('arange', 'array', 'atleast_1d', 'atleast_2d', 'atleast_3d',
+    if name in ('arange', 'array', 'asarray', 'atleast_1d', 'atleast_2d',
+                'atleast_3d', 'take', 'all', 'array2string', 'errstate',
+                'inf', 'isnan', 'max', 'object_', 'number', 'result_type',
+                'float32', 'intp', 'isnat', 'empty', 'array_repr',
                 'block', 'concatenate', 'hstack', 'newaxis', 'stack',
                 'vstack', 'finfo', 'iinfo', 'swapaxes',
                 'isscalar', 'ndarray', 'signbit'):

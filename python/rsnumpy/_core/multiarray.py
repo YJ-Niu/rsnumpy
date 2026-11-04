@@ -147,6 +147,11 @@ def _field_dtype(dt, name):
 
 
 def _field_code(fdt):
+    # 子数组字段：返回基字段码（按基类型逐元素 pack/unpack，
+    # 如 (float64, (2**29,)) → 'd'）
+    _sd = getattr(fdt, '_subdtype', None)
+    if _sd is not None:
+        return _field_code(_sd[0])
     for kind, size, code in _STRUCT_CODES:
         if fdt.kind == kind and fdt.itemsize == size:
             return code
@@ -163,6 +168,40 @@ def _pack_record(values, dt, prefix):
         fdt = _field_dtype(dt, name)
         if getattr(fdt, 'names', None) is not None:
             out += _pack_record(v, fdt, prefix)
+            continue
+        _sd = getattr(fdt, '_subdtype', None)
+        if _sd is not None:
+            # 子数组字段：按基类型逐元素 pack
+            _bc = _field_code(_sd[0])
+            # 快路径：f8 基类型且小端时整块转换（大子数组逐元素过慢）
+            if _bc == 'd' and prefix in ('<', '='):
+                try:
+                    if hasattr(v, 'tobytes'):
+                        out += v.tobytes()
+                    else:
+                        import array as _array_mod
+                        out += _array_mod.array('d', v).tobytes()
+                    continue
+                except (TypeError, ValueError):
+                    pass
+            for ev in v:
+                if _bc in ('dd', 'ff'):
+                    out += struct.pack(
+                        prefix + _bc,
+                        ev.real if isinstance(ev, complex) else float(ev),
+                        ev.imag if isinstance(ev, complex) else 0.0)
+                elif _bc in ('d', 'f'):
+                    out += struct.pack(prefix + _bc, float(ev))
+                elif _bc in _INT_CODES:
+                    out += struct.pack(prefix + _bc, int(ev))
+                elif _bc.endswith('s'):
+                    _n = int(_bc[:-1])
+                    _b = (ev.encode('utf-8') if isinstance(ev, str)
+                          else bytes(ev))
+                    out += _b[:_n].ljust(_n, b'\x00')
+                else:
+                    raise TypeError(
+                        f"unsupported dtype for binary IO: {fdt}")
             continue
         code = _field_code(fdt)
         if code.endswith('s'):
@@ -192,6 +231,31 @@ def _unpack_record(chunk, dt, prefix, off):
         if getattr(fdt, 'names', None) is not None:
             v, off = _unpack_record(chunk, fdt, prefix, off)
             vals.append(v)
+            continue
+        _sd = getattr(fdt, '_subdtype', None)
+        if _sd is not None:
+            # 子数组字段：按基类型逐元素 unpack（返回 tuple）
+            _base = _sd[0]
+            _bc = _field_code(_base)
+            _bi = int(getattr(_base, 'itemsize', 8) or 8)
+            _n_sub = 1
+            for _s in (_sd[1] or ()):
+                _n_sub *= _s
+            # 快路径：f8 基类型且小端时整块解包（大子数组逐元素过慢）
+            if _bc == 'd' and prefix in ('<', '='):
+                import array as _array_mod
+                _a = _array_mod.array('d')
+                _a.frombytes(chunk[off:off + _n_sub * 8])
+                off += _n_sub * 8
+                vals.append(tuple(_a))
+                continue
+            _sub = []
+            for _j in range(_n_sub):
+                (_ev,) = struct.unpack_from(
+                    prefix + _bc, chunk, off + _j * _bi)
+                _sub.append(_ev)
+            off += _n_sub * _bi
+            vals.append(tuple(_sub))
             continue
         code = _field_code(fdt)
         if code.endswith('s'):
@@ -233,6 +297,10 @@ def _extract_records(arr):
     """逐记录取值：剥掉外层 ndim 层嵌套，返回记录字段值列表（不拍平字段）。"""
     data = arr.tolist()
     if arr.ndim == 0:
+        # 0-d 结构化数组 tolist 已返回"记录列表"（如 [(1.0,)]），直接展开；
+        # 若已是单条记录（tuple）则包一层。
+        if isinstance(data, list):
+            return list(data)
         return [data]
     out = []
 

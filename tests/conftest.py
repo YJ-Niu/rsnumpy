@@ -343,6 +343,14 @@ for _n in (
 _testing.IS_WASM = False
 _testing.IS_PYPY = False
 
+# 正式实现（rsnumpy/testing/_private/utils.py）已补齐 numpy.testing 的
+# assert 名与 numpy 详细报错格式：核心比较函数委托真实实现（简化 shim
+# 仅作兜底）。这些正是 tests/testing/tests/test_utils.py 要测的代码。
+import rsnumpy.testing as _real_testing_mod
+for _n in ("assert_equal", "assert_array_equal", "assert_array_almost_equal",
+           "assert_allclose", "assert_almost_equal"):
+    setattr(_testing, _n, getattr(_real_testing_mod, _n))
+
 
 def _assert_array_max_ulp(x, y, ulp=4, *a, **k):
     lx, ly = _flat(x), _flat(y)

@@ -144,6 +144,11 @@ class DType(metaclass=_DTypeMeta):
                 src._subdtype[1] if src._subdtype else None,
                 src._byteorder)
 
+    @property
+    def _is_numeric(self):
+        # numpy 语义：数值类 dtype（b/i/u/f/c）为 True，其余（S/U/V/O/M/T）False
+        return self._kind in ('b', 'i', 'u', 'f', 'c')
+
     def __new__(cls, name=None, fields=None, align=False):
         if isinstance(name, str) and fields is None and not align:
             try:
@@ -171,6 +176,21 @@ class DType(metaclass=_DTypeMeta):
         self._titles = None
         self._dt_unit = None
         self._type_override = None
+        # numpy (type, descr) 形式：np.dtype((np.record, dt)) → 结构化
+        # dtype 的 record 标记副本（.type = record）
+        if (isinstance(name, tuple) and len(name) == 2
+                and isinstance(name[0], type)):
+            _tp, _dc = name
+            if _tp.__name__ in ('record', '_Record'):
+                _base = _dc if isinstance(_dc, DType) else DType(_dc)
+                self._copy_from(_base)
+                if getattr(_base, '_names', None) is not None:
+                    try:
+                        import rsnumpy as _rn_rt
+                        self._type_override = _rn_rt._Record
+                    except Exception:
+                        pass
+                return
         if name is None and fields is None:
             # numpy 语义：dtype(None) / dtype() 无参 → object
             name = 'O'
@@ -223,6 +243,9 @@ class DType(metaclass=_DTypeMeta):
         >>> np.dtype('float64').type
         <class 'rsnumpy.float64'>
         """
+        # 子数组 dtype：.type = 基类型（numpy 语义，如 ('i4',(2,)) → int32）
+        if self._subdtype is not None:
+            return self._subdtype[0].type
         # 结构化 dtype（V）：record-view（np.dtype((record,spec)) / .view(recarray)
         # 标记）的 .type=record；普通结构化 .type=void（numpy 语义）。优先于
         # hook——hook 对 V 返回字符串标量类是错的。
@@ -402,7 +425,23 @@ class DType(metaclass=_DTypeMeta):
                 else:
                     return (n, _typestr(fdt))
             # 使用列表推导代替显式 for 循环
-            return [_field_descr(n) for n in self._names]
+            out = [_field_descr(n) for n in self._names]
+            # numpy 语义：字段偏移乱序（字段选择重排）时 descr 无定义
+            _offs = [self._fields[n][1] for n in self._names]
+            if any(_offs[i] > _offs[i + 1] for i in range(len(_offs) - 1)):
+                raise ValueError(
+                    "dtype.descr is not defined for types with overlapping "
+                    "or out-of-order fields")
+            # numpy 语义：字段选择后的尾部未用字节以 V 填充表达
+            try:
+                _total = self._itemsize
+                _last_n = self._names[-1]
+                _used = _offs[-1] + self._fields[_last_n][0]._itemsize
+                if _used < _total:
+                    out.append(('', '|V%d' % (_total - _used)))
+            except Exception:
+                pass
+            return out
         return [('', _typestr(self))]
 
     @property
@@ -765,6 +804,10 @@ def _parse_list_dtype(lst, align):
 def _parse_tuple_dtype(obj, align):
     base = _parse_any_dtype(obj[0], align)
     shp = obj[1]
+    # legacy 嵌套形式 (base, dtype字符串)（如 ('i8', 'i4,i4')）：外层 base
+    # 决定存储类型（numpy 语义），字符串不可当子数组 shape 拆字符。
+    if isinstance(shp, str):
+        return base
     shape = (shp,) if isinstance(shp, int) else tuple(shp)
     return _make_subarray(base, shape)
 
