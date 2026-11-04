@@ -1014,10 +1014,17 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
 
                     reduced_error = error[invalids]
                     max_abs_error = max(reduced_error)
+                    _err_kind = getattr(getattr(error, 'dtype', None),
+                                        'kind', 'f')
                     if getattr(error, 'dtype', object_) == object_:
                         remarks.append(
                             'Max absolute difference among violations: '
                             + str(max_abs_error))
+                    elif _err_kind in ('i', 'u'):
+                        # 整型数组：numpy 的 max 返回 int，无小数点
+                        remarks.append(
+                            'Max absolute difference among violations: '
+                            + str(int(max_abs_error)))
                     else:
                         remarks.append(
                             'Max absolute difference among violations: '
