@@ -8,6 +8,7 @@
 import builtins
 import cmath as _cmath
 import math as _math
+import re as _re
 
 import rsnumpy.num_core as _core
 
@@ -150,8 +151,20 @@ def exp2(x):
 
 
 def floor_divide(x1, x2):
-    """逐元素向下整除。"""
+    """逐元素向下整除（除零按浮点错误状态处理，numpy 语义）。"""
     np = _np()
+    a = _asarray(x1)
+    b = _asarray(x2)
+    if b.size:
+        try:
+            zero_mask = (b == 0)
+            has_zero = zero_mask.any()
+        except TypeError:
+            has_zero = False
+        if has_zero:
+            _fp_fire('divide', "divide by zero encountered in floor_divide")
+            res = np.floor(np.divide(a, np.where(zero_mask, 1, b)))
+            return np.where(zero_mask, 0, res)
     return np.floor(np.divide(x1, x2))
 
 
@@ -871,9 +884,20 @@ def iterable(y):
 
 
 def iscomplexobj(x):
-    """判断对象是否为复数类型。"""
-    if isinstance(x, complex):
+    """判断对象是否为复数类型（numpy 语义：dtype.kind / 元素级检测）。"""
+    if isinstance(x, builtins.complex):
         return True
+    if isinstance(x, (list, tuple)):
+        return builtin_any(isinstance(v, builtins.complex) for v in _flat(x))
+    dt = getattr(x, 'dtype', None)
+    if dt is not None:
+        k = getattr(dt, 'kind', None)
+        if k is not None:
+            return k == 'c'
+        tp = getattr(dt, 'type', None)
+        if isinstance(tp, type) and issubclass(tp, builtins.complex):
+            return True
+        return 'complex' in (getattr(dt, 'name', '') or str(dt))
     if getattr(x, "_complex_data", None) is not None:
         return True
     return getattr(x, "_dtype", "") in ("complex128", "complex64")
@@ -929,25 +953,49 @@ def isnat(x):
     return np.array(_map_nested(lambda v: False, arr.tolist()), dtype="bool")
 
 
-def isneginf(x, out=None):
-    """逐元素判断是否为负无穷。"""
-    _ = out
+def _is_inf_check(x, out, positive):
+    """isposinf/isneginf 共用实现：complex 输入抛 TypeError，标量返回
+    bool 标量，支持 out 参数（numpy 语义）。"""
     np = _np()
     arr = _asarray(x)
-    return np.logical_and(np.isinf(arr), np.less(arr, 0.0))
+    try:
+        if arr.dtype.kind == 'c':
+            raise TypeError(
+                "isposinf/isneginf is not supported for complex input")
+    except AttributeError:
+        pass
+    if arr.ndim == 0:
+        v = float(arr.tolist())
+        ok = (v == float('inf')) if positive else (v == float('-inf'))
+        if out is not None:
+            out[...] = ok
+            return out
+        return np.bool_(ok)
+    cmp = np.greater(arr, 0.0) if positive else np.less(arr, 0.0)
+    res = np.logical_and(np.isinf(arr), cmp)
+    if out is not None:
+        out[...] = res
+        return out
+    return res
+
+
+def isneginf(x, out=None):
+    """逐元素判断是否为负无穷。"""
+    return _is_inf_check(x, out, False)
 
 
 def isposinf(x, out=None):
     """逐元素判断是否为正无穷。"""
-    _ = out
-    np = _np()
-    arr = _asarray(x)
-    return np.logical_and(np.isinf(arr), np.greater(arr, 0.0))
+    return _is_inf_check(x, out, True)
 
 
 def real(val):
-    """返回实部。"""
+    """返回实部（Python 标量输入返回 float，numpy 语义）。"""
     np = _np()
+    if isinstance(val, builtins.complex):
+        return float(val.real)
+    if isinstance(val, (bool, int, float)) and not isinstance(val, np.ndarray):
+        return float(val)
     if iscomplexobj(val):
         # Multi-dim complex arrays don't expose the flat `_complex_data`
         # buffer (it is None/absent); fall back to the nested `tolist`.
@@ -959,8 +1007,12 @@ def real(val):
 
 
 def imag(val):
-    """返回虚部。"""
+    """返回虚部（Python 标量输入返回 float，numpy 语义）。"""
     np = _np()
+    if isinstance(val, builtins.complex):
+        return float(val.imag)
+    if isinstance(val, (bool, int, float)) and not isinstance(val, np.ndarray):
+        return 0.0
     if iscomplexobj(val):
         cdata = getattr(val, "_complex_data", None)
         if cdata is not None:
@@ -1001,23 +1053,58 @@ def angle(z, deg=False):
 
 
 def real_if_close(a, tol=100):
-    """若虚部接近 0 则返回实部，否则原样返回。"""
-    _ = tol
-    if iscomplexobj(a):
-        cdata = getattr(a, "_complex_data", None)
-        if cdata is None:
-            cdata = [complex(v) for v in _flat(a)]
-        if builtin_all(abs(complex(v).imag) < 1e-13 for v in cdata):
-            return real(a)
+    """若虚部接近 0 则返回实部，否则原样返回。
+
+    numpy 语义：int tol 为机器精度倍数（tol * eps），非 int tol 为绝对阈值。
+    """
+    if not iscomplexobj(a):
+        return _asarray(a)
+    if isinstance(tol, int) and not isinstance(tol, bool):
+        threshold = tol * 2.220446049250313e-16
+    else:
+        threshold = float(tol)
+    cdata = getattr(a, "_complex_data", None)
+    if cdata is None:
+        cdata = [builtins.complex(v) for v in _flat(a)]
+    if builtin_all(abs(builtins.complex(v).imag) < threshold for v in cdata):
+        return real(a)
     return _asarray(a)
 
 
 def nan_to_num(x, copy=True, nan=0.0, posinf=None, neginf=None):
-    """将 NaN/Inf 替换为有限数。"""
-    _ = copy
+    """将 NaN/Inf 替换为有限数（numpy 语义）。
+
+    0-d / 标量输入返回对应标量（int64/float64/complex128）；
+    copy=False 时原地修改并返回同一对象。
+    """
+    np = _np()
     pos = 1.7976931348623157e308 if posinf is None else float(posinf)
     neg = -1.7976931348623157e308 if neginf is None else float(neginf)
-    return _wrap(_core.nan_to_num(_asarray(x)._array, nan, pos, neg))
+    _inf = float('inf')
+
+    def _r(v):
+        v = float(v)
+        if v != v:
+            return float(nan)
+        if v == _inf:
+            return pos
+        if v == -_inf:
+            return neg
+        return v
+
+    arr = _asarray(x)
+    if arr.ndim == 0:
+        v = arr.tolist()
+        if isinstance(v, builtins.complex):
+            return np.complex128(_r(v.real) + _r(v.imag) * 1j)
+        if isinstance(v, (bool, int)):
+            return np.int64(int(v))
+        return np.float64(_r(v))
+    res = _wrap(_core.nan_to_num(arr._array, nan, pos, neg))
+    if not copy:
+        arr._array = res._array
+        return arr
+    return res
 
 
 # ========== 数组变形 / 组合 ==========
@@ -1045,21 +1132,29 @@ def matrix_transpose(x):
     return _np().transpose(arr, tuple(axes))
 
 
+def _atleast_n(arr, n):
+    """把 arr 提升为至少 n 维（前置补 1；reshape 保留 dtype——
+    Rust _core.atleast_* 会丢失 complex dtype 标签，故纯 Python 实现）。"""
+    while getattr(arr, 'ndim', 0) < n:
+        arr = arr.reshape((1,) * (n - arr.ndim) + tuple(arr.shape))
+    return arr
+
+
 def atleast_1d(*arys):
     """确保输入至少为一维。"""
-    out = [_wrap(_core.atleast_1d(_asarray(a)._array)) for a in arys]
+    out = [_atleast_n(_asarray(a), 1) for a in arys]
     return out[0] if len(out) == 1 else out
 
 
 def atleast_2d(*arys):
     """确保输入至少为二维。"""
-    out = [_wrap(_core.atleast_2d(_asarray(a)._array)) for a in arys]
+    out = [_atleast_n(_asarray(a), 2) for a in arys]
     return out[0] if len(out) == 1 else out
 
 
 def atleast_3d(*arys):
     """确保输入至少为三维。"""
-    out = [_wrap(_core.atleast_3d(_asarray(a)._array)) for a in arys]
+    out = [_atleast_n(_asarray(a), 3) for a in arys]
     return out[0] if len(out) == 1 else out
 
 
@@ -1166,6 +1261,15 @@ def block(arrays):
     if list_depth == 0:
         # numpy 语义：单数组/标量输入返回副本（_block_concatenate 的边缘处理）
         result = result.copy()
+    # 内存序（numpy 语义）：全部叶子数组 F 序 → 结果 F 序
+    # （concatenate 不传播 _rs_order 标记，在此统一恢复）。
+    if result.ndim > 1:
+        def _all_f(x):
+            if isinstance(x, list):
+                return builtin_all(_all_f(e) for e in x)
+            return getattr(_asarray(x), '_rs_order', None) == 'F'
+        if _all_f(arrays):
+            result._rs_order = 'F'
     return result
 
 
@@ -1463,8 +1567,33 @@ def pad(array, pad_width, mode="constant", **kwargs):
 
 
 def trim_zeros(filt, trim="fb"):
-    """裁剪一维数组两端的零。"""
-    return _wrap(_core.trim_zeros(_asarray(filt)._array, trim))
+    """裁剪一维数组两端的零（纯 Python：Rust 版丢失 complex dtype 标签）。"""
+    np = _np()
+    arr = _asarray(filt)
+    if arr.size == 0:
+        return arr
+    vals = arr.tolist()
+    n = len(vals)
+
+    def _is_zero(v):
+        try:
+            return v == 0
+        except Exception:
+            return False
+
+    first = 0
+    while first < n and _is_zero(vals[first]):
+        first += 1
+    last = n - 1
+    while last >= 0 and _is_zero(vals[last]):
+        last -= 1
+    if 'f' not in trim:
+        first = 0
+    if 'b' not in trim:
+        last = n - 1
+    if first > last:
+        return np.zeros(0, arr.dtype)
+    return arr[first:last + 1]
 
 
 def ediff1d(ary, to_end=None, to_begin=None):
@@ -2971,8 +3100,21 @@ def min_scalar_type(value):
 
 
 def common_type(*arrays):
-    """返回若干数组的公共（浮点/复数）标量类型。"""
+    """返回若干数组的公共（浮点/复数）标量类型。
+
+    gh-30890：传入 dtype 对象或标量类型类 → 明确的 TypeError（提示用
+    np.result_type / np.promote_types）。
+    """
     np = _np()
+    for a in arrays:
+        if isinstance(a, type) and issubclass(a, np.generic):
+            raise TypeError(
+                "passing a scalar type to np.common_type is not supported; "
+                "use np.result_type or np.promote_types")
+        if builtins.type(a).__name__ == 'DType' and hasattr(a, 'kind'):
+            raise TypeError(
+                "passing a dtype object to np.common_type is not supported; "
+                "use np.result_type or np.promote_types")
     has_complex = False
     prec = 4
     for a in arrays:
@@ -2995,7 +3137,7 @@ def isdtype(dtype, kind):
     # numpy 2.x 语义：首参必须是 dtype 实例或标量类型（不允许裸 str）
     if isinstance(dtype, str):
         raise TypeError(
-            "isdtype's first argument must be a NumPy dtype, not a string")
+            "isdtype's first argument must be a rsnumpy dtype, not a string")
     n = _canon_dt_type(dtype)
     k = _DT_INFO[n][0]
 
@@ -3185,37 +3327,98 @@ def format_float_scientific(x, precision=None, unique=True, trim='k', sign=False
 
 
 # ========== 浮点错误状态 ==========
-_ERRSTATE = {'divide': 'warn', 'over': 'warn', 'under': 'ignore', 'invalid': 'warn'}
-_ERRCALL = [None]
+# numpy 2.x 语义：状态存于 contextvars —— 每个 asyncio Task / 线程有独立
+# 上下文副本，errstate 的 set/reset 经 token 恢复，天然并发安全（官方
+# test_asyncio_safe 依赖此语义：交叉的上下文互不破坏）。
+import contextvars as _contextvars
+
+_ERR_DEFAULT = {'divide': 'warn', 'over': 'warn', 'under': 'ignore',
+                'invalid': 'warn'}
+_err_state_ctx = _contextvars.ContextVar('rsnumpy_errstate', default=None)
+_err_call_ctx = _contextvars.ContextVar('rsnumpy_errcall', default=None)
 _BUFSIZE = [8192]
+_ERR_MODES = ('ignore', 'warn', 'raise', 'call', 'print')
+_NO_CALL = object()
+
+
+def _fp_flat(vals):
+    """把 tolist 的嵌套列表展平为扁平序列。"""
+    def rec(x):
+        if isinstance(x, (list, tuple)):
+            for v in x:
+                yield from rec(v)
+        else:
+            yield x
+    yield from rec(vals)
+
+
+def _current_errstate():
+    """当前上下文的浮点错误状态（未设置时为默认值）。"""
+    st = _err_state_ctx.get()
+    return dict(st) if st is not None else dict(_ERR_DEFAULT)
+
+
+def _fp_fire(kind, msg):
+    """按当前 errstate 处理一次浮点错误事件（numpy 语义）。"""
+    state = _err_state_ctx.get()
+    mode = (state or _ERR_DEFAULT).get(kind, 'warn')
+    if mode == 'ignore':
+        return
+    if mode == 'raise':
+        raise FloatingPointError(msg)
+    if mode == 'call':
+        cb = _err_call_ctx.get()
+        if cb is not None:
+            cb(msg)
+        return
+    if mode == 'warn':
+        import warnings as _warnings
+        _warnings.warn(msg, RuntimeWarning, stacklevel=4)
+    elif mode == 'print':
+        print(msg)
+
+
+def _check_err_mode(v, name=None):
+    """seterr 参数校验（numpy 语义：非字符串 → TypeError）。"""
+    if not isinstance(v, str):
+        raise TypeError(
+            "seterr: argument must be a string or None, got "
+            f"{type(v).__name__}")
+    if v not in _ERR_MODES:
+        raise ValueError(f"seterr: {name!r} is not a valid error mode")
 
 
 def geterr():
     """返回当前浮点错误处理状态。"""
-    return dict(_ERRSTATE)
+    return _current_errstate()
 
 
 def seterr(all=None, divide=None, over=None, under=None, invalid=None):
     """设置浮点错误处理状态，返回旧状态。"""
-    old = dict(_ERRSTATE)
+    old = _current_errstate()
+    new = dict(old)
     if all is not None:
-        for k in _ERRSTATE:
-            _ERRSTATE[k] = all
-    for k, v in {'divide': divide, 'over': over, 'under': under, 'invalid': invalid}.items():
+        _check_err_mode(all, 'all')
+        for k in new:
+            new[k] = all
+    for k, v in {'divide': divide, 'over': over, 'under': under,
+                 'invalid': invalid}.items():
         if v is not None:
-            _ERRSTATE[k] = v
+            _check_err_mode(v, k)
+            new[k] = v
+    _err_state_ctx.set(new)
     return old
 
 
 def geterrcall():
     """返回当前浮点错误回调。"""
-    return _ERRCALL[0]
+    return _err_call_ctx.get()
 
 
 def seterrcall(func):
     """设置浮点错误回调，返回旧回调。"""
-    old = _ERRCALL[0]
-    _ERRCALL[0] = func
+    old = _err_call_ctx.get()
+    _err_call_ctx.set(func)
     return old
 
 
@@ -3232,30 +3435,77 @@ def setbufsize(size):
 
 
 class errstate:
-    """临时修改浮点错误处理状态的上下文管理器。"""
+    """临时修改浮点错误处理状态的上下文管理器（可作装饰器，单次使用）。
 
-    def __init__(self, *, call=None, **kwargs):
+    numpy 2.x 语义：状态存于 contextvar（每个 Task/线程独立），退出经
+    token 恢复到进入前的状态；实例不可重复进入。
+    """
+
+    def __init__(self, *, call=_NO_CALL, **kwargs):
         self._kw = kwargs
         self._call = call
-        self._saved = None
-        self._saved_call = None
+        self._token = None
+        self._call_token = None
+
+    def _make_extobj(self):
+        """当前状态与本上下文设置合并为新状态（all 优先，逐键覆盖）。"""
+        st = _current_errstate()
+        if 'all' in self._kw:
+            _check_err_mode(self._kw['all'], 'all')
+            for k in st:
+                st[k] = self._kw['all']
+        for k in ('divide', 'over', 'under', 'invalid'):
+            if k in self._kw:
+                _check_err_mode(self._kw[k], k)
+                st[k] = self._kw[k]
+        return st
 
     def __enter__(self):
-        self._saved = seterr(**self._kw)
-        if self._call is not None:
-            self._saved_call = seterrcall(self._call)
-        return None
+        if self._token is not None:
+            raise TypeError("Cannot enter `np.errstate` twice")
+        self._token = _err_state_ctx.set(self._make_extobj())
+        if self._call is not _NO_CALL:
+            self._call_token = _err_call_ctx.set(self._call)
+        return self
 
     def __exit__(self, *exc):
-        seterr(**self._saved)
-        if self._call is not None:
-            seterrcall(self._saved_call)
+        if self._token is not None:
+            _err_state_ctx.reset(self._token)
+        if self._call_token is not None:
+            _err_call_ctx.reset(self._call_token)
         return False
+
+    def __call__(self, function):
+        """装饰器用法：每次调用独立 enter/exit（可重复调用，asyncio 安全）。"""
+        if not callable(function):
+            raise TypeError("errstate can only decorate callable objects")
+        import functools
+
+        @functools.wraps(function)
+        def wrapper(*args, **kwargs):
+            token = _err_state_ctx.set(self._make_extobj())
+            call_token = None
+            if self._call is not _NO_CALL:
+                call_token = _err_call_ctx.set(self._call)
+            try:
+                return function(*args, **kwargs)
+            finally:
+                _err_state_ctx.reset(token)
+                if call_token is not None:
+                    _err_call_ctx.reset(call_token)
+        return wrapper
 
 
 # ========== 解析 / IO ==========
+_CPX_NUM = r'(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?'
+_CPX_STRICT_RE = _re.compile(
+    r'^[+-]?' + _CPX_NUM + r'$'
+    r'|^[+-]?' + _CPX_NUM + r'j$'
+    r'|^[+-]?' + _CPX_NUM + r'[+-]' + _CPX_NUM + r'j$')
+
+
 def fromstring(string, dtype=float, count=-1, sep='', *, like=None):
-    """从文本字符串解析一维数组。"""
+    """从文本字符串解析一维数组（numpy 语义：空 token/非法 token → ValueError）。"""
     _ = like
     np = _np()
     if sep == '':
@@ -3263,9 +3513,27 @@ def fromstring(string, dtype=float, count=-1, sep='', *, like=None):
     if sep == ' ':
         parts = string.split()
     else:
+        # 不过滤空 token：连续分隔符/纯分隔符 → float('') 自然 ValueError
         parts = [p.strip() for p in string.split(sep)]
-        parts = [p for p in parts if p != '']
-    vals = [float(p) for p in parts]
+    _dt_str = str(dtype) if dtype is not None else ''
+    _is_cpx = (_dt_str.startswith('complex')
+               or _dt_str in ('c8', 'c16', 'c', 'cdouble', 'csingle')
+               or dtype in (builtins.complex, np.complex64, np.complex128))
+    if _is_cpx:
+        # numpy 严格文本复数文法（Python complex() 过宽：容忍 '1+j' 等）：
+        # 纯实数 | 实数j | 实数±实数j；token 内不允许空白。
+        def _cpx_tok(p):
+            for ch in p:
+                if ch.isspace():
+                    raise ValueError(
+                        "whitespace in complex number: %r" % p)
+            if not _CPX_STRICT_RE.match(p):
+                raise ValueError(
+                    "malformed complex number: %r" % p)
+            return builtins.complex(p)
+        vals = [_cpx_tok(p) for p in parts]
+    else:
+        vals = [builtins.float(p) for p in parts]
     if count >= 0:
         vals = vals[:count]
     arr = np.array(vals)
@@ -5379,3 +5647,12 @@ fromstring.__text_signature__ = (
 frompyfunc.__text_signature__ = "(func, nin, nout, *, kwargs=None)"
 datetime_data.__text_signature__ = "(dtype,)"
 promote_types.__text_signature__ = "(type1, type2)"
+
+
+# ---- 多项式旧 API：完整移植版覆盖上方薄实现（语义与 numpy 2.x 一致，
+# 实现见 polynomial/_npcompat.py：poly1d 对齐排版/pq 元组/polyfit cov/
+# roots dtype 保持等）。此处 re-import 使模块属性指向新实现，
+# __init__.py 的 __all__ 挂载循环随之导出新版本。 ----
+from .polynomial._npcompat import (  # noqa: E402,F401
+    poly, roots, polyint, polyder, polyval, polyadd,
+    polysub, polymul, polydiv, poly1d)

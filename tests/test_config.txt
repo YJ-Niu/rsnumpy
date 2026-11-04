@@ -2,10 +2,10 @@
 #   1 = 上次全部通过   0 = 存在 failed/skipped/error（或尚未跑通）
 # 由 build_wheel.sh 的测试阶段自动维护：每跑完一个文件立即更新（边测边更新），
 # --test debug 只跑标志为 0 的文件；--test all 全量重建。
-tests/_core_tests/test__exceptions.py 0
+tests/_core_tests/test__exceptions.py 1
 tests/_core_tests/test_abc.py 0
 tests/_core_tests/test_api.py 0
-tests/_core_tests/test_array_api_info.py 0
+tests/_core_tests/test_array_api_info.py 1
 tests/_core_tests/test_array_coercion.py 0
 tests/_core_tests/test_arrayobject.py 0
 tests/_core_tests/test_arrayprint.py 0
@@ -14,16 +14,16 @@ tests/_core_tests/test_cython.py 0
 tests/_core_tests/test_defchararray.py 0
 tests/_core_tests/test_dtype.py 0
 tests/_core_tests/test_einsum.py 0
-tests/_core_tests/test_errstate.py 0
-tests/_core_tests/test_finfo.py 0
-tests/_core_tests/test_function_base.py 0
-tests/_core_tests/test_getlimits.py 0
+tests/_core_tests/test_errstate.py 1
+tests/_core_tests/test_finfo.py 1
+tests/_core_tests/test_function_base.py 1
+tests/_core_tests/test_getlimits.py 1
 tests/_core_tests/test_half.py 0
 tests/_core_tests/test_indexerrors.py 0
 tests/_core_tests/test_indexing.py 0
 tests/_core_tests/test_item_selection.py 0
 tests/_core_tests/test_limited_api.py 0
-tests/_core_tests/test_longdouble.py 0
+tests/_core_tests/test_longdouble.py 1
 tests/_core_tests/test_multiarray.py 0
 tests/_core_tests/test_nditer.py 0
 tests/_core_tests/test_nep50_promotions.py 0
@@ -33,7 +33,7 @@ tests/_core_tests/test_print.py 0
 tests/_core_tests/test_protocols.py 0
 tests/_core_tests/test_records.py 0
 tests/_core_tests/test_regression.py 0
-tests/_core_tests/test_scalar_ctors.py 0
+tests/_core_tests/test_scalar_ctors.py 1
 tests/_core_tests/test_scalar_methods.py 0
 tests/_core_tests/test_scalarinherit.py 0
 tests/_core_tests/test_scalarmath.py 0
@@ -52,14 +52,14 @@ tests/lib_tests/test_index_tricks.py 0
 tests/lib_tests/test_loadtxt.py 0
 tests/lib_tests/test_nanfunctions.py 0
 tests/lib_tests/test_packbits.py 0
-tests/lib_tests/test_polynomial.py 0
+tests/lib_tests/test_polynomial.py 1
 tests/lib_tests/test_recfunctions.py 0
 tests/lib_tests/test_regression.py 0
 tests/lib_tests/test_shape_base.py 0
 tests/lib_tests/test_stride_tricks.py 0
 tests/lib_tests/test_twodim_base.py 0
-tests/lib_tests/test_type_check.py 0
-tests/lib_tests/test_ufunclike.py 0
+tests/lib_tests/test_type_check.py 1
+tests/lib_tests/test_ufunclike.py 1
 tests/linalg_tests/test_deprecations.py 0
 tests/linalg_tests/test_linalg.py 0
 tests/linalg_tests/test_regression.py 0

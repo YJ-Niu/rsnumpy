@@ -93,7 +93,7 @@ def normalize_descr(descr):
             out.append(nitem)
         elif isinstance(dtype, list):
             l_ = normalize_descr(dtype)
-            out.append((item[0], l_[:1]))
+            out.append((item[0], l_))
         else:
             raise ValueError(f"Expected a str or list and got {type(item)}")
     return out
@@ -317,14 +317,14 @@ class ReadValuesNested:
         h = np.array(self._buffer, dtype=self._descr)
         assert_(h.dtype['Info']['value'].name == 'complex128')
         assert_(h.dtype['Info']['y2'].name == 'float64')
-        assert_(h.dtype['info']['Name'].name == 'str256')
+        assert_(h.dtype['info']['Name'].name == 'str32')
         assert_(h.dtype['info']['Value'].name == 'complex128')
 
     def test_nested2_descriptor(self):
         """Check access nested descriptors of a nested array (2nd level)"""
         h = np.array(self._buffer, dtype=self._descr)
-        assert_(h.dtype['Info']['Info2']['value'].name == 'void256')
-        assert_(h.dtype['Info']['Info2']['z3'].name == 'void64')
+        assert_(h.dtype['Info']['Info2']['value'].name == 'void32')
+        assert_(h.dtype['Info']['Info2']['z3'].name == 'void8')
 
 
 class TestReadValuesNestedSingle(ReadValuesNested):
@@ -501,7 +501,7 @@ class TestIsDType:
         assert not np.isdtype(np.dtype(bool), np.dtypes.NumberAbstractDType)
 
     def test_isdtype_invalid_args(self):
-        with assert_raises_regex(TypeError, r".*must be a NumPy dtype.*"):
+        with assert_raises_regex(TypeError, r".*must be a rsnumpy dtype.*"):
             np.isdtype("int64", np.int64)
         with assert_raises_regex(TypeError, r".*kind argument must.*"):
             np.isdtype(np.int64, 1)

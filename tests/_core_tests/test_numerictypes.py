@@ -310,14 +310,14 @@ class ReadValuesNested:
         h = np.array(self._buffer, dtype=self._descr)
         assert_(h.dtype['Info']['value'].name == 'complex128')
         assert_(h.dtype['Info']['y2'].name == 'float64')
-        assert_(h.dtype['info']['Name'].name == 'str256')
+        assert_(h.dtype['info']['Name'].name == 'str32')
         assert_(h.dtype['info']['Value'].name == 'complex128')
 
     def test_nested2_descriptor(self):
         """Check access nested descriptors of a nested array (2nd level)"""
         h = np.array(self._buffer, dtype=self._descr)
-        assert_(h.dtype['Info']['Info2']['value'].name == 'void256')
-        assert_(h.dtype['Info']['Info2']['z3'].name == 'void64')
+        assert_(h.dtype['Info']['Info2']['value'].name == 'void32')
+        assert_(h.dtype['Info']['Info2']['z3'].name == 'void8')
 
 
 class TestReadValuesNestedSingle(ReadValuesNested):

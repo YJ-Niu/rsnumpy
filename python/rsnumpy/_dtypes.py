@@ -134,6 +134,28 @@ class DType(metaclass=_DTypeMeta):
                  '_names', '_fields', '_aligned', '_subdtype', '_titles',
                  '_dt_unit', '_type_override')
 
+    # 单例缓存：np.dtype('uint64') is np.dtype('ulong')（numpy 语义——
+    # dtype 对象不可变，同类型同配置返回同一对象）
+    _scalar_cache = {}
+
+    @classmethod
+    def _cache_key(cls, src):
+        return (src._typename, src._itemsize, src._names,
+                src._subdtype[1] if src._subdtype else None,
+                src._byteorder)
+
+    def __new__(cls, name=None, fields=None, align=False):
+        if isinstance(name, str) and fields is None and not align:
+            try:
+                _k = cls._cache_key(_parse_any_dtype(name, False))
+            except Exception:
+                _k = None
+            if _k is not None:
+                inst = cls._scalar_cache.get(_k)
+                if inst is not None:
+                    return inst
+        return super().__new__(cls)
+
     def __init__(self, name=None, fields=None, align=False):
         # 向后兼容：DType('int64') / DType(<其他>) 构造标量。
         # align=True：numpy 语义的对齐结构体（字段偏移按对齐要求填充）。
@@ -155,8 +177,15 @@ class DType(metaclass=_DTypeMeta):
         if name is not None:
             src = _parse_any_dtype(name, False)
             self._copy_from(src)
+        else:
+            src = None
         if align:
             self._aligned = True
+        if src is not None and fields is None and not align:
+            try:
+                DType._scalar_cache[DType._cache_key(src)] = self
+            except Exception:
+                pass
 
     def _copy_from(self, o):
         self._kind = o._kind
@@ -330,7 +359,8 @@ class DType(metaclass=_DTypeMeta):
         if self._subdtype is not None:
             return 'void%d' % self._itemsize
         if self._kind == 'S':
-            return 'bytes%d' % self._itemsize
+            # numpy 2.x 语义：固定长字节串 name 为 str{itemsize}
+            return 'str%d' % self._itemsize
         if self._kind == 'U':
             return 'str%d' % self._itemsize
         if self._kind == 'V':
@@ -367,8 +397,8 @@ class DType(metaclass=_DTypeMeta):
                     b, sh = fdt._subdtype
                     return (n, _typestr(b), sh)
                 elif fdt._names is not None:
-                    # numpy 语义：嵌套结构化字段的 descr 仅保留首个子字段
-                    return (n, fdt.descr[:1])
+                    # numpy 语义：嵌套结构化字段的 descr 全量保留子字段
+                    return (n, fdt.descr)
                 else:
                     return (n, _typestr(fdt))
             # 使用列表推导代替显式 for 循环

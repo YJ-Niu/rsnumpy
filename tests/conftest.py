@@ -59,35 +59,9 @@ for _sub in ("random", "ma", "exceptions", "linalg", "fft"):
 numpy = rsnumpy
 
 
-# numpy uses ``@np.errstate(...)`` as a decorator; rsnumpy's errstate result
-# isn't callable, so wrap it to be both a context manager and a decorator.
-class _ErrstateCM:
-    def __init__(self, cm):
-        self._cm = cm() if isinstance(cm, type) else cm
-
-    def __enter__(self):
-        return self._cm.__enter__()
-
-    def __exit__(self, *a):
-        return self._cm.__exit__(*a)
-
-    def __call__(self, func):
-        @functools.wraps(func)
-        def wrapper(*fa, **fk):
-            with self._cm:
-                return func(*fa, **fk)
-
-        return wrapper
-
-
-_orig_errstate = rsnumpy.errstate
-
-
-def _errstate(*a, **k):
-    return _ErrstateCM(_orig_errstate(*a, **k))
-
-
-rsnumpy.errstate = _errstate
+# numpy uses ``@np.errstate(...)`` as a decorator. rsnumpy's errstate is
+# natively callable (each decorated call creates a fresh single-use context),
+# so no shim is needed here.
 
 
 # ---------------------------------------------------------------------------
@@ -197,6 +171,16 @@ def assert_array_equal(a, b, err_msg="", *args, **kwargs):
         raise AssertionError(f"{err_msg}\n x: {la}\n y: {lb}")
 
 
+def _is_nan_pair(x, y):
+    """NaN 同位匹配判定（complex 按实/虚分量位判定）。"""
+    if isinstance(x, complex) or isinstance(y, complex):
+        xr, xi = (x.real, x.imag) if isinstance(x, complex) else (x, 0.0)
+        yr, yi = (y.real, y.imag) if isinstance(y, complex) else (y, 0.0)
+        return (math.isnan(xr) and math.isnan(yr)
+                or math.isnan(xi) and math.isnan(yi))
+    return math.isnan(x) and math.isnan(y)
+
+
 def assert_array_almost_equal(a, b, decimal=6, *args, **kwargs):
     assert_almost_equal(a, b, decimal=decimal, *args, **kwargs)
 
@@ -206,9 +190,9 @@ def assert_allclose(a, b, rtol=1e-7, atol=0.0, *args, **kwargs):
     if len(la) != len(lb):
         raise AssertionError(f"size mismatch: {len(la)} != {len(lb)}")
     for x, y in zip(la, lb):
-        x, y = float(x), float(y)
-        if math.isnan(x) and math.isnan(y):
+        if _is_nan_pair(x, y):
             continue
+        # complex 用模（abs 内建统一处理实数/复数）
         if not (abs(x - y) <= atol + rtol * abs(y)):
             raise AssertionError(f"not allclose (rtol={rtol}, atol={atol}): {x} vs {y}")
 
@@ -219,8 +203,7 @@ def assert_almost_equal(a, b, decimal=7, *args, **kwargs):
         raise AssertionError(f"size mismatch: {len(la)} != {len(lb)}")
     tol = 1.5 * 10 ** (-decimal)
     for x, y in zip(la, lb):
-        x, y = float(x), float(y)
-        if math.isnan(x) and math.isnan(y):
+        if _is_nan_pair(x, y):
             continue
         if abs(x - y) >= tol:
             raise AssertionError(f"not almost equal (decimal={decimal}): {x} vs {y}")

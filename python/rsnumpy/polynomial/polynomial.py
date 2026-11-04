@@ -1,27 +1,21 @@
-"""多项式模块 - NumPy 兼容的 polynomial 子模块 stub。
+"""numpy.polynomial.polynomial 兼容模块（新 API：升序系数，低次在前）。
 
-提供与 numpy.polynomial.polynomial 兼容的接口，实现位于 Rust。
-这里仅提供最小的兼容层。
+旧版 stub 存在循环引用（polyfit 递归调用自身）且缺 polyfromroots，
+现重写：polyfromroots 基于旧 API 的 poly（降序）反转得到升序系数。
 """
 
-from __future__ import annotations
-
-from ..polynomial import Poly, polyval, polyfit, polyder, polyint, polyroots
-
-# Alias Polynomial to Poly for NumPy compatibility
-Polynomial = Poly
+__all__ = ['polyfromroots']
 
 
-def polyval(x, c):
-    """Evaluate a polynomial at points x."""
-    if isinstance(c, Poly):
-        return c(x)
-    return Poly(c)(x)
+def polyfromroots(roots):
+    """由根序列返回多项式系数（新 API：升序排列，低次在前）。
 
-
-def polyfit(x, y, deg, rcond=None, full=False, w=None):
-    """Least-squares polynomial fit."""
-    return polyfit(x, y, deg)
-
-
-__all__ = ['Polynomial', 'polyval', 'polyfit', 'polyder', 'polyint', 'polyroots']
+    polyfromroots([1, 2]) -> array([2., 1., 1.])  # 2 + x + x**2
+    """
+    import rsnumpy as NX
+    from ..polynomial._npcompat import poly as _legacy_poly
+    r = NX.asarray(roots)
+    if r.size == 0:
+        return NX.array([1.0])
+    # 旧 API poly 返回降序系数（首项为 1），反转为升序
+    return _legacy_poly(r)[::-1].copy()

@@ -10,7 +10,9 @@ __all__ = [
     'bool', 'int', 'float', 'complex', 'str', 'bytes', 'object',
 ]
 
-from builtins import bool, bytes, complex, float, int, object, str  # noqa: F401
+from builtins import bytes, complex, float, int, object, str  # noqa: F401
+# 注意：bool 不从此处导入——nt.bool 必须指向 rsnumpy 标量类（numpy
+# numerictypes 语义），由模块 __getattr__ 回落到 rsnumpy.bool。
 
 _TYPECODES = {
     'Character': 'c',

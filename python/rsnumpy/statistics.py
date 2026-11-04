@@ -646,11 +646,12 @@ def nanpercentile(a, q, axis=None, out=None, keepdims=False, interpolation='line
 
 
 def argmax(a, axis=None, out=None, keepdims=False):
-    """返回数组沿指定轴的最大值索引。"""
+    """返回数组沿指定轴的最大值索引（全归约返回 intp 标量，numpy 语义）。"""
     _ = out, keepdims
     raw = _core.argmax_axis(_ensure_raw(a), axis)
     if axis is None:
-        return int(raw.tolist())
+        import rsnumpy as _rsn
+        return _rsn.int64(raw.tolist())
     return _nd()._wrap(raw, _dtype='int64')
 
 

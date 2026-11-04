@@ -245,7 +245,10 @@ class ndarray:
 
     def __init__(self, data=None, _dtype="float64", _fields=None, _raw_data=None,
                  shape=None, dtype=None, buffer=None, offset=0, strides=None,
-                 order=None, _na_object=None, _vstring=False):
+                 order=None, _na_object=None, _vstring=False, **_kw):
+        # **_kw 吸收子类 __new__ 透传的自定义参数（numpy 风格子类化：
+        # MyArray.__new__ 自定义参数会原样落到基类 __init__）。
+        _ = _kw
         # numpy 兼容的 buffer 视图构造：Subclass(shape, dtype=..., buffer=arr)
         # —— 第一参是形状而非数据，复用 buffer 的值。
         if buffer is not None:
@@ -706,6 +709,21 @@ class ndarray:
         if getattr(self, '_complex_data', None) is not None or \
                 str(getattr(self, '_dtype', '')).startswith('complex'):
             raise BufferError("complex array does not support the buffer protocol")
+        if self.ndim == 0:
+            # Rust 0-d 缓冲协议长度损坏（len 返回标量值而非 itemsize，
+            # bytes(np.array(567.)) 会得 567 字节）：按 dtype 逐元素编码，
+            # 保证单元素 itemsize 字节（numpy 语义）。
+            import struct as _st0
+            _dt0 = getattr(self, '_dtype', 'float64')
+            _fmt0 = _TOBYTES_STRUCT.get(_dt0, 'd')
+            _v0 = self.tolist()
+            if _fmt0 == '?':
+                _b0 = bytes(1 if _v0 else 0)
+            elif _fmt0 in ('d', 'f'):
+                _b0 = _st0.pack('<' + _fmt0, float(_v0))
+            else:
+                _b0 = _st0.pack('<' + _fmt0, int(_v0))
+            return memoryview(_b0)
         return memoryview(self._array)
 
     def __release_buffer__(self, view):
@@ -721,6 +739,17 @@ class ndarray:
         return bitwise_not(self)
 
     def __getitem__(self, key):
+        res = self._getitem_impl(key)
+        # numpy 语义：子类索引返回子类实例（view 触发 __array_finalize__，
+        # 传递自定义属性如 metadata）。matrix 暂排除：matrixlib 现有绿测
+        # 依赖基类返回，matrix 自身索引语义另行处理。
+        t = builtins.type(self)
+        if (t is not ndarray and t is not matrix and _is_ndarray(res)
+                and issubclass(t, ndarray)):
+            res = res.view(t)
+        return res
+
+    def _getitem_impl(self, key):
         # Empty tuple key: return a copy of the array (numpy semantics: no
         # indexing applied). 0-d 数组：arr[()] 返回标量（numpy 语义）。
         if isinstance(key, tuple) and len(key) == 0:
@@ -1528,11 +1557,14 @@ class ndarray:
         if self.size == 0:
             return self.copy()
         if _is_ndarray(other):
-            return _wrap_result(self._array - other._array, dt)
-        if isinstance(other, (tuple, list)):
+            r = _wrap_result(self._array - other._array, dt)
+        elif isinstance(other, (tuple, list)):
             other_arr = ndarray(other)
-            return _wrap_result(self._array - other_arr._array, dt)
-        return _wrap_result(self._array - other, dt)
+            r = _wrap_result(self._array - other_arr._array, dt)
+        else:
+            r = _wrap_result(self._array - other, dt)
+        _fp_check_sub_invalid(self, other, r)
+        return r
 
     def __rsub__(self, other):
         dt = _promote_dtype(self._dtype, other)
@@ -1591,7 +1623,7 @@ class ndarray:
         return _wrap_result(other / self._array, dt)
 
     def __floordiv__(self, other):
-        """逐元素地板除（// 运算符）。"""
+        """逐元素地板除（// 运算符；除零按浮点错误状态处理，numpy 语义）。"""
         dt = _truediv_dtype(self._dtype)
         if self.size == 0:
             return self.copy()
@@ -1602,12 +1634,24 @@ class ndarray:
                 a_vals = [a_vals]
             if not isinstance(b_vals, list):
                 b_vals = [b_vals]
-            result = [x // y for x, y in zip(a_vals, b_vals)]
+            pairs = list(zip(a_vals, b_vals))
         else:
             a_vals = self.ravel().tolist()
             if not isinstance(a_vals, list):
                 a_vals = [a_vals]
-            result = [x // other for x in a_vals]
+            pairs = [(x, other) for x in a_vals]
+        try:
+            has_zero = builtins.any(bv == 0 for _, bv in pairs)
+        except Exception:
+            has_zero = False
+        if has_zero:
+            _extra_module._fp_fire(
+                'divide', "divide by zero encountered in floor_divide")
+            _is_int = self._dtype in _INT_DTYPES
+            result = [_floordiv_zero(x, _is_int) if bv == 0 else x // bv
+                      for x, bv in pairs]
+        else:
+            result = [x // bv for x, bv in pairs]
         out = _wrap_result(result, dt)
         if self.ndim > 1:
             out = out.reshape(self.shape)
@@ -2323,13 +2367,17 @@ class ndarray:
         return _ndarray_methods().item(self, *args)
 
     def __index__(self):
-        """支持将 0 维数组用作整数索引或切片参数。"""
+        """支持将 0 维数组用作整数索引或切片参数。
+
+        numpy 语义：仅整型/bool 0-d 数组合法；float/complex 0-d → TypeError
+        （否则 bytes()/range() 等会把 __index__ 结果当 int count，
+        bytes(np.array(567.)) 误得 567 字节）。
+        """
         if self.ndim == 0:
             val = self.item()
-            if isinstance(val, float):
-                if val != val:  # NaN check
-                    return 0
-                return int(val)
+            if isinstance(val, float) or isinstance(val, builtins.complex):
+                raise TypeError(
+                    "only integer scalar arrays can be converted to a scalar index")
             if isinstance(val, builtins.bool):
                 # bool is not a valid __index__ result (deprecated); coerce.
                 return int(val)
@@ -2618,8 +2666,10 @@ class ndarray:
             """numpy 语义：view(..., type=T) 把结果实例化为 T（共享数据，
             不经子类 __init__——与 numpy view 的 C 层行为一致）。"""
             if isinstance(t, builtins.type) and issubclass(t, ndarray):
-                return t._wrap(arr._array, _dtype=arr._dtype,
+                inst = t._wrap(arr._array, _dtype=arr._dtype,
                                _fields=getattr(arr, '_fields', None))
+                _finalize_view(inst, arr)
+                return inst
             if isinstance(t, builtins.type):
                 try:
                     return t(arr)
@@ -2633,6 +2683,7 @@ class ndarray:
             elif isinstance(dtype, builtins.type) and issubclass(dtype, ndarray):
                 # numpy 的 view(子类)：返回共享数据的该子类实例
                 res = dtype._wrap(self._array, _dtype=self._dtype)
+                _finalize_view(res, self)
             elif isinstance(dtype, builtins.type) and not issubclass(dtype, generic):
                 # 组合包装类（如 char.chararray）：接受 ndarray 构造。
                 # rsnumpy 标量类型类（np.uint32 等）不算包装类——
@@ -2652,7 +2703,9 @@ class ndarray:
             if type is recarray:
                 return _view_as_recarray(self)
             if isinstance(type, builtins.type) and issubclass(type, ndarray):
-                return type._wrap(self._array, _dtype=self._dtype)
+                inst = type._wrap(self._array, _dtype=self._dtype)
+                _finalize_view(inst, self)
+                return inst
             if isinstance(type, builtins.type) and not issubclass(type, generic):
                 try:
                     return type(self)
@@ -2866,6 +2919,13 @@ def _view_as_recarray(src):
     res._dtype_obj = getattr(src, '_dtype_obj', None)
     res._fields = getattr(src, '_fields', None)
     res._raw_data = getattr(src, '_raw_data', None)
+    # 携带字符串/复数/object/形状元数据（与 copy 路径一致），否则字段
+    # 数组经 view(recarray) 后丢 _str_dtype（U 字段 dtype 退化为 S0）。
+    res._str_dtype = getattr(src, '_str_dtype', None)
+    res._complex_data = getattr(src, '_complex_data', None)
+    res._na_object = getattr(src, '_na_object', None)
+    res._rs_unaligned = getattr(src, '_rs_unaligned', None)
+    res._rs_shape_override = getattr(src, '_rs_shape_override', None)
     res.__class__ = recarray
     _mark_dtype_record(res)
     return res
@@ -2927,7 +2987,12 @@ def _wrap_result(result, dtype="float64"):
     """将原始 ndarray 结果包装到 ndarray 类中。"""
     if hasattr(result, '__class__') and result.__class__.__name__ == 'ndarray':
         if getattr(result, 'is_complex', False):
-            dtype = "complex128"
+            # 原生复数底层只有一种存储：调用方显式 complex64 标签保留
+            # （NEP 50：complex64 数组 + Python 弱标量 → complex64），
+            # 否则默认 complex128。
+            if not (isinstance(dtype, str)
+                    and dtype.startswith('complex64')):
+                dtype = "complex128"
         inner_array = getattr(result, '_array', result)
         return ndarray._wrap(inner_array, _dtype=dtype)
     if isinstance(result, (list, tuple)):
@@ -3682,12 +3747,24 @@ def _coerce_scalar_by_dt(v, fdt):
         return complex(v)
     if k == 'S':
         if isinstance(v, (bytes, bytearray)):
-            return bytes(v)
-        return str(v).encode('latin-1')
+            b = bytes(v)
+        else:
+            b = str(v).encode('latin-1')
+        # numpy 语义：超过 itemsize 截断（保守：短串不补零，保持既有行为）
+        _n = fdt.itemsize
+        if len(b) > _n:
+            b = b[:_n]
+        return b
     if k == 'U':
         if isinstance(v, (bytes, bytearray)):
-            return bytes(v).decode('latin-1')
-        return str(v)
+            s = bytes(v).decode('latin-1')
+        else:
+            s = str(v)
+        # U itemsize = 4 字节/codepoint；超长截断
+        _n = fdt.itemsize // 4
+        if len(s) > _n:
+            s = s[:_n]
+        return s
     return v
 
 
@@ -3720,6 +3797,18 @@ def _coerce_struct_data(data, dt):
     if isinstance(data, tuple):
         return _coerce_record(data, dt)
     if isinstance(data, list):
+        n = len(dt._names)
+        # 记录列表：所有字段均为标量（无子数组/嵌套）且每个元素是
+        # 长度等于字段数的序列 → 每元素是一条记录（fromrecords 场景）。
+        # 含子数组字段的 2-d 嵌套数据仍走逐元素递归，避免误判。
+        _scalar_fields = all(
+            dt._fields[_nm][0]._subdtype is None
+            and dt._fields[_nm][0]._names is None
+            for _nm in dt._names)
+        if (_scalar_fields and len(data) > 0
+                and all(isinstance(x, (list, tuple)) and len(x) == n
+                        for x in data)):
+            return [_coerce_record(list(x), dt) for x in data]
         return [_coerce_struct_data(x, dt) for x in data]
     # 标量广播到单字段记录
     return _coerce_record((data,), dt)
@@ -4769,12 +4858,37 @@ def _make_scalar_type(name, base, pybase, itemsize, zero):
     is_int_scalar = pybase is int
 
     def _new(cls, val=zero, *args):
-        # numpy 语义：标量构造最多 1 个位置参数（C 层 slot 行为），
-        # 多参抛 TypeError（官方测试 test_gh_15395）。
+        # numpy 语义：complex 标量接受 (real, imag) 双参形式——两参均为实
+        # 分量（int/float/实标量/0-d 实数组）；第一参为 rsnumpy 复数标量时
+        # 保留原值再加虚分量（c64(1+2j, 1) == 1+3j）；纯 Python complex
+        # 作分量 → TypeError。其余标量构造最多 1 个位置参数（官方
+        # 测试 test_gh_15395 / test_complex_errors）。
         if args:
-            raise TypeError(
-                f'{cls.__name__}() takes at most 1 argument '
-                f'({1 + len(args)} given)')
+            def _real_comp(v, is_first):
+                # 实分量：int/float/bool/实 rsnumpy 标量/0-d 实数组；
+                # 纯 Python complex 恒拒；rsnumpy 复数标量仅允许作首参
+                # （C 层 slot 行为，test_complex_errors / two_arg_numpy）
+                if isinstance(v, complex):
+                    return (is_first and isinstance(v, generic)
+                            and 'complex' in str(v.dtype))
+                if isinstance(v, (builtins.int, builtins.float, builtins.bool,
+                                  generic)):
+                    return True
+                if _is_ndarray(v) and v.ndim == 0:
+                    return 'complex' not in str(v.dtype)
+                return False
+            if (pybase is complex and len(args) == 1
+                    and _real_comp(val, True) and _real_comp(args[0], False)):
+                # numpy 语义：第一参为 rsnumpy 复数标量时保留原值再加虚
+                # 分量（c64(1+2j, 1) == 1+3j）
+                if isinstance(val, generic) and 'complex' in str(val.dtype):
+                    val = complex(val) + complex(complex(args[0]).real) * 1j
+                else:
+                    val = complex(complex(val).real, complex(args[0]).real)
+            else:
+                raise TypeError(
+                    f'{cls.__name__}() takes at most 1 argument '
+                    f'({1 + len(args)} given)')
         if isinstance(val, ndarray):
             if val.size == 1:
                 if is_int_scalar:
@@ -4786,6 +4900,11 @@ def _make_scalar_type(name, base, pybase, itemsize, zero):
         if isinstance(val, (list, tuple)):
             return ndarray(val).astype(name)
         if is_int_scalar:
+            # numpy 语义：无符号标量构造拒绝负值（array 构造路径才允许回绕）
+            if (name.startswith('uint') and isinstance(val, builtins.int)
+                    and not isinstance(val, builtins.bool) and val < 0):
+                raise OverflowError(
+                    f"Python -int cannot be converted to C {name}")
             inst = base.__new__(cls)
             inst._value = pybase(val)
             return inst
@@ -4860,7 +4979,12 @@ def _bool_new(cls, val=False, *args):
 
 
 def _string_new(cls, v=b'', *args):
-    """string_ 构造：bytes 子类不接受 str（需 encoding），此处按 utf-8 编码。"""
+    """string_ 构造：bytes 子类不接受 str（需 encoding），此处按 utf-8 编码。
+
+    numpy 语义：数值输入 → str 表示的字节串（bytes_(-2) == b'-2'）。
+    """
+    if isinstance(v, int):
+        v = str(v).encode('utf-8')
     if isinstance(v, str):
         v = v.encode('utf-8')
     return bytes.__new__(cls, v)
@@ -5128,49 +5252,172 @@ def _void_repr(bs):
 
 
 class void(flexible):
-    """void 标量：存储原始字节，支持按字节相等比较（兼容 rsnumpy.void）。"""
+    """void 标量：存储原始字节，支持按字节相等比较（兼容 rsnumpy.void）。
+
+    numpy 语义：
+    - int → 长度（b'\0' * length）；整数标量/0-d 整型数组 → 长度；
+      bytes-like / 0-d 浮点数组（buffer 协议）→ 原始字节；
+      memoryview → shape-(n,) 的 V1 ndarray（array-like 优先）。
+    - dtype='Vn' 对原始字节扩展（补零）或截断；结构化 dtype 打包字段值；
+      非 V dtype（标量/子数组）→ TypeError。
+    - item()：结构化 → 字段值元组；原始 Vn → bytes。
+    - res['字段名'] 按名访问字段。
+    """
+
+    def __new__(cls, data, dtype=None):
+        if isinstance(data, memoryview) and dtype is None:
+            # numpy 语义：memoryview 是 array-like（逐字节 1-d 数组），
+            # 优先于 bytes-like → V1 ndarray
+            return array(list(data.tobytes()), dtype='V1')
+        return super().__new__(cls)
 
     def __init__(self, data, dtype=None):
         if dtype is not None:
-            # numpy 语义：np.void((True, 2), dtype="?,<i8")——按结构化
-            # dtype 把逐字段值打包为 void 标量（字段顺序按 dtype.names）。
             # 参数名 dtype 遮蔽了模块级构造器：运行时再取。
             import rsnumpy as _rs_v
             dt = _rs_v.dtype(dtype)
+            # numpy 语义：void 的 dtype 必须是 V（含结构化）；
+            # 标量 / 子数组 dtype → TypeError
+            if dt.kind != 'V' or getattr(dt, 'subdtype', None) is not None:
+                raise TypeError(
+                    f"void: descr must be a `void` dtype, got `{dt}`")
+            _raw = None
+            if isinstance(data, (bytes, bytearray)):
+                _raw = bytes(data)
+            elif (_is_ndarray(data) and data.ndim == 0
+                    and data.dtype.kind not in ('i', 'u', 'b')):
+                # 0-d 数值数组按 buffer 协议取原始字节（与测试 bytes(arr) 一致）
+                _raw = bytes(data)
+            if _raw is not None:
+                # Vn：原始字节扩展（补零）或截断
+                n = dt.itemsize
+                if len(_raw) < n:
+                    _raw += b'\x00' * (n - len(_raw))
+                self._bytes = _raw[:n]
+                self._struct_dtype = dt
+                return
+            if isinstance(data, void):
+                self._bytes = data._bytes
+                self._struct_dtype = dt
+                return
             names = dt.names or ()
-            vals = list(data)
-            rec = _coerce_record(vals, dt) if names else data
-            import struct as _st
-            chunks = []
-            for i, n in enumerate(names):
-                fdt = dt._fields[n][0]
-                v = rec[i]
+
+            def _pack_field(fdt, v):
+                # 递归按 dtype 布局打包（支持嵌套结构化字段）
+                if fdt.names:
+                    sub = (list(v) if isinstance(v, (list, tuple))
+                           else [v] * len(fdt.names))
+                    return b''.join(_pack_field(fdt._fields[n][0], sub[i])
+                                    for i, n in enumerate(fdt.names))
                 kind = fdt.kind
                 size = fdt.itemsize
                 if kind == 'b':
-                    chunks.append(_st.pack('<b', 1 if v else 0))
-                elif kind in ('i', 'u'):
-                    chunks.append(_st.pack('<' + ('q' if size == 8 else 'i'),
-                                           builtins.int(v) & ((1 << (size * 8)) - 1)
-                                           if size == 4 else builtins.int(v)))
-                elif kind == 'f':
-                    chunks.append(_st.pack('<' + ('d' if size == 8 else 'f'),
-                                           builtins.float(v)))
-                else:
-                    chunks.append(b'\x00' * size)
-            self._bytes = b''.join(chunks)
+                    return _st.pack('<b', 1 if v else 0)
+                if kind in ('i', 'u'):
+                    # 格式字符按位宽映射（i1→b / i2→h / i4→i / i8→q）
+                    _ch = {1: 'b', 2: 'h', 4: 'i', 8: 'q'}.get(size, 'i')
+                    if kind == 'u':
+                        return _st.pack(
+                            '<' + _ch.upper(),
+                            builtins.int(v) & ((1 << (size * 8)) - 1))
+                    return _st.pack('<' + _ch, builtins.int(v))
+                if kind == 'f':
+                    return _st.pack('<' + ('d' if size == 8 else 'f'),
+                                    builtins.float(v))
+                if kind == 'U':
+                    # numpy U 类型：4 字节 UTF-32-LE
+                    _b = str(v).encode('utf-32-le')
+                    return _b[:size].ljust(size, b'\x00')
+                return b'\x00' * size
+            import struct as _st
+            if names and isinstance(data, (list, tuple)) and len(data) == len(names):
+                rec = _coerce_record(list(data), dt)
+                self._bytes = b''.join(_pack_field(dt._fields[n][0], rec[i])
+                                       for i, n in enumerate(names))
+                self._struct_dtype = dt
+                return
+            if names:
+                # numpy 语义：标量 data 广播到所有字段（"length" 含义被
+                # dtype 覆盖）
+                rec = [data] * len(names)
+                self._bytes = b''.join(_pack_field(dt._fields[n][0], rec[i])
+                                       for i, n in enumerate(names))
+                self._struct_dtype = dt
+                return
+            self._bytes = b'\x00' * dt.itemsize
             self._struct_dtype = dt
             return
         if isinstance(data, (bytes, bytearray)):
             self._bytes = bytes(data)
-        elif isinstance(data, int):
-            self._bytes = b'\x00' * data
+        elif _is_ndarray(data) and data.ndim == 0:
+            # numpy 语义：整型 0-d 数组 → 长度；浮点等 → buffer 原始字节
+            # （用 bytes() buffer 协议，与测试的 bytes(arr) 一致）
+            if data.dtype.kind in ('i', 'u', 'b'):
+                self._bytes = b'\x00' * builtins.int(data)
+            else:
+                self._bytes = bytes(data)
+        elif isinstance(data, (bool, int)):
+            self._bytes = b'\x00' * builtins.int(data)
+        elif isinstance(data, generic):
+            self._bytes = b'\x00' * builtins.int(data)
         else:
             self._bytes = bytes(data)
         self._struct_dtype = None
 
+    def item(self):
+        """numpy 语义：结构化 → 字段值元组（嵌套递归）；原始 Vn → bytes。"""
+        dt = getattr(self, '_struct_dtype', None)
+        if dt is not None and getattr(dt, 'names', None):
+            import struct as _st
+
+            def _unpack_field(fdt, chunk):
+                if fdt.names:
+                    sub = []
+                    off = 0
+                    for n in fdt.names:
+                        sf = fdt._fields[n][0]
+                        off += sf.itemsize
+                        sub.append(_unpack_field(
+                            sf, chunk[off - sf.itemsize:off]))
+                    return tuple(sub)
+                kind = fdt.kind
+                size = fdt.itemsize
+                if kind == 'b':
+                    return bool(chunk[0])
+                if kind in ('i', 'u'):
+                    _ch = {1: 'b', 2: 'h', 4: 'i', 8: 'q'}.get(size, 'i')
+                    if kind == 'u':
+                        _ch = _ch.upper()
+                    return _st.unpack('<' + _ch, chunk)[0]
+                if kind == 'f':
+                    return _st.unpack(
+                        '<' + ('d' if size == 8 else 'f'), chunk)[0]
+                if kind == 'U':
+                    return chunk.decode('utf-32-le').rstrip('\x00')
+                return chunk
+            vals = []
+            off = 0
+            for n in dt.names:
+                fdt = dt._fields[n][0]
+                chunk = self._bytes[off:off + fdt.itemsize]
+                off += fdt.itemsize
+                vals.append(_unpack_field(fdt, chunk))
+            return tuple(vals)
+        return self._bytes
+
+    def __getitem__(self, key):
+        dt = getattr(self, '_struct_dtype', None)
+        if (dt is not None and getattr(dt, 'names', None)
+                and key in dt.names):
+            return self.item()[dt.names.index(key)]
+        raise KeyError(key)
+
     def tobytes(self):
         return self._bytes
+
+    @property
+    def nbytes(self):
+        return len(self._bytes)
 
     @property
     def dtype(self):
@@ -5183,6 +5430,17 @@ class void(flexible):
             return self._bytes == other._bytes
         if isinstance(other, (bytes, bytearray)):
             return self._bytes == bytes(other)
+        if isinstance(other, (list, tuple)):
+            # 与记录元组比较（0-d 结构化数组元素为 tuple）
+            try:
+                return self.item() == tuple(other)
+            except Exception:
+                return NotImplemented
+        if isinstance(other, generic):
+            try:
+                return self._bytes == bytes(other.tobytes())
+            except Exception:
+                return NotImplemented
         return NotImplemented
 
     def __ne__(self, other):
@@ -5287,31 +5545,100 @@ def issubdtype(arg1, arg2):
 
 
 class finfo:
-    """浮点类型的机器精度信息（兼容 rsnumpy.finfo）。"""
+    """浮点类型的机器精度信息（兼容 rsnumpy.finfo）。
+
+    numpy 语义：单例缓存（同一规范名返回同一实例）；接受 dtype / 类型类 /
+    字符串 / 标量实例（优先 .dtype 属性，全程不对输入做哈希，gh23867）；
+    字节序前缀归一化为 native；None → TypeError。
+    """
 
     _DATA = {
         'float16': dict(bits=16, eps=0.0009765625, epsneg=0.00048828125,
                         max=65504.0, min=-65504.0, tiny=6.103515625e-05,
-                        resolution=0.001, nmant=10, nexp=5, precision=3),
+                        resolution=0.001, nmant=10, nexp=5, precision=3,
+                        smallest_subnormal=5.9604645e-08),
         'float32': dict(bits=32, eps=1.1920929e-07, epsneg=5.9604645e-08,
                         max=3.4028235e+38, min=-3.4028235e+38, tiny=1.1754944e-38,
-                        resolution=1e-06, nmant=23, nexp=8, precision=6),
+                        resolution=1e-06, nmant=23, nexp=8, precision=6,
+                        smallest_subnormal=1.40129846e-45),
         'float64': dict(bits=64, eps=2.220446049250313e-16, epsneg=1.1102230246251565e-16,
                         max=1.7976931348623157e+308, min=-1.7976931348623157e+308,
                         tiny=2.2250738585072014e-308, resolution=1e-15,
-                        nmant=52, nexp=11, precision=15),
+                        nmant=52, nexp=11, precision=15,
+                        smallest_subnormal=4.9406564584124654e-324),
     }
 
-    def __init__(self, dtype):
-        name = _resolve_type_name(dtype)
+    _cache = {}
+
+    def __class_getitem__(cls, item):
+        import types as _types
+        return _types.GenericAlias(cls, item)
+
+    @classmethod
+    def _resolve_name(cls, dtype):
+        """把 finfo 输入解析为规范浮点名（不对输入做哈希）。"""
+        if dtype is None:
+            raise TypeError("finfo: dtype argument must not be None")
+        name = None
+        if isinstance(dtype, str):
+            s = dtype
+            if s and s[0] in '<>=|':
+                s = s[1:]
+            if len(s) == 1 and s in _DTYPE_CHAR_CODES:
+                name = _DTYPE_CHAR_CODES[s]
+            elif s.lower() in _RS_DTYPE_CODES:
+                name = _RS_DTYPE_CODES[s.lower()]
+            else:
+                name = s
+        elif isinstance(dtype, DType):
+            name = dtype.name
+        elif isinstance(dtype, type):
+            # 类型类直接按名解析（不取 .dtype——未绑定属性返回 property 对象）
+            name = _resolve_type_name(dtype)
+        else:
+            # 实例：优先 .dtype 属性（gh23867：对象可带 dtype 属性且不可哈希）
+            dt = getattr(dtype, 'dtype', None)
+            if dt is not None and dt is not dtype and not isinstance(dt, property):
+                dtype = dt
+            if isinstance(dtype, DType):
+                name = dtype.name
+            else:
+                # 标量实例等：无哈希取类名
+                name = getattr(dtype, '__name__', None)
+                if name is None:
+                    name = getattr(dtype, 'name', None)
+                if name is None:
+                    name = getattr(builtins.type(dtype), '__name__', None)
+        if isinstance(name, str):
+            if name and name[0] in '<>=|':
+                name = name[1:]
+            if name in _RS_DTYPE_CODES:
+                name = _RS_DTYPE_CODES[name]
+            elif name.lower() in _RS_DTYPE_CODES:
+                name = _RS_DTYPE_CODES[name.lower()]
         if name in ('complex64',):
             name = 'float32'
         elif name in ('complex128',):
             name = 'float64'
-        if name not in self._DATA:
-            raise ValueError(f"data type {dtype!r} not inexact")
-        self._name = name
+        if name not in cls._DATA:
+            raise ValueError(f"data type {dtype} not compatible with finfo")
+        return name
+
+    def __new__(cls, dtype):
+        name = cls._resolve_name(dtype)
+        inst = cls._cache.get(name)
+        if inst is None:
+            inst = super().__new__(cls)
+            inst._finfo_name = name
+            cls._cache[name] = inst
+        return inst
+
+    def __init__(self, dtype):
+        if getattr(self, '_finfo_ready', False):
+            return
+        name = self._finfo_name
         d = self._DATA[name]
+        self._name = name
         self.bits = d['bits']
         self.eps = d['eps']
         self.epsneg = d['epsneg']
@@ -5319,16 +5646,30 @@ class finfo:
         self.min = d['min']
         self.tiny = d['tiny']
         self.smallest_normal = d['tiny']
+        self.smallest_subnormal = d['smallest_subnormal']
         self.resolution = d['resolution']
         self.nmant = d['nmant']
         self.nexp = d['nexp']
         self.maxexp = 2 ** (self.nexp - 1)
         self.minexp = 2 - self.maxexp
         self.precision = d['precision']
+        self._finfo_ready = True
 
     @property
     def dtype(self):
         return dtype(self._name)
+
+    @property
+    def machep(self):
+        return self.eps
+
+    @property
+    def negep(self):
+        return self.epsneg
+
+    @property
+    def iexp(self):
+        return self.nexp
 
     def __repr__(self):
         return (f"finfo(resolution={self.resolution}, min={self.min}, "
@@ -5342,6 +5683,10 @@ class iinfo:
         'int8': (8, True), 'int16': (16, True), 'int32': (32, True), 'int64': (64, True),
         'uint8': (8, False), 'uint16': (16, False), 'uint32': (32, False), 'uint64': (64, False),
     }
+
+    def __class_getitem__(cls, item):
+        import types as _types
+        return _types.GenericAlias(cls, item)
 
     def __init__(self, int_type):
         name = _resolve_type_name(int_type)
@@ -6107,6 +6452,10 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
                 _arr = ndarray([_c]).reshape(())
                 if dtype is not None:
                     _arr = _arr.astype(_resolve_dtype(dtype))
+                elif str(_dtype).startswith('complex64'):
+                    # complex64 标量保留自身精度（列表构造默认 complex128；
+                    # astype 需类形式——字符串 'complex64' 不走转换）
+                    _arr = _arr.astype(complex64)
                 if ndmin > _arr.ndim:
                     _arr = _arr.reshape((1,) * (ndmin - _arr.ndim) + _arr.shape)
                 return _arr
@@ -6134,6 +6483,17 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
                 _dtype = _infer_smart_dtype(flat)
     else:
         _dtype = _resolve_dtype(dtype)
+        # rsnumpy 复数标量 + 显式 dtype：ndarray() 构造会把标量数值化丢
+        # 失精度标签（complex64 → complex128），改走 0-d 列表构造 + astype
+        # 类形式（已验证保留 single 精度）。
+        if (isinstance(data, generic) and not _is_ndarray(data)
+                and 'complex' in str(data.dtype)
+                and _dtype in ('complex128', 'complex64')):
+            _arr = (ndarray([complex(data)]).reshape(())
+                    .astype(complex64 if _dtype == 'complex64' else complex128))
+            if ndmin > _arr.ndim:
+                _arr = _arr.reshape((1,) * (ndmin - _arr.ndim) + _arr.shape)
+            return _arr
         # StringDType（可空字符串）：构造器 _vstring 路径保留 NA 对象身份，
         # 直接返回（不能走 _coerce_dtype：'string_' 标签 vs 解析出的
         # 'float64' 会触发 astype 重建，丢失 NA 语义）。
@@ -6307,6 +6667,12 @@ def _infer_scalar_dtype(a):
             pass
     if isinstance(a, builtins.complex):
         return "complex128"
+    # Python 标量按 numpy 语义推断：int → int64、bool → bool（此前统一
+    # 退化为 float64，导致 asarray(0).dtype != array(0).dtype 不一致）。
+    if isinstance(a, builtins.bool):
+        return "bool"
+    if isinstance(a, builtins.int):
+        return "int64"
     return "float64"
 
 
@@ -6360,6 +6726,56 @@ def _has_rscalar_leaf(x):
         return builtins.any(_has_rscalar_leaf(v) for v in x)
     return (isinstance(x, generic) and not _is_ndarray(x)
             and hasattr(x, 'tolist'))
+
+
+def _fp_sub_bad(a, other, res):
+    """减法结果含 NaN 而两个输入均非 NaN（如 inf-inf）→ invalid 事件。"""
+    try:
+        if a.dtype.kind != 'f':
+            return False
+        import math as _math
+        a_vals = list(_extra_module._fp_flat(a.tolist()))
+        r_vals = list(_extra_module._fp_flat(res.tolist()))
+        o_vals = (list(_extra_module._fp_flat(other.tolist()))
+                  if _is_ndarray(other) else [other])
+        for i, (av, rv) in enumerate(zip(a_vals, r_vals)):
+            ov = o_vals[i] if i < len(o_vals) else (o_vals[0] if o_vals else 0.0)
+            if (_math.isnan(rv) and not _math.isnan(av)
+                    and not _math.isnan(ov)):
+                return True
+    except Exception:
+        return False
+    return False
+
+
+def _fp_check_sub_invalid(a, other, res):
+    """按当前 errstate 处理减法的 invalid 浮点错误事件（numpy 语义）。"""
+    if _fp_sub_bad(a, other, res):
+        _extra_module._fp_fire('invalid',
+                               "invalid value encountered in subtract")
+
+
+def _floordiv_zero(x, is_int_dtype):
+    """整数/浮点地板除的除零结果（numpy 语义：int → 0；float 0/0 → NaN、
+    x/0 → ±inf）。"""
+    if is_int_dtype:
+        return 0
+    import math as _m
+    if x == 0:
+        return _m.nan
+    return _m.copysign(_m.inf, x)
+
+
+def _finalize_view(inst, src):
+    """numpy 语义：view 创建后对新对象调用 __array_finalize__(src)，
+    用于子类属性传递（如自定义 metadata）。查类而非实例，避开
+    ndarray.__getattr__ 透传。"""
+    fin = getattr(builtins.type(inst), '__array_finalize__', None)
+    if fin is not None:
+        try:
+            fin(inst, src)
+        except Exception:
+            pass
 
 
 def asarray(a, dtype=None, order=None):
@@ -6783,7 +7199,10 @@ def _numeric_tobytes(arr, order='C'):
     dt = getattr(arr, '_dtype', 'float64')
     # 快路径：float64 数组的字节布局与底层存储一致，直接从缓冲协议 memcpy，
     # 避免逐元素 tolist()→float()→struct.pack 的 Python 开销（百万点级差异达百毫秒）。
+    # 0-d 例外：Rust 0-d 缓冲协议长度损坏，走逐元素编码。
     if (dt == 'float64' and getattr(arr, '_raw_data', None) is None and getattr(arr, '_complex_data', None) is None):
+        if getattr(arr, 'ndim', 1) == 0:
+            return struct.pack('<d', float(arr.tolist()))
         return memoryview(arr._array).tobytes(order)
     fmt = _TOBYTES_STRUCT.get(dt, 'd')
     flat = _flatten_data(arr.tolist())
@@ -6807,6 +7226,10 @@ def _resolve_dtype(dtype):
         return "bytes_"
     if isinstance(dtype, (list, tuple)):
         return "void"
+    # 复数标量类型类：complex64 必须保留 64 位精度（此前误折叠为
+    # complex128，导致 astype/构造器丢失 single 精度）
+    if isinstance(dtype, type) and dtype in (complex64, complex128):
+        return dtype.__name__
     if isinstance(dtype, str):
         dt_str = dtype
     else:
@@ -6814,7 +7237,12 @@ def _resolve_dtype(dtype):
         if not isinstance(_nm, str):
             _nm = getattr(dtype, '__name__', None)
         dt_str = _nm if isinstance(_nm, str) else str(dtype)
+    if dt_str in ("cs", "csingle", "cfloat32", "complex32"):
+        return "complex64"
     if dt_str in ("complex", "complex128", "complex64", "cfloat", "cdouble"):
+        # 裸 "complex"/"complex64" 字符串：保持 complex128（numpy 默认）
+        if dt_str == "complex64":
+            return "complex64"
         return "complex128"
     if dt_str in ("int", "int_", "intp", "intc"):
         return "int64"
@@ -7511,21 +7939,45 @@ def linspace(start, stop, num=50, endpoint=True, retstep=False, dtype=None, axis
         out_dtype = _resolve_dtype(dtype)
         integer_dtype = out_dtype in _LSPACE_INT_DTYPES
 
+    if num == 0:
+        # numpy 语义：空结果，跳过端点差计算（避免 inf-inf 虚假
+        # "invalid value" 告警）；retstep 时 step 未定义 → NaN
+        _empty = zeros(0, out_dtype if not integer_dtype else 'int64')
+        if retstep:
+            return _empty, float('nan')
+        return _empty
+
     # 端点转到 inexact 结果 dtype 后求差（numpy 以 dtype=dt 计算 delta）
     start_f = start_a.astype(dt_name, copy=False)
     stop_f = stop_a.astype(dt_name, copy=False)
 
     # 相等端点（含相等无穷）跳过减法：inf-inf 会产生虚假 NaN 与
-    # "invalid value" 告警；真正非法的组合（混合符号无穷等）仍产生 NaN
-    sub = stop_f - start_f
+    # "invalid value" 告警；真正非法的组合（混合符号无穷等）仍产生 NaN。
+    # 0-d 相等用 tolist() 标量比较（bool(equal) 对 0-d 子类数组可能
+    # 报 "truth value ambiguous"）。
     equal = start_f == stop_f
-    if sub.ndim == 0:
-        delta = zeros((), dt_name) if start_f.tolist() == stop_f.tolist() else sub
+    _equal_scalar = (start_f.ndim == 0 and stop_f.ndim == 0
+                     and start_f.tolist() == stop_f.tolist())
+    if _equal_scalar:
+        delta = zeros((), dt_name)
     else:
-        delta = sub
-        if bool(equal.any()):
-            delta = sub.copy()
-            delta[equal] = 0.0
+        if start_f.ndim > 0 and bool(equal.any()):
+            # 相等元素先置零再减：避免相等无穷元素 inf-inf 触发虚假
+            # "invalid" 告警；混合符号无穷（非相等元素）仍产生 NaN 并告警
+            _s0 = start_f.copy()
+            _t0 = stop_f.copy()
+            _s0[equal] = 0.0
+            _t0[equal] = 0.0
+            sub = _t0 - _s0
+        else:
+            sub = stop_f - start_f
+        if sub.ndim == 0:
+            delta = sub
+        else:
+            delta = sub
+            if bool(equal.any()):
+                delta = sub.copy()
+                delta[equal] = 0.0
 
     y = arange(0, num, dtype='float64').reshape((-1,) + (1,) * equal.ndim)
     if dt_name != 'float64':
@@ -8001,20 +8453,25 @@ def fromfile(file, dtype=None, count=-1, sep='', offset=0, *, like=None):
     （-1 表示读到结尾）。
     """
     import os as _os
+    if isinstance(file, (str, bytes, _os.PathLike)):
+        with open(file, 'rb') as f:
+            raw = f.read()
+    elif hasattr(file, 'read'):
+        raw = file.read()
+    else:
+        raise TypeError("file must be a filename or a file-like object")
+    if sep != '':
+        # 文本模式（numpy 语义）：按 sep 解析，非法/空 token → ValueError
+        if isinstance(raw, (bytes, bytearray)):
+            raw = raw.decode('utf-8', 'surrogateescape')
+        return _extra_module.fromstring(raw, dtype=dtype, count=count, sep=sep)
     elem_size = _dtype_itemsize(dtype)
     skip = offset * elem_size
     nbytes = count * elem_size if count >= 0 else None
-    if isinstance(file, (str, bytes, _os.PathLike)):
-        with open(file, 'rb') as f:
-            if skip:
-                f.seek(skip)
-            raw = f.read(nbytes)
-    elif hasattr(file, 'read'):
-        if skip:
-            file.read(skip)
-        raw = file.read(nbytes)
-    else:
-        raise TypeError("file must be a filename or a file-like object")
+    if skip:
+        raw = raw[skip:]
+    if nbytes is not None:
+        raw = raw[:nbytes]
     return frombuffer(raw, dtype=dtype)
 
 
@@ -8844,14 +9301,14 @@ def isfinite(x):
 
 
 def iscomplex(x):
-    """逐元素检测元素的虚部是否非零。"""
+    """逐元素检测元素的虚部是否非零（numpy 语义，返回 bool 数组）。"""
     arr = ndarray(x)
-    cpx = getattr(arr, '_complex_data', None)
-    if cpx is not None:
-        return ndarray(np.iscomplex_cpx(cpx))
-    # 不是复数数组 → 全零
-    shape = arr.shape
-    return ndarray(np.zeros(shape))
+
+    def _chk(v):
+        if isinstance(v, (list, tuple)):
+            return [_chk(e) for e in v]
+        return builtins.complex(v).imag != 0
+    return array(_chk(arr.tolist()), dtype='bool')
 
 
 # AxisError 统一来源：rsnumpy.exceptions（测试自该模块导入）；
@@ -9491,6 +9948,10 @@ class _NamespaceInfo:
     def extensions(self):
         return []
 
+    def _check_device(self, device):
+        if device is not None and device not in self.devices():
+            raise ValueError(f"Device not understood: {device!r}")
+
     def _all_dtypes(self):
         return {
             'bool': bool_,
@@ -9502,11 +9963,12 @@ class _NamespaceInfo:
         }
 
     def default_dtypes(self, *, device=None, kind=None):
+        self._check_device(device)
         defaults = {
             'real floating': float64,
             'complex floating': complex128,
-            'integral': int64,
-            'indexing': int64,
+            'integral': intp,
+            'indexing': intp,
             'bool': bool_,
         }
         if kind is None:
@@ -9514,6 +9976,7 @@ class _NamespaceInfo:
         return defaults[kind]
 
     def dtypes(self, *, device=None, kind=None):
+        self._check_device(device)
         all_dtypes = self._all_dtypes()
         if kind is None:
             return dict(all_dtypes)
@@ -9536,12 +9999,11 @@ class _NamespaceInfo:
                 out.update({n: all_dtypes[n] for n in
                             ('int8', 'int16', 'int32', 'int64',
                              'uint8', 'uint16', 'uint32', 'uint64')})
-                out['indexing'] = int64
             elif k == 'numeric':
                 out.update(all_dtypes)
                 out.pop('bool')
             else:
-                raise ValueError(f"unrecognized data type kind: {k!r}")
+                raise ValueError(f"unsupported kind: {k!r}")
         return out
 
 
@@ -9569,6 +10031,18 @@ from . import ma  # noqa: E402,F401
 # numpy 顶层遗留别名（np.product = np.prod）
 product = prod
 __all__.append('product')
+
+# ---- 多项式旧 API 完整版：覆盖 L24 的薄包装（polyval/polyfit/polyder/
+# polyint），语义与 numpy 2.x 一致（polyfit cov/full、Horner 复合、
+# poly1d 递归 integ/deriv）。poly1d/poly/polydiv/roots 已由 _extra 挂载。 ----
+from .polynomial._npcompat import (  # noqa: E402
+    polyval as _npx_polyval, polyfit as _npx_polyfit,
+    polyder as _npx_polyder, polyint as _npx_polyint)
+polyval = _npx_polyval
+polyfit = _npx_polyfit
+polyder = _npx_polyder
+polyint = _npx_polyint
+del _npx_polyval, _npx_polyfit, _npx_polyder, _npx_polyint
 
 
 _sys.modules['rsnumpy'] = _sys.modules[__name__]

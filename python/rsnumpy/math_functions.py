@@ -195,15 +195,52 @@ def trunc(x):
     return _wrap(_core.trunc(_ensure_raw(x)))
 
 
-def fix(x):
-    """向零取整。"""
-    return _wrap(_core.fix(_ensure_raw(x)))
+def fix(x, out=None, **kwargs):
+    """向零取整（与 numpy 一致：已弃用，等价于 trunc/ceil）。"""
+    import warnings as _warnings
+    _warnings.warn(
+        "rsnumpy.fix is deprecated: use rsnumpy.trunc/ceil instead",
+        DeprecationWarning, stacklevel=2)
+    np = _nd()
+    raw = _core.fix(_ensure_raw(x))
+    if hasattr(x, '_array'):
+        res = _wrap(raw)
+        # ufunc 子类保持：经输入对象的 __array_wrap__ 包装（numpy 语义）。
+        # 注意 _nd() 返回的就是 ndarray 类本身。
+        if type(x) is not np and hasattr(type(x), '__array_wrap__'):
+            res = x.__array_wrap__(res, context=None, return_scalar=False)
+        if out is not None:
+            out[...] = res
+            return out
+        return res
+    # 标量输入返回 float64 标量（numpy 语义），不衰减为 ndarray。
+    from .__init__ import float64 as _float64
+    val = float(raw.tolist())
+    if out is not None:
+        out[...] = val
+        return out
+    return _float64(val)
 
 
 # ========== 特殊函数 ==========
+def _sqrt_has_negative(x):
+    try:
+        from ._extra import _fp_flat
+        if hasattr(x, '_array'):
+            return builtins.any(v < 0 for v in _fp_flat(x.tolist()))
+        return x < 0
+    except Exception:
+        return False
+
+
 def sqrt(x):
-    """计算平方根。"""
-    return _wrap(_core.sqrt(_ensure_raw(x)))
+    """计算平方根（负数输入按 errstate 触发 invalid 浮点错误事件）。"""
+    raw = _ensure_raw(x)
+    res = _wrap(_core.sqrt(raw))
+    if _sqrt_has_negative(x):
+        from ._extra import _fp_fire
+        _fp_fire('invalid', "invalid value encountered in sqrt")
+    return res
 
 
 def square(x):
@@ -450,6 +487,12 @@ def _isclose_arrays(arr_a, arr_b, rtol, atol, equal_nan):
     import math as _m
     nd = _nd()
 
+    def _fin(x):
+        # 复数元素：math.isfinite 不接受 complex → 实/虚部分别判
+        if isinstance(x, builtins.complex):
+            return _m.isfinite(x.real) and _m.isfinite(x.imag)
+        return _m.isfinite(x)
+
     def _num(x):
         if isinstance(x, (list, tuple)):
             return nd(list(x))
@@ -554,7 +597,7 @@ def _isclose_arrays(arr_a, arr_b, rtol, atol, equal_nan):
         elif _av == _bv:
             # 相等值（含 inf==inf / -inf==-inf）恒 close
             _out.append(True)
-        elif _m.isfinite(_av) and _m.isfinite(_bv):
+        elif _fin(_av) and _fin(_bv):
             _out.append(builtins.bool(abs(_av - _bv) <=
                                       _atv + _rtv * abs(_bv)))
         else:

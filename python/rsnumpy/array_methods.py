@@ -39,6 +39,30 @@ class NdArrayMethods:
                 raise TypeError(
                     "cannot astype to a structured dtype containing object "
                     "fields (rsnumpy cannot represent object fields)")
+        # 非结构化 → 结构化：逐元素逐字段 cast（numpy astype 语义：
+        # 每个标量按各字段 dtype 转换成一个记录）
+        try:
+            import rsnumpy as _rn_ast
+            _dst_dt = _rn_ast.dtype(dtype)
+            _dst_names = getattr(_dst_dt, 'names', None)
+            if _dst_names is not None:
+                _src_dt = getattr(arr, '_dtype_obj', None)
+                _src_structured = (_src_dt is not None
+                                   and getattr(_src_dt, '_names', None)
+                                   is not None)
+                if not _src_structured:
+                    _recs = []
+                    for _v in arr.tolist():
+                        _recs.append(tuple(
+                            _rn_ast._coerce_field_value(
+                                _v, _dst_dt._fields[_n][0])
+                            for _n in _dst_names))
+                    res = _rn_ast.array(_recs, dtype=dtype)
+                    if res.ndim < arr.ndim and arr.shape:
+                        res = res.reshape(arr.shape)
+                    return res
+        except Exception:
+            pass
         if isinstance(dtype, str):
             try:
                 import rsnumpy as _rn_asm
@@ -540,11 +564,12 @@ class NdArrayMethods:
     
     @staticmethod
     def argmax(arr, axis=None):
-        """返回最大值的索引。"""
+        """返回最大值的索引（全归约返回 intp 标量，numpy 语义）。"""
         axis = NdArrayMethods._reduce_axis_check(arr, axis)
         result = _wrap_result(_core.argmax_axis(arr._array, axis))
         if result.ndim == 0:
-            return int(result.item())
+            import rsnumpy as _rsn
+            return _rsn.int64(result.item())
         return result
     
     @staticmethod
