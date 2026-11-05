@@ -24,8 +24,9 @@ def _rich_dtype(x):
 
 
 def _records(arr):
-    """展平结构化数组为记录 tuple 列表。"""
-    return np._flatten_records(arr._raw_data)
+    """展平结构化数组为记录 tuple 列表（MaskedArray 先解包底层数据）。"""
+    data, _mask = _rec_info(arr)
+    return np._flatten_records(data._raw_data)
 
 
 def _default_field(fdt):
@@ -308,7 +309,8 @@ def recursive_fill_fields(input, output):
         out_field_dt = out_dt[on]
         for k in range(n):
             out_recs[k][oi] = _project_value(in_recs[k][ii], in_field_dt, out_field_dt)
-    output._raw_data = np._reshape_flat([tuple(r) for r in out_recs], output.shape)
+    _out_data, _out_mask = _rec_info(output)
+    _out_data._raw_data = np._reshape_flat([tuple(r) for r in out_recs], _out_data.shape)
     return output
 
 
@@ -428,33 +430,96 @@ def stack_arrays(arrays, defaults=None, usemask=True, asrecarray=False,
     if not arrays:
         return np.array([])
     field_order = []
-    field_dt = {}
-    has_structured = False
-    for arr in arrays:
+    field_dts = {}
+    # 全为无名数组：直接拼接（numpy 语义，不做字段包装）
+    if not any(_rich_dtype(arr).names is not None for arr in arrays):
+        return np.concatenate([np.array(a) for a in arrays])
+    # 非结构化数组包装成单字段记录：字段名按其在字段并集中的插入
+    # 位置命名（numpy 语义：stack (x, z)→'f0'，stack (z, x)→'f2'）
+    for ai, arr in enumerate(arrays):
         dt = _rich_dtype(arr)
         if dt.names is not None:
-            has_structured = True
             # 使用 for 循环保持字段顺序（dict 去重）
             for n in dt.names:
-                if n not in field_dt:
+                field_dts.setdefault(n, []).append(dt[n])
+                if n not in field_dts or len(field_dts[n]) == 1:
                     field_order.append(n)
-                    field_dt[n] = dt[n]
-    if not has_structured:
-        return np.concatenate([np.array(a) for a in arrays])
+        else:
+            fname = 'f%d' % len(field_order)
+            arrays[ai] = np.array([(v,) for v in arr.tolist()],
+                                  dtype=[(fname, dt)])
+            field_dts.setdefault(fname, []).append(dt)
+            if fname not in field_order:
+                field_order.append(fname)
+    # 字段 dtype：autoconvert 时取各来源中最宽者；不一致且未开则 TypeError
+    _KIND_RANK = {'b': 0, 'i': 1, 'u': 1, 'f': 2, 'c': 3}
+
+    def _widen(dts):
+        cur = dts[0]
+        for d in dts[1:]:
+            if str(d) == str(cur):
+                continue
+            kc = getattr(cur, '_kind', None)
+            kd = getattr(d, '_kind', None)
+            if kd != kc:
+                if _KIND_RANK.get(kd, -1) > _KIND_RANK.get(kc, -1):
+                    cur = d
+            elif getattr(d, 'itemsize', 0) > getattr(cur, 'itemsize', 0):
+                cur = d
+        return cur
+
     names = field_order
-    formats = [field_dt[n] for n in names]
+    formats = []
+    for n in names:
+        dts = field_dts[n]
+        if len(dts) == 1:
+            formats.append(dts[0])
+        else:
+            _w = _widen(dts)
+            if not autoconvert and any(str(d) != str(_w) for d in dts):
+                raise TypeError(
+                    f'incompatible field dtype for {n!r}: '
+                    f'{[str(d) for d in dts]} (use autoconvert=True)')
+            formats.append(_w)
     newdt = np._build_struct(names, formats, None, None, None, False)
-    # 嵌套列表推导：展开所有记录并按字段并集投影
-    out_recs = [
-        _project_record(r, _rich_dtype(arr), newdt)
-        for arr in arrays
-        for r in _records(arr)
-    ]
+    # 逐记录投影到字段并集；缺失字段填默认值并置掩码；MaskedArray
+    # 输入的掩码按记录传播（rsnumpy 结构化掩码为按记录形式）
+    out_recs = []
+    out_mask = []
+    for arr in arrays:
+        data, msk = _rec_info(arr)
+        dt = _rich_dtype(data)
+        in_names = dt.names or ()
+        for ri, r in enumerate(_records(data)):
+            row, mrow = [], []
+            for on in names:
+                if on in in_names:
+                    row.append(_project_value(
+                        r[in_names.index(on)], dt[on], newdt[on]))
+                    mrow.append(bool(msk[ri]) if msk else False)
+                else:
+                    row.append(_default_field(newdt[on]))
+                    mrow.append(True)
+            out_recs.append(tuple(row))
+            out_mask.append(mrow)
     output = np._wrap_structured(newdt, out_recs)
+    if usemask:
+        import rsnumpy.ma as _ma
+        # 传每记录掩码列表（与 ma.array 结构化掩码构造路径一致）
+        return _ma.MaskedArray(output, mask=out_mask)
     return _fix_output(output, usemask=usemask, asrecarray=asrecarray)
 
 
 # ========== 去重 ==========
+
+def _hashable_key(v):
+    """把记录值转为可哈希的键（list 递归转 tuple）。"""
+    if isinstance(v, list):
+        return tuple(_hashable_key(x) for x in v)
+    if isinstance(v, tuple):
+        return tuple(_hashable_key(x) for x in v)
+    return v
+
 
 def find_duplicates(a, key=None, ignoremask=True, return_index=False):
     """查找结构化（可选掩码）数组中的重复记录。"""
@@ -467,20 +532,26 @@ def find_duplicates(a, key=None, ignoremask=True, return_index=False):
     dt = _rich_dtype(base)
     recs = _records(base)
     if key is None:
-        key = dt.names[0]
-    ki = dt.names.index(key)
-    # 列表推导：一次性提取所有键值
-    vals = [r[ki] for r in recs]
+        # numpy 语义：key=None 按"整条记录"比较（非第一个字段）
+        ki = None
+        vals = [_hashable_key(r) for r in recs]
+    else:
+        ki = dt.names.index(key)
+        # 列表推导：一次性提取所有键值
+        vals = [r[ki] for r in recs]
     if mask is None:
         mask = [False] * len(vals)
 
-    # 字典推导构建 positions（兼容 ignoremask 行为）
+    # 字典推导构建 positions：ignoremask=True 跳过掩码记录；
+    # ignoremask=False 时掩码记录视为各自独立（masked 值与任何值
+    # 都不构成重复，numpy 语义）
     positions = {}
     for i, v in enumerate(vals):
-        # ignoremask=True 时跳过掩码记录
-        if ignoremask and i < len(mask) and mask[i]:
+        masked_i = i < len(mask) and mask[i]
+        if ignoremask and masked_i:
             continue
-        positions.setdefault(v, []).append(i)
+        k = ('__masked__', i) if masked_i else v
+        positions.setdefault(k, []).append(i)
 
     # 生成器推导：从 positions.values() 拉平并排序重复索引
     dup_idx = sorted(i for idxs in positions.values() if len(idxs) > 1 for i in idxs)
@@ -530,14 +601,94 @@ def _rec_info(a):
     return a, None
 
 
-def append_fields(rec1, rec2, dk1=None, dk2=None, usemask=True, fill_value=1,
-                  names=None, dtype=None, tobegin=False):
-    """按关键字段把 rec2 的字段追加到 rec1（numpy.append_fields 兼容）。
+def _append_fields_values(base, names, data, usemask=True, fill_value=-1):
+    """numpy 语义的 append_fields：按字段名 + 值序列追加新字段。
 
-    无键（dk1=dk2=[]）时按位置匹配；未匹配行以 fill_value 填充并掩码。
+    输出行数为 max(len(base), len(data))；不足的行以 fill_value 填充
+    并置掩码。base 为普通数组时字段名取 'f0'（numpy 兼容）。
     """
     import rsnumpy
     import rsnumpy.ma as ma
+    if isinstance(names, str):
+        names = [names]
+        fields_vals = [data]
+    else:
+        names = list(names)
+        fields_vals = [list(f) for f in data]
+    # 基数组字段行与掩码
+    b_names_dt = getattr(getattr(base, 'dtype', None), 'names', None)
+    if b_names_dt:
+        binfo, bmask = _rec_info(base)
+        b_names = list(b_names_dt)
+        b_specs = [(n, binfo.dtype.fields[n][0]) for n in b_names]
+        b_rows = [[binfo[i][n] for n in b_names] for i in range(binfo.shape[0])]
+        b_masks = [[bmask[i * len(b_names) + k] if bmask else False
+                    for k in range(len(b_names))]
+                   for i in range(binfo.shape[0])]
+    else:
+        b_names = ['f0']
+        b_specs = [('f0', base.dtype)]
+        b_rows = [[v] for v in base.tolist()]
+        b_masks = [[False] for _ in b_rows]
+    n_out = max([len(b_rows)] + [len(f) for f in fields_vals])
+    _new_specs = [(nm, np.array(f if len(f) else [0]).dtype)
+                  for nm, f in zip(names, fields_vals)]
+    # 缺失行/缺失值的填充：嵌套结构/子数组字段不能直接填标量
+    # （_coerce_record 会因序列长度不匹配越界），按字段 dtype 取默认结构
+    def _pad_val(fdt):
+        if (getattr(fdt, '_names', None) is not None
+                or getattr(fdt, '_subdtype', None) is not None):
+            try:
+                return np._default_field(fdt, lambda f: fill_value)
+            except Exception:
+                pass
+        return fill_value
+    out_rows, out_mask = [], []
+    for i in range(n_out):
+        row, mrow = [], []
+        if i < len(b_rows):
+            row += b_rows[i]
+            mrow += b_masks[i]
+        else:
+            row += [_pad_val(s[1]) for s in b_specs]
+            mrow += [True] * len(b_names)
+        for nm, fdt_i, f in zip(names, _new_specs, fields_vals):
+            if i < len(f):
+                row.append(f[i])
+                mrow.append(False)
+            else:
+                row.append(_pad_val(fdt_i))
+                mrow.append(True)
+        out_rows.append(row)
+        out_mask.append(mrow)
+    out_dtype = list(b_specs) + list(_new_specs)
+    arr = rsnumpy.array(out_rows, dtype=out_dtype)
+    if usemask:
+        flat = [m for rowm in out_mask for m in rowm]
+        return ma.MaskedArray(arr, mask=flat)
+    return arr
+
+
+def append_fields(rec1, rec2=None, dk1=None, dk2=None, usemask=True,
+                  fill_value=-1, names=None, dtype=None, tobegin=False,
+                  data=None, as_recarray=False):
+    """按关键字段把 rec2 的字段追加到 rec1（numpy.append_fields 兼容）。
+
+    numpy 2.x 语义：append_fields(base, names, data=None, fill_value=-1,
+    usemask=True, as_recarray=False)——第二位置参数是字段名，data 是
+    各字段的值序列；输出行数为 max(len(base), len(data))，不足的行以
+    fill_value 填充并掩码。
+    旧签名（按关键字段合并记录数组，dk1/dk2）保持兼容。
+    """
+    import rsnumpy
+    import rsnumpy.ma as ma
+    if data is not None:
+        # numpy 形式：第二位置参数是字段名，data 是字段值序列
+        if names is None:
+            names = rec2
+        rec2 = data
+        return _append_fields_values(rec1, names, rec2, usemask=usemask,
+                                     fill_value=fill_value)
     dk1 = list(dk1) if dk1 else []
     dk2 = list(dk2) if dk2 else []
     data1, mask1 = _rec_info(rec1)
@@ -584,47 +735,76 @@ def append_fields(rec1, rec2, dk1=None, dk2=None, usemask=True, fill_value=1,
 
 
 def assign_fields_by_name(rec1, rec2, usemask=True, overwrite=False,
-                          extra_fields='drop'):
-    """按字段名把 rec2 的值赋给 rec1（第 i 行 ↔ 第 i 行，numpy 兼容）。"""
-    import rsnumpy
-    data1, mask1 = _rec_info(rec1)
-    data2, mask2 = _rec_info(rec2)
-    n1 = data1.dtype.names or ()
-    n2 = data2.dtype.names or ()
-    out_rows, out_mask = [], []
-    for i in range(data1.shape[0]):
-        r1 = data1[i]
-        r2 = data2[i] if i < data2.shape[0] else None
-        vals = [r1[n] for n in n1]
-        ms = [mask1[i * len(n1) + k] if mask1 else False
-              for k in range(len(n1))]
-        if r2 is not None:
-            for k, n in enumerate(n1):
-                if n in n2:
-                    j = n2.index(n)
-                    src_mask = (mask2[i * len(n2) + j] if mask2 else False)
-                    if overwrite or not src_mask:
-                        vals[k] = r2[n]
-                    ms[k] = src_mask or ms[k]
-        out_rows.append(vals)
-        out_mask.append(ms)
-    arr = rsnumpy.array(out_rows, dtype=data1.dtype)
-    if usemask:
-        flat = [m for row in out_mask for m in row]
-        return rsnumpy.ma.MaskedArray(arr, mask=flat)
-    return arr
+                          extra_fields='drop', zero_unassigned=True):
+    """按字段名把 rec2 的值赋给 rec1（第 i 行 ↔ 第 i 行，numpy 兼容）。
 
-
-def join_by(left, right, keys, join_type='inner', fill_value=None,
-            lsuffix=None, rsuffix=None):
-    """按键字段联接两个记录数组（SQL 风格，numpy.join_by 兼容）。
-
-    join_type: 'inner' / 'left' / 'right' / 'full'（'outer' 同 'full'）。
+    原地写回 rec1 中与 rec2 同名的字段（嵌套结构按字段名递归）；
+    rec1 独有字段：zero_unassigned=True（numpy 默认）清零，False 保留原值。
+    rec2 独有字段按 extra_fields 丢弃（'drop'）。
     """
     import rsnumpy
+    n1 = getattr(getattr(rec1, 'dtype', None), 'names', None)
+    n2 = getattr(getattr(rec2, 'dtype', None), 'names', None)
+    if n1 is None:
+        # 非结构化数组（含 0-d）：整体赋值（numpy 测试的 unstructured 路径）
+        try:
+            rec1[...] = rec2
+        except Exception:
+            pass
+        return rec1
+
+    def _zero_field(arr, name):
+        fdt = arr.dtype.fields[name][0]
+        sub = getattr(fdt, '_names', None)
+        if sub:
+            fv = arr[name]
+            for s in sub:
+                _zero_field(fv, s)
+        else:
+            arr[name] = 0
+
+    for n in n1:
+        if n2 and n in n2:
+            v = rec2[n]
+            fdt = rec1.dtype.fields[n][0]
+            if getattr(fdt, '_names', None) is not None:
+                # 嵌套结构：按字段名递归赋值（子字段视图写回父数组）
+                assign_fields_by_name(rec1[n], v, usemask=usemask,
+                                      overwrite=overwrite,
+                                      extra_fields=extra_fields,
+                                      zero_unassigned=zero_unassigned)
+            else:
+                rec1[n] = v
+        elif zero_unassigned:
+            _zero_field(rec1, n)
+    return rec1
+
+
+def join_by(left, right, keys, jointype='inner', fill_value=None,
+            r1postfix='1', r2postfix='2', defaults=None, usemask=True,
+            as_recarray=False, lsuffix=None, rsuffix=None,
+            join_type=None):
+    """按键字段联接两个记录数组（SQL 风格，numpy.join_by 兼容）。
+
+    jointype: 'inner' / 'left' / 'right' / 'outer'（同 'full'）。
+    重叠的非键字段：左表字段加 r1postfix、右表字段加 r2postfix
+    （numpy 默认 '1'/'2'）。
+    """
+    import rsnumpy
+    # numpy 顺序：join_by(key, r1, r2, ...)——第一参数是键，后两个是数组；
+    # 旧顺序 (left, right, keys) 以"首参是数组"识别并保持兼容。
+    if (not hasattr(left, 'dtype') and hasattr(right, 'dtype')
+            and hasattr(keys, 'dtype')):
+        left, right, keys = right, keys, left
+    if join_type is None:
+        join_type = jointype
     join_type = str(join_type).lower()
     if join_type == 'outer':
         join_type = 'full'
+    if join_type == 'leftouter':
+        join_type = 'left'
+    if join_type == 'rightouter':
+        join_type = 'right'
     dl, ml = _rec_info(left)
     dr, mr = _rec_info(right)
     nl = dl.dtype.names or ()
@@ -632,51 +812,110 @@ def join_by(left, right, keys, join_type='inner', fill_value=None,
     if isinstance(keys, str):
         keys = [keys]
     keys = list(keys)
+    if len(set(keys)) != len(keys):
+        raise ValueError(f"duplicate key field(s): {keys}")
 
+    _lp = lsuffix if lsuffix else (r1postfix if r1postfix is not None else '1')
+    _rp = rsuffix if rsuffix else (r2postfix if r2postfix is not None else '2')
+    left_out = {}
+    for n in nl:
+        if n in nr and n not in keys:
+            left_out[n] = f'{n}{_lp}'
+        else:
+            left_out[n] = n
     right_out = {}
     for n in nr:
         if n in nl and n not in keys:
-            right_out[n] = f'{n}{rsuffix}' if rsuffix else n
+            right_out[n] = f'{n}{_rp}'
         else:
             right_out[n] = n
-    spec = [(n, n, dl.dtype.fields[n][0]) for n in nl]
-    for n in nr:
-        if n in nl and n in keys:
+    # spec 项: (输出名, 'l'|'r', 源字段名, fdt)。
+    # numpy 语义：键字段排最前（按左表字段顺序，不后缀，只出一次）；
+    # 同名非键字段左/右相邻输出（b1,b2,c1,c2）；两表同名字段 dtype
+    # 不同时取宽者（如 S5/S10 → S10）。
+    def _wider_dt(dt_l, dt_r):
+        ls_, rs_ = getattr(dt_l, 'itemsize', 0), getattr(dt_r, 'itemsize', 0)
+        return dt_r if getattr(dt_r, '_kind', None) == getattr(
+            dt_l, '_kind', None) and rs_ > ls_ else dt_l
+
+    spec = []
+    for n in nl:
+        if n in keys:
+            _fdt = dl.dtype.fields[n][0]
+            if n in nr:
+                _fdt = _wider_dt(_fdt, dr.dtype.fields[n][0])
+            spec.append((n, 'l', n, _fdt))
+    for n in nl:
+        if n in keys:
             continue
-        spec.append((right_out[n], n, dr.dtype.fields[n][0]))
+        spec.append((left_out[n], 'l', n, dl.dtype.fields[n][0]))
+        if n in nr:
+            spec.append((right_out[n], 'r', n, dr.dtype.fields[n][0]))
+    for n in nr:
+        if n not in nl:
+            spec.append((right_out[n], 'r', n, dr.dtype.fields[n][0]))
     out_names = [s[0] for s in spec]
+
+    def _key_val(rec, k):
+        # 子数组字段值（ndarray）不可哈希，转为 tuple
+        v = rec[k]
+        if hasattr(v, 'tolist'):
+            t = v.tolist()
+            return tuple(t) if isinstance(t, list) else t
+        return tuple(v) if isinstance(v, list) else v
 
     idx = {}
     for j in range(dr.shape[0]):
-        key = tuple(dr[j][k] for k in keys)
+        key = tuple(_key_val(dr[j], k) for k in keys)
         idx.setdefault(key, []).append(j)
     right_lists = {k: list(v) for k, v in idx.items()}
     consumed_r, consumed_l = set(), set()
     out_rows, out_mask = [], []
 
+    # 缺省值：fill_value=None 时按字段 dtype 取类型默认值（值被掩码，
+    # numpy 语义：defaults 未给时数值取 0、字符串取 ''）
+    def _default_for(fdt):
+        if fill_value is not None:
+            return fill_value
+        k = getattr(fdt, '_kind', None)
+        if k in ('S', 'U'):
+            return ''
+        if k == 'c':
+            return 0j
+        if k in ('i', 'u', 'f', 'b'):
+            return 0
+        return None
+
+    # 字段名重复（如空后缀导致重命名失效）→ ValueError（numpy 语义）
+    if len(set(out_names)) != len(out_names):
+        dupes = sorted({n for n in out_names if out_names.count(n) > 1})
+        raise ValueError(f'field name(s) duplicated in join result: {dupes}')
+
     def _emit(i, j):
         row, mrow = [], []
-        if i is None:
-            for _ in nl:
-                row.append(fill_value)
-                mrow.append(True)
-        else:
-            for k, n in enumerate(nl):
-                row.append(dl[i][n])
-                mrow.append(ml[i * len(nl) + k] if ml else False)
-        for out_n, src_n, _fdt in spec[len(nl):]:
-            if j is None:
-                row.append(fill_value)
-                mrow.append(True)
+        for out_n, side, src_n, fdt in spec:
+            if side == 'l':
+                if i is None:
+                    row.append(_default_for(fdt))
+                    mrow.append(True)
+                else:
+                    row.append(dl[i][src_n])
+                    mrow.append(ml[i * len(nl) + nl.index(src_n)]
+                                if ml else False)
             else:
-                row.append(dr[j][src_n])
-                mrow.append(mr[j * len(nr) + nr.index(src_n)] if mr else False)
+                if j is None:
+                    row.append(_default_for(fdt))
+                    mrow.append(True)
+                else:
+                    row.append(dr[j][src_n])
+                    mrow.append(mr[j * len(nr) + nr.index(src_n)]
+                                if mr else False)
         out_rows.append(row)
         out_mask.append(mrow)
 
     if join_type in ('inner', 'left', 'full'):
         for i in range(dl.shape[0]):
-            key = tuple(dl[i][k] for k in keys)
+            key = tuple(_key_val(dl[i], k) for k in keys)
             ms = [j for j in right_lists.get(key, []) if j not in consumed_r]
             if ms:
                 for j in ms:
@@ -689,9 +928,9 @@ def join_by(left, right, keys, join_type='inner', fill_value=None,
         for j in range(dr.shape[0]):
             if j in consumed_r:
                 continue
-            key = tuple(dr[j][k] for k in keys)
+            key = tuple(_key_val(dr[j], k) for k in keys)
             i = next((x for x in range(dl.shape[0])
-                      if tuple(dl[x][k] for k in keys) == key
+                      if tuple(_key_val(dl[x], k) for k in keys) == key
                       and x not in consumed_l), None)
             if i is not None:
                 consumed_l.add(i)
@@ -699,10 +938,12 @@ def join_by(left, right, keys, join_type='inner', fill_value=None,
             else:
                 _emit(None, j)
 
-    out_dtype = [(n, fdt) for n, _src, fdt in spec]
+    out_dtype = [(n, fdt) for n, _side, _src, fdt in spec]
     arr = rsnumpy.array(out_rows, dtype=out_dtype)
     import rsnumpy.ma as ma
-    if rsnumpy.ma.isMaskedArray(left) or rsnumpy.ma.isMaskedArray(right):
+    if usemask and (rsnumpy.ma.isMaskedArray(left)
+                    or rsnumpy.ma.isMaskedArray(right)
+                    or any(any(row) for row in out_mask)):
         flat = [m for row in out_mask for m in row]
         return ma.MaskedArray(arr, mask=flat)
     return arr

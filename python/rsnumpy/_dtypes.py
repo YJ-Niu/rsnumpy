@@ -337,6 +337,23 @@ class DType(metaclass=_DTypeMeta):
     def names(self):
         return self._names
 
+    @names.setter
+    def names(self, value):
+        # numpy 语义：dt.names = ('k', 'v') 重命名字段（给定的名字依次
+        # 对应现有字段；超出给定数的字段被隐藏——align=True 的填充字段
+        # 即由此剔除）。
+        new_names = tuple(value)
+        if len(new_names) > len(self._names):
+            raise ValueError(
+                f"there are already {len(self._names)} fields, "
+                f"cannot set {len(new_names)} names")
+        old_names = list(self._names)
+        new_fields = {}
+        for i, nn in enumerate(new_names):
+            new_fields[nn] = self._fields[old_names[i]]
+        self._names = new_names
+        self._fields = new_fields
+
     @property
     def isalignedstruct(self):
         return bool(self._aligned)

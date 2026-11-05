@@ -1563,24 +1563,10 @@ class ndarray:
             np.setitem_multi(self._array, key, list(self.shape), val)
         else:
             self._array[key] = value
-        # 字段视图写回（numpy field view 语义：a['f'][i] = v 反映到父数组）
-        _rp = getattr(self, '_rec_parent', None)
-        _rf = getattr(self, '_rec_field', None)
-        if _rp is not None and _rf is not None:
-            try:
-                _dt_p = _struct_dt_of(_rp)
-                if (_dt_p is not None and _rf in _dt_p._names
-                        and getattr(_rp, 'ndim', 1) == 1):
-                    _fi = _dt_p._names.index(_rf)
-                    _fdt_p = _dt_p._fields[_rf][0]
-                    _vals = self.tolist()
-                    for _i in range(len(_rp)):
-                        _old = _get_flat_record(_rp, _i)
-                        _lst = list(_old)
-                        _lst[_fi] = _coerce_field_value(_vals[_i], _fdt_p)
-                        _set_flat_record(_rp, _i, tuple(_lst))
-            except Exception:
-                pass
+        # 字段视图写回（numpy field view 语义：a['f'][i] = v 反映到父数组；
+        # 嵌套字段视图沿 _rec_parent 链逐级向上传播）
+        if getattr(self, '_rec_parent', None) is not None:
+            _propagate_field_writeback(self)
 
     def __add__(self, other):
         dt = _promote_dtype(self._dtype, other)
@@ -2688,6 +2674,14 @@ class ndarray:
 
     def byteswap(self, inplace=False):
         """交换数组中每个元素的字节顺序（大小端转换）。"""
+        # numpy 语义：结构化（含子数组字段）dtype 不支持 byteswap——
+        # 记录级字节序无意义，超尺寸 itemsize 抛 TypeError
+        dt_obj = getattr(self, '_dtype_obj', None)
+        if dt_obj is not None and getattr(dt_obj, '_names', None):
+            raise TypeError(
+                f"Cannot byteswap: itemsize larger than a single element "
+                f"is not supported for structured dtype "
+                f"(itemsize={getattr(self, 'itemsize', 0)})")
         data = self._array.flatten().tolist()
         dtype = getattr(self, '_dtype', 'float64')
         swapped = []
@@ -4045,18 +4039,14 @@ def _coerce_struct_data(data, dt):
         return _coerce_record(data, dt)
     if isinstance(data, list):
         n = len(dt._names)
-        # 记录列表：所有字段均为标量（无子数组/嵌套）且每个元素是
-        # 长度等于字段数的序列 → 每元素是一条记录（fromrecords 场景）。
-        # 含子数组字段的 2-d 嵌套数据仍走逐元素递归，避免误判。
-        # 注意：模块级 all/any 被 rsnumpy ufunc 遮蔽（对生成器恒 True），
-        # 必须用捕获的内建别名 _py_all。
-        _scalar_fields = _py_all(
-            dt._fields[_nm][0]._subdtype is None
-            and dt._fields[_nm][0]._names is None
-            for _nm in dt._names)
+        # 记录列表：每个元素是长度等于字段数的序列 → 每元素是一条记录
+        # （fromrecords / join_by 输出等场景；字段可以是子数组/嵌套，
+        # 记录行的长度仍等于字段数）。
         # 元素首项本身是长度 n 的序列 → 记录在更深层（多维记录行），
         # 走逐元素递归而非记录列表（否则 (2,2) 结构被误判成 (2,) 记录）。
-        if (_scalar_fields and len(data) > 0
+        # 注意：模块级 all/any 被 rsnumpy ufunc 遮蔽（对生成器恒 True），
+        # 必须用捕获的内建别名 _py_all。
+        if (len(data) > 0
                 and _py_all(isinstance(x, (list, tuple)) and len(x) == n
                             for x in data)
                 and not _py_all(isinstance(x[0], (list, tuple))
@@ -4390,6 +4380,34 @@ def _broadcast_field_values(value, n):
     return [value] * n
 
 
+def _propagate_field_writeback(src):
+    """字段视图写回后，沿 _rec_parent/_rec_field 链逐级向上传播到根数组
+    （numpy field view 语义：嵌套赋值 a['a']['c'] = v 反映到 a）。"""
+    _rp = getattr(src, '_rec_parent', None)
+    _rf = getattr(src, '_rec_field', None)
+    _cur = src
+    while _rp is not None and _rf is not None:
+        try:
+            _dt_p = _struct_dt_of(_rp)
+            if (_dt_p is None or _rf not in _dt_p._names
+                    or getattr(_rp, 'ndim', 1) != 1):
+                break
+            _fi = _dt_p._names.index(_rf)
+            _fdt_p = _dt_p._fields[_rf][0]
+            _vals = _cur.tolist()
+            for _i in range(len(_rp)):
+                _old = _get_flat_record(_rp, _i)
+                _lst = list(_old)
+                _lst[_fi] = _coerce_field_value(_vals[_i], _fdt_p)
+                _set_flat_record(_rp, _i, tuple(_lst))
+        except Exception:
+            break
+        # 继续向上一级传播
+        _cur = _rp
+        _rp = getattr(_rp, '_rec_parent', None)
+        _rf = getattr(_rp, '_rec_field', None) if _rp is not None else None
+
+
 def _set_field(arr, name, value):
     dt = _struct_dt_of(arr)
     fi = dt._names.index(name)
@@ -4402,6 +4420,8 @@ def _set_field(arr, name, value):
         lst[fi] = _coerce_field_value(v, fdt)
         new.append(tuple(lst))
     arr._raw_data = _reshape_flat(new, arr.shape)
+    # 字段视图写回：沿 _rec_parent 链向上传播到根数组
+    _propagate_field_writeback(arr)
 
 
 def _set_multifield(arr, keys, value):
