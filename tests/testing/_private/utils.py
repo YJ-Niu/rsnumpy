@@ -394,6 +394,22 @@ def assert_equal(actual, desired, err_msg='', verbose=True, *, strict=False):
      DESIRED: array([2., 2., 2.], dtype=float32)
     """
     __tracebackhide__ = True  # Hide traceback for py.test
+    # MaskedArray 特判：rsnumpy 的 MaskedArray 非 ndarray 子类，asanyarray
+    # 会包成 (1,) object 数组——解包 _data 比较；两边都是 masked 时掩码也须一致
+    try:
+        from rsnumpy.ma.core import MaskedArray as _MA
+    except Exception:
+        _MA = None
+    if _MA is not None and (isinstance(actual, _MA)
+                            or isinstance(desired, _MA)):
+        _ad = actual._data if isinstance(actual, _MA) else actual
+        _dd = desired._data if isinstance(desired, _MA) else desired
+        assert_equal(_ad, _dd, err_msg, verbose, strict=strict)
+        if isinstance(actual, _MA) and isinstance(desired, _MA):
+            assert_equal(np.array(actual._mask, dtype='bool'),
+                         np.array(desired._mask, dtype='bool'),
+                         err_msg, verbose)
+        return
     if isinstance(desired, dict):
         if not isinstance(actual, dict):
             raise AssertionError(repr(type(actual)))
@@ -771,6 +787,36 @@ def assert_approx_equal(actual, desired, significant=7, err_msg='',
         raise AssertionError(msg)
 
 
+
+def _fmt_scalar_np(v, precision=8):
+    """numpy array2string 的标量语义:precision 位小数、去尾零、保小数点。"""
+    try:
+        if isinstance(v, bool):
+            return str(v)
+        if isinstance(v, int):
+            return str(v)
+        import math as _math
+        if isinstance(v, float) and _math.isinf(v):
+            return 'inf' if v > 0 else '-inf'
+        if isinstance(v, float) and _math.isnan(v):
+            return 'nan'
+        av = abs(float(v))
+        _int_digits = len(f'{av:.0f}') if av >= 1 else 0
+        if av != 0 and (av < 1e-3 or _int_digits > precision):
+            # numpy array2string 语义:小值用科学计数(mantissa 去尾零)
+            s = f'{float(v):.{precision}e}'
+            m, e = s.split('e')
+            m = m.rstrip('0').rstrip('.')
+            return f'{m}e{int(e)}'
+        s = f'{float(v):.{precision}f}'
+        if '.' in s:
+            s = s.rstrip('0').rstrip('.')
+            if '.' not in s and 'e' not in s and 'inf' not in s and 'nan' not in s:
+                s += '.'
+        return s
+    except Exception:
+        return str(v)
+
 def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
                          precision=6, equal_nan=True, equal_inf=True,
                          *, strict=False, names=('ACTUAL', 'DESIRED')):
@@ -847,7 +893,12 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
         """
         __tracebackhide__ = True  # Hide traceback for py.test
 
-        if not infs_mask.any():
+        # infs_mask 可能是标量（rsnumpy 的 bool 标量类名也是 'bool'，
+        # 不能用 isinstance 判别），按是否有 .any() 鸭子类型区分
+        if not hasattr(infs_mask, 'any'):
+            if not infs_mask:
+                return
+        elif not infs_mask.any():
             return
         if x.ndim > 0 and y.ndim > 0:
             x = x[infs_mask]
@@ -935,8 +986,8 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
         # do not trigger a failure (np.ma.masked != True evaluates as
         # np.ma.masked, which is falsy).
         if not cond:
-            n_mismatch = reduced.size - reduced.sum(dtype=intp)
-            n_elements = flagged.size if flagged.ndim != 0 else reduced.size
+            n_mismatch = int(reduced.size - reduced.sum(dtype=intp))
+            n_elements = int(flagged.size) if flagged.ndim != 0 else int(reduced.size)
             percent_mismatch = 100 * n_mismatch / n_elements
             remarks = [(f'Mismatched elements: {n_mismatch} / {n_elements} '
                         f'({percent_mismatch:.3g}%)')]
@@ -947,8 +998,8 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
                     positions = np.argwhere(np.asarray(invalids))
                 s = "\n".join(
                     [
-                        f" {p.tolist()}: {ox if ox.ndim == 0 else ox[tuple(p)]} "
-                        f"({names[0]}), {oy if oy.ndim == 0 else oy[tuple(p)]} "
+                        f" {[int(x) for x in p.tolist()]}: {ox if ox.ndim == 0 else ox[tuple(int(x) for x in p)]} "
+                        f"({names[0]}), {oy if oy.ndim == 0 else oy[tuple(int(x) for x in p)]} "
                         f"({names[1]})"
                         for p in positions[:5]
                     ]
@@ -974,40 +1025,46 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
                         error2 = abs(y - x)
                         np.minimum(error, error2, out=error)
 
-                    reduced_error = error[invalids]
+                    # 扁平化索引(0-d 布尔索引在 rsnumpy 不可用)
+                    _err_flat = np.asarray(error).reshape(-1)
+                    _inv_flat = np.asarray(invalids).reshape(-1)
+                    reduced_error = _err_flat[_inv_flat]
                     max_abs_error = max(reduced_error)
-                    if getattr(error, 'dtype', object_) == object_:
+                    if getattr(error, 'dtype', None) is object_ or getattr(error, 'dtype', None) == 'object':
                         remarks.append(
                             'Max absolute difference among violations: '
                             + str(max_abs_error))
                     else:
                         remarks.append(
                             'Max absolute difference among violations: '
-                            + array2string(max_abs_error))
+                            + _fmt_scalar_np(max_abs_error.item() if hasattr(max_abs_error, 'item') else max_abs_error, 8))
 
                     # note: this definition of relative error matches that one
                     # used by assert_allclose (found in np.isclose)
                     # Filter values where the divisor would be zero
-                    nonzero = np.bool(y != np.zeros_like(y))
+                    nonzero = y != np.zeros_like(y)
                     nonzero_and_invalid = np.logical_and(invalids, nonzero)
+                    _nai_flat = np.asarray(nonzero_and_invalid).reshape(-1)
 
-                    if all(~nonzero_and_invalid):
+                    if all(~_nai_flat):
                         max_rel_error = array(inf)
                     else:
-                        nonzero_invalid_error = error[nonzero_and_invalid]
-                        broadcasted_y = np.broadcast_to(y, error.shape)
-                        nonzero_invalid_y = broadcasted_y[nonzero_and_invalid]
+                        nonzero_invalid_error = _err_flat[_nai_flat]
+                        broadcasted_y = np.broadcast_to(
+                            np.asarray(y), np.asarray(error).shape)
+                        _y_flat = broadcasted_y.reshape(-1)
+                        nonzero_invalid_y = _y_flat[_nai_flat]
                         max_rel_error = max(nonzero_invalid_error
                                             / abs(nonzero_invalid_y))
 
-                    if getattr(error, 'dtype', object_) == object_:
+                    if getattr(error, 'dtype', None) is object_ or getattr(error, 'dtype', None) == 'object':
                         remarks.append(
                             'Max relative difference among violations: '
                             + str(max_rel_error))
                     else:
                         remarks.append(
                             'Max relative difference among violations: '
-                            + array2string(max_rel_error))
+                            + _fmt_scalar_np(max_rel_error.item() if hasattr(max_rel_error, 'item') else max_rel_error, 8))
             err_msg = str(err_msg)
             err_msg += '\n' + '\n'.join(remarks)
             msg = build_err_msg([ox, oy], err_msg,

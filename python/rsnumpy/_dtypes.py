@@ -201,6 +201,23 @@ class DType(metaclass=_DTypeMeta):
             src = None
         if align:
             self._aligned = True
+            if self._names:
+                # numpy 语义：对齐结构体——每个字段偏移向上取整到自身
+                # 对齐要求，itemsize 补齐到最大字段对齐数
+                _max_align = 1
+                _new_fields = {}
+                _off = 0
+                for _n in self._names:
+                    _fdt = self._fields[_n][0]
+                    _fa = max(1, getattr(_fdt, '_alignment', 1) or 1)
+                    _max_align = max(_max_align, _fa)
+                    _off = _round_up(_off, _fa)
+                    _rest = tuple(self._fields[_n][2:])
+                    _new_fields[_n] = (_fdt, _off) + _rest
+                    _off += _fdt._itemsize
+                self._itemsize = _round_up(_off, _max_align)
+                self._fields = _new_fields
+                self._alignment = _max_align
         if src is not None and fields is None and not align:
             try:
                 DType._scalar_cache[DType._cache_key(src)] = self

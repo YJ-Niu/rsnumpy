@@ -71,8 +71,20 @@ def _collect_leaves(val, fdt, out):
             _collect_leaves(val[i], fdt[n], out)
     elif fdt.subdtype is not None:
         base = fdt.subdtype[0]
-        for x in _iter_flat(val):
-            _collect_leaves(x, base, out)
+        shape = fdt.subdtype[1] or ()
+        if base.names is not None:
+            # 子数组元素是记录：按外层 shape 逐层遍历，不把记录展平成标量
+            def _walk(v, shp):
+                if not shp:
+                    for i, n in enumerate(base.names):
+                        _collect_leaves(v[i], base[n], out)
+                else:
+                    for e in v:
+                        _walk(e, shp[1:])
+            _walk(val, shape)
+        else:
+            for x in _iter_flat(val):
+                _collect_leaves(x, base, out)
     else:
         out.append(val)
 
@@ -203,7 +215,15 @@ def _repack_dtype(dt, align, recurse):
     pairs = [_process(name) for name in dt.names]
     names = [p[0] for p in pairs]
     formats = [p[1] for p in pairs]
-    return np._build_struct(names, formats, None, None, None, align)
+    newdt = np._build_struct(names, formats, None, None, None, align)
+    # 保留 record 标记（np.dtype((np.record, dt)) 的 .type 语义）
+    _ov = getattr(dt, '_type_override', None)
+    if _ov is not None:
+        try:
+            newdt._type_override = _ov
+        except Exception:
+            pass
+    return newdt
 
 
 def repack_fields(a, align=False, recurse=False):
@@ -273,6 +293,9 @@ def drop_fields(base, drop_names, usemask=True, asrecarray=False):
         drop_names = set(drop_names)
     dt = _rich_dtype(base)
     newdt = _drop_descr(dt, drop_names)
+    if newdt is None:
+        # 顶层字段全部删除：无字段的空结构化数组（numpy 语义）
+        newdt = np._build_struct([], [], None, None, None, False)
     recs = _records(base)
     newrecs = [_project_record(r, dt, newdt) for r in recs]
     output = np._wrap_structured(newdt, np._reshape_flat(newrecs, base.shape))
@@ -318,14 +341,70 @@ def recursive_fill_fields(input, output):
 
 def structured_to_unstructured(arr, dtype=None, copy=False, casting='unsafe'):
     """将结构化数组转换为常规（多一维）数组。"""
-    _ = copy, casting
+    _ = casting
     dt = _rich_dtype(arr)
     recs = _records(arr)
     rows = [_record_leaves(r, dt) for r in recs]
-    nested = np._reshape_flat(rows, arr.shape)
-    out = np.array(nested)
+    if not tuple(arr.shape):
+        # 0-d 结构化：输出形状 = (叶子数,)，无行包装（numpy 语义）
+        nested = rows[0] if rows else []
+    else:
+        nested = np._reshape_flat(rows, arr.shape)
+    # 叶子字段 dtype 收集（uniform 判定 + 视图血缘）。
+    # 注意：rsnumpy 把嵌套子数组解析为递归子数组（(i4,(2,2)) → (i4,(2,)) 套
+    # (2,)），必须递归展开到真正的标量叶子
+    leaf_dts = []
+
+    def _leaves(f, mult):
+        if f._names is not None:
+            for n in f.names:
+                _leaves(f.fields[n][0], mult)
+        elif f._subdtype is not None:
+            b, s = f._subdtype
+            c = 1
+            for s2 in (s or ()):
+                c *= s2
+            _leaves(b, mult * c)
+        else:
+            leaf_dts.extend([f] * mult)
+
+    _leaves(dt, 1)
+    _uniform = len(set(str(x) for x in leaf_dts)) == 1 and leaf_dts
+    if not _uniform and not leaf_dts:
+        # 空结构化 dtype（无字段/零叶子）
+        if dtype is not None:
+            raise NotImplementedError(
+                "structured_to_unstructured with dtype for empty "
+                "structured arrays is not implemented")
+        raise ValueError("Can't convert 0-field structured arrays")
     if dtype is not None:
-        out = out.astype(dtype)
+        out = np.array(nested).astype(dtype)
+    elif _uniform:
+        # numpy 语义：uniform 字段返回原字段 dtype 的视图
+        out = np.array(nested, dtype=np._scalar_name_of(leaf_dts[0]))
+    else:
+        out = np.array(nested)
+    if not copy and _uniform:
+        # 共享内存的血缘标记（rsnumpy 记录模型无字节缓冲，用逻辑血缘表达）
+        try:
+            out._rs_parent = arr
+        except Exception:
+            pass
+    # 子类保持（numpy 语义：子类输入 → 子类输出，含 copy=True）
+    _tp = type(arr)
+    if _tp is not np.ndarray and isinstance(arr, np.ndarray):
+        if isinstance(arr, np.recarray):
+            out = np._as_recarray(out)
+        else:
+            try:
+                out.__class__ = _tp
+            except Exception:
+                pass
+        if not copy:
+            try:
+                out._rs_parent = arr
+            except Exception:
+                pass
     return out
 
 
@@ -335,7 +414,23 @@ def unstructured_to_structured(arr, dtype=None, names=None, **kwargs):
     if dtype is None and names is not None:
         raise ValueError("either dtype or names must be provided")
     dt = _rich_dtype(dtype)
-    rows = arr.tolist()
+    a2 = np.asanyarray(arr)
+    if a2.ndim == 0:
+        raise ValueError(
+            "unstructured_to_structured: input must have at least 1 dimension")
+    # numpy 语义：末轴按叶子数拆为字段，前导形状为记录形状
+    nleaves = _count_leaves(dt)
+    if nleaves == 0 or a2.shape[-1] == 0:
+        raise NotImplementedError(
+            "unstructured_to_structured with zero-leaf input is not "
+            "implemented")
+    if a2.shape[-1] != nleaves:
+        raise ValueError(
+            f"input shape {a2.shape} last axis must have {nleaves} leaves "
+            f"to match dtype")
+    a2 = a2.reshape((-1, nleaves))
+    rows = a2.tolist()
+    outer_shape = a2.shape[:-1]
 
     def build(row):
         rec = []
@@ -345,10 +440,22 @@ def unstructured_to_structured(arr, dtype=None, names=None, **kwargs):
             rec.append(v)
         return tuple(rec)
 
-    outer_shape = arr.shape[:-1]
-    flat_rows = np._flatten_records([rows]) if False else _flatten_rows(rows)
-    recs = [build(r) for r in flat_rows]
-    return np._wrap_structured(dt, np._reshape_flat(recs, outer_shape))
+    recs = [build(r) for r in rows]
+    out = np._wrap_structured(dt, np._reshape_flat(recs, outer_shape))
+    # 视图血缘传递：输入本身带逻辑血缘（如 structured_to_unstructured
+    # 的视图）时，输出沿链共享（numpy 的 shares_memory 语义）
+    try:
+        if getattr(arr, '_rs_parent', None) is not None:
+            out._rs_parent = arr
+    except Exception:
+        pass
+    if not tuple(outer_shape):
+        # 0-d 结构化：保持空形状表示（_struct_shape 会把单记录推断成 (1,)）
+        try:
+            out._rs_shape_override = ()
+        except Exception:
+            pass
+    return out
 
 
 def _flatten_rows(rows):
@@ -382,20 +489,33 @@ def merge_arrays(seqarrays, fill_value=-1, flatten=False, usemask=False,
                  asrecarray=False):
     """将多个数组合并为一个结构化数组。"""
     _ = flatten
+    # 单数组输入：视为一个元素的序列（numpy 语义，merge_arrays(x) →
+    # 每元素一条单字段记录）
+    if hasattr(seqarrays, 'dtype'):
+        seqarrays = [seqarrays]
     arrays = list(seqarrays)
     field_specs = []  # (name, fdt, values)
+    mask_specs = []   # 与 field_specs 平行：None（无掩码）或叶子级掩码列表
     counter = 0
     for arr in arrays:
+        # MaskedArray 输入：解包底层数组（掩码单独收集）
+        mflat = None
+        if hasattr(arr, '_data') and not hasattr(arr, '_array'):
+            mflat = list(arr._mask)
+            arr = arr._data
         if not hasattr(arr, 'dtype'):
             arr = np.asarray(arr)
         dt = _rich_dtype(arr)
         if isinstance(dt, np.DType) and dt.names is not None:
-            recs = _records(arr)
+            if hasattr(arr, '_raw_data'):
+                recs_list = _records(arr)
+            else:
+                # 记录标量（z[0] 等）：单条记录
+                recs_list = [tuple(arr)]
             # 嵌套列表推导：一次提取 (name, dt[n], values)
-            field_specs.extend(
-                (n, dt[n], [r[i] for r in recs])
-                for i, n in enumerate(dt.names)
-            )
+            for i, n in enumerate(dt.names):
+                field_specs.append((n, dt[n], [r[i] for r in recs_list]))
+                mask_specs.append(mflat)
         else:
             name = 'f%d' % counter
             counter += 1
@@ -403,6 +523,7 @@ def merge_arrays(seqarrays, fill_value=-1, flatten=False, usemask=False,
             if not isinstance(vals, list):
                 vals = [vals]
             field_specs.append((name, _scalar_dtype_of(arr), vals))
+            mask_specs.append(mflat)
     maxlen = max((len(v) for _, _, v in field_specs), default=0)
     names = [s[0] for s in field_specs]
     formats = [s[1] for s in field_specs]
@@ -415,6 +536,26 @@ def merge_arrays(seqarrays, fill_value=-1, flatten=False, usemask=False,
         for k in range(maxlen)
     ]
     output = np._wrap_structured(newdt, recs)
+    if usemask:
+        # 字段级掩码：输入掩码叶子 + 值不足 maxlen 的行置 True（numpy 语义）
+        import rsnumpy.ma as _ma
+        flat = []
+        for k in range(maxlen):
+            for (_, _, vals), mf in zip(field_specs, mask_specs):
+                if k >= len(vals):
+                    flat.append(True)
+                elif mf is not None and k < len(mf):
+                    flat.append(bool(mf[k]))
+                else:
+                    flat.append(False)
+        out = _ma.MaskedArray(output, mask=flat)
+        if asrecarray:
+            from rsnumpy.ma.mrecords import MaskedRecords
+            try:
+                out.__class__ = MaskedRecords
+            except Exception:
+                pass
+        return out
     return _fix_output(output, usemask=usemask, asrecarray=asrecarray)
 
 
@@ -483,20 +624,22 @@ def stack_arrays(arrays, defaults=None, usemask=True, asrecarray=False,
             formats.append(_w)
     newdt = np._build_struct(names, formats, None, None, None, False)
     # 逐记录投影到字段并集；缺失字段填默认值并置掩码；MaskedArray
-    # 输入的掩码按记录传播（rsnumpy 结构化掩码为按记录形式）
+    # 输入的字段级掩码传播到输出（掩码存储为按字段展平）
     out_recs = []
     out_mask = []
     for arr in arrays:
         data, msk = _rec_info(arr)
         dt = _rich_dtype(data)
         in_names = dt.names or ()
+        _ni = len(in_names)
         for ri, r in enumerate(_records(data)):
             row, mrow = [], []
             for on in names:
                 if on in in_names:
+                    ii = in_names.index(on)
                     row.append(_project_value(
-                        r[in_names.index(on)], dt[on], newdt[on]))
-                    mrow.append(bool(msk[ri]) if msk else False)
+                        r[ii], dt[on], newdt[on]))
+                    mrow.append(bool(msk[ri * _ni + ii]) if msk else False)
                 else:
                     row.append(_default_field(newdt[on]))
                     mrow.append(True)
@@ -531,26 +674,66 @@ def find_duplicates(a, key=None, ignoremask=True, return_index=False):
         mask = None
     dt = _rich_dtype(base)
     recs = _records(base)
-    if key is None:
-        # numpy 语义：key=None 按"整条记录"比较（非第一个字段）
-        ki = None
-        vals = [_hashable_key(r) for r in recs]
-    else:
-        ki = dt.names.index(key)
-        # 列表推导：一次性提取所有键值
-        vals = [r[ki] for r in recs]
+    # key 可为顶层字段或嵌套子字段（BA/BB 等）：统一按叶子偏移取范围
+    nrec = len(recs)
     if mask is None:
-        mask = [False] * len(vals)
+        mask = []
+        per = 0
+    else:
+        # 字段级掩码（长度 = 记录数 × 叶子数）：按 key 字段的叶子偏移
+        # 判定记录掩码（numpy 语义：key='A' 时只看 A 字段掩码，key=None
+        # 看整条记录任一字段）
+        per = len(mask) // nrec if nrec else 0
+    _offs = {}
+    _o = 0
 
-    # 字典推导构建 positions：ignoremask=True 跳过掩码记录；
-    # ignoremask=False 时掩码记录视为各自独立（masked 值与任何值
-    # 都不构成重复，numpy 语义）
+    def _walk_offs(d):
+        nonlocal _o
+        for n in d.names:
+            f = d.fields[n][0]
+            if f._names is not None:
+                _start = _o
+                _walk_offs(f)
+                # 嵌套字段也记录自己的叶子范围（供 key=嵌套字段使用）
+                _offs[n] = (_start, _o - _start)
+            elif f._subdtype is not None:
+                b, s = f._subdtype
+                c = 1
+                for s2 in (s or ()):
+                    c *= s2
+                if b._names is not None:
+                    _start = _o
+                    _walk_offs(b)
+                    _offs[n] = (_start, _o - _start)
+                else:
+                    _offs[n] = (_o, c)
+                    _o += c
+            else:
+                _offs[n] = (_o, 1)
+                _o += 1
+
+    _walk_offs(dt)
+
+    # 逐记录构造比较键：key 范围内的叶子值 + 对应掩码（叶子顺序 =
+    # dtype 字段序 = 掩码序）。ignoremask=True 时相关叶子任一被掩码
+    # 即跳过；ignoremask=False 时掩码叶子互相相等、掩码叶子与值
+    # 不相等（numpy 语义——掩码叶子替换为哨兵即可实现）。
     positions = {}
-    for i, v in enumerate(vals):
-        masked_i = i < len(mask) and mask[i]
-        if ignoremask and masked_i:
+    for i, r in enumerate(recs):
+        leaves = []
+        if key is None:
+            _collect_leaves(r, dt, leaves)
+            chunk = mask[i * per:(i + 1) * per] if per else []
+        else:
+            leaves_full = []
+            _collect_leaves(r, dt, leaves_full)
+            off, cnt = _offs.get(key, (0, 1))
+            leaves = leaves_full[off:off + cnt]
+            chunk = mask[i * per + off:i * per + off + cnt] if per else []
+        if ignoremask and any(chunk):
             continue
-        k = ('__masked__', i) if masked_i else v
+        k = tuple(('__m__',) if m else (_hashable_key(x),)
+                  for x, m in zip(leaves, chunk))
         positions.setdefault(k, []).append(i)
 
     # 生成器推导：从 positions.values() 拉平并排序重复索引
@@ -578,15 +761,39 @@ def _get_fieldspec(adtype):
     return [(None, dt, None)]
 
 
+def _flatten_descr(ndtype):
+    """平铺结构化 dtype 的字段（嵌套子字段直接展开，numpy 语义）。"""
+    if ndtype.names is None:
+        return [('', ndtype)]
+    descr = []
+    for name in ndtype.names:
+        fdt = ndtype.fields[name][0]
+        if fdt.names is not None:
+            descr.extend(_flatten_descr(fdt))
+        else:
+            descr.append((name, fdt))
+    return descr
+
+
 def _zip_descr(seqarrays, flatten=False):
-    """由一维数组列表构造记录字段描述（numpy.lib.recfunctions._zip_descr 兼容）。"""
-    _ = flatten
+    """由一维数组列表构造记录字段描述（numpy.lib.recfunctions._zip_descr 兼容）。
+
+    flatten=True：各数组 dtype 平铺到字段级（嵌套子字段展开）；
+    flatten=False：每数组整体作为一个 '' 命名的字段。
+    """
+    seqarrays = list(seqarrays)
     if len(seqarrays) == 0:
         return []
     if len(np.asarray(seqarrays[0]).shape[1:]) != 0:
         raise ValueError("only 1-dimensional arrays are supported")
-    return [('r%d' % i, np.asarray(a).dtype)
-            for i, a in enumerate(seqarrays)]
+    zipped = []
+    if flatten:
+        for seqarray in seqarrays:
+            zipped.extend(_flatten_descr(np.asarray(seqarray).dtype))
+    else:
+        for seqarray in seqarrays:
+            zipped.append(('', np.asarray(seqarray).dtype))
+    return np.dtype(zipped)
 
 
 def _zip_dtype(seqarrays, flatten=False):
@@ -615,21 +822,69 @@ def _append_fields_values(base, names, data, usemask=True, fill_value=-1):
     else:
         names = list(names)
         fields_vals = [list(f) for f in data]
-    # 基数组字段行与掩码
+    # 基数组字段行与掩码（掩码存储为叶子级：记录数 × 每记录叶子数）
+    def _leaf_span(d):
+        # 返回 [(name, fdt, off, cnt), ...]（叶子偏移与数量）
+        spans = []
+        _o = [0]
+
+        def walk(dd):
+            for n in dd.names:
+                f = dd.fields[n][0]
+                if getattr(f, '_names', None) is not None:
+                    walk(f)
+                elif getattr(f, '_subdtype', None) is not None:
+                    _b, _s = f._subdtype
+                    c = 1
+                    for s2 in (_s or ()):
+                        c *= s2
+                    if getattr(_b, '_names', None) is not None:
+                        walk(_b)
+                    else:
+                        spans.append((n, f, _o[0], c))
+                        _o[0] += c
+                else:
+                    spans.append((n, f, _o[0], 1))
+                    _o[0] += 1
+
+        walk(d)
+        return spans
+
     b_names_dt = getattr(getattr(base, 'dtype', None), 'names', None)
     if b_names_dt:
         binfo, bmask = _rec_info(base)
         b_names = list(b_names_dt)
         b_specs = [(n, binfo.dtype.fields[n][0]) for n in b_names]
         b_rows = [[binfo[i][n] for n in b_names] for i in range(binfo.shape[0])]
-        b_masks = [[bmask[i * len(b_names) + k] if bmask else False
-                    for k in range(len(b_names))]
-                   for i in range(binfo.shape[0])]
+        b_spans = _leaf_span(binfo.dtype)
+        _per = len(bmask) // binfo.shape[0] if (bmask and binfo.shape[0]) else 0
+        b_masks = []
+        for i in range(binfo.shape[0]):
+            chunk = bmask[i * _per:(i + 1) * _per] if _per else []
+            # 叶子级掩码行：嵌套/子数组字段展开为其叶子
+            rowm = []
+            for n, f, off, cnt in b_spans:
+                if chunk:
+                    rowm.extend(bool(x) for x in chunk[off:off + cnt])
+                else:
+                    rowm.extend([False] * cnt)
+            b_masks.append(rowm)
     else:
         b_names = ['f0']
         b_specs = [('f0', base.dtype)]
         b_rows = [[v] for v in base.tolist()]
         b_masks = [[False] for _ in b_rows]
+    # 新字段的叶子数（掩码行与叶子一一对应）
+    def _n_leaves(fdt):
+        if getattr(fdt, '_names', None) is not None:
+            return sum(_n_leaves(fdt.fields[n][0]) for n in fdt.names)
+        if getattr(fdt, '_subdtype', None) is not None:
+            _b, _s = fdt._subdtype
+            c = 1
+            for s2 in (_s or ()):
+                c *= s2
+            return c * _n_leaves(_b)
+        return 1
     n_out = max([len(b_rows)] + [len(f) for f in fields_vals])
     _new_specs = [(nm, np.array(f if len(f) else [0]).dtype)
                   for nm, f in zip(names, fields_vals)]
@@ -644,6 +899,7 @@ def _append_fields_values(base, names, data, usemask=True, fill_value=-1):
                 pass
         return fill_value
     out_rows, out_mask = [], []
+    _new_leaves = [_n_leaves(fdt_i) for _nm, fdt_i in _new_specs]
     for i in range(n_out):
         row, mrow = [], []
         if i < len(b_rows):
@@ -651,14 +907,16 @@ def _append_fields_values(base, names, data, usemask=True, fill_value=-1):
             mrow += b_masks[i]
         else:
             row += [_pad_val(s[1]) for s in b_specs]
-            mrow += [True] * len(b_names)
-        for nm, fdt_i, f in zip(names, _new_specs, fields_vals):
+            mrow += [True] * len(b_masks[0]) if b_masks else \
+                [True] * sum(c for _, _, _, c in b_spans)
+        for (nm, fdt_i, f), _lf in zip(zip(names, _new_specs, fields_vals),
+                                       _new_leaves):
             if i < len(f):
                 row.append(f[i])
-                mrow.append(False)
+                mrow.extend([False] * _lf)
             else:
                 row.append(_pad_val(fdt_i))
-                mrow.append(True)
+                mrow.extend([True] * _lf)
         out_rows.append(row)
         out_mask.append(mrow)
     out_dtype = list(b_specs) + list(_new_specs)
@@ -896,8 +1154,15 @@ def join_by(left, right, keys, jointype='inner', fill_value=None,
         for out_n, side, src_n, fdt in spec:
             if side == 'l':
                 if i is None:
-                    row.append(_default_for(fdt))
-                    mrow.append(True)
+                    if j is not None and src_n in keys and src_n in nr:
+                        # 右未匹配行：键字段值取自右表（numpy 语义：
+                        # 键值来自存在的一侧、未掩码）
+                        row.append(dr[j][src_n])
+                        mrow.append(mr[j * len(nr) + nr.index(src_n)]
+                                    if mr else False)
+                    else:
+                        row.append(_default_for(fdt))
+                        mrow.append(True)
                 else:
                     row.append(dl[i][src_n])
                     mrow.append(ml[i * len(nl) + nl.index(src_n)]
@@ -939,6 +1204,13 @@ def join_by(left, right, keys, jointype='inner', fill_value=None,
                 _emit(None, j)
 
     out_dtype = [(n, fdt) for n, _side, _src, fdt in spec]
+    # numpy 语义：join_by 输出按键字段排序（键字段在 spec 最前）
+    _nk = len(keys)
+    if _nk and len(out_rows) > 1:
+        order = sorted(range(len(out_rows)),
+                       key=lambda r: tuple(out_rows[r][:_nk]))
+        out_rows = [out_rows[r] for r in order]
+        out_mask = [out_mask[r] for r in order]
     arr = rsnumpy.array(out_rows, dtype=out_dtype)
     import rsnumpy.ma as ma
     if usemask and (rsnumpy.ma.isMaskedArray(left)

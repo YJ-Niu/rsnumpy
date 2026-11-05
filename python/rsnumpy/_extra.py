@@ -361,8 +361,36 @@ def nextafter(x1, x2):
 
 
 def spacing(x):
-    """逐元素返回相邻浮点数间距。"""
-    return _wrap(_core.spacing(_asarray(x)._array))
+    """逐元素返回相邻浮点数间距(按输入 dtype 的尾数位数)。"""
+    import math as _math
+    import struct as _struct
+    arr = _asarray(x)
+    dt = str(getattr(arr, '_dtype', '') or '')
+    # Rust 层按 f64 计算间距,float32/16 需按各自尾数位数修正
+    if 'float32' in dt or 'float16' in dt:
+        _bits = 24 if 'float32' in dt else 11
+        _fmt = '<I' if 'float32' in dt else None
+
+        def _sp(v):
+            if v == 0:
+                return 2.0 ** (-149) if 'float32' in dt else 2.0 ** (-24)
+            if _math.isnan(v) or _math.isinf(v):
+                return float('nan')
+            if _fmt is not None:
+                bits = _struct.unpack(_fmt, _struct.pack('<f', v))[0]
+                if v > 0:
+                    nb = bits + 1
+                else:
+                    nb = bits - 1
+                nv = _struct.unpack('<f', _struct.pack('<I', nb & 0xFFFFFFFF))[0]
+                return abs(nv - v)
+            # float16:近似用归一化公式
+            _, e = _math.frexp(abs(v))
+            return 2.0 ** (e - _bits)
+
+        vals = [_sp(float(v)) for v in arr.tolist()]
+        return np.array(vals, dtype='float32' if 'float32' in dt else 'float16')
+    return _wrap(_core.spacing(arr._array))
 
 
 def ldexp(x1, x2):
@@ -1733,25 +1761,72 @@ def outer(a, b, out=None):
 
 
 def kron(a, b):
-    """Kronecker 积（支持 1D/2D）。"""
+    """Kronecker 积（支持任意维度与 MaskedArray）。"""
     np = _np()
     _nd = np.ndarray
-    # 官方语义：两输入为同一 ndarray 子类（如 matrix）时，结果保持子类
-    _subcls = (type(a) if (isinstance(a, _nd) and isinstance(b, type(a))
-                           and type(a) is not _nd) else None)
+    # masked 输入：值 = filled(1) 的 kron；掩码 = m_a/m_b 按结果索引
+    # 取模 OR（对角外有任一因子被掩码即掩码，numpy ma.kron 语义）
+    _ma = getattr(np, 'ma', None)
+    if _ma is not None and (_ma.isMaskedArray(a) or _ma.isMaskedArray(b)):
+        import itertools
+        data = kron(_ma.filled(a, 0), _ma.filled(b, 0))
+        m_a = _ma.getmaskarray(a)
+        m_b = _ma.getmaskarray(b)
+        _nd2 = builtins.max(a.ndim, b.ndim)
+        ash = (1,) * (_nd2 - a.ndim) + tuple(a.shape)
+        bsh = (1,) * (_nd2 - b.ndim) + tuple(b.shape)
+        out_shape = tuple(x * y for x, y in zip(ash, bsh))
+        mask_flat = []
+        for coord in itertools.product(*[range(s) for s in out_shape]):
+            va = m_a[tuple(c % s for c, s in zip(coord, ash))]
+            vb = m_b[tuple(c % s for c, s in zip(coord, bsh))]
+            mask_flat.append(bool(va) or bool(vb))
+        mask = np.array(mask_flat, dtype=bool).reshape(out_shape)
+        return _ma.MaskedArray(data, mask=mask)
+    # 官方语义：结果类型由 __array_priority__ 更高的子类决定
+    # (numpy: kron(a, ma) → ma 的类型)
+    _subcls = None
+    for _x in (a, b):
+        if isinstance(_x, _nd) and type(_x) is not _nd:
+            _t = type(_x)
+            if (_subcls is None
+                    or getattr(_t, '__array_priority__', 0)
+                    > getattr(_subcls, '__array_priority__', 0)):
+                _subcls = _t
     A = _asarray(a)
     B = _asarray(b)
     if A.ndim == 1 and B.ndim == 1:
         res = outer(A, B).ravel()
     else:
-        A2 = A if A.ndim == 2 else np.reshape(A, (1, A.size))
-        B2 = B if B.ndim == 2 else np.reshape(B, (1, B.size))
-        ia, ja = A2.shape
-        ib, jb = B2.shape
-        ar = np.reshape(A2, (ia, 1, ja, 1))
-        br = np.reshape(B2, (1, ib, 1, jb))
-        prod4 = np.multiply(ar, br)
-        res = np.reshape(prod4, (ia * ib, ja * jb))
+        # numpy 语义：kron[a_idx * bsh + b_idx] = a[a_idx] * b[b_idx]。
+        # 等价于 tile(A, bsh) 逐块重复 × B 逐元素展开（repeat ash 次）。
+        _nd2 = builtins.max(A.ndim, B.ndim)
+        ash = (1,) * (_nd2 - A.ndim) + tuple(A.shape)
+        bsh = (1,) * (_nd2 - B.ndim) + tuple(B.shape)
+        out_shape = tuple(x * y for x, y in zip(ash, bsh))
+        if A.size == 0 or B.size == 0:
+            # 零尺寸：绕开广播引擎对零长轴的处理，直接构造空结果
+            res = np.zeros(out_shape, dtype=getattr(A, '_dtype', None)
+                           or 'float64')
+            if _subcls is not None:
+                try:
+                    return _subcls(res.tolist())
+                except Exception:
+                    pass
+            return res
+        # kron[i,j] = a[i//sb, j//sb] * b[i%sb, j%sb]：
+        # A 侧逐元素展开（每个 a 元素重复 bsh 次），B 侧分块平铺（tile ash）
+        import itertools
+        idx_flat = []
+        for coord in itertools.product(*[range(s) for s in out_shape]):
+            f = 0
+            for cd, sd, bd in zip(coord, ash, bsh):
+                f = f * sd + (cd // bd)
+            idx_flat.append(f)
+        Ax = np.take(np.reshape(A, (-1,)),
+                     np.array(idx_flat)).reshape(out_shape)
+        Bx = np.tile(B, ash)
+        res = np.multiply(Ax, Bx)
     if _subcls is not None:
         try:
             return _subcls(res.tolist())
@@ -2572,13 +2647,39 @@ def apply_along_axis(func1d, axis, arr, *args, **kwargs):
     """沿指定轴对一维切片应用函数。"""
     import itertools as _it
     np = _np()
+    _in_cls = type(arr) if isinstance(arr, np.ndarray) else None
     a = _asarray(arr)
     nd = a.ndim
     axis = axis % nd
     inds = [range(a.shape[i]) for i in range(nd) if i != axis]
     combos = list(_it.product(*inds)) if inds else [()]
+    # numpy 语义：任一迭代维长度为 0 时无切片可调用 → ValueError
+    if not combos or builtins.any(a.shape[i] == 0 for i in range(nd) if i != axis):
+        raise ValueError(
+            "Cannot apply_along_axis when any iteration dimensions are 0")
+
+    # object dtype：混合切片会经 f64 占位丢失元素，改用嵌套列表切片
+    _a_lists = None
+    if str(getattr(a, '_dtype', '')) == 'object':
+        _a_lists = a.tolist()
 
     def slice_at(combo):
+        if _a_lists is not None:
+            it = iter(combo)
+            fixed = {}
+            for i in range(nd):
+                if i != axis:
+                    fixed[i] = next(it)
+
+            def drill(lst, i):
+                # 非轴维取固定索引,轴维保留列表(遍历)
+                if i == nd:
+                    return lst
+                if i in fixed:
+                    return drill(lst[fixed[i]], i + 1)
+                return [drill(x, i + 1) for x in lst]
+
+            return drill(_a_lists, 0)
         key = []
         it = iter(combo)
         for i in range(nd):
@@ -2588,17 +2689,57 @@ def apply_along_axis(func1d, axis, arr, *args, **kwargs):
     results = [func1d(slice_at(c), *args, **kwargs) for c in combos]
     outer = tuple(a.shape[i] for i in range(nd) if i != axis)
     r0 = results[0]
-    is_scalar_out = not isinstance(r0, list) and not (hasattr(r0, "ndim") and _asarray(r0).ndim > 0)
+    is_scalar_out = (not isinstance(r0, (list, tuple))
+                     and not (hasattr(r0, "ndim") and _asarray(r0).ndim > 0))
     if is_scalar_out:
         vals = [_as_scalar(r) if hasattr(r, "tolist") else r for r in results]
-        return _as_scalar(np.array(vals)) if not outer else np.reshape(np.array(vals), outer)
+        if builtins.all(isinstance(v, (int, float, bool, complex))
+                        and not isinstance(v, _np().ndarray) for v in vals):
+            arr_v = np.array(vals)
+        else:
+            # 不可数值化的元素(如 set)→ object 数组(vals 已按 outer
+            # 行主序排列;object 数组不能过 Rust raw reshape,会丢元素)
+            arr_v = np.array(vals, dtype='object')
+            if not outer or tuple(arr_v.shape) == tuple(outer):
+                return _as_scalar(arr_v) if not outer else arr_v
+            return np.reshape(arr_v, outer)
     r_shape = tuple(_asarray(r0).shape)
-    stacked = np.array([_asarray(r).tolist() for r in results])
-    stacked = np.reshape(stacked, outer + r_shape)
+    import rsnumpy.ma as _ma
+    if _ma.isMaskedArray(r0):
+        # MaskedArray 结果：分别堆叠 data 与 mask(moveaxis 各自处理
+        # 后再合成,避免 moveaxis 降级丢失掩码)
+        data = np.array([_ma.filled(r, 0).tolist() for r in results])
+        mask = np.array([_ma.getmaskarray(r).tolist() for r in results])
+        data = np.reshape(data, outer + r_shape)
+        mask = np.reshape(mask, outer + r_shape)
+        if r_shape:
+            src = list(range(len(outer), len(outer) + len(r_shape)))
+            dst = list(range(axis, axis + len(r_shape)))
+            data = np.moveaxis(data, src, dst)
+            mask = np.moveaxis(mask, src, dst)
+        return _ma.MaskedArray(data, mask=mask)
+    else:
+        try:
+            stacked = np.array([_asarray(r).tolist() for r in results])
+        except Exception:
+            # 元素不可数值化(如 set)→ object 数组
+            stacked = np.array(results, dtype='object')
+        stacked = np.reshape(stacked, outer + r_shape)
     if r_shape:
         src = list(range(len(outer), len(outer) + len(r_shape)))
         dst = list(range(axis, axis + len(r_shape)))
         stacked = np.moveaxis(stacked, src, dst)
+    # numpy 语义:输出类型跟随 func1d 返回值的子类(其次输入子类)
+    _out_cls = None
+    if isinstance(r0, np.ndarray) and type(r0) is not np.ndarray:
+        _out_cls = type(r0)
+    elif _in_cls is not None and _in_cls is not np.ndarray:
+        _out_cls = _in_cls
+    if _out_cls is not None and not _ma.isMaskedArray(stacked):
+        try:
+            stacked = stacked.view(_out_cls)
+        except Exception:
+            pass
     return stacked
 
 

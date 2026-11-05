@@ -4,8 +4,11 @@ from . import recfunctions
 from . import stride_tricks
 from . import _index_tricks_impl
 
+# numpy.lib._shape_base_impl 的兼容引用(suppress_warnings 等按模块过滤用)
+from .. import _extra as _shape_base_impl
+
 __all__ = ['recfunctions', 'stride_tricks', 'add_newdoc', 'NumpyVersion',
-           '_index_tricks_impl']
+           '_index_tricks_impl', '_shape_base_impl']
 
 
 def add_newdoc(where, obj, doc):

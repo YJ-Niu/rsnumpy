@@ -48,6 +48,17 @@ import rsnumpy._core as _real_core
 
 faulthandler.enable()  # print a Python traceback if a numpy test crashes the C ext
 
+# 真实 numpy 的 array2string(报错消息格式对齐用)——必须在 numpy 别名
+# 替换前导入;导入后立刻恢复 sys.modules["numpy"] 供 rsnumpy 占用
+try:
+    import numpy as _np_real_fmt
+    _REAL_FMT = (_np_real_fmt.array2string, _np_real_fmt.float64)
+    sys.modules.pop("numpy", None)
+    for _k in [k for k in sys.modules if k == "numpy" or k.startswith("numpy.")]:
+        del sys.modules[_k]
+except Exception:
+    _REAL_FMT = None
+
 # ---------------------------------------------------------------------------
 # 1. Alias top-level numpy -> rsnumpy; map real submodules to rsnumpy's.
 # ---------------------------------------------------------------------------
@@ -210,10 +221,11 @@ def assert_almost_equal(a, b, decimal=7, *args, **kwargs):
 
 
 def assert_string_equal(a, b, err_msg=""):
-    a = a if isinstance(a, str) else str(a)
-    b = b if isinstance(b, str) else str(b)
-    if a != b:
-        raise AssertionError(f"{err_msg}\n x: {a!r}\n y: {b!r}")
+    # numpy 语义(difflib 差异格式)委托正式实现(_real_testing_mod 是
+    # 替换 sys.modules 前捕获的真实 rsnumpy.testing)
+    _real_testing_mod.assert_string_equal(
+        a if isinstance(a, str) else str(a),
+        b if isinstance(b, str) else str(b))
 
 
 class _Raises:
@@ -285,10 +297,11 @@ def assert_warns(expected, *args, **kwargs):
         func, fargs = args[0], args[1:]
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            func(*fargs, **kwargs)
+            ret = func(*fargs, **kwargs)
         if not any(issubclass(x.category, expected) for x in w):
             raise AssertionError(f"Did not warn {expected}")
-        return w
+        # numpy 语义:返回被调函数的返回值(而非 warnings 列表)
+        return ret
 
     class _Ctx:
         def __enter__(self):
@@ -347,8 +360,12 @@ _testing.IS_PYPY = False
 # assert 名与 numpy 详细报错格式：核心比较函数委托真实实现（简化 shim
 # 仅作兜底）。这些正是 tests/testing/tests/test_utils.py 要测的代码。
 import rsnumpy.testing as _real_testing_mod
+# 报错消息格式对齐用的真实 numpy array2string(在 numpy 别名替换前快照)
+if _REAL_FMT is not None:
+    setattr(_real_testing_mod, '_REAL_FMT', _REAL_FMT)
 for _n in ("assert_equal", "assert_array_equal", "assert_array_almost_equal",
-           "assert_allclose", "assert_almost_equal"):
+           "assert_allclose", "assert_almost_equal", "assert_warns",
+           "assert_no_warnings"):
     setattr(_testing, _n, getattr(_real_testing_mod, _n))
 
 

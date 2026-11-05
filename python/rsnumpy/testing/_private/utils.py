@@ -394,6 +394,22 @@ def assert_equal(actual, desired, err_msg='', verbose=True, *, strict=False):
      DESIRED: array([2., 2., 2.], dtype=float32)
     """
     __tracebackhide__ = True  # Hide traceback for py.test
+    # MaskedArray 特判：非 ndarray 子类的独立类，asanyarray 会包成
+    # (1,) object 数组——解包 _data 比较；两边都是 masked 时掩码也须一致
+    try:
+        from rsnumpy.ma.core import MaskedArray as _MA
+    except Exception:
+        _MA = None
+    if _MA is not None and (isinstance(actual, _MA)
+                            or isinstance(desired, _MA)):
+        _ad = actual._data if isinstance(actual, _MA) else actual
+        _dd = desired._data if isinstance(desired, _MA) else desired
+        assert_equal(_ad, _dd, err_msg, verbose, strict=strict)
+        if isinstance(actual, _MA) and isinstance(desired, _MA):
+            assert_equal(np.array(actual._mask, dtype='bool'),
+                         np.array(desired._mask, dtype='bool'),
+                         err_msg, verbose)
+        return
     # dtype 对象特判：不能当序列迭代（numpy asanyarray(dtype) 是 0-d
     # 对象数组），直接比较相等性
     def _is_dtype_obj(x):
@@ -788,9 +804,18 @@ def assert_approx_equal(actual, desired, significant=7, err_msg='',
         raise AssertionError(msg)
 
 
+_REAL_FMT = None  # conftest 注入的真实 numpy (array2string, float64)
+
 def _fmt_err(v):
     """numpy array2string 风格的标量错误值格式：8 位有效数字、去尾零、
     科学计数保留 '1.e-04' 形式、整值浮点保留 '1.' 形式。"""
+    # 有真实 numpy 时直接用其 array2string(格式完全对齐)
+    if _REAL_FMT is not None:
+        try:
+            _a2s, _f64 = _REAL_FMT
+            return _a2s(_f64(v))
+        except Exception:
+            pass
     if isinstance(v, bool):
         return str(v)
     if isinstance(v, int):
@@ -801,19 +826,55 @@ def _fmt_err(v):
         return str(v)
     if fv != fv or fv in (float('inf'), float('-inf')):
         return str(v)
-    if fv == int(fv) and abs(fv) < 1e16:
-        # 整值：numpy 数组打印带小数点（563766. → '563766.'）
-        return f'{int(fv)}.'
-    s = f'{fv:.8g}'
-    if 'e' in s:
+    av = abs(fv)
+    _int_digits = len(f'{av:.0f}') if av >= 1 else 0
+    if av != 0 and (av < 1e-3 or _int_digits > 8):
+        # numpy array2string 语义：小值/大整数位用科学计数（8 位小数、去尾零）
+        s = f'{fv:.8e}'
         mant, exp = s.split('e')
+        mant = mant.rstrip('0').rstrip('.')
         if '.' not in mant:
             mant += '.'
         return mant + 'e' + exp
-    if '.' not in s:
-        s += '.'
+    if fv == int(fv) and abs(fv) < 1e16:
+        # 整值：numpy 数组打印带小数点（563766. → '563766.'）
+        return f'{int(fv)}.'
+    s = f'{fv:.8f}'
+    if '.' in s:
+        s = s.rstrip('0').rstrip('.')
+        if '.' not in s:
+            s += '.'
     return s
 
+
+def _fmt_scalar_np(v, precision=8):
+    """numpy array2string 的标量语义:precision 位小数、去尾零、保小数点。"""
+    try:
+        if isinstance(v, bool):
+            return str(v)
+        if isinstance(v, int):
+            return str(v)
+        import math as _math
+        if isinstance(v, float) and _math.isinf(v):
+            return 'inf' if v > 0 else '-inf'
+        if isinstance(v, float) and _math.isnan(v):
+            return 'nan'
+        av = abs(float(v))
+        _int_digits = len(f'{av:.0f}') if av >= 1 else 0
+        if av != 0 and (av < 1e-3 or _int_digits > precision):
+            # numpy array2string 语义:小值用科学计数(mantissa 去尾零)
+            s = f'{float(v):.{precision}e}'
+            m, e = s.split('e')
+            m = m.rstrip('0').rstrip('.')
+            return f'{m}e{int(e)}'
+        s = f'{float(v):.{precision}f}'
+        if '.' in s:
+            s = s.rstrip('0').rstrip('.')
+            if '.' not in s and 'e' not in s and 'inf' not in s and 'nan' not in s:
+                s += '.'
+        return s
+    except Exception:
+        return str(v)
 
 def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
                          precision=6, equal_nan=True, equal_inf=True,
@@ -1029,11 +1090,13 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
                         error2 = abs(y - x)
                         np.minimum(error, error2, out=error)
 
-                    reduced_error = error[invalids]
+                    _err_flat = np.asarray(error).reshape(-1)
+                    _inv_flat = np.asarray(invalids).reshape(-1)
+                    reduced_error = _err_flat[_inv_flat]
                     max_abs_error = max(reduced_error)
                     _err_kind = getattr(getattr(error, 'dtype', None),
                                         'kind', 'f')
-                    if getattr(error, 'dtype', object_) == object_:
+                    if getattr(error, 'dtype', None) is object_ or getattr(error, 'dtype', None) == 'object':
                         remarks.append(
                             'Max absolute difference among violations: '
                             + str(max_abs_error))
@@ -1053,16 +1116,19 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
                     nonzero = y != np.zeros_like(y)
                     nonzero_and_invalid = np.logical_and(invalids, nonzero)
 
-                    if all(~nonzero_and_invalid):
+                    _nai_flat = np.asarray(nonzero_and_invalid).reshape(-1)
+                    if all(~_nai_flat):
                         max_rel_error = array(inf)
                     else:
-                        nonzero_invalid_error = error[nonzero_and_invalid]
-                        broadcasted_y = np.broadcast_to(y, error.shape)
-                        nonzero_invalid_y = broadcasted_y[nonzero_and_invalid]
+                        nonzero_invalid_error = _err_flat[_nai_flat]
+                        broadcasted_y = np.broadcast_to(
+                            np.asarray(y), np.asarray(error).shape)
+                        _y_flat = broadcasted_y.reshape(-1)
+                        nonzero_invalid_y = _y_flat[_nai_flat]
                         max_rel_error = max(nonzero_invalid_error
                                             / abs(nonzero_invalid_y))
 
-                    if getattr(error, 'dtype', object_) == object_:
+                    if getattr(error, 'dtype', None) is object_ or getattr(error, 'dtype', None) == 'object':
                         remarks.append(
                             'Max relative difference among violations: '
                             + str(max_rel_error))

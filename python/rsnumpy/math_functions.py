@@ -424,6 +424,24 @@ def less(x1, x2):
 
 def equal(x1, x2):
     """逐元素相等比较。"""
+    # object dtype：Rust 层对 object 占位失真，逐元素 Python ==
+    _a1 = x1 if hasattr(x1, '_array') else None
+    if _a1 is not None and getattr(_a1, '_dtype', None) == 'object':
+        from rsnumpy import _flatten_vals
+        flat = (_a1.flatten().tolist() if getattr(_a1, '_raw_data', None) is None
+                else _flatten_vals(_a1._raw_data))
+        if hasattr(x2, '_array') and getattr(x2, 'ndim', 0) == 0:
+            x2 = x2.item()
+        if hasattr(x2, '_array') and getattr(x2, '_dtype', None) == 'object':
+            flat2 = (x2.flatten().tolist()
+                     if getattr(x2, '_raw_data', None) is None
+                     else _flatten_vals(x2._raw_data))
+            flat_r = ([a == b for a, b in zip(flat, flat2)]
+                      if len(flat) == len(flat2) else [False] * len(flat))
+        else:
+            flat_r = [a == x2 for a in flat]
+        res = _nd()._wrap(_nd()(flat_r), _dtype='bool')
+        return res.reshape(_a1.shape)
     return _wrap_bool(_core.equal(_ensure_raw(x1), _ensure_raw(x2)))
 
 

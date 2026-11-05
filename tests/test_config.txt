@@ -1,102 +1,103 @@
-# rsnumpy 测试配置: <测试文件> <标志>
+# rsnumpy 测试配置: <测试文件> <标志> <passed>/<failed>/<skipped>
 #   1 = 上次全部通过   0 = 存在 failed/skipped/error（或尚未跑通）
-# 由 build_wheel.sh 的测试阶段自动维护：每跑完一个文件立即更新（边测边更新），
+# 由 build_wheel.sh 的测试阶段自动维护：每个文件一个 pytest 子进程，跑完立即
+# 写回结果（边测边更新；崩溃只影响该文件，计数列标 crash）。
 # --test debug 只跑标志为 0 的文件；--test all 全量重建。
-tests/_core_tests/test__exceptions.py 1
-tests/_core_tests/test_abc.py 0
-tests/_core_tests/test_api.py 0
-tests/_core_tests/test_array_api_info.py 1
-tests/_core_tests/test_array_coercion.py 0
-tests/_core_tests/test_arrayobject.py 0
-tests/_core_tests/test_arrayprint.py 0
-tests/_core_tests/test_casting_floatingpoint_errors.py 0
-tests/_core_tests/test_cython.py 0
-tests/_core_tests/test_defchararray.py 0
-tests/_core_tests/test_dtype.py 0
-tests/_core_tests/test_einsum.py 0
-tests/_core_tests/test_errstate.py 1
-tests/_core_tests/test_finfo.py 1
-tests/_core_tests/test_function_base.py 1
-tests/_core_tests/test_getlimits.py 1
-tests/_core_tests/test_half.py 0
-tests/_core_tests/test_indexerrors.py 0
-tests/_core_tests/test_indexing.py 0
-tests/_core_tests/test_item_selection.py 0
-tests/_core_tests/test_limited_api.py 0
-tests/_core_tests/test_longdouble.py 1
-tests/_core_tests/test_multiarray.py 0
-tests/_core_tests/test_nditer.py 0
-tests/_core_tests/test_nep50_promotions.py 0
-tests/_core_tests/test_numeric.py 0
-tests/_core_tests/test_numerictypes.py 0
-tests/_core_tests/test_print.py 0
-tests/_core_tests/test_protocols.py 0
-tests/_core_tests/test_records.py 0
-tests/_core_tests/test_regression.py 0
-tests/_core_tests/test_scalar_ctors.py 1
-tests/_core_tests/test_scalar_methods.py 0
-tests/_core_tests/test_scalarinherit.py 0
-tests/_core_tests/test_scalarmath.py 0
-tests/_core_tests/test_scalarprint.py 0
-tests/_core_tests/test_shape_base.py 0
-tests/_core_tests/test_strings.py 0
-tests/_core_tests/test_umath_accuracy.py 0
-tests/_core_tests/test_umath_complex.py 0
-tests/_core_tests/test_unicode.py 0
-tests/fft_tests/test_helper.py 0
-tests/lib_tests/test__version.py 0
-tests/lib_tests/test_arraysetops.py 0
-tests/lib_tests/test_function_base.py 0
-tests/lib_tests/test_histograms.py 0
-tests/lib_tests/test_index_tricks.py 0
-tests/lib_tests/test_loadtxt.py 0
-tests/lib_tests/test_nanfunctions.py 0
-tests/lib_tests/test_packbits.py 0
-tests/lib_tests/test_polynomial.py 1
-tests/lib_tests/test_recfunctions.py 0
-tests/lib_tests/test_regression.py 0
-tests/lib_tests/test_shape_base.py 0
-tests/lib_tests/test_stride_tricks.py 0
-tests/lib_tests/test_twodim_base.py 0
-tests/lib_tests/test_type_check.py 1
-tests/lib_tests/test_ufunclike.py 1
-tests/linalg_tests/test_deprecations.py 0
-tests/linalg_tests/test_linalg.py 0
-tests/linalg_tests/test_regression.py 0
-tests/ma_tests/test_arrayobject.py 0
-tests/ma_tests/test_core.py 0
-tests/ma_tests/test_deprecations.py 0
-tests/ma_tests/test_extras.py 0
-tests/ma_tests/test_mrecords.py 0
-tests/ma_tests/test_old_ma.py 0
-tests/ma_tests/test_regression.py 0
-tests/matrixlib_tests/test_defmatrix.py 0
-tests/matrixlib_tests/test_interaction.py 0
-tests/matrixlib_tests/test_masked_matrix.py 0
-tests/matrixlib_tests/test_matrix_linalg.py 0
-tests/matrixlib_tests/test_multiarray.py 0
-tests/matrixlib_tests/test_numeric.py 0
-tests/matrixlib_tests/test_regression.py 0
-tests/polynomial_tests/test_polynomial.py 0
-tests/random_tests/test_extending.py 0
-tests/random_tests/test_random.py 0
-tests/random_tests/test_randomstate_regression.py 0
-tests/random_tests/test_seed_sequence.py 0
-tests/test_arithmetic.py 1
-tests/test_buffer.py 1
-tests/test_comparison.py 1
-tests/test_creation.py 1
-tests/test_indexing.py 1
-tests/test_known_gaps.py 0
-tests/test_reduction.py 1
-tests/test_rsnumpy_array_coercion.py 0
-tests/test_rsnumpy_defchararray.py 0
-tests/test_rsnumpy_function_base.py 0
-tests/test_rsnumpy_indexing.py 0
-tests/test_rsnumpy_numeric.py 0
-tests/test_rsnumpy_numerictypes.py 0
-tests/test_rsnumpy_records.py 0
-tests/test_rsnumpy_scalarmath.py 0
-tests/test_rsnumpy_shape_base.py 0
-tests/testing/tests/test_utils.py 0
-tests/typing_tests/test_typing.py 0
+tests/_core_tests/test__exceptions.py 1 11/0/0
+tests/_core_tests/test_abc.py 1 5/0/0
+tests/_core_tests/test_api.py 0 1/41/15
+tests/_core_tests/test_array_api_info.py 1 15/0/0
+tests/_core_tests/test_array_coercion.py 0 83/21/114
+tests/_core_tests/test_arrayobject.py 0 0/18/32
+tests/_core_tests/test_arrayprint.py 0 16/46/72
+tests/_core_tests/test_casting_floatingpoint_errors.py 0 0/182/0
+tests/_core_tests/test_cython.py 0 0/0/28
+tests/_core_tests/test_defchararray.py 0 94/1/5
+tests/_core_tests/test_dtype.py 0 714/221/199
+tests/_core_tests/test_einsum.py 0 11/40/25
+tests/_core_tests/test_errstate.py 1 8/0/0
+tests/_core_tests/test_finfo.py 0 0/0/30
+tests/_core_tests/test_function_base.py 0 41/2/0
+tests/_core_tests/test_getlimits.py 0 19/0/12
+tests/_core_tests/test_half.py 0 0/0/39
+tests/_core_tests/test_indexerrors.py 0 7/0/1
+tests/_core_tests/test_indexing.py 0 75/29/3
+tests/_core_tests/test_item_selection.py 0 8/188/86
+tests/_core_tests/test_limited_api.py 0 0/0/1
+tests/_core_tests/test_longdouble.py 0 9/0/25
+tests/_core_tests/test_multiarray.py 0 0/0/0
+tests/_core_tests/test_nditer.py 0 0/0/0
+tests/_core_tests/test_nep50_promotions.py 0 0/0/0
+tests/_core_tests/test_numeric.py 0 0/0/0
+tests/_core_tests/test_numerictypes.py 0 0/0/0
+tests/_core_tests/test_print.py 0 0/0/0
+tests/_core_tests/test_protocols.py 0 0/0/0
+tests/_core_tests/test_records.py 0 0/0/0
+tests/_core_tests/test_regression.py 0 0/0/0
+tests/_core_tests/test_scalar_ctors.py 0 0/0/0
+tests/_core_tests/test_scalar_methods.py 0 0/0/0
+tests/_core_tests/test_scalarinherit.py 0 0/0/0
+tests/_core_tests/test_scalarmath.py 0 0/0/0
+tests/_core_tests/test_scalarprint.py 0 0/0/0
+tests/_core_tests/test_shape_base.py 0 0/0/0
+tests/_core_tests/test_strings.py 0 0/0/0
+tests/_core_tests/test_umath_accuracy.py 0 0/0/0
+tests/_core_tests/test_umath_complex.py 0 0/0/0
+tests/_core_tests/test_unicode.py 0 0/0/0
+tests/fft_tests/test_helper.py 0 0/0/0
+tests/lib_tests/test__version.py 0 0/0/0
+tests/lib_tests/test_arraysetops.py 0 0/0/0
+tests/lib_tests/test_function_base.py 0 0/0/0
+tests/lib_tests/test_histograms.py 0 0/0/0
+tests/lib_tests/test_index_tricks.py 0 0/0/0
+tests/lib_tests/test_loadtxt.py 0 0/0/0
+tests/lib_tests/test_nanfunctions.py 0 0/0/0
+tests/lib_tests/test_packbits.py 0 0/0/0
+tests/lib_tests/test_polynomial.py 0 0/0/0
+tests/lib_tests/test_recfunctions.py 0 0/0/0
+tests/lib_tests/test_regression.py 0 0/0/0
+tests/lib_tests/test_shape_base.py 0 0/0/0
+tests/lib_tests/test_stride_tricks.py 0 0/0/0
+tests/lib_tests/test_twodim_base.py 0 0/0/0
+tests/lib_tests/test_type_check.py 0 0/0/0
+tests/lib_tests/test_ufunclike.py 0 0/0/0
+tests/linalg_tests/test_deprecations.py 0 0/0/0
+tests/linalg_tests/test_linalg.py 0 0/0/0
+tests/linalg_tests/test_regression.py 0 0/0/0
+tests/ma_tests/test_arrayobject.py 0 0/0/0
+tests/ma_tests/test_core.py 0 0/0/0
+tests/ma_tests/test_deprecations.py 0 0/0/0
+tests/ma_tests/test_extras.py 0 0/0/0
+tests/ma_tests/test_mrecords.py 0 0/0/0
+tests/ma_tests/test_old_ma.py 0 0/0/0
+tests/ma_tests/test_regression.py 0 0/0/0
+tests/matrixlib_tests/test_defmatrix.py 0 0/0/0
+tests/matrixlib_tests/test_interaction.py 0 0/0/0
+tests/matrixlib_tests/test_masked_matrix.py 0 0/0/0
+tests/matrixlib_tests/test_matrix_linalg.py 0 0/0/0
+tests/matrixlib_tests/test_multiarray.py 0 0/0/0
+tests/matrixlib_tests/test_numeric.py 0 0/0/0
+tests/matrixlib_tests/test_regression.py 0 0/0/0
+tests/polynomial_tests/test_polynomial.py 0 0/0/0
+tests/random_tests/test_extending.py 0 0/0/0
+tests/random_tests/test_random.py 0 0/0/0
+tests/random_tests/test_randomstate_regression.py 0 0/0/0
+tests/random_tests/test_seed_sequence.py 0 0/0/0
+tests/test_arithmetic.py 0 0/0/0
+tests/test_buffer.py 0 0/0/0
+tests/test_comparison.py 0 0/0/0
+tests/test_creation.py 0 0/0/0
+tests/test_indexing.py 0 0/0/0
+tests/test_known_gaps.py 0 0/0/0
+tests/test_reduction.py 0 0/0/0
+tests/test_rsnumpy_array_coercion.py 0 0/0/0
+tests/test_rsnumpy_defchararray.py 0 0/0/0
+tests/test_rsnumpy_function_base.py 0 0/0/0
+tests/test_rsnumpy_indexing.py 0 0/0/0
+tests/test_rsnumpy_numeric.py 0 0/0/0
+tests/test_rsnumpy_numerictypes.py 0 0/0/0
+tests/test_rsnumpy_records.py 0 0/0/0
+tests/test_rsnumpy_scalarmath.py 0 0/0/0
+tests/test_rsnumpy_shape_base.py 0 0/0/0
+tests/testing/tests/test_utils.py 0 0/0/0
+tests/typing_tests/test_typing.py 0 0/0/0

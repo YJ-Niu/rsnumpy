@@ -27,6 +27,38 @@ def _record_count(data):
     return data.size
 
 
+def _fields_leaf_count(dt):
+    """结构化 dtype 的每记录叶子数（嵌套字段/子数组递归展开）。"""
+    per = 0
+    for _n in dt.names:
+        fdt = dt.fields[_n][0]
+        if getattr(fdt, '_names', None) is not None:
+            per += _fields_leaf_count(fdt)
+        elif getattr(fdt, '_subdtype', None) is not None:
+            _b, _s = fdt._subdtype
+            c = 1
+            for s2 in (_s or ()):
+                c *= s2
+            if getattr(_b, '_names', None) is not None:
+                per += c * _fields_leaf_count(_b)
+            else:
+                per += c
+        else:
+            per += 1
+    return per
+
+
+def _leaf_count(data):
+    """掩码长度语义：普通数组 = size；结构化数组 = size × 每记录字段叶子数
+    （numpy：结构化 ma 的掩码为字段级）。"""
+    dt = getattr(data, 'dtype', None)
+    names = getattr(dt, 'names', None)
+    size = int(getattr(data, 'size', 0) or 0)
+    if not names:
+        return size
+    return size * _fields_leaf_count(dt)
+
+
 def _is_ma(a):
     return isinstance(a, MaskedArray)
 
@@ -63,16 +95,25 @@ class MaskedArray:
             elif dtype is not None:
                 data = data.view(dtype)
         self._data = data
-        n = _record_count(data)
+        # 掩码长度语义（numpy）：普通数组 = size；结构化数组 = size ×
+        # 每记录字段叶子数（字段级掩码）。展平后按叶子数对齐：
+        # 单值广播、不足补 False、超长截断——不做记录级截断（那会
+        # 丢失字段级掩码信息）。
+        n = _leaf_count(data)
         if mask is None or mask is False:
-            self._mask = base_mask if base_mask is not None else [False] * n
+            m = base_mask if base_mask is not None else [False]
         elif mask is True:
-            self._mask = [True] * n
+            m = [True]
         else:
-            m = mask.tolist() if hasattr(mask, 'tolist') else list(mask)
-            self._mask = [bool(x) for x in _flatten(m)]
-        if len(self._mask) != n:
-            self._mask = (self._mask + [False] * n)[:n]
+            mm = mask.tolist() if hasattr(mask, 'tolist') else list(mask)
+            m = [bool(x) for x in _flatten(mm)]
+        if len(m) == 1 and n > 1:
+            m = m * n
+        if len(m) > n:
+            m = m[:n]
+        if len(m) < n:
+            m = m + [False] * (n - len(m))
+        self._mask = m
         self.fill_value = fill_value
 
     # ------------------------------------------------------------------
@@ -109,19 +150,25 @@ class MaskedArray:
 
     @property
     def mask(self):
-        return np.array(self._mask, dtype='bool').reshape(self.shape)
+        m = np.array(self._mask, dtype='bool')
+        if len(self._mask) == int(self.size):
+            # 普通数组：掩码形状与数据形状一致
+            try:
+                return m.reshape(self.shape)
+            except Exception:
+                return m
+        # 结构化字段级掩码：长度 = 叶子数（size × 每记录字段数），平坦表示
+        return m
 
     @mask.setter
     def mask(self, value):
         if value is None:
-            self._mask = [False] * _record_count(self._data)
+            self._mask = [False] * _leaf_count(self._data)
             return
         mask = np.asarray(value, dtype='bool')
         if mask.ndim == 0:
-            self._mask = [bool(mask)] * _record_count(self._data)
+            self._mask = [bool(mask)] * _leaf_count(self._data)
             return
-        if mask.shape != self.shape:
-            raise ValueError("mask and data must have the same shape")
         self._mask = [bool(item) for item in mask.reshape((-1,)).tolist()]
 
     def _mask_flat(self):
@@ -280,7 +327,7 @@ class MaskedArray:
         if dtype is None:
             return MaskedArray(self._data, list(self._mask))
         newdata = self._data.view(dtype)
-        newn = _record_count(newdata)
+        newn = _leaf_count(newdata)
         newmask = list(self._mask) if len(self._mask) == newn else [False] * newn
         return MaskedArray(newdata, newmask)
 
@@ -296,7 +343,27 @@ class MaskedArray:
         return self._data[~self.mask].copy()
 
     def __getitem__(self, key):
-        return self._data[key]
+        res = self._data[key]
+        # 非标量切片：结果保持 MaskedArray(numpy 语义),掩码同 key 索引
+        if hasattr(res, 'ndim') and getattr(res, 'ndim', 0) > 0:
+            m = np.array(self._mask, dtype='bool')
+            _sz = int(self.size)
+            try:
+                if len(self._mask) == _sz:
+                    m = m.reshape(self.shape)
+                    m_res = m[key]
+                else:
+                    m_res = None
+            except Exception:
+                m_res = None
+            if m_res is not None:
+                m_flat = [bool(x) for x
+                          in np.asarray(m_res).reshape((-1,)).tolist()]
+            else:
+                m_flat = [False] * (int(res.size)
+                                    if hasattr(res, 'size') else 0)
+            return MaskedArray(res, m_flat)
+        return res
 
     def __setitem__(self, key, value):
         self._data[key] = value
@@ -553,7 +620,7 @@ def fix_invalid(a):
     for i, b in enumerate(bad.reshape((-1,)).tolist()):
         if i < len(newmask):
             newmask[i] = newmask[i] or bool(b)
-    a._mask = newmask[:_record_count(data)]
+    a._mask = newmask[:_leaf_count(data)]
     return a
 
 

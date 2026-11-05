@@ -810,22 +810,38 @@ def hstack(arrays, out=None, dtype=None, casting="same_kind"):
 
 
 def dstack(arrays):
-    """沿深度方向堆叠数组。"""
-    arr_list = list(arrays)
+    """沿深度方向堆叠数组（numpy 语义：1-D→(1,n,1)、2-D→(m,n,1) 后
+    沿新 axis=2 拼接）。"""
+    if not isinstance(arrays, (list, tuple)) and not hasattr(arrays, '_array'):
+        raise TypeError("arrays to stack must be array_like or sequences")
+    arr_list = [_ensure_raw(a) if not hasattr(a, '_array') else a
+                for a in arrays]
     if not arr_list:
         raise ValueError("dstack requires at least one array")
-    first = arr_list[0] if hasattr(arr_list[0], '_array') else _wrap(arr_list[0])
+    first = arr_list[0]
     nd = _nd()
     dtype = getattr(first, '_dtype', "float64")
     fields = getattr(first, '_fields', None)
     raw_data = getattr(first, '_raw_data', None)
-    raw_list = [_ensure_raw(a) for a in arr_list]
-    result = _core.concatenate(raw_list, 2)
+    # numpy 语义：先统一升到 3-D（避免对低维数组沿 axis=2 拼接越界）
+    lifted = []
+    for a in arr_list:
+        sh = tuple(a.shape)
+        if len(sh) == 1:
+            a = a.reshape((1,) + sh + (1,))
+        elif len(sh) == 2:
+            a = a.reshape(sh + (1,))
+        elif len(sh) == 0:
+            a = a.reshape((1, 1, 1))
+        lifted.append(a)
+    result = _core.concatenate([_ensure_raw(a) for a in lifted], 2)
     return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
 
 
 def column_stack(arrays):
     """将 1-D 数组作为列堆叠成 2-D 数组。"""
+    if not isinstance(arrays, (list, tuple)) and not hasattr(arrays, '_array'):
+        raise TypeError("arrays to stack must be array_like or sequences")
     arr_list = list(arrays)
     if not arr_list:
         raise ValueError("column_stack requires at least one array")
@@ -842,6 +858,12 @@ def column_stack(arrays):
 def split(ary, indices_or_sections, axis=0):
     """将数组拆分为多个子数组（使用 Rust 实现）。"""
     arr = ary if hasattr(ary, '_array') else _wrap(ary)
+    # numpy 语义：整数份数不能整除该轴长度时抛 ValueError
+    if isinstance(indices_or_sections, (int, builtins.int)) and not isinstance(indices_or_sections, bool):
+        axis_len = arr.shape[axis] if arr.ndim > axis else 0
+        if axis_len % indices_or_sections != 0:
+            raise ValueError(
+                "array split does not result in an equal division")
     nd = _nd()
     dtype = getattr(arr, '_dtype', "float64")
     fields = getattr(arr, '_fields', None)
@@ -851,12 +873,19 @@ def split(ary, indices_or_sections, axis=0):
 
 
 def hsplit(ary, indices_or_sections):
-    """水平拆分数组。"""
+    """水平拆分数组（numpy 语义：1-D 数组沿唯一轴 axis=0 拆）。"""
+    arr = ary if hasattr(ary, '_array') else _wrap(ary)
+    if arr.ndim == 1:
+        return split(ary, indices_or_sections, axis=0)
     return split(ary, indices_or_sections, axis=1)
 
 
 def vsplit(ary, indices_or_sections):
-    """垂直拆分数组。"""
+    """垂直拆分数组（numpy 语义：1-D 数组无轴 1，抛 ValueError）。"""
+    arr = ary if hasattr(ary, '_array') else _wrap(ary)
+    if arr.ndim < 2:
+        raise ValueError(
+            "vsplit only works on arrays of 2 or more dimensions")
     return split(ary, indices_or_sections, axis=0)
 
 
@@ -866,10 +895,34 @@ def dsplit(ary, indices_or_sections):
 
 
 def tile(A, reps):
-    """重复数组。"""
+    """重复数组（numpy 语义：reps 短于 ndim 时前置补 1，即沿末轴重复；
+    长于 ndim 时前导补新轴）。"""
+    arr = A if hasattr(A, '_array') else _wrap(A)
     if isinstance(reps, int) or _scalar_idx(reps):
         reps = [int(reps)]
-    return _wrap(_core.tile(_ensure_raw(A), reps))
+    reps = [int(r) for r in reps]
+    sh = tuple(arr.shape)
+    nd = len(sh)
+    if len(reps) < nd:
+        reps = [1] * (nd - len(reps)) + reps
+    out = arr
+    if len(reps) > nd:
+        out = out.reshape((1,) * (len(reps) - nd) + sh)
+        nd = len(reps)
+    # 空数组：直接构造目标形状的空结果
+    if getattr(arr, 'size', 0) == 0:
+        new_sh = tuple(r * s for r, s in zip(reps, tuple(out.shape)))
+        return _np().zeros(new_sh, dtype=getattr(arr, '_dtype', None) or 'float64')
+    for i, r in enumerate(reps):
+        if r == 1:
+            continue
+        if r == 0:
+            sl = [slice(None)] * nd
+            sl[i] = slice(0, 0)
+            out = out[tuple(sl)]
+        else:
+            out = _np().concatenate([out] * r, axis=i)
+    return _wrap(_ensure_raw(out))
 
 
 def repeat(a, repeats, axis=None):

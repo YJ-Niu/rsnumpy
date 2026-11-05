@@ -647,21 +647,36 @@ def nanpercentile(a, q, axis=None, out=None, keepdims=False, interpolation='line
 
 def argmax(a, axis=None, out=None, keepdims=False):
     """返回数组沿指定轴的最大值索引（全归约返回 intp 标量，numpy 语义）。"""
-    _ = out, keepdims
-    raw = _core.argmax_axis(_ensure_raw(a), axis)
+    _ = out
+    arr = a if hasattr(a, '_array') else _wrap(a)
+    if axis is not None and axis < 0:
+        axis += arr.ndim
+    raw = _core.argmax_axis(_ensure_raw(arr), axis)
     if axis is None:
-        import rsnumpy as _rsn
-        return _rsn.int64(raw.tolist())
-    return _nd()._wrap(raw, _dtype='int64')
+        return int(raw.tolist())
+    result = _nd()._wrap(raw, _dtype='int64')
+    if keepdims:
+        shape = list(tuple(arr.shape))
+        shape[axis] = 1
+        result = result.reshape(tuple(shape))
+    return result
 
 
 def argmin(a, axis=None, out=None, keepdims=False):
     """返回数组沿指定轴的最小值索引。"""
-    _ = out, keepdims
-    raw = _core.argmin_axis(_ensure_raw(a), axis)
+    _ = out
+    arr = a if hasattr(a, '_array') else _wrap(a)
+    if axis is not None and axis < 0:
+        axis += arr.ndim
+    raw = _core.argmin_axis(_ensure_raw(arr), axis)
     if axis is None:
         return int(raw.tolist())
-    return _nd()._wrap(raw, _dtype='int64')
+    result = _nd()._wrap(raw, _dtype='int64')
+    if keepdims:
+        shape = list(tuple(arr.shape))
+        shape[axis] = 1
+        result = result.reshape(tuple(shape))
+    return result
 
 
 def argsort(a, axis=-1, kind=None, order=None):

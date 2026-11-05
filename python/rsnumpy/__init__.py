@@ -644,6 +644,11 @@ class ndarray:
                 return list(raw)
         return raw_list
 
+    @property
+    def data(self):
+        """缓冲区的 memoryview 视图（numpy ndarray.data 兼容）。"""
+        return memoryview(self.tobytes())
+
     def tobytes(self, order='C'):
         """返回数组原始字节（与 rsnumpy.ndarray.tobytes 兼容）。
 
@@ -744,6 +749,16 @@ class ndarray:
 
     def __getitem__(self, key):
         res = self._getitem_impl(key)
+        # 切片语义 = 视图：记录逻辑血缘(may_share_memory/shares_memory
+        # 用 _rs_parent 链表达;rsnumpy 切片是拷贝,无真实共享缓冲)
+        _is_slice_key = (isinstance(key, slice)
+                         or (isinstance(key, tuple) and key
+                             and builtins.all(isinstance(k, slice) for k in key)))
+        if _is_slice_key and _is_ndarray(res) and not isinstance(res, matrix):
+            try:
+                res._rs_parent = self
+            except Exception:
+                pass
         # numpy 语义：子类索引返回子类实例（view 触发 __array_finalize__，
         # 传递自定义属性如 metadata）。matrix 暂排除：matrixlib 现有绿测
         # 依赖基类返回，matrix 自身索引语义另行处理。
@@ -1884,6 +1899,28 @@ class ndarray:
         if self._dtype in ('float32', 'float16') and \
                 isinstance(other, float) and not isinstance(other, bool):
             other = _round_scalar_to_f(self._dtype, other)
+        # object dtype：逐元素 Python == (Rust 层对 object 占位失真)
+        if getattr(self, '_dtype', None) == 'object' or \
+                (getattr(self, '_dtype_obj', None) is not None
+                 and str(getattr(self._dtype_obj, 'dtype', '')) == 'object'):
+            flat_list = (_flatten_vals(self._raw_data)
+                         if getattr(self, '_raw_data', None) is not None
+                         else self.flatten().tolist())
+            if _is_ndarray(other) and getattr(other, 'ndim', 0) == 0:
+                other = other.item()
+            if _is_ndarray(other) or isinstance(other, (list, tuple)):
+                other_flat = (other.flatten().tolist()
+                              if _is_ndarray(other) else
+                              [x for t in other for x in (t if isinstance(t, (list, tuple)) else [t])])
+                if len(flat_list) == len(other_flat):
+                    flat_result = [x == o for x, o in zip(flat_list, other_flat)]
+                else:
+                    flat_result = [False] * len(flat_list)
+            else:
+                flat_result = [x == other for x in flat_list]
+            result = ndarray(flat_result)
+            result._dtype = "bool"
+            return result.reshape(self.shape)
         if isinstance(other, str):
             flat_list = self.flatten().tolist()
             flat_result = [x == other for x in flat_list]
@@ -4049,8 +4086,9 @@ def _coerce_struct_data(data, dt):
         if (len(data) > 0
                 and _py_all(isinstance(x, (list, tuple)) and len(x) == n
                             for x in data)
-                and not _py_all(isinstance(x[0], (list, tuple))
-                                and len(x[0]) == n for x in data)):
+                and not (n > 0
+                         and _py_all(isinstance(x[0], (list, tuple))
+                                     and len(x[0]) == n for x in data))):
             return [_coerce_record(list(x), dt) for x in data]
         return [_coerce_struct_data(x, dt) for x in data]
     # 标量广播到单字段记录
@@ -4317,7 +4355,13 @@ def _get_multifield(arr, keys):
     idxs = [dt._names.index(k) for k in keys]
     recs = _flatten_records(arr._raw_data)
     new_recs = [tuple(r[i] for i in idxs) for r in recs]
-    return _wrap_structured(newdt, _reshape_flat(new_recs, arr.shape))
+    res = _wrap_structured(newdt, _reshape_flat(new_recs, arr.shape))
+    # 视图血缘（numpy 语义：shares_memory(view, arr) 为 True）
+    try:
+        res._rs_parent = arr
+    except Exception:
+        pass
+    return res
 
 
 def _field_leaf_to_scalar(v, fdt):
@@ -4367,6 +4411,15 @@ def _struct_getitem(arr, key):
         return (True, _wrap_structured(dt, sub if isinstance(sub, list) else [sub]))
     if isinstance(key, slice):
         return (True, _wrap_structured(dt, arr._raw_data[key]))
+    if _is_ndarray(key) and str(getattr(key, '_dtype', '')) not in ('bool',):
+        # 整数数组 fancy 索引：取记录子集（值在 _raw_data，不在 f64 占位）
+        idxs = key.tolist()
+        recs = _flatten_records(arr._raw_data)
+        out = []
+        for i in idxs:
+            k = i + len(recs) if isinstance(i, int) and i < 0 else i
+            out.append(recs[k])
+        return (True, _wrap_structured(dt, _reshape_flat(out, key.shape)))
     return (False, None)
 
 
@@ -7894,6 +7947,74 @@ def _string_filled(shape, fill, dtype):
     return array([fill] * n, dtype=dtype)
 
 
+class memmap(ndarray):
+    """np.memmap 最小兼容：mmap 文件后端的数组。
+
+    支持 mode='r'/'r+'/'w+'（'c' 按 'r+' 处理）；数据读写通过底层
+    ndarray 的内存表示，flush() 把当前值写回映射文件。
+    """
+
+    def __new__(cls, filename, dtype='uint8', mode='r', offset=0, shape=None,
+                order='C'):
+        import mmap as _mmap_mod
+        import os as _os
+        from rsnumpy._core import multiarray
+        _path = str(filename)
+        dt_obj = _as_struct_dtype(dtype)
+        _dto = dt_obj if dt_obj is not None else dtype(dtype)
+        _isz = _dto._itemsize or 8
+        if shape is None:
+            _flen = _os.path.getsize(_path) - offset if _os.path.exists(_path) else 0
+            _sh = (_flen // _isz,) if _flen > 0 else (0,)
+        else:
+            _sh = shape if isinstance(shape, (tuple, list)) else (shape,)
+        n = 1
+        for s in _sh:
+            n *= s
+        nbytes = n * _isz
+        if mode in ('w+', 'r+', 'c'):
+            # 打开或创建文件并补齐长度（r+b 模式下 seek+write 才有效）
+            _f = open(_path, 'a+b')
+            _f.close()
+            with open(_path, 'r+b') as _f:
+                _flen = _os.path.getsize(_path)
+                if _flen < offset + nbytes:
+                    _f.seek(offset + nbytes)
+                    _f.write(b'\x00' * (offset + nbytes - _flen))
+        elif not _os.path.exists(_path):
+            raise FileNotFoundError(f"memmap: file not found: {_path}")
+        byts = b''
+        with open(_path, 'rb' if mode == 'r' else 'r+b') as _f:
+            _f.seek(offset)
+            byts = _f.read(nbytes)
+        if dt_obj is not None:
+            recs = multiarray.unpack_array_bytes(byts, _dto, n)
+            import rsnumpy as _rs
+            arr = _rs.array(list(recs), dtype=_dto)
+        else:
+            values = multiarray.unpack_array_bytes(byts, _dto, n)
+            import rsnumpy as _rs
+            arr = _rs.array(values, dtype=_scalar_name_of(_dto))
+        arr = arr.reshape(tuple(_sh))
+        arr.__class__ = cls
+        arr._mm_path = _path
+        arr._mm_offset = offset
+        arr._mm_mode = mode
+        return arr
+
+    def flush(self):
+        """把数组当前值写回映射文件。"""
+        from rsnumpy._core import multiarray
+        _path = getattr(self, '_mm_path', None)
+        if _path is None:
+            return
+        dt_obj = _as_struct_dtype(self.dtype) or self.dtype
+        data = multiarray.pack_array_bytes(self)
+        with open(_path, 'r+b') as _f:
+            _f.seek(getattr(self, '_mm_offset', 0))
+            _f.write(data)
+
+
 def zeros(shape, dtype=None, order='C', buffer=None, *, device=None, like=None):
     """返回指定形状的零数组。"""
     _sh0 = shape if isinstance(shape, (tuple, list)) else (shape,)
@@ -7901,6 +8022,9 @@ def zeros(shape, dtype=None, order='C', buffer=None, *, device=None, like=None):
     dt_obj = _as_struct_dtype(dtype)
     if dt_obj is not None:
         result = _wrap_structured(dt_obj, _make_struct_filled(shape, dt_obj, _zero_scalar_for))
+        if not tuple(_sh0):
+            # 0-d 结构化：保持空形状表示（_struct_shape 会把单记录推断成 (1,)）
+            result._rs_shape_override = ()
     else:
         _su = _string_dtype_spec(dtype)
         if _su is not None:
@@ -7923,6 +8047,9 @@ def ones(shape, dtype=None, order='C', buffer=None, *, device=None, like=None):
     dt_obj = _as_struct_dtype(dtype)
     if dt_obj is not None:
         result = _wrap_structured(dt_obj, _make_struct_filled(shape, dt_obj, _one_scalar_for))
+        if not tuple(_sh0):
+            # 0-d 结构化：保持空形状表示（同 zeros）
+            result._rs_shape_override = ()
     else:
         _su = _string_dtype_spec(dtype)
         if _su is not None:
@@ -7945,6 +8072,9 @@ def empty(shape, dtype=None, order='C', buffer=None, *, device=None, like=None):
     dt_obj = _as_struct_dtype(dtype)
     if dt_obj is not None:
         result = _wrap_structured(dt_obj, _make_struct_filled(shape, dt_obj, _zero_scalar_for))
+        if not tuple(_sh0):
+            # 0-d 结构化：保持空形状表示（同 zeros）
+            result._rs_shape_override = ()
     else:
         _su = _string_dtype_spec(dtype)
         if _su is not None:
