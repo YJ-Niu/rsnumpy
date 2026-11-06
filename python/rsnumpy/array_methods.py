@@ -100,8 +100,7 @@ class NdArrayMethods:
                 try:
                     import rsnumpy._dtypes as _dts_bo
                     _d = _dts_bo.DType(name)
-                    _d._byteorder = _bo
-                    res._dtype_obj = _d
+                    res._dtype_obj = _dts_bo._clone_with_byteorder(_d, _bo)
                 except Exception:
                     pass
             return res

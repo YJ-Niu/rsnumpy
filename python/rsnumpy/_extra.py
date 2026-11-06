@@ -383,13 +383,15 @@ def spacing(x):
                 else:
                     nb = bits - 1
                 nv = _struct.unpack('<f', _struct.pack('<I', nb & 0xFFFFFFFF))[0]
-                return abs(nv - v)
+                q = _struct.unpack('<f', _struct.pack('<f', v))[0]
+                return abs(nv - q)
             # float16:近似用归一化公式
             _, e = _math.frexp(abs(v))
             return 2.0 ** (e - _bits)
 
         vals = [_sp(float(v)) for v in arr.tolist()]
-        return np.array(vals, dtype='float32' if 'float32' in dt else 'float16')
+        np_ = _np()
+        return np_.array(vals, dtype='float32' if 'float32' in dt else 'float16')
     return _wrap(_core.spacing(arr._array))
 
 
@@ -1751,13 +1753,22 @@ trapz = trapezoid
 # ========== 线性代数辅助 ==========
 def outer(a, b, out=None):
     """向量外积。"""
-    _ = out
     np = _np()
     av = _asarray(a).ravel()
     bv = _asarray(b).ravel()
     ar = np.reshape(av, (av.size, 1))
     br = np.reshape(bv, (1, bv.size))
-    return np.multiply(ar, br)
+    res = np.multiply(ar, br)
+    if out is not None:
+        # numpy 语义:out 形状须与结果一致,结果写入 out 并返回 out
+        if tuple(out.shape) != (av.size, bv.size):
+            raise ValueError(
+                "non-broadcastable output operand with shape "
+                f"{tuple(out.shape)} provided to make "
+                f"shape {(av.size, bv.size)} fit")
+        out[...] = res
+        return out
+    return res
 
 
 def kron(a, b):
@@ -1964,6 +1975,18 @@ def tensordot(a, b, axes=2):
     n2 = _math.prod(B.shape[i] for i in notin_b) if notin_b else 1
 
     # 重塑为2D矩阵进行matmul
+    # 零收缩维(nc=0):numpy 语义结果是全零数组(形状由非收缩维决定)。
+    # Rust matmul 对零尺寸维返回失真结果(如 size 1),须预检短路。
+    if nc == 0:
+        outshape0 = tuple(A.shape[i] for i in notin_a) + tuple(
+            B.shape[i] for i in notin_b)
+        try:
+            _dt0 = np.result_type(A, B)
+        except Exception:
+            _dt0 = getattr(A, '_dtype', 'float64')
+        if outshape0:
+            return np.zeros(outshape0, dtype=_dt0)
+        return _as_scalar(np.zeros((1,), dtype=_dt0)[0])
     am = np.reshape(at.ravel(), (n1, nc))
     bm = np.reshape(bt.ravel(), (nc, n2))
 
@@ -2181,6 +2204,28 @@ def kaiser(M, beta):
     return np.divide(i0(arg), _as_scalar(i0(np.array([float(beta)]))))
 
 
+def _conv_corr_mode(mode):
+    """convolve/correlate 的 mode 校验(精确对齐 numpy C 层语义)。
+
+    字符串:仅 'valid'/'same'/'full';整数:legacy 0=valid 1=same 2=full;
+    其余类型/取值分别 TypeError/ValueError(numpy 消息)。
+    """
+    if isinstance(mode, str):
+        if mode in ('valid', 'same', 'full'):
+            return mode
+        raise ValueError(
+            "Use one of 'valid', 'same', or 'full' for convolve/correlate")
+    if isinstance(mode, int) and not isinstance(mode, bool):
+        return {0: 'valid', 1: 'same', 2: 'full'}.get(
+            mode, None) or _raise_int_mode()
+    raise TypeError("convolve/correlate mode not understood")
+
+
+def _raise_int_mode():
+    raise ValueError(
+        "integer convolve/correlate mode must be 0, 1, or 2")
+
+
 def convolve(a, v, mode="full"):
     """一维离散卷积。"""
     A = _asarray(a)
@@ -2189,7 +2234,7 @@ def convolve(a, v, mode="full"):
         raise ValueError("a cannot be empty")
     if V.size == 0:
         raise ValueError("v cannot be empty")
-    return _wrap(_core.convolve(A._array, V._array, mode))
+    return _wrap(_core.convolve(A._array, V._array, _conv_corr_mode(mode)))
 
 
 def correlate(a, v, mode="valid"):
@@ -2200,7 +2245,7 @@ def correlate(a, v, mode="valid"):
         raise ValueError("a cannot be empty")
     if V.size == 0:
         raise ValueError("v cannot be empty")
-    return _wrap(_core.correlate(A._array, V._array, mode))
+    return _wrap(_core.correlate(A._array, V._array, _conv_corr_mode(mode)))
 
 
 def interp(x, xp, fp, left=None, right=None, period=None):
@@ -2247,10 +2292,28 @@ def _boolmask(arr):
                     np.full(arr.shape, 0.0), np.full(arr.shape, 1.0))
 
 
+def _check_array_function(a):
+    """numpy 语义:子类 __array_function__ 返回 NotImplemented 时抛
+    TypeError(numpy 对未接管的函数统一报错)。"""
+    _af = getattr(a, '__array_function__', None)
+    if _af is not None and type(a) is not getattr(__import__('rsnumpy'), 'ndarray'):
+        try:
+            if _af(type(a), [a], (), None) is NotImplemented:
+                raise TypeError(
+                    "no implementation found for 'numpy.all' on types that "
+                    "implement __array_function__: "
+                    f"[{type(a).__module__}.{type(a).__name__}]")
+        except TypeError:
+            raise
+        except Exception:
+            pass
+
+
 def all(a, axis=None, out=None, keepdims=False, *, where=True):
     """判断沿轴的所有元素是否都为真。"""
     _ = out, keepdims, where
     np = _np()
+    _check_array_function(a)
     arr = _asarray(a)
     if axis is None:
         return builtin_all(v != 0 for v in _flat(arr))
@@ -2261,6 +2324,7 @@ def any(a, axis=None, out=None, keepdims=False, *, where=True):
     """判断沿轴是否存在为真的元素。"""
     _ = out, keepdims, where
     np = _np()
+    _check_array_function(a)
     arr = _asarray(a)
     if axis is None:
         return builtin_any(v != 0 for v in _flat(arr))
@@ -2280,7 +2344,14 @@ round_ = round
 def astype(x, dtype, copy=True, casting="unsafe"):
     """将数组转换为指定类型。"""
     _ = casting
-    return _asarray(x).astype(dtype, copy=copy)
+    np_ = _np()
+    if not hasattr(x, '_array'):
+        if isinstance(x, np_.generic):
+            # numpy 语义:标量 astype 返回标量(经 0-d 数组路径转换)
+            return np_.array(x).astype(dtype)[()]
+        # numpy 语义:模块级 astype 只接受数组输入(list 等先经 asarray)
+        raise TypeError("Input should be a NumPy array")
+    return x.astype(dtype, copy=copy)
 
 
 def ascontiguousarray(a, dtype=None, copy=None, subok=True):

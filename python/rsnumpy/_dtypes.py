@@ -573,6 +573,20 @@ def _new():
     return d
 
 
+def _clone_with_byteorder(dt, bo):
+    """克隆新 DType 实例并设 byteorder(不走单例缓存)。
+
+    DType 标量实例按 (typename, itemsize, names, subdtype, byteorder)
+    缓存为单例;直接改单例的 _byteorder 会污染同类型的所有数组
+    (后续同 dtype 构造会把 byteorder 重置回 native)。凡需给数组挂
+    非 native byteorder 的 _dtype_obj,必须用本助手克隆新实例。
+    """
+    d = _new()
+    d._copy_from(dt)
+    d._byteorder = bo
+    return d
+
+
 def _make_scalar(name, bo):
     kind, itemsize, align = _SCALAR_INFO[name]
     if itemsize == 1 or kind == 'O':
@@ -606,6 +620,12 @@ def _make_flexible(kind, width, bo):
 
 def _make_datetime(kind, unit, bo):
     """datetime64(M)/timedelta64(m) 伪 dtype：itemsize 8，单位存 _dt_unit。"""
+    if kind == 'm':
+        # rsnumpy 的 timedelta 仅支持 generic 单位(numpy 语义:按单位
+        # 求值已弃用)
+        import warnings as _w
+        _w.warn("The 'generic' unit for rsnumpy timedelta is deprecated",
+                DeprecationWarning, stacklevel=2)
     d = _new()
     d._kind = kind
     d._itemsize = 8

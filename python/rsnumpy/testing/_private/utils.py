@@ -278,7 +278,24 @@ def build_err_msg(arrays, err_msg, header='Items are not equal:',
 
             if isinstance(a, ndarray):
                 # precision argument is only needed if the objects are ndarrays
-                r_func = partial(array_repr, precision=precision)
+                def _r_func(_a=a):
+                    # 真实 numpy 的 array2string 支持 precision(rs 的
+                    # array_repr 忽略该参数);非数值/结构化回退 rs repr
+                    _hook = globals().get('_REAL_FMT')
+                    if _hook is not None and len(_hook) > 2:
+                        try:
+                            _a2s, _f64, _npr = _hook
+                            _dn = str(getattr(_a.dtype, 'name', '') or 'float64')
+                            _s = _a2s(_npr.asarray(_a.tolist(), dtype=_dn),
+                                      precision=precision, separator=', ')
+                            # numpy 语义：默认平台 dtype(f64/i64)省略 dtype 后缀
+                            if _dn in ('float64', 'int64', 'bool'):
+                                return f'array({_s})'
+                            return f'array({_s}, dtype={_dn})'
+                        except Exception:
+                            pass
+                    return partial(array_repr, precision=precision)(_a)
+                r_func = _r_func
             else:
                 r_func = repr
 
@@ -402,8 +419,32 @@ def assert_equal(actual, desired, err_msg='', verbose=True, *, strict=False):
         _MA = None
     if _MA is not None and (isinstance(actual, _MA)
                             or isinstance(desired, _MA)):
+        # 全 masked 一方：masked 位置不参与比较（numpy 语义）
+        def _all_masked(m):
+            _m = getattr(m, '_mask', None)
+            if _m is None or _m is False:
+                return False
+            try:
+                _ml = np.asarray(_m).ravel().tolist()
+                return bool(_ml) and all(bool(v) for v in _ml)
+            except Exception:
+                return False
+        if _all_masked(actual) or _all_masked(desired):
+            return
         _ad = actual._data if isinstance(actual, _MA) else actual
         _dd = desired._data if isinstance(desired, _MA) else desired
+        # masked 位置不参与比较:用对方的值填充(对齐 nan/masked 语义)
+        try:
+            if isinstance(actual, _MA) and not isinstance(desired, _MA):
+                _m = np.asarray(actual._mask)
+                if _m.any():
+                    _ad = np.where(_m, _dd, np.asarray(_ad))
+            if isinstance(desired, _MA) and not isinstance(actual, _MA):
+                _m = np.asarray(desired._mask)
+                if _m.any():
+                    _dd = np.where(_m, _ad, np.asarray(_dd))
+        except Exception:
+            pass
         assert_equal(_ad, _dd, err_msg, verbose, strict=strict)
         if isinstance(actual, _MA) and isinstance(desired, _MA):
             assert_equal(np.array(actual._mask, dtype='bool'),
@@ -484,8 +525,13 @@ def assert_equal(actual, desired, err_msg='', verbose=True, *, strict=False):
     try:
         isdesnat = isnat(desired)
         isactnat = isnat(actual)
-        dtypes_match = (np.asarray(desired).dtype.type ==
-                        np.asarray(actual).dtype.type)
+        try:
+            dtypes_match = (np.asarray(desired).dtype.type ==
+                            np.asarray(actual).dtype.type)
+        except Exception:
+            # 非数值元素(warnings filter 元组里的 None/类/regex 等)
+            # 不能 asarray,按 dtype 不匹配处理
+            dtypes_match = False
         if isdesnat and isactnat:
             # If both are NaT (and have the same dtype -- datetime or
             # timedelta) they are considered equal.
@@ -499,8 +545,28 @@ def assert_equal(actual, desired, err_msg='', verbose=True, *, strict=False):
 
     # Inf/nan/negative zero handling
     try:
-        isdesnan = isnan(desired)
-        isactnan = isnan(actual)
+        # complex(含 nan 分量):rs 的 isnan 对 complex 失真,逐元素检测
+        def _is_cplx(v):
+            return isinstance(v, complex) or getattr(v, '_dtype', None) in (
+                'complex64', 'complex128')
+        if _is_cplx(desired) or _is_cplx(actual):
+            def _has_nan(v):
+                if isinstance(v, complex):
+                    return v != v
+                try:
+                    return builtins_any(x != x for x in v.ravel().tolist())
+                except Exception:
+                    return False
+            isdesnan = _has_nan(desired)
+            isactnan = _has_nan(actual)
+        else:
+            isdesnan = isnan(desired)
+            isactnan = isnan(actual)
+    except (AttributeError, TypeError, ValueError):
+        # 非数值元素(warnings filter 元组里的 None/类/regex 等)
+        # 不参与 nan/inf 特判,直接跳到逐值比较
+        isdesnan = isactnan = False
+    try:
         if isdesnan and isactnan:
             return  # both nan, so equal
 
@@ -521,7 +587,7 @@ def assert_equal(actual, desired, err_msg='', verbose=True, *, strict=False):
             if not signbit(desired) == signbit(actual):
                 raise AssertionError(msg)
 
-    except (TypeError, ValueError, NotImplementedError):
+    except (TypeError, ValueError, NotImplementedError, AttributeError):
         pass
 
     try:
@@ -653,6 +719,12 @@ def assert_almost_equal(actual, desired, decimal=7, err_msg='', verbose=True):
     from rsnumpy import imag, iscomplexobj, real
     from rsnumpy._core import ndarray
 
+    # np.ma.masked 单例:与任意值比较恒通过(numpy 语义:masked 位置
+    # 不参与比较;rs 的 real/iscomplexobj 会把它包成 object 数组)
+    _masked_s = getattr(getattr(np, 'ma', None), 'masked', None)
+    if _masked_s is not None and (actual is _masked_s or desired is _masked_s):
+        return
+
     # Handle complex numbers: separate into real/imag to handle
     # nan/inf/negative zero correctly
     # XXX: catch ValueError for subclasses of ndarray where iscomplex fail
@@ -665,6 +737,16 @@ def assert_almost_equal(actual, desired, decimal=7, err_msg='', verbose=True):
         header = (f'Arrays are not almost equal to {decimal} decimals')
         return build_err_msg([actual, desired], err_msg, verbose=verbose,
                              header=header)
+
+    # complex 标量:逐分量判定(rs 的 isnan/isfinite 对 complex 失真)
+    if isinstance(actual, complex) and isinstance(desired, complex):
+        _ok_r = (actual.real == desired.real
+                 or (actual.real != actual.real and desired.real != desired.real))
+        _ok_i = (actual.imag == desired.imag
+                 or (actual.imag != actual.imag and desired.imag != desired.imag))
+        if not (_ok_r and _ok_i):
+            raise AssertionError(_build_err_msg())
+        return
 
     if usecomplex:
         if iscomplexobj(actual):
@@ -812,8 +894,8 @@ def _fmt_err(v):
     # 有真实 numpy 时直接用其 array2string(格式完全对齐)
     if _REAL_FMT is not None:
         try:
-            _a2s, _f64 = _REAL_FMT
-            return _a2s(_f64(v))
+            _a2s, _f64 = _REAL_FMT[:2]
+            return _a2s(_f64(float(v)))
         except Exception:
             pass
     if isinstance(v, bool):
@@ -845,6 +927,9 @@ def _fmt_err(v):
         if '.' not in s:
             s += '.'
     return s
+
+
+from builtins import any as builtins_any
 
 
 def _fmt_scalar_np(v, precision=8):
@@ -882,6 +967,17 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
     __tracebackhide__ = True  # Hide traceback for py.test
     from rsnumpy._core import all, array2string, errstate, inf, isnan, max, object_
 
+    # 全 masked 输入（标量或数组）：masked 位置不参与比较（numpy 语义）；
+    # 必须在 asanyarray 之前判定——asanyarray 会把 MaskedArray 降级丢 mask
+    for _arr in (x, y):
+        _m = getattr(_arr, '_mask', None)
+        if _m is not None and _m is not False:
+            try:
+                _ml = np.asarray(_m).ravel().tolist()
+                if _ml and all(bool(v) for v in _ml):
+                    return
+            except Exception:
+                pass
     x = np.asanyarray(x)
     y = np.asanyarray(y)
 
@@ -890,7 +986,7 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
 
     def isnumber(x):
         # rsnumpy 所有数值 dtype 共用一个 DType 类，_is_numeric 按实例 kind 判定
-        return getattr(x.dtype, '_is_numeric', False)
+        return getattr(getattr(x, 'dtype', None), '_is_numeric', False)
 
     def istime(x):
         return x.dtype.char in "Mm"
@@ -945,6 +1041,11 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
         elif isinstance(y_id, bool) or y_id.ndim == 0:
             return np.bool(y_id)
         else:
+            # numpy 语义:位置掩码按广播形状对齐
+            # (x (2,2) 与 y (2,) 的 nan 位置须广播一致)
+            if tuple(y_id.shape) != tuple(x_id.shape):
+                y_id = np.broadcast_to(np.asarray(y_id),
+                                       np.asarray(x_id).shape)
             return y_id
 
     def assert_same_inf_values(x, y, infs_mask):
@@ -965,6 +1066,26 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
             y = y[infs_mask]
         else:
             assert infs_mask
+
+        # 混合 complex/float:rs 的 __eq__ 走 f64 实部比较丢虚部差异,
+        # 逐元素 Python 判定(复杂标量的 inf+1j vs inf 须报差异)
+        if (getattr(x, '_dtype', None) in ('complex64', 'complex128')
+                or getattr(y, '_dtype', None) in ('complex64', 'complex128')):
+            try:
+                _diff = [a != b for a, b in zip(x.ravel().tolist(),
+                                                y.ravel().tolist())]
+            except Exception:
+                _diff = None
+            if _diff is not None:
+                if any(_diff):
+                    msg = build_err_msg(
+                        [x, y],
+                        err_msg + '\ninf values mismatch:',
+                        verbose=verbose, header=header,
+                        names=names,
+                        precision=precision)
+                    raise AssertionError(msg)
+                return
 
         if robust_any_difference(x, y):
             msg = build_err_msg(
@@ -1008,7 +1129,7 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
                     func=isinf_func,
                     hasval='inf')
                 assert_same_inf_values(x, y, infs_mask)
-                flagged |= infs_mask
+                flagged = np.logical_or(flagged, infs_mask)
 
         elif istime(x) and istime(y):
             # If one is datetime64 and the other timedelta64 there is no point
@@ -1023,7 +1144,6 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
                     x, y, func=isnan, hasval=dt.na_object)
 
         if flagged.ndim > 0:
-            x, y = x[~flagged], y[~flagged]
             # Only do the comparison if actual values are left
             if x.size == 0:
                 return
@@ -1032,6 +1152,34 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
             return
 
         val = comparison(x, y)
+        # inf 位置豁免(equal_inf 块已确认双方 inf 对齐;z 的 nan 来自
+        # inf-inf)——按 flagged 豁免,保持原始位置索引(numpy 消息语义)
+        try:
+            if getattr(flagged, 'ndim', 0) > 0 and bool(np.any(flagged)):
+                val = np.logical_or(val, flagged)
+        except Exception:
+            pass
+        # 0-d 输入经 isclose 等可能返回 (1,)，归一回 0-d（numpy 语义）
+        if (getattr(ox, 'ndim', 1) == 0 and getattr(oy, 'ndim', 1) == 0
+                and getattr(val, 'ndim', 0) == 1 and getattr(val, 'size', 0) == 1):
+            val = val.reshape(())
+        # equal_nan：双方同为 nan 的位置视为相等（numpy 语义——rs 的
+        # 字符串/na_object 比较对 nan 位置返回 False）
+        if equal_nan and isnumber(x) and isnumber(y):
+            try:
+                if getattr(x, '_dtype', None) in ('complex64', 'complex128') \
+                        and isinstance(y, np.ndarray) \
+                        and getattr(y, '_dtype', None) in ('complex64', 'complex128'):
+                    # rs 的 isnan 不支持 complex:逐元素 Python nan 检测
+                    _xn = [v != v for v in x.ravel().tolist()]
+                    _yn = [v != v for v in y.ravel().tolist()]
+                    _both_nan = np.array([a and b for a, b in zip(_xn, _yn)])
+                else:
+                    _both_nan = np.logical_and(np.isnan(x), np.isnan(y))
+                if np.any(_both_nan):
+                    val = np.logical_or(val, _both_nan)
+            except (TypeError, ValueError, AttributeError):
+                pass
         invalids = np.logical_not(val)
 
         if isinstance(val, bool):
@@ -1040,6 +1188,20 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
         else:
             reduced = val.ravel()
             cond = reduced.all()
+
+        # 全 masked 输入（标量或数组）：masked 位置不参与比较（numpy 语义），
+        # rsnumpy 的 MaskedArray 非子类、eq 不传播 masked，这里显式判定
+        if not cond:
+            for _arr in (x, y):
+                _m = getattr(_arr, '_mask', None)
+                if _m is not None and _m is not False:
+                    try:
+                        _ml = np.asarray(_m).ravel().tolist()
+                        if _ml and all(bool(v) for v in _ml):
+                            cond = True
+                            break
+                    except Exception:
+                        pass
 
         # The below comparison is a hack to ensure that fully masked
         # results, for which val.ravel().all() returns np.ma.masked,
@@ -1052,10 +1214,10 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
             remarks = [(f'Mismatched elements: {n_mismatch} / {n_elements} '
                         f'({percent_mismatch:.3g}%)')]
             if invalids.ndim != 0:
-                if flagged.ndim > 0:
-                    positions = np.argwhere(np.asarray(~flagged))[invalids]
-                else:
-                    positions = np.argwhere(np.asarray(invalids))
+                # 直接用 invalids 的非零位置(等价 numpy 的
+                # argwhere(~flagged)[invalids],且规避 rs 布尔索引对
+                # 多维 (k, ndim) 数组的形状失真)
+                positions = np.argwhere(np.asarray(invalids))
                 # rsnumpy 内部 f64 存储：argwhere 行元素取出来是 float，
                 # 直接 tuple(p) 会触发 float 索引保护（numpy 收 int）。
                 def _pos(p):
@@ -1084,18 +1246,30 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
 
             with errstate(all='ignore'):
                 # ignore errors for non-numeric types
-                with contextlib.suppress(TypeError):
+                with contextlib.suppress(TypeError, AttributeError):
                     error = abs(x - y)
-                    if np.issubdtype(x.dtype, np.unsignedinteger):
+                    if np.issubdtype(getattr(x, 'dtype', None),
+                                     np.unsignedinteger):
                         error2 = abs(y - x)
-                        np.minimum(error, error2, out=error)
+                        # rs 的 minimum 不支持 out=:用返回值
+                        error = np.minimum(error, error2)
 
                     _err_flat = np.asarray(error).reshape(-1)
                     _inv_flat = np.asarray(invalids).reshape(-1)
-                    reduced_error = _err_flat[_inv_flat]
+                    if _inv_flat.size == _err_flat.size:
+                        reduced_error = _err_flat[_inv_flat]
+                    else:
+                        # val 为 bool 标量(子类 __eq__)时 invalids 是标量,
+                        # 全部元素都是 mismatch
+                        reduced_error = _err_flat
                     max_abs_error = max(reduced_error)
                     _err_kind = getattr(getattr(error, 'dtype', None),
                                         'kind', 'f')
+                    # rs 的 int-int 减法降级 f64:双方均整型时按 int 显示
+                    _xk = getattr(getattr(x, 'dtype', None), 'kind', 'f')
+                    _yk = getattr(getattr(y, 'dtype', None), 'kind', 'f')
+                    if _xk in ('i', 'u') and _yk in ('i', 'u'):
+                        _err_kind = 'i'
                     if getattr(error, 'dtype', None) is object_ or getattr(error, 'dtype', None) == 'object':
                         remarks.append(
                             'Max absolute difference among violations: '
@@ -1120,6 +1294,9 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
                     if all(~_nai_flat):
                         max_rel_error = array(inf)
                     else:
+                        # val 为 bool 标量(子类 __eq__)时形状对齐同 max 块
+                        if _nai_flat.size != _err_flat.size:
+                            _nai_flat = np.ones(_err_flat.size, dtype='bool')
                         nonzero_invalid_error = _err_flat[_nai_flat]
                         broadcasted_y = np.broadcast_to(
                             np.asarray(y), np.asarray(error).shape)
@@ -1368,6 +1545,60 @@ def assert_array_almost_equal(actual, desired, decimal=6, err_msg='',
 
     """
     __tracebackhide__ = True  # Hide traceback for py.test
+
+    # np.ma.masked 单例:与任意值比较恒通过(否则被 asanyarray 包成
+    # (1,) object 数组导致形状失配)
+    _masked_s = getattr(getattr(np, 'ma', None), 'masked', None)
+    if _masked_s is not None and (actual is _masked_s or desired is _masked_s):
+        return
+    # MaskedArray 豁免:masked 位置不参与比较,用对方的值填充
+    # (rs 的 MaskedArray 非子类,eq 不传播 masked)
+    try:
+        from rsnumpy.ma.core import MaskedArray as _MA
+    except Exception:
+        _MA = None
+    _masked = np.ma.masked if hasattr(np, 'ma') else None
+    if _MA is not None and (isinstance(actual, _MA)
+                            or isinstance(desired, _MA)
+                            or actual is _masked or desired is _masked):
+        def _fill_masked(m, other):
+            _m = getattr(m, '_mask', None)
+            if _m is None or _m is False:
+                return m
+            try:
+                _ml = np.asarray(_m)
+                if _ml.any():
+                    _od = np.asarray(getattr(other, '_data', other))
+                    _md = np.asarray(getattr(m, '_data', m))
+                    # rs 的 _mask 是叶子级平坦存储:按 data 形状重塑后
+                    # 再 where(rs 的 where 压平,结果 reshape 回 data 形状)
+                    if _md.shape:
+                        _ml = _ml.reshape(_md.shape)
+                    _r = np.where(_ml, _od, _md)
+                    return _r.reshape(_md.shape) \
+                        if hasattr(_r, 'reshape') else _r
+            except Exception:
+                pass
+            return m
+        def _replace_masked(m, other):
+            # np.ma.masked 单例:无 _mask 属性,整体视为全 masked
+            if _masked is not None and m is _masked:
+                return np.asarray(getattr(other, '_data', other))
+            _m = getattr(m, '_mask', None)
+            if _m is None or _m is False:
+                return m
+            try:
+                _ml = np.asarray(_m)
+                if _ml.all():
+                    return np.asarray(getattr(other, '_data', other))
+            except Exception:
+                pass
+            return _fill_masked(m, other)
+        if isinstance(actual, _MA) and not isinstance(desired, _MA):
+            actual = _replace_masked(actual, desired)
+        if isinstance(desired, _MA) and not isinstance(actual, _MA):
+            desired = _replace_masked(desired, actual)
+
     from rsnumpy._core import number, result_type
     from rsnumpy._core.numerictypes import issubdtype
 
@@ -1376,12 +1607,61 @@ def assert_array_almost_equal(actual, desired, decimal=6, err_msg='',
         # casting of x later.
         dtype = result_type(y, 1.)
         y = np.asanyarray(y, dtype)
+        # object 数组：Rust 占位算术失真（元素按 0 参与），逐元素 Python 计算
+        if getattr(x, '_dtype', None) == 'object':
+            from rsnumpy import _flatten_vals
+            try:
+                xf = (list(_flatten_vals(x._raw_data))
+                      if getattr(x, '_raw_data', None) is not None
+                      else x.flatten().tolist())
+                yf = (y.ravel().tolist() if getattr(y, 'ndim', 0) > 0
+                      else [y.item() if hasattr(y, 'item') else y])
+                if len(yf) == 1 and len(xf) > 1:
+                    yf = yf * len(xf)  # 标量广播
+                if len(xf) == len(yf):
+                    zf = [abs(float(a) - float(b))
+                          if isinstance(a, (int, float, bool))
+                          and not isinstance(a, bool) else 1.0
+                          for a, b in zip(xf, yf)]
+                else:
+                    zf = [1.0] * len(xf)
+                res = np.array(zf) < 1.5 * 10.0**(-decimal)
+                return res.reshape(x.shape)
+            except Exception:
+                pass
         z = abs(x - y)
+        # rs 的 abs 对 complex 返回 complex dtype:取实部(模为实数)
+        if getattr(z, '_dtype', None) in ('complex64', 'complex128'):
+            z = z.real
 
-        if not issubdtype(z.dtype, number):
+        _zdt = getattr(z, 'dtype', None)
+        if _zdt is None:
+            # 标量相减返回 Python float:直接布尔判定
+            return bool(z < 1.5 * 10.0**(-decimal))
+        if not issubdtype(_zdt, number):
+            z = z.astype(np.float64)  # handle object arrays
             z = z.astype(np.float64)  # handle object arrays
 
-        return z < 1.5 * 10.0**(-decimal)
+        _lt = z < 1.5 * 10.0**(-decimal)
+        # rs 的 complex 减法对相同 inf 值产生 nan(inf-inf),且布尔索引
+        # 剔除会丢虚部——相等位置(含 nan 语义已修的 __eq__)直接豁免
+        _xc = (isinstance(x, complex)
+               or getattr(x, '_dtype', None) in ('complex64', 'complex128'))
+        if _xc:
+            try:
+                # 相等位置豁免 + 双方同为 nan 分量的位置豁免(equal_nan
+                # 语义);ravel().tolist 取完整复数元素(asanyarray 后
+                # rs 占位算术对 inf/nan 失真)
+                xf = (x.ravel().tolist() if hasattr(x, 'ravel') else [x])
+                yf = (y.ravel().tolist() if hasattr(y, 'ravel') else [y])
+                _eq = np.array([a == b or (a != a and b != b)
+                                for a, b in zip(xf, yf)], dtype='bool')
+                if getattr(x, 'ndim', 1) == 0:
+                    _eq = _eq.reshape(())
+                _lt = np.logical_or(_lt, _eq)
+            except Exception:
+                pass
+        return _lt
 
     assert_array_compare(compare, actual, desired, err_msg=err_msg, verbose=verbose,
                          header=f'Arrays are not almost equal to {decimal} decimals',
@@ -1990,9 +2270,44 @@ def assert_array_almost_equal_nulp(x, y, nulp=1):
     """
     __tracebackhide__ = True  # Hide traceback for py.test
     import rsnumpy as np
+    # f32 语义(complex64/float32 标记):底层 f64 存储未量化到 f32
+    # 网格,偏移/ULP 比会擦线失真;先按 f32 量化实/虚部,并把幅值
+    # 数组标记为 float32 使 np.spacing 给出 f32 ULP(numpy 里
+    # float32/complex64 的 ULP 就是 f32 尺度)
+    if (getattr(x, '_dtype', None) in ('complex64', 'float32')
+            or getattr(y, '_dtype', None) in ('complex64', 'float32')):
+        import struct as _struct
+
+        def _q(v):
+            try:
+                return _struct.unpack('f', _struct.pack('f', v))[0]
+            except Exception:
+                return v
+
+        def _qarr(a):
+            try:
+                _aa = np.asarray(a)
+                fl = _aa.ravel().tolist()
+                if getattr(_aa, '_dtype', '') == 'complex64':
+                    q = [complex(_q(v.real), _q(v.imag)) for v in fl]
+                    return np.array(q, dtype='complex64').reshape(_aa.shape)
+                q = [_q(v) for v in fl]
+                return np.array(q, dtype='float32').reshape(_aa.shape)
+            except Exception:
+                return a
+        x = _qarr(x)
+        y = _qarr(y)
     ax = np.abs(x)
     ay = np.abs(y)
-    spacing = np.spacing(np.where(ax > ay, ax, ay))
+    _mx = np.where(ax > ay, ax, ay)
+    # f32 语义(complex64/float32 标记):幅值标记 float32,使
+    # np.spacing 给出 f32 ULP(底层 f64 数据不动)
+    if (getattr(x, '_dtype', None) in ('complex64', 'float32')
+            or getattr(y, '_dtype', None) in ('complex64', 'float32')):
+        _mx = np.asarray(_mx)
+        if hasattr(_mx, 'reshape'):
+            _mx._dtype = 'float32'
+    spacing = np.spacing(_mx)
     ref = nulp * spacing
     diff = np.abs(x - y)
 
@@ -2000,13 +2315,8 @@ def assert_array_almost_equal_nulp(x, y, nulp=1):
         if np.iscomplexobj(x) or np.iscomplexobj(y):
             msg = f"Arrays are not equal to {nulp} ULP"
         else:
-            dtype = np.dtype(np.common_type(np.asarray(x), np.asarray(y)))
-            if dtype in (np.float16, np.float32, np.float64):
-                max_nulp = np.max(nulp_diff(x, y))
-                msg = f"Arrays are not equal to {nulp} ULP (max is {max_nulp:g})"
-            else:
-                msg = f"Arrays are not equal to {nulp} ULP"
-
+            max_nulp = np.max(nulp_diff(x, y))
+            msg = f"Arrays are not equal to {nulp} ULP (max is {max_nulp:g})"
         raise AssertionError(msg)
 
 
@@ -2093,34 +2403,75 @@ def nulp_diff(x, y, dtype=None):
     >>> nulp_diff(1, 1 + np.finfo(x.dtype).eps)
     1.0
     """
-    import rsnumpy as np
-    if dtype:
-        x = np.asarray(x, dtype=dtype)
-        y = np.asarray(y, dtype=dtype)
+    import struct as _struct
+    xa = np.asarray(x)
+    ya = np.asarray(y)
+
+    def _dname(a):
+        try:
+            return str(np.dtype(a.dtype))
+        except Exception:
+            try:
+                return str(np.dtype(type(a)))
+            except Exception:
+                return 'float64'
+
+    dx, dy = _dname(xa), _dname(ya)
+    # 同宽输入保持原 dtype(rs 的 common_type 对 f32+f32 降级 f64)
+    if dx == dy:
+        tname = dx
     else:
-        x = np.asarray(x)
-        y = np.asarray(y)
+        t = np.common_type(xa, ya)
+        tname = str(np.dtype(t)) if not isinstance(t, str) else t
+    if 'complex' in tname:
+        _ct = np.complex64 if '64' in tname else np.complex128
+        _ft = np.float32 if _ct is np.complex64 else np.float64
+        _ffmt, _ifmt, _top = (('<f', '<i', -(2**31)) if _ft is np.float32
+                              else ('<d', '<q', -(2**63)))
+        cx = np.asarray(xa, dtype=_ct).ravel().tolist()
+        cy = np.asarray(ya, dtype=_ct).ravel().tolist()
+        if len(cx) != len(cy):
+            raise ValueError(f"Arrays do not have the same shape: "
+                             f"{len(cx)} - {len(cy)}")
 
-    t = np.common_type(x, y)
-    if np.iscomplexobj(x) or np.iscomplexobj(y):
-        raise NotImplementedError("_nulp not implemented for complex array")
+        def _ulp_pair(vx, vy):
+            if vx != vx and vy != vy:
+                return 0
+            out = []
+            for a, b in ((vx.real, vy.real), (vx.imag, vy.imag)):
+                ba = _struct.unpack(_ifmt, _struct.pack(_ffmt, a))[0]
+                bb = _struct.unpack(_ifmt, _struct.pack(_ffmt, b))[0]
+                sa = _top - ba if ba < 0 else ba
+                sb = _top - bb if bb < 0 else bb
+                out.append(abs(sa - sb))
+            return max(out)
 
-    x = np.array([x], dtype=t)
-    y = np.array([y], dtype=t)
+        vals = [_ulp_pair(a, b) for a, b in zip(cx, cy)]
+        return np.array(vals, dtype='float64').reshape(tuple(xa.shape))
 
-    x[np.isnan(x)] = np.nan
-    y[np.isnan(y)] = np.nan
+    if 'float32' in tname:
+        _ffmt, _ifmt, _top = '<f', '<i', -(2**31)
+    elif 'float16' in tname:
+        _ffmt, _ifmt, _top = '<e', '<h', -(2**15)
+    else:
+        _ffmt, _ifmt, _top = '<d', '<q', -(2**63)
+    fx = np.asarray(xa, dtype=tname).ravel().tolist()
+    fy = np.asarray(ya, dtype=tname).ravel().tolist()
+    if len(fx) != len(fy):
+        raise ValueError(f"Arrays do not have the same shape: "
+                         f"{len(fx)} - {len(fy)}")
 
-    if not x.shape == y.shape:
-        raise ValueError(f"Arrays do not have the same shape: {x.shape} - {y.shape}")
+    def _ulp_one(a, b):
+        if a != a and b != b:
+            return 0  # 不同 NAN 表示之间的 ULP 差视为 0(numpy 语义)
+        ba = _struct.unpack(_ifmt, _struct.pack(_ffmt, a))[0]
+        bb = _struct.unpack(_ifmt, _struct.pack(_ffmt, b))[0]
+        sa = _top - ba if ba < 0 else ba
+        sb = _top - bb if bb < 0 else bb
+        return abs(sa - sb)
 
-    def _diff(rx, ry, vdt):
-        diff = np.asarray(rx - ry, dtype=vdt)
-        return np.abs(diff)
-
-    rx = integer_repr(x)
-    ry = integer_repr(y)
-    return _diff(rx, ry, t)
+    vals = [_ulp_one(a, b) for a, b in zip(fx, fy)]
+    return np.array(vals, dtype='float64').reshape(tuple(xa.shape))
 
 
 def _integer_repr(x, vdt, comp):

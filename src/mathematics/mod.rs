@@ -647,15 +647,52 @@ fn correlate(py: Python<'_>, a: &NdArray, v: &NdArray, mode: &str) -> PyResult<N
     let x: Vec<f64> = a.data.iter().copied().collect();
     let mut h: Vec<f64> = v.data.iter().copied().collect();
     h.reverse();
-    let out = py
-        .detach(|| convolve_modes(&x, &h, mode))
-        .map_err(PyValueError::new_err)?;
-    let arr = Array::from_shape_vec(IxDyn(&[out.len()]), out)
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(NdArray {
-        imag: None,
-        data: arr,
-    })
+    if a.imag.is_none() && v.imag.is_none() {
+        // 纯实数互相关（原路径）
+        let out = py
+            .detach(|| convolve_modes(&x, &h, mode))
+            .map_err(PyValueError::new_err)?;
+        let arr = Array::from_shape_vec(IxDyn(&[out.len()]), out)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(NdArray {
+            imag: None,
+            data: arr,
+        })
+    } else {
+        // 复数互相关（无共轭，numpy.correlate 语义）：
+        //   correlate(a, v) = conv(a, reverse(v))
+        // 实/虚部各自 reverse 后按复数乘法四路实数卷积合成：
+        //   real = conv(x_re, h_re) - conv(x_im, h_im)
+        //   imag = conv(x_re, h_im) + conv(x_im, h_re)
+        // 缺失的虚部补零到与实部等长（处理实/复混合输入）。
+        let x_im: Vec<f64> = match &a.imag {
+            Some(im) => im.iter().copied().collect(),
+            None => vec![0.0; x.len()],
+        };
+        let mut h_im: Vec<f64> = match &v.imag {
+            Some(im) => im.iter().copied().collect(),
+            None => vec![0.0; h.len()],
+        };
+        h_im.reverse();
+        let out = py
+            .detach(|| -> Result<(Vec<f64>, Vec<f64>), String> {
+                let rr = convolve_modes(&x, &h, mode)?;
+                let ri = convolve_modes(&x, &h_im, mode)?;
+                let ir = convolve_modes(&x_im, &h, mode)?;
+                let ii = convolve_modes(&x_im, &h_im, mode)?;
+                let n = rr.len();
+                let re = (0..n).map(|i| rr[i] - ii[i]).collect::<Vec<f64>>();
+                let im = (0..n).map(|i| ri[i] + ir[i]).collect::<Vec<f64>>();
+                Ok((re, im))
+            })
+            .map_err(PyValueError::new_err)?;
+        let (re, im) = out;
+        let re_arr = Array::from_shape_vec(IxDyn(&[re.len()]), re)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let im_arr = Array::from_shape_vec(IxDyn(&[im.len()]), im)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(NdArray::from_complex(re_arr, im_arr))
+    }
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {

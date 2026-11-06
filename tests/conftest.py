@@ -52,7 +52,7 @@ faulthandler.enable()  # print a Python traceback if a numpy test crashes the C 
 # 替换前导入;导入后立刻恢复 sys.modules["numpy"] 供 rsnumpy 占用
 try:
     import numpy as _np_real_fmt
-    _REAL_FMT = (_np_real_fmt.array2string, _np_real_fmt.float64)
+    _REAL_FMT = (_np_real_fmt.array2string, _np_real_fmt.float64, _np_real_fmt)
     sys.modules.pop("numpy", None)
     for _k in [k for k in sys.modules if k == "numpy" or k.startswith("numpy.")]:
         del sys.modules[_k]
@@ -362,10 +362,21 @@ _testing.IS_PYPY = False
 import rsnumpy.testing as _real_testing_mod
 # 报错消息格式对齐用的真实 numpy array2string(在 numpy 别名替换前快照)
 if _REAL_FMT is not None:
-    setattr(_real_testing_mod, '_REAL_FMT', _REAL_FMT)
+    try:
+        setattr(_real_testing_mod._private.utils, '_REAL_FMT', _REAL_FMT)
+        # tests/testing/_private/utils.py 副本(以 'testing._private.utils'
+        # 导入并被 stub 6b 复制)也需要同一钩子
+        try:
+            import testing._private.utils as _t_utils
+            setattr(_t_utils, '_REAL_FMT', _REAL_FMT)
+        except Exception:
+            pass
+    except Exception:
+        pass
 for _n in ("assert_equal", "assert_array_equal", "assert_array_almost_equal",
            "assert_allclose", "assert_almost_equal", "assert_warns",
-           "assert_no_warnings"):
+           "assert_no_warnings", "assert_array_max_ulp",
+           "assert_array_almost_equal_nulp", "assert_array_less"):
     setattr(_testing, _n, getattr(_real_testing_mod, _n))
 
 
@@ -397,7 +408,6 @@ def _gen_alignment_data(dtype=float, type='binary', max_size=24):
     yield out, inp1, inp2, "alignment data"
 
 
-_testing.assert_array_max_ulp = _assert_array_max_ulp
 _testing._gen_alignment_data = _gen_alignment_data
 _testing.check_support_sve = lambda *a, **k: False
 sys.modules["numpy.testing"] = _testing

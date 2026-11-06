@@ -243,12 +243,29 @@ class ndarray:
         imag: 数组的虚部。
     """
 
+    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
+        # CPython operator 模块分发(如 operator.concat):无对应
+        # 实现,模仿 numpy 直接 TypeError("Concatenation operation is
+        # not implemented for NumPy arrays");其余协议返回
+        # NotImplemented 交还调用方回退。
+        if ufunc == 'operator.concat':
+            raise TypeError(
+                "Concatenation operation is not implemented for "
+                "rsnumpy arrays")
+        return NotImplemented
+
     def __init__(self, data=None, _dtype="float64", _fields=None, _raw_data=None,
                  shape=None, dtype=None, buffer=None, offset=0, strides=None,
                  order=None, _na_object=None, _vstring=False, **_kw):
         # **_kw 吸收子类 __new__ 透传的自定义参数（numpy 风格子类化：
         # MyArray.__new__ 自定义参数会原样落到基类 __init__）。
         _ = _kw
+        # numpy 语义:np.ndarray 第一位置参数是 shape 而非 data——
+        # np.ndarray((3, 0)) 是 shape (3, 0) 的空数组(零填充),不是
+        # 3 元素数据。tuple 首参(且无 buffer)一律按 shape 归一化。
+        if isinstance(data, tuple) and buffer is None and shape is None:
+            shape = data
+            data = None
         # numpy 兼容的 buffer 视图构造：Subclass(shape, dtype=..., buffer=arr)
         # —— 第一参是形状而非数据，复用 buffer 的值。
         if buffer is not None:
@@ -415,7 +432,9 @@ class ndarray:
                     elif has_c:
                         # 包含复数 → 交由 Rust 原生复数解析（保留形状与虚部）
                         self._array = np.ndarray(data)
-                        _dtype = "complex128"
+                        # numpy 语义：显式 complex64 标记保留（f32 源的
+                        # 复数运算），否则统一 complex128
+                        _dtype = _dtype if _dtype == "complex64" else "complex128"
                     else:
                         try:
                             raw = np.ndarray(data)
@@ -749,6 +768,29 @@ class ndarray:
 
     def __getitem__(self, key):
         res = self._getitem_impl(key)
+        # rs 布尔索引对 complex 数组丢虚部(Rust 层按 f64 占位):逐元素重建
+        _bool_key = (isinstance(key, (list, tuple)) and key
+                     and builtins.all(isinstance(k, (bool, bool_)) for k in key))
+        if not _bool_key and _is_ndarray(key) \
+                and getattr(key, '_dtype', None) == 'bool':
+            _bool_key = True
+        if _bool_key and _is_ndarray(res) \
+                and getattr(self, '_dtype', None) in ('complex64', 'complex128'):
+            try:
+                flat = (_flatten_vals(self._raw_data)
+                        if getattr(self, '_raw_data', None) is not None
+                        else self.ravel().tolist())
+                kf = (builtins.list(key) if isinstance(key, (list, tuple))
+                      else key.ravel().tolist())
+                picked = [flat[i] for i, k in enumerate(kf) if k]
+                out = ndarray(picked)
+                out._dtype = self._dtype
+                _dto = getattr(self, '_dtype_obj', None)
+                if _dto is not None:
+                    out._dtype_obj = _dto
+                return out
+            except Exception:
+                pass
         # 切片语义 = 视图：记录逻辑血缘(may_share_memory/shares_memory
         # 用 _rs_parent 链表达;rsnumpy 切片是拷贝,无真实共享缓冲)
         _is_slice_key = (isinstance(key, slice)
@@ -1868,16 +1910,46 @@ class ndarray:
         return result
 
     def __eq__(self, other):
+        # 仅真正的结构化 dtype（有字段名）走结构化比较；StringDType 等
+        # 无 names 的 dtype 走通用路径（_struct_eq 对其会误判崩溃）
         if getattr(self, '_dtype_obj', None) is not None and \
-                _is_ndarray(other) and getattr(other, '_dtype_obj', None) is not None:
+                getattr(self._dtype_obj, 'names', None) and \
+                _is_ndarray(other) and getattr(other, '_dtype_obj', None) is not None and \
+                getattr(other._dtype_obj, 'names', None):
+            # numpy 语义:字段名集合不同(非仅顺序)的比较抛 TypeError
+            _na1 = list(getattr(self._dtype_obj, 'names') or ())
+            _na2 = list(getattr(other._dtype_obj, 'names') or ())
+            if set(_na1) != set(_na2):
+                raise TypeError('field names of the arrays do not match: '
+                                f'{_na1} vs {_na2}')
             return _struct_eq(self, other)
         # 字符串/字节数组：按原始 Python 值逐元素比较（底层是 f64 占位）
         if getattr(self, '_raw_data', None) is not None and \
                 _is_ndarray(other) and getattr(other, '_raw_data', None) is not None:
             a_flat = _flatten_vals(self._raw_data)
             b_flat = _flatten_vals(other._raw_data)
-            if self.size == other.size and self.shape == other.shape:
+            # StringDType 的 na_object：双方同为 na（含 nan）视为相等
+            _na = getattr(getattr(self, '_dtype_obj', None), 'na_object', None)
+            if _na is not None:
+                import math as _math
+
+                def _is_na(v):
+                    if v is _na:
+                        return True
+                    try:
+                        if v == _na:
+                            return True
+                    except Exception:
+                        # NA 哨兵的布尔值歧义:仅按 is 判定
+                        return False
+                    return (isinstance(v, float) and isinstance(_na, float)
+                            and _math.isnan(v) and _math.isnan(_na))
+
+                res = [(_is_na(x) and _is_na(y)) or (x == y)
+                       for x, y in zip(a_flat, b_flat)]
+            else:
                 res = [x == y for x, y in zip(a_flat, b_flat)]
+            if self.size == other.size and self.shape == other.shape:
                 out = ndarray(res)
                 out._dtype = 'bool'
                 return out.reshape(self.shape)
@@ -1895,6 +1967,26 @@ class ndarray:
                 out = ndarray(res)
                 out._dtype = 'bool'
                 return out.reshape(self.shape)
+        # complex dtype：Rust 层对 nan 元素的相等比较失真，逐元素
+        # Python ==（python complex 的 nan 语义正确）
+        if getattr(self, '_dtype', None) in ('complex64', 'complex128') \
+                and _is_ndarray(other) \
+                and getattr(other, '_dtype', None) in ('complex64', 'complex128'):
+            # asanyarray 会把 complex 压成 f64 占位（只剩实部），优先
+            # 从 _raw_data 取完整复数元素
+            a_flat = (_flatten_vals(self._raw_data)
+                      if getattr(self, '_raw_data', None) is not None
+                      else self.ravel().tolist())
+            b_flat = (_flatten_vals(other._raw_data)
+                      if getattr(other, '_raw_data', None) is not None
+                      else other.ravel().tolist())
+            if len(a_flat) == len(b_flat):
+                res = [x == y for x, y in zip(a_flat, b_flat)]
+            else:
+                res = [False] * len(a_flat)
+            out = ndarray(res)
+            out._dtype = 'bool'
+            return out.reshape(self.shape)
         # NEP50：低精度浮点数组 vs Python float 标量 → 标量先降到数组精度
         if self._dtype in ('float32', 'float16') and \
                 isinstance(other, float) and not isinstance(other, bool):
@@ -3216,7 +3308,8 @@ def _operand_is_float(other):
 def _operand_is_complex(other):
     """判断算术运算的另一操作数是否为复数。"""
     if _is_ndarray(other):
-        return getattr(other, '_dtype', 'float64') == 'complex128'
+        return getattr(other, '_dtype', 'float64') in ('complex128',
+                                                       'complex64')
     return isinstance(other, complex)
 
 
@@ -3234,10 +3327,18 @@ def _promote_dtype(self_dtype, other):
     if self_dtype == 'complex64':
         # NEP50：Python 弱复数标量不提升（complex64+3j→complex64）；
         # complex128 数组操作数仍提升
-        if _operand_is_complex(other):
-            return 'complex64' if not hasattr(other, '_array') else 'complex128'
+        if _is_ndarray(other):
+            if _operand_is_complex(other):
+                return 'complex128' if getattr(other, '_dtype', '') == 'complex128' \
+                    else 'complex64'
+            return 'complex64'
         return 'complex64'
     if _operand_is_complex(other):
+        # numpy 语义:float32 数组 + Python 弱复数标量 → complex64
+        # (complex128 数组操作数仍提升)
+        if self_dtype == 'float32' and not (
+                _is_ndarray(other) and getattr(other, '_dtype', '') == 'complex128'):
+            return 'complex64'
         return 'complex128'
     if _is_float_dtype(self_dtype):
         return self_dtype
@@ -5472,15 +5573,36 @@ _bool_ns = {
     '__str__': lambda self: builtins.str(builtins.bool(int(self))),
 }
 _bool_ns.update(_scalar_dunder_ns(int))
+def _bool_bitop(self, other, op):
+    """bool 标量位运算:与数组运算时委托 Rust 逻辑 ufunc(标量广播,
+    numpy 语义);标量对标量返回 True_/False_ 单例。"""
+    if _is_ndarray(other):
+        _g = globals()
+        if op == 'and':
+            return _g['logical_and'](self, other)
+        if op == 'xor':
+            return _g['logical_xor'](self, other)
+        return _g['logical_or'](self, other)
+    _b = builtins.bool(other)
+    if op == 'and':
+        return True_ if builtins.bool(self) and _b else False_
+    if op == 'xor':
+        return True_ if builtins.bool(self) != _b else False_
+    return True_ if builtins.bool(self) or _b else False_
+
+
 # numpy 语义：bool 标量位运算返回 True_/False_ 模块单例
 # （np.True_ | np.True_ is np.True_ 等）
 _bool_ns.update({
-    '__and__': lambda self, other: True_ if builtins.bool(self) and builtins.bool(other) else False_,
-    '__rand__': lambda self, other: True_ if builtins.bool(self) and builtins.bool(other) else False_,
-    '__or__': lambda self, other: True_ if builtins.bool(self) or builtins.bool(other) else False_,
-    '__ror__': lambda self, other: True_ if builtins.bool(self) or builtins.bool(other) else False_,
-    '__xor__': lambda self, other: True_ if builtins.bool(self) != builtins.bool(other) else False_,
-    '__rxor__': lambda self, other: True_ if builtins.bool(self) != builtins.bool(other) else False_,
+    '__and__': lambda self, other: _bool_bitop(self, other, 'and'),
+    '__rand__': lambda self, other: _bool_bitop(other, self, 'and'),
+    '__or__': lambda self, other: _bool_bitop(self, other, 'or'),
+    '__ror__': lambda self, other: _bool_bitop(other, self, 'or'),
+    '__xor__': lambda self, other: _bool_bitop(self, other, 'xor'),
+    '__rxor__': lambda self, other: _bool_bitop(other, self, 'xor'),
+    '__iand__': lambda self, other: _bool_bitop(self, other, 'and'),
+    '__ior__': lambda self, other: _bool_bitop(self, other, 'or'),
+    '__ixor__': lambda self, other: _bool_bitop(self, other, 'xor'),
     '__invert__': lambda self: False_ if builtins.bool(self) else True_,
 })
 # 与整型标量同理：不继承 Python int（否则 CPython 内置算子会先吃掉标量）。
@@ -6087,13 +6209,16 @@ class finfo:
         d = self._DATA[name]
         self._name = name
         self.bits = d['bits']
-        self.eps = d['eps']
-        self.epsneg = d['epsneg']
-        self.max = d['max']
-        self.min = d['min']
-        self.tiny = d['tiny']
-        self.smallest_normal = d['tiny']
-        self.smallest_subnormal = d['smallest_subnormal']
+        # numpy 语义：浮点属性是对应 dtype 的标量（finfo(f32).max 是
+        # float32 标量而非 Python float，np.array([...]) 不再升 f64）
+        _sc = {'float16': float16, 'float32': float32, 'float64': float64}[name]
+        self.eps = _sc(d['eps'])
+        self.epsneg = _sc(d['epsneg'])
+        self.max = _sc(d['max'])
+        self.min = _sc(d['min'])
+        self.tiny = _sc(d['tiny'])
+        self.smallest_normal = _sc(d['tiny'])
+        self.smallest_subnormal = _sc(d['smallest_subnormal'])
         self.resolution = d['resolution']
         self.nmant = d['nmant']
         self.nexp = d['nexp']

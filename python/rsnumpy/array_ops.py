@@ -165,7 +165,9 @@ def rollaxis(a, axis, start=0):
         raise np.AxisError(
             f"start {start} is out of bounds for array of dimension {ndim}")
     axis_n = axis % ndim
-    start_n = start % (ndim + 1)
+    # numpy 语义:start 归一化到 [0, ndim]——负 start 按 +ndim 折算
+    # (-1 → ndim-1),而非模 ndim+1(那会把 -1 错映成 ndim)。
+    start_n = start + ndim if start < 0 else start
     if start_n > axis_n:
         start_n -= 1
     return moveaxis(arr, axis_n, start_n)
@@ -368,8 +370,7 @@ def _apply_dtype(res, dtype):
         _dbo = getattr(_dtype_fn(dtype), 'byteorder', None)
         if isinstance(_dbo, str) and _dbo not in ('|', '=', '@', 'n', 'native'):
             _d = _dts.DType(_name)
-            _d._byteorder = _dbo
-            res._dtype_obj = _d
+            res._dtype_obj = _dts._clone_with_byteorder(_d, _dbo)
         elif _name == 'complex64' and str(getattr(res, '_dtype', '')) != 'complex64':
             # astype 复数路径强制 complex128 标签；按 np.array 语义重挂 complex64
             res._dtype = 'complex64'

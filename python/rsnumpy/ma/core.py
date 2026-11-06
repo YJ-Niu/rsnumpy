@@ -344,7 +344,6 @@ class MaskedArray:
 
     def __getitem__(self, key):
         res = self._data[key]
-        # 非标量切片：结果保持 MaskedArray(numpy 语义),掩码同 key 索引
         if hasattr(res, 'ndim') and getattr(res, 'ndim', 0) > 0:
             m = np.array(self._mask, dtype='bool')
             _sz = int(self.size)
@@ -805,6 +804,14 @@ def empty_like(a, dtype=None):
                        mask=list(asarray(a)._mask) if _is_ma(a) else None)
 
 
+# ma 专属构造器：本地定义返回 MaskedArray（np.ma.zeros 等语义），
+# 不可被 np 同名普通数组构造器覆盖。
+_MA_OWN_CONSTRUCTORS = (
+    'empty', 'empty_like', 'full', 'full_like',
+    'ones', 'ones_like', 'zeros', 'zeros_like',
+)
+
+
 def _copy_names():
     names = (
         'abs', 'absolute', 'add', 'all', 'allclose', 'allequal', 'alltrue',
@@ -825,6 +832,8 @@ def _copy_names():
     )
     d = {}
     for n in names:
+        if n in _MA_OWN_CONSTRUCTORS:
+            continue
         if hasattr(np, n):
             d[n] = getattr(np, n)
     return d

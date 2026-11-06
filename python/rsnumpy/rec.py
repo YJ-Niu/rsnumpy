@@ -124,6 +124,9 @@ def fromarrays(itemsets, dtypes=None, names=None, shape=None, **kwargs):
         dtypes = []
         for a in itemsets:
             arr = a if isinstance(a, rs.ndarray) else rs.asarray(a)
+            # numpy 语义:嵌套 structured 数组不支持(字段套字段)
+            if getattr(getattr(arr.dtype, 'names', None), '__len__', lambda: 0)():
+                raise ValueError('element sizes are not compatible')
             dtypes.append(arr.dtype)
         dt = rs.dtype(list(zip(names, dtypes)))
     else:
