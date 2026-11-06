@@ -284,7 +284,11 @@ class MaskedArray:
                            fill_value=self.fill_value)
 
     def __abs__(self):
-        return self._ma_binop(0, np.abs)
+        # numpy.abs 是一元算子：不能走二元 _ma_binop（会双参调用 op）。
+        # mask 恒等传播（|x| 不改变掩码）。
+        res = np.abs(self._data)
+        fill = self.fill_value if self.fill_value is not None else None
+        return MaskedArray(res, mask=list(self._mask), fill_value=fill)
 
     def __eq__(self, other):
         return self._ma_binop(other, np.equal)

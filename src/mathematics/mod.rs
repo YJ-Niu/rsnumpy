@@ -659,9 +659,9 @@ fn correlate(py: Python<'_>, a: &NdArray, v: &NdArray, mode: &str) -> PyResult<N
             data: arr,
         })
     } else {
-        // 复数互相关（无共轭，numpy.correlate 语义）：
-        //   correlate(a, v) = conv(a, reverse(v))
-        // 实/虚部各自 reverse 后按复数乘法四路实数卷积合成：
+        // 复数互相关（numpy 语义）：numpy.correlate(a, v) = conv(a, reverse(conj(v)))
+        // ——对 v 取共轭（实部保留、虚部取反）后反转，再按复数乘法
+        // 四路实数卷积合成：
         //   real = conv(x_re, h_re) - conv(x_im, h_im)
         //   imag = conv(x_re, h_im) + conv(x_im, h_re)
         // 缺失的虚部补零到与实部等长（处理实/复混合输入）。
@@ -670,7 +670,7 @@ fn correlate(py: Python<'_>, a: &NdArray, v: &NdArray, mode: &str) -> PyResult<N
             None => vec![0.0; x.len()],
         };
         let mut h_im: Vec<f64> = match &v.imag {
-            Some(im) => im.iter().copied().collect(),
+            Some(im) => im.iter().map(|t| -t).collect(),
             None => vec![0.0; h.len()],
         };
         h_im.reverse();

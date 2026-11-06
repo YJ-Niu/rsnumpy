@@ -1630,11 +1630,14 @@ class ndarray:
         if self.size == 0:
             return self.copy()
         if _is_ndarray(other):
-            return _wrap_result(self._array + other._array, dt)
-        if isinstance(other, (tuple, list)):
-            other_arr = ndarray(other)
-            return _wrap_result(self._array + other_arr._array, dt)
-        return _wrap_result(self._array + other, dt)
+            res = _wrap_result(self._array + other._array, dt)
+        elif isinstance(other, (tuple, list)):
+            other = ndarray(other)
+            res = _wrap_result(self._array + other._array, dt)
+        else:
+            res = _wrap_result(self._array + other, dt)
+        _extra_module._fp_arith_check(self, other, res, 'add')
+        return res
 
     def __concat__(self, other):
         # numpy ndarray 无序列拼接语义：operator.concat/`+` 拼接须 TypeError
@@ -1646,7 +1649,9 @@ class ndarray:
         dt = _promote_dtype(self._dtype, other)
         if self.size == 0:
             return self.copy()
-        return _wrap_result(other + self._array, dt)
+        res = _wrap_result(other + self._array, dt)
+        _extra_module._fp_arith_check(other, self, res, 'add')
+        return res
 
     def __sub__(self, other):
         dt = _promote_dtype(self._dtype, other)
@@ -1674,10 +1679,14 @@ class ndarray:
             return self.copy()
         if _is_ndarray(other):
             # Rust core handles NumPy broadcasting (e.g. (4,4)*(4,)).
-            return _wrap_result(self._array * other._array, dt)
+            res = _wrap_result(self._array * other._array, dt)
+            _extra_module._fp_arith_check(self, other, res, 'multiply')
+            return res
         if isinstance(other, (tuple, list)):
-            other_arr = ndarray(other)
-            return _wrap_result(self._array * other_arr._array, dt)
+            other = ndarray(other)
+            res = _wrap_result(self._array * other._array, dt)
+            _extra_module._fp_arith_check(self, other, res, 'multiply')
+            return res
         # Python scalar
         try:
             scalar = float(other)
@@ -1693,6 +1702,7 @@ class ndarray:
         out = _wrap_result(result, dt)
         if self.ndim > 1:
             out = out.reshape(self.shape)
+        _extra_module._fp_arith_check(self, other, out, 'multiply')
         return out
 
     def __rmul__(self, other):
@@ -1706,17 +1716,22 @@ class ndarray:
         if self.size == 0:
             return self.copy()
         if _is_ndarray(other):
-            return _wrap_result(self._array / other._array, dt)
-        if isinstance(other, (tuple, list)):
-            other_arr = ndarray(other)
-            return _wrap_result(self._array / other_arr._array, dt)
-        return _wrap_result(self._array / other, dt)
+            res = _wrap_result(self._array / other._array, dt)
+        elif isinstance(other, (tuple, list)):
+            other = ndarray(other)
+            res = _wrap_result(self._array / other._array, dt)
+        else:
+            res = _wrap_result(self._array / other, dt)
+        _extra_module._fp_divide_check(self, other, res, 'true_divide')
+        return res
 
     def __rtruediv__(self, other):
         dt = _truediv_dtype(self._dtype)
         if self.size == 0:
             return self.copy()
-        return _wrap_result(other / self._array, dt)
+        res = _wrap_result(other / self._array, dt)
+        _extra_module._fp_divide_check(other, self, res, 'true_divide')
+        return res
 
     def __floordiv__(self, other):
         """逐元素地板除（// 运算符；除零按浮点错误状态处理，numpy 语义）。"""
@@ -2392,7 +2407,8 @@ class ndarray:
 
     def reshape(self, *shape, order='C', **kwargs):
         """改变数组形状。"""
-        return _ndarray_methods().reshape(self, *shape)
+        _copy = kwargs.pop('copy', None)
+        return _ndarray_methods().reshape(self, *shape, copy=_copy)
 
     def resize(self, new_shape):
         """改变数组大小。"""

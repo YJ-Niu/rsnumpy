@@ -253,13 +253,25 @@ def cbrt(x):
     return _wrap(_core.cbrt(_ensure_raw(x)))
 
 
-def absolute(x):
+def absolute(x, out=None):
     """计算绝对值。"""
     import builtins
     if isinstance(x, complex):
         from .__init__ import ndarray
-        return ndarray([builtins.abs(x)])
-    return _wrap(_core.abs(_ensure_raw(x)))
+        res = ndarray([builtins.abs(x)])
+    # numpy 语义:bool 数组的 abs 保持 bool(恒等映射);float 化后
+    # 位运算会失真(~0.0f 按位翻转 = -1.0)。
+    elif getattr(x, '_dtype', None) == 'bool':
+        res = x.copy()
+    else:
+        res = _wrap(_core.abs(_ensure_raw(x)))
+    if out is not None:
+        try:
+            out[...] = res
+            return out
+        except Exception:
+            pass
+    return res
 
 
 abs = absolute
@@ -348,6 +360,8 @@ def multiply(x1, x2, out=None, **kwargs):
 def divide(x1, x2, out=None, **kwargs):
     """逐元素除法。"""
     res = _wrap(_core.divide(_ensure_raw(x1), _ensure_raw(x2)))
+    from . import _extra as _ex
+    _ex._fp_divide_check(x1, x2, res, 'true_divide')
     if out is not None:
         try:
             out[...] = res

@@ -65,7 +65,6 @@ def reshape(a, shape=None, order='C', *, newshape=None, copy=None):
     shape 为新形状（整数或整数元组）。newshape 为已弃用的旧参数名，
     order 支持 'C'（行优先）与 'F'（列优先）。
     """
-    _ = copy
     if shape is None:
         shape = newshape
     if shape is None:
@@ -85,12 +84,36 @@ def reshape(a, shape=None, order='C', *, newshape=None, copy=None):
     if order == 'F':
         flat = arr.ravel(order='F')
         out = _wrap(_core.reshape(flat._array, shape))
+        # numpy 语义:F 序无法对 C 序输入做视图,结果是新拷贝——
+        # 不标记 _rs_parent/_raw_data 血缘(shares_memory 应为 False)。
+        if copy is None:
+            try:
+                out._rs_parent = None
+            except Exception:
+                pass
+            if getattr(out, '_raw_data', None) is getattr(arr, '_raw_data', None):
+                try:
+                    out._raw_data = None
+                except Exception:
+                    pass
+        else:
+            try:
+                out._rs_parent = arr
+            except Exception:
+                pass
     else:
         out = _wrap(_core.reshape(_ensure_raw(a), shape))
-    try:
-        out._rs_parent = arr
-    except Exception:
-        pass
+        try:
+            out._rs_parent = arr
+        except Exception:
+            pass
+    if copy is True:
+        # numpy 语义:copy=True 恒返回新数组(不与输入共享内存)
+        out = out.copy()
+        try:
+            out._rs_parent = None
+        except Exception:
+            pass
     return out
 
 

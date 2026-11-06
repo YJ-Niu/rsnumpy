@@ -156,8 +156,9 @@ def _reduce_given_mean(a, mean, axis, keepdims, ddof, want_std, out):
             _m = _m.item()
     except Exception:
         pass
-    if not hasattr(a, '_array'):
-        # list/tuple 输入（numpy 非 array 参数包装语义）
+    if not hasattr(a, '_array') and not hasattr(a, '_data'):
+        # list/tuple 输入（numpy 非 array 参数包装语义）；MaskedArray 有
+        # _data（非 _array），不可包装降级（否则 a - _m 走 ndarray 算术）
         a = _nd()(a)
     diff = a - _m
     nd = diff.ndim

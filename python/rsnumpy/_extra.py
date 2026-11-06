@@ -241,11 +241,18 @@ def logaddexp2(x1, x2):
     return np.add(m, np.log2(np.add(exp2(np.subtract(a, m)), exp2(np.subtract(b, m)))))
 
 
-def logical_not(x):
+def logical_not(x, out=None):
     """逐元素逻辑非。"""
     np = _np()
     arr = _asarray(x)
-    return np.equal(arr, np.full(arr.shape, 0.0))
+    res = np.equal(arr, np.full(arr.shape, 0.0))
+    if out is not None:
+        try:
+            out[...] = res
+            return out
+        except Exception:
+            pass
+    return res
 
 
 def gcd(x1, x2):
@@ -898,6 +905,19 @@ def isscalar(element):
         from fractions import Fraction as _Frac
         from decimal import Decimal as _Dec
         if isinstance(element, (_Frac, _Dec)):
+            return True
+    except Exception:
+        pass
+    # PEP 3141（numpy 语义）:numbers.Number 子类视为标量——裸 Number()
+    # 实例既无 __index__ 也无 __float__(那分别是 Integral/Real 的方法),
+    # 须用 isinstance 判定;rs 标量(非 int 子类)靠 __index__/__float__ 兼容。
+    if hasattr(element, '__len__'):
+        return False
+    if hasattr(element, '__index__') or hasattr(element, '__float__'):
+        return True
+    try:
+        from numbers import Number as _NumNumber
+        if isinstance(element, _NumNumber):
             return True
     except Exception:
         pass
@@ -3063,6 +3083,33 @@ def _str_kind_width(n):
     return None
 
 
+def _raw_str_kind_width(x):
+    """从 dtype 原始字符串参数直接解析 kind/width。
+
+    name 规范化会丢失 S/U 区分(S5→'str5'、U5→'str20'、'S'→'str0'),
+    字符串类原始参数('S'/'S5'/'U3'/'bytes5'/'str3' 及带字节序前缀形式)
+    须绕过 name 路径。数字类型('u1'/'b' 等小写单字符)不匹配,返回 None。
+    """
+    if not isinstance(x, str):
+        return None
+    s = x.strip()
+    if not s:
+        return None
+    if s[0] in '<>=|':
+        s = s[1:]
+    if s.startswith('str'):
+        rest = s[3:]
+        return ('U', int(rest)) if rest.isdigit() else ('U', 0)
+    if s.startswith('bytes'):
+        rest = s[5:]
+        return ('S', int(rest)) if rest.isdigit() else ('S', 0)
+    if len(s) == 1 and s in ('S', 'U'):
+        return (s, 0)
+    if len(s) >= 2 and s[0] in ('S', 'U') and s[1:].isdigit():
+        return (s[0], int(s[1:]))
+    return None
+
+
 def _void_promo(d1, d2):
     """void/结构化提升（numpy 语义）：兼容（同为 void 同尺寸、或同字段名）
     → 返回 type1；否则 TypeError。"""
@@ -3099,9 +3146,10 @@ def promote_types(type1, type2):
     # void/结构化：兼容 → type1，否则 TypeError
     if k1 == 'V' or k2 == 'V':
         return _void_promo(d1, d2)
-    # 字符串 dtype 提升
-    sa = _str_kind_width(a)
-    sb = _str_kind_width(b)
+    # 字符串 dtype 提升:原始字符串参数优先——name 规范化丢失 S/U
+    # 区分(S5→'str5'、U5→'str20'、'S'→'str0'),须从原参解析 kind。
+    sa = _raw_str_kind_width(type1) or _str_kind_width(a)
+    sb = _raw_str_kind_width(type2) or _str_kind_width(b)
     if sa or sb:
         if sa and sb:
             # 字符串 + 字符串：unicode 优先，宽度取最大
@@ -3599,6 +3647,130 @@ def _fp_fire(kind, msg):
         _warnings.warn(msg, RuntimeWarning, stacklevel=4)
     elif mode == 'print':
         print(msg)
+
+
+def _fp_divide_check(num, den, res, op='true_divide'):
+    """true_divide 的 errstate 触发（numpy 语义）：除零 → 'divide'，
+    0/0 → 'invalid'。仅当存在非 ignore 模式时扫描，避免常态开销。"""
+    st = _err_state_ctx.get()
+    eff = st or _ERR_DEFAULT
+    if (eff.get('divide', 'warn') == 'ignore'
+            and eff.get('invalid', 'warn') == 'ignore'):
+        return
+    try:
+        def _flat(x):
+            if isinstance(x, (list, tuple)):
+                out = []
+                for e in x:
+                    out.extend(_flat(e))
+                return out
+            if hasattr(x, 'ravel'):
+                v = x.ravel().tolist()
+                return v if isinstance(v, list) else [v]
+            return [x]
+        den_flat = _flat(den)
+        if not builtins.any(v == 0 for v in den_flat):
+            return
+        for v in _flat(res):
+            if isinstance(v, float):
+                if _math.isinf(v):
+                    _fp_fire('divide', f'divide by zero encountered in {op}')
+                    return
+                if _math.isnan(v):
+                    _fp_fire('invalid', f'invalid value encountered in {op}')
+                    return
+    except (FloatingPointError, TypeError):
+        raise
+    except Exception:
+        pass
+
+
+def _fp_arith_check(num, oth, res, op):
+    """add/subtract/multiply 的 errstate 触发（numpy 语义）：
+    overflow（有限输入 → ±inf）与 invalid（inf-inf / 0*inf / inf+(-inf)）。"""
+    st = _err_state_ctx.get()
+    eff = st or _ERR_DEFAULT
+    if (eff.get('overflow', 'warn') == 'ignore'
+            and eff.get('invalid', 'warn') == 'ignore'
+            and eff.get('under', 'warn') == 'ignore'):
+        return
+    try:
+        _TINY64 = 2.2250738585072014e-308
+        def _flat(x):
+            if isinstance(x, (list, tuple)):
+                out = []
+                for e in x:
+                    out.extend(_flat(e))
+                return out
+            if hasattr(x, 'ravel'):
+                v = x.ravel().tolist()
+                return v if isinstance(v, list) else [v]
+            return [x]
+        na = _flat(num)
+        nb = _flat(oth)
+        if len(na) == 1 and len(nb) > 1:
+            na = na * len(nb)
+        elif len(nb) == 1 and len(na) > 1:
+            nb = nb * len(na)
+        n = min(len(na), len(nb))
+        ra = _flat(res)
+        if len(ra) == 1 and n > 1:
+            ra = ra * n
+        fired_ov = False
+        fired_inv = False
+        fired_un = False
+        for i in range(n):
+            a = na[i] if i < len(na) else 0
+            b = nb[i] if i < len(nb) else 0
+            r = ra[i] if i < len(ra) else 0
+            if not builtins.all(isinstance(v, float) for v in (a, b, r)):
+                continue
+            ai, bi, ri = _math.isinf(a), _math.isinf(b), _math.isinf(r)
+            if op == 'multiply':
+                if ri and not (ai or bi) and a != 0 and b != 0:
+                    if not fired_ov:
+                        _fp_fire('overflow', f'overflow encountered in {op}')
+                        fired_ov = True
+                    continue
+                if _math.isnan(r):
+                    if not fired_inv:
+                        _fp_fire('invalid', f'invalid value encountered in {op}')
+                        fired_inv = True
+                    continue
+                if ri and (ai or bi) and (a == 0 or b == 0):
+                    if not fired_inv:
+                        _fp_fire('invalid', f'invalid value encountered in {op}')
+                        fired_inv = True
+                    continue
+                # underflow：两个有限非零输入 → 结果为 0（完全下溢）
+                # 或次正规数（|r| < tiny）
+                if (not (ai or bi) and a != 0 and b != 0
+                        and not _math.isnan(r)
+                        and (r == 0 or builtins.abs(r) < _TINY64)):
+                    if not fired_un:
+                        _fp_fire('under', f'underflow encountered in {op}')
+                        fired_un = True
+                continue
+            # add / subtract：overflow = 有限输入 → ±inf
+            if op == 'add':
+                ov = (a > 0 and b > 0 and ri and r > 0) or \
+                     (a < 0 and b < 0 and ri and r < 0)
+            else:
+                ov = ((a > 0 and b < 0 and ri and r > 0)
+                      or (a < 0 and b > 0 and ri and r < 0))
+            if ov and not (ai or bi):
+                if not fired_ov:
+                    _fp_fire('overflow', f'overflow encountered in {op}')
+                    fired_ov = True
+            # invalid：inf - inf / inf + (-inf) → nan
+            if ai and bi and _math.isnan(r):
+                if not fired_inv:
+                    _fp_fire('invalid', f'invalid value encountered in {op}')
+                    fired_inv = True
+    except (FloatingPointError, TypeError):
+        raise
+    except Exception:
+        pass
 
 
 def _check_err_mode(v, name=None):

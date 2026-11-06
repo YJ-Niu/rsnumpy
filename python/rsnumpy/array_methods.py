@@ -293,7 +293,7 @@ class NdArrayMethods:
         return _fin(_wrap_result(arr._array.astype(name), dtype=name))
 
     @staticmethod
-    def reshape(arr, *shape):
+    def reshape(arr, *shape, copy=None):
         """改变数组形状而不改变数据。"""
         ndarray, _ = _get_deps()
         if len(shape) == 1 and isinstance(shape[0], (tuple, list)):
@@ -343,6 +343,12 @@ class NdArrayMethods:
                 _rec_cls = _rn_rs.recarray
                 if issubclass(_src_cls, _rec_cls):
                     out.__class__ = _src_cls
+            except Exception:
+                pass
+        if copy is True:
+            out = out.copy()
+            try:
+                out._rs_parent = None
             except Exception:
                 pass
         return out
