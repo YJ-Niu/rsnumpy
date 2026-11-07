@@ -233,6 +233,10 @@ def broadcast_to(a, shape, subok=None, device=None):
 
 def transpose(a, axes=None):
     """转置数组。axes 为 None 时反转所有轴，否则按给定顺序置换。"""
+    # 等形状 ndarray 列表：先堆叠再转置（numpy 语义 (n, k) → (k, n)）
+    if isinstance(a, (list, tuple)) and a and all(
+            hasattr(_x, '_array') for _x in a):
+        a = [_x.tolist() for _x in a]
     arr = a if hasattr(a, '_array') else _wrap(a)
     nd = _nd()
     dtype = getattr(arr, '_dtype', "float64")

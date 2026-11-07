@@ -19,24 +19,24 @@ fn mean(_py: Python<'_>, x: &NdArray, axis: Option<isize>, keepdims: bool) -> Py
 }
 
 #[pyfunction]
-#[pyo3(signature = (x, axis=None, ddof=0, keepdims=false), name = "std")]
+#[pyo3(signature = (x, axis=None, ddof=0.0, keepdims=false), name = "std")]
 fn std_dev(
     _py: Python<'_>,
     x: &NdArray,
     axis: Option<isize>,
-    ddof: usize,
+    ddof: f64,
     keepdims: bool,
 ) -> PyResult<NdArray> {
     _py.detach(move || x.std(axis, ddof, keepdims))
 }
 
 #[pyfunction]
-#[pyo3(signature = (x, axis=None, ddof=0, keepdims=false))]
+#[pyo3(signature = (x, axis=None, ddof=0.0, keepdims=false))]
 fn var(
     _py: Python<'_>,
     x: &NdArray,
     axis: Option<isize>,
-    ddof: usize,
+    ddof: f64,
     keepdims: bool,
 ) -> PyResult<NdArray> {
     _py.detach(move || x.var(axis, ddof, keepdims))
@@ -1340,8 +1340,8 @@ fn nanmean(x: &NdArray, axis: Option<isize>, keepdims: bool) -> PyResult<NdArray
 
 /// 沿轴求方差（忽略 NaN；若有效元素数 <= ddof 则返回 NaN）。
 #[pyfunction]
-#[pyo3(signature = (x, axis=None, ddof=0, keepdims=false))]
-fn nanvar(x: &NdArray, axis: Option<isize>, ddof: usize, keepdims: bool) -> PyResult<NdArray> {
+#[pyo3(signature = (x, axis=None, ddof=0.0, keepdims=false))]
+fn nanvar(x: &NdArray, axis: Option<isize>, ddof: f64, keepdims: bool) -> PyResult<NdArray> {
     let shape = x.data.shape().to_vec();
     let (outer, dim_size, inner, result_shape) = axis_reduce_layout(&shape, axis, keepdims)?;
     let data: Vec<f64> = x.data.iter().copied().collect();
@@ -1365,7 +1365,7 @@ fn nanvar(x: &NdArray, axis: Option<isize>, ddof: usize, keepdims: bool) -> PyRe
                     cnt += 1;
                 }
             }
-            if cnt > ddof {
+            if (cnt as f64) > ddof {
                 let mu = s / cnt as f64;
                 // 第二遍：求平方差和
                 let mut sq = 0.0f64;
@@ -1376,7 +1376,7 @@ fn nanvar(x: &NdArray, axis: Option<isize>, ddof: usize, keepdims: bool) -> PyRe
                         sq += d * d;
                     }
                 }
-                let n = (cnt - ddof) as f64;
+                let n = cnt as f64 - ddof;
                 out[o] = sq / n;
             } else {
                 out[o] = f64::NAN;
@@ -1395,8 +1395,8 @@ fn nanvar(x: &NdArray, axis: Option<isize>, ddof: usize, keepdims: bool) -> PyRe
 
 /// 沿轴求标准差（忽略 NaN）。
 #[pyfunction]
-#[pyo3(signature = (x, axis=None, ddof=0, keepdims=false))]
-fn nanstd(x: &NdArray, axis: Option<isize>, ddof: usize, keepdims: bool) -> PyResult<NdArray> {
+#[pyo3(signature = (x, axis=None, ddof=0.0, keepdims=false))]
+fn nanstd(x: &NdArray, axis: Option<isize>, ddof: f64, keepdims: bool) -> PyResult<NdArray> {
     let mut v = nanvar(x, axis, ddof, keepdims)?;
     v.data.mapv_inplace(|x| x.sqrt());
     Ok(v)

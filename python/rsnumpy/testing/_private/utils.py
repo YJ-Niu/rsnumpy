@@ -1606,6 +1606,14 @@ def assert_array_almost_equal(actual, desired, decimal=6, err_msg='',
         # make sure y is an inexact type to avoid abs(MIN_INT); will cause
         # casting of x later.
         dtype = result_type(y, 1.)
+        # numpy 语义: result_type(f16/f32, python float) → float64;
+        # rsnumpy 的 result_type 不提升 → 手动提升, 避免 asanyarray 把
+        # f64 缓冲值重截断到 f16/f32 造成 0-d/轴归约的虚假失配。
+        _dk = getattr(dtype, 'kind', None)
+        if not isinstance(_dk, str) and isinstance(dtype, str):
+            _dk = dtype.lstrip('<>=|')[:1]
+        if isinstance(_dk, str) and _dk in 'ef':
+            dtype = 'float64'
         y = np.asanyarray(y, dtype)
         # object 数组：Rust 占位算术失真（元素按 0 参与），逐元素 Python 计算
         if getattr(x, '_dtype', None) == 'object':

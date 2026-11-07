@@ -435,11 +435,13 @@ def _reduce_last_along(c, axis):
 
 def prod(a, axis=None, dtype=None, out=None, keepdims=False, initial=None, where=True):
     """计算元素乘积。"""
-    _ = dtype, out, where
+    _ = out, where
     arr = _asarray(a)
+    dt = getattr(arr, '_dtype', 'float64')
+    res_dt = dtype if dtype is not None else dt
     # 0-d 短路：Rust 归约对 0-d 输入会 abort；numpy 返回保持原 dtype 的 0-d
     if not tuple(getattr(arr._array, 'shape', ())):
-        res = _wrap(arr._array, _dtype=getattr(arr, '_dtype', 'float64'))
+        res = _wrap(arr._array, _dtype=res_dt)
         if initial is not None:
             np = _np()
             res = np.multiply(res, initial)
@@ -447,8 +449,9 @@ def prod(a, axis=None, dtype=None, out=None, keepdims=False, initial=None, where
     result = _core.prod(arr._array, axis, keepdims)
     if initial is not None:
         np = _np()
-        result = np.multiply(result, initial)
-    return _wrap(result)
+        return np.multiply(result, initial)
+    # 与 sum 一致：按输入 dtype 标注（Rust 以 f64 计算）
+    return _wrap(result, _dtype=res_dt)
 
 
 def _shape_drop(shape, axis):
@@ -469,74 +472,115 @@ def _count_notnan(a, axis):
     return np.sum(mask, axis)
 
 
-def nansum(a, axis=None, dtype=None, out=None, keepdims=False):
-    """忽略 NaN 求和（Rust 单次遍历实现）。"""
-    _ = dtype, out
-    return _wrap(_core.nansum(_asarray(a)._array, axis, keepdims))
+def _nan_result_dtype(a, kind, axis=None, keepdims=False):
+    """计算 nan 归约函数的结果 dtype，与对应 X 函数保持一致。
+
+    - mean：恒 float64
+    - var/std：保留输入 dtype（complex→float64），与 var/std 一致
+    - sum/prod/min/max：全归约保留输入 dtype，axis 归约用 float64，与对应 X 一致
+    """
+    dt = getattr(a, '_dtype', 'float64')
+    if kind == 'mean':
+        return 'float64'
+    if kind in ('var', 'std'):
+        # numpy 语义：int/uint/bool/complex 输入 → float64；float 保留精度
+        if not isinstance(dt, str):
+            return 'float64'
+        _k = dt.lstrip('<>=|')[:1]
+        if _k in 'iubcO' or dt.startswith('complex'):
+            return 'float64'
+        return dt
+    if axis is None and not keepdims:
+        return dt
+    return 'float64'
 
 
-def nanprod(a, axis=None, dtype=None, out=None, keepdims=False):
-    """忽略 NaN 求积（Rust 单次遍历实现）。"""
-    _ = dtype, out
-    return _wrap(_core.nanprod(_asarray(a)._array, axis, keepdims))
+def nansum(a, axis=None, dtype=None, out=None, keepdims=False, initial=None,
+           where=True):
+    """忽略 NaN 求和（委托 _nanfunctions_impl：Rust 快路径 + 逐 slice 归约）。"""
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    return _nfi.nansum(a, axis=axis, dtype=dtype, out=out, keepdims=keepdims,
+                       initial=initial, where=where)
 
 
-def nanmax(a, axis=None, out=None, keepdims=False):
-    """忽略 NaN 求最大值（Rust 实现，全 NaN 返回 NaN）。"""
-    _ = out
-    return _wrap(_core.nanmax(_asarray(a)._array, axis, keepdims))
+def nanprod(a, axis=None, dtype=None, out=None, keepdims=False, initial=None,
+            where=True):
+    """忽略 NaN 求积（委托 _nanfunctions_impl：Rust 快路径 + 逐 slice 归约）。"""
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    return _nfi.nanprod(a, axis=axis, dtype=dtype, out=out, keepdims=keepdims,
+                        initial=initial, where=where)
 
 
-def nanmin(a, axis=None, out=None, keepdims=False):
-    """忽略 NaN 求最小值（Rust 实现，全 NaN 返回 NaN）。"""
-    _ = out
-    return _wrap(_core.nanmin(_asarray(a)._array, axis, keepdims))
+def nanmax(a, axis=None, out=None, keepdims=False, initial=None, where=True):
+    """忽略 NaN 求最大值（委托 _nanfunctions_impl）。"""
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    return _nfi.nanmax(a, axis=axis, out=out, keepdims=keepdims,
+                       initial=initial, where=where)
 
 
-def nanmean(a, axis=None, dtype=None, out=None, keepdims=False):
-    """忽略 NaN 求均值（Rust 单次遍历实现）。"""
-    _ = dtype, out
-    return _wrap(_core.nanmean(_asarray(a)._array, axis, keepdims))
+def nanmin(a, axis=None, out=None, keepdims=False, initial=None, where=True):
+    """忽略 NaN 求最小值（委托 _nanfunctions_impl）。"""
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    return _nfi.nanmin(a, axis=axis, out=out, keepdims=keepdims,
+                       initial=initial, where=where)
 
 
-def nanvar(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False):
-    """忽略 NaN 求方差（Rust 两遍遍历实现）。"""
-    _ = dtype, out
-    return _wrap(_core.nanvar(_asarray(a)._array, axis, ddof, keepdims))
+def nanmean(a, axis=None, dtype=None, out=None, keepdims=False, where=True):
+    """忽略 NaN 求均值（委托 _nanfunctions_impl）。"""
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    return _nfi.nanmean(a, axis=axis, dtype=dtype, out=out, keepdims=keepdims,
+                        where=where)
 
 
-def nanstd(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False):
-    """忽略 NaN 求标准差（Rust 实现）。"""
-    _ = dtype, out
-    return _wrap(_core.nanstd(_asarray(a)._array, axis, ddof, keepdims))
+def nanvar(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False,
+           where=True, correction=None, mean=None):
+    """忽略 NaN 求方差（委托 _nanfunctions_impl）。"""
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    return _nfi.nanvar(a, axis=axis, dtype=dtype, out=out, ddof=ddof,
+                       keepdims=keepdims, where=where, correction=correction,
+                       mean=mean)
 
 
-def nanargmax(a, axis=None):
-    """忽略 NaN 的最大值索引（Rust 实现）。"""
-    return _wrap(_core.nanargmax_axis(_asarray(a)._array, axis), _dtype="int64")
+def nanstd(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False,
+           where=True, correction=None, mean=None):
+    """忽略 NaN 求标准差（委托 _nanfunctions_impl）。"""
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    return _nfi.nanstd(a, axis=axis, dtype=dtype, out=out, ddof=ddof,
+                       keepdims=keepdims, where=where, correction=correction,
+                       mean=mean)
 
 
-def nanargmin(a, axis=None):
-    """忽略 NaN 的最小值索引（Rust 实现）。"""
-    return _wrap(_core.nanargmin_axis(_asarray(a)._array, axis), _dtype="int64")
+def nanargmax(a, axis=None, out=None, keepdims=False):
+    """忽略 NaN 的最大值索引（委托 _nanfunctions_impl）。"""
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    return _nfi.nanargmax(a, axis=axis, out=out, keepdims=keepdims)
 
 
-def nancumsum(a, axis=None):
-    """忽略 NaN 的累积和（NaN 视为 0，Rust 实现）。"""
-    return _wrap(_core.nancumsum(_asarray(a)._array, axis))
+def nanargmin(a, axis=None, out=None, keepdims=False):
+    """忽略 NaN 的最小值索引（委托 _nanfunctions_impl）。"""
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    return _nfi.nanargmin(a, axis=axis, out=out, keepdims=keepdims)
 
 
-def nancumprod(a, axis=None):
-    """忽略 NaN 的累积积（NaN 视为 1，Rust 实现）。"""
-    return _wrap(_core.nancumprod(_asarray(a)._array, axis))
+def nancumsum(a, axis=None, dtype=None, out=None):
+    """忽略 NaN 的累积和（NaN 视为 0，委托 _nanfunctions_impl）。"""
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    return _nfi.nancumsum(a, axis=axis, dtype=dtype, out=out)
 
 
-def nanquantile(a, q, axis=None, **kwargs):
-    """忽略 NaN 的分位数。"""
-    _ = axis, kwargs
-    np = _np()
-    vals = [v for v in _flat(a) if not _math.isnan(v)]
-    return np.percentile(np.array(vals), q * 100 if q <= 1 else q)
+def nancumprod(a, axis=None, dtype=None, out=None):
+    """忽略 NaN 的累积积（NaN 视为 1，委托 _nanfunctions_impl）。"""
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    return _nfi.nancumprod(a, axis=axis, dtype=dtype, out=out)
+
+
+def nanquantile(a, q, axis=None, out=None, method='linear', keepdims=False,
+                weights=None, interpolation=None):
+    """忽略 NaN 的分位数（委托 _nanfunctions_impl）。"""
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    return _nfi.nanquantile(a, q, axis=axis, out=out, method=method,
+                            keepdims=keepdims, weights=weights,
+                            interpolation=interpolation)
 
 
 def cumulative_sum(x, axis=None, dtype=None, out=None, include_initial=False):

@@ -646,19 +646,24 @@ class random_module:
         """设置随机种子。"""
         return self._random.seed(s)
     
+    def _rand_arr(self, vals):
+        """确保输出是带 _dtype 的正规 rsnumpy ndarray（Rust 原生对象转换）。"""
+        from ..__init__ import ndarray
+        if hasattr(vals, 'tolist') and not hasattr(vals, '_dtype'):
+            vals = vals.tolist()
+        return ndarray(vals)
+
     def rand(self, *args):
         """生成均匀分布的随机数。"""
-        from ..__init__ import ndarray
         if len(args) == 0:
-            return ndarray(self._random.rand(1))
-        return ndarray(self._random.rand(*args))
-    
+            return self._rand_arr(self._random.rand(1))
+        return self._rand_arr(self._random.rand(*args))
+
     def randn(self, *args):
         """生成标准正态分布的随机数。"""
-        from ..__init__ import ndarray
         if len(args) == 0:
-            return ndarray(self._random.randn(1))
-        return ndarray(self._random.randn(*args))
+            return self._rand_arr(self._random.randn(1))
+        return self._rand_arr(self._random.randn(*args))
     
     def randint(self, low, high=None, size=None):
         """生成整数随机数。"""

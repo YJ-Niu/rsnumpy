@@ -40,7 +40,9 @@ fn isfinite(x: &NdArray) -> NdArray {
 fn isreal(x: &NdArray) -> NdArray {
     let data = match x.imag.as_ref() {
         None => x.data.mapv(|_| 1.0),
-        Some(im) => im.clone().mapv(|iv| if iv.abs() < 1e-15 { 1.0 } else { 0.0 }),
+        Some(im) => im
+            .clone()
+            .mapv(|iv| if iv.abs() < 1e-15 { 1.0 } else { 0.0 }),
     };
     NdArray { imag: None, data }
 }

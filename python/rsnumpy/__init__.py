@@ -771,11 +771,29 @@ class ndarray:
         # rs 布尔索引对 complex 数组丢虚部(Rust 层按 f64 占位):逐元素重建
         _bool_key = (isinstance(key, (list, tuple)) and key
                      and builtins.all(isinstance(k, (bool, bool_)) for k in key))
-        if not _bool_key and _is_ndarray(key) \
-                and getattr(key, '_dtype', None) == 'bool':
-            _bool_key = True
-        if _bool_key and _is_ndarray(res) \
-                and getattr(self, '_dtype', None) in ('complex64', 'complex128'):
+        if not _bool_key and _is_ndarray(key):
+            # _dtype 可能是 'bool' 字符串，也可能是 bool 类（rsnumpy.bool）
+            _kd = getattr(key, '_dtype', None)
+            _kd_s = _kd if isinstance(_kd, str) else getattr(_kd, '__name__', None)
+            if _kd_s in ('bool', 'bool_'):
+                _bool_key = True
+        # Rust 端布尔掩码索引产出广播垃圾（如 (3,3)[mask] → (3,3,3)）：
+        # 整体形状一致的掩码走 Python 逐元素选择（所有非结构化 dtype）。
+        # complex 历史即走此路径，保持原条件不变。
+        _self_struct = getattr(getattr(self, '_dtype_obj', None),
+                               '_names', None) is not None
+        _mask_shape_ok = False
+        if _is_ndarray(key):
+            _mask_shape_ok = (tuple(getattr(key, 'shape', ()))
+                              == tuple(self.shape))
+        elif isinstance(key, (list, tuple)) and key:
+            _mask_shape_ok = (
+                builtins.all(isinstance(k, (bool, bool_)) for k in key)
+                and builtins.len(key) == int(getattr(self, 'size', -1) or -1))
+        if (_bool_key and _is_ndarray(res) and not _self_struct
+                and (_mask_shape_ok
+                     or getattr(self, '_dtype', None)
+                     in ('complex64', 'complex128'))):
             try:
                 flat = (_flatten_vals(self._raw_data)
                         if getattr(self, '_raw_data', None) is not None
@@ -7869,7 +7887,8 @@ def _resolve_dtype(dtype):
                   'B': 'uint8', 'H': 'uint16',
                   'I': 'uint32', 'L': 'uint64', 'Q': 'uint64',
                   'e': 'float16', 'f': 'float32', 'd': 'float64',
-                  'F': 'complex64', 'D': 'complex128', '?': 'bool'}
+                  'F': 'complex64', 'D': 'complex128', 'G': 'complex128',
+                  '?': 'bool'}
     if dt_str in _CHARCODES:
         return _CHARCODES[dt_str]
     if dt_str in _PREFIX_DTYPE_NAMES:
@@ -8119,6 +8138,9 @@ class memmap(ndarray):
         from rsnumpy._core import multiarray
         _path = str(filename)
         dt_obj = _as_struct_dtype(dtype)
+        if dt_obj is None and hasattr(dtype, '_typename'):
+            # dtype 已是 DType 实例（np.memmap(f, dtype=a.dtype)）
+            dt_obj = dtype
         _dto = dt_obj if dt_obj is not None else dtype(dtype)
         _isz = _dto._itemsize or 8
         if shape is None:
@@ -10501,14 +10523,46 @@ histogramdd = _statistics_module.histogramdd
 digitize = _statistics_module.digitize
 
 
-def cumsum(a, axis=None):
-    """计算数组元素的累积和。"""
-    return asarray(a).cumsum(axis)
+def _cum_relabel(res, a, dtype):
+    """cumsum/cumprod 结果标注：显式 dtype 优先；缺省时 float16/float32
+    保留输入精度（numpy 语义，与 nancumsum/nancumprod 标注规则一致）。"""
+    if dtype is not None:
+        _tdt = str(_resolve_dtype(dtype))
+    else:
+        _adt = str(getattr(a, '_dtype', 'float64'))
+        _tdt = _adt if _adt in ('float16', 'float32') else None
+    if _tdt is not None and _tdt != str(getattr(res, '_dtype', '')):
+        try:
+            return array(res.tolist(), dtype=_tdt)
+        except Exception:
+            pass
+    return res
 
 
-def cumprod(a, axis=None):
-    """计算数组元素的累积乘积。"""
-    return asarray(a).cumprod(axis)
+def cumsum(a, axis=None, dtype=None, out=None):
+    """计算数组元素的累积和（numpy 签名：dtype/out；out 被填充并返回）。"""
+    a = asarray(a)
+    res = _cum_relabel(a.cumsum(axis), a, dtype)
+    if out is not None:
+        try:
+            out[...] = res
+        except Exception:
+            pass
+        return out
+    return res
+
+
+def cumprod(a, axis=None, dtype=None, out=None):
+    """计算数组元素的累积积（numpy 签名：dtype/out；out 被填充并返回）。"""
+    a = asarray(a)
+    res = _cum_relabel(a.cumprod(axis), a, dtype)
+    if out is not None:
+        try:
+            out[...] = res
+        except Exception:
+            pass
+        return out
+    return res
 
 
 linalg = _linalg_module()

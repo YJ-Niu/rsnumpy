@@ -1839,14 +1839,14 @@ impl NdArray {
         }
     }
 
-    #[pyo3(signature = (axis=None, ddof=0, keepdims=false))]
-    fn std(&self, axis: Option<isize>, ddof: usize, keepdims: bool) -> PyResult<NdArray> {
+    #[pyo3(signature = (axis=None, ddof=0.0, keepdims=false))]
+    fn std(&self, axis: Option<isize>, ddof: f64, keepdims: bool) -> PyResult<NdArray> {
         match axis {
             None => {
                 let m = self.data.mean().unwrap_or(0.0);
                 let n = self.data.len();
-                let denom = if n > ddof {
-                    (n - ddof) as f64
+                let denom = if (n as f64) > ddof {
+                    n as f64 - ddof
                 } else {
                     f64::NAN
                 };
@@ -1877,8 +1877,8 @@ impl NdArray {
                         let post_size: usize = shape.iter().skip(ax + 1).product();
                         let data_vec: Vec<f64> = self.data.iter().copied().collect();
 
-                        let denom = if axis_size > ddof {
-                            (axis_size - ddof) as f64
+                        let denom = if (axis_size as f64) > ddof {
+                            axis_size as f64 - ddof
                         } else {
                             f64::NAN
                         };
@@ -1934,14 +1934,14 @@ impl NdArray {
         }
     }
 
-    #[pyo3(signature = (axis=None, ddof=0, keepdims=false))]
-    fn var(&self, axis: Option<isize>, ddof: usize, keepdims: bool) -> PyResult<NdArray> {
+    #[pyo3(signature = (axis=None, ddof=0.0, keepdims=false))]
+    fn var(&self, axis: Option<isize>, ddof: f64, keepdims: bool) -> PyResult<NdArray> {
         match axis {
             None => {
                 let m = self.data.mean().unwrap_or(0.0);
                 let n = self.data.len();
-                let denom = if n > ddof {
-                    (n - ddof) as f64
+                let denom = if (n as f64) > ddof {
+                    n as f64 - ddof
                 } else {
                     f64::NAN
                 };
@@ -1972,8 +1972,8 @@ impl NdArray {
                         let post_size: usize = shape.iter().skip(ax + 1).product();
                         let data_vec: Vec<f64> = self.data.iter().copied().collect();
 
-                        let denom = if axis_size > ddof {
-                            (axis_size - ddof) as f64
+                        let denom = if (axis_size as f64) > ddof {
+                            axis_size as f64 - ddof
                         } else {
                             f64::NAN
                         };

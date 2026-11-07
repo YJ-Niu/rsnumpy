@@ -1373,6 +1373,14 @@ def assert_array_almost_equal(actual, desired, decimal=6, err_msg='',
         # make sure y is an inexact type to avoid abs(MIN_INT); will cause
         # casting of x later.
         dtype = result_type(y, 1.)
+        # numpy 语义: result_type(f16/f32, python float) → float64;
+        # rsnumpy 的 result_type 不提升 → 手动提升, 避免 asanyarray 把
+        # f64 缓冲值重截断到 f16/f32 造成 0-d/轴归约的虚假失配。
+        _dk = getattr(dtype, 'kind', None)
+        if not isinstance(_dk, str) and isinstance(dtype, str):
+            _dk = dtype.lstrip('<>=|')[:1]
+        if isinstance(_dk, str) and _dk in 'ef':
+            dtype = 'float64'
         y = np.asanyarray(y, dtype)
         z = abs(x - y)
         # rs 的 abs 对 complex 返回 complex dtype:取实部(模为实数)

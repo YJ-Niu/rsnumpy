@@ -541,6 +541,15 @@ class DType(metaclass=_DTypeMeta):
             return self._eqkey() == other._eqkey()
         if other is None:
             return False
+        if isinstance(other, type):
+            # dtype 对象 == 标量类（numpy 语义：np.dtype('f4') == np.float32）
+            _nm = getattr(other, '__name__', None)
+            if _nm:
+                try:
+                    return self._eqkey() == dtype(_nm)._eqkey()
+                except Exception:
+                    return NotImplemented
+            return NotImplemented
         try:
             return self._eqkey() == dtype(other)._eqkey()
         except Exception:
