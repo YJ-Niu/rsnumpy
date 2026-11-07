@@ -331,6 +331,37 @@ fn flatnonzero(a: &NdArray) -> PyResult<NdArray> {
     })
 }
 
+/// trim_zeros 的 (first, last) 非零边界（展平行主序索引）。
+/// complex 非零 ⟺ real != 0 || imag != 0。空数组返回 (0, 0)。
+/// Python 层按返回边界切片以保留 dtype 标签（避免 Python tolist）。
+#[pyfunction]
+fn trim_zeros_bounds(a: &NdArray) -> (usize, usize) {
+    let n = a.data.len();
+    if n == 0 {
+        return (0, 0);
+    }
+    let re: Vec<f64> = a.data.iter().copied().collect();
+    let im: Option<Vec<f64>> = a.imag.as_ref().map(|m| m.iter().copied().collect());
+    let is_zero = |i: usize| -> bool {
+        if re[i] != 0.0 {
+            return false;
+        }
+        match &im {
+            Some(v) => v[i] == 0.0,
+            None => true,
+        }
+    };
+    let mut first = 0usize;
+    while first < n && is_zero(first) {
+        first += 1;
+    }
+    let mut last = n - 1;
+    while last > 0 && is_zero(last) {
+        last -= 1;
+    }
+    (first, last)
+}
+
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(where_, m)?)?;
     m.add_function(wrap_pyfunction!(nonzero, m)?)?;
@@ -338,6 +369,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(argwhere, m)?)?;
     m.add_function(wrap_pyfunction!(flatnonzero, m)?)?;
     m.add_function(wrap_pyfunction!(count_nonzero, m)?)?;
+    m.add_function(wrap_pyfunction!(trim_zeros_bounds, m)?)?;
     m.add_function(wrap_pyfunction!(extract, m)?)?;
     m.add_function(wrap_pyfunction!(select_rs, m)?)?;
     m.add_function(wrap_pyfunction!(ix_rs, m)?)?;

@@ -4231,13 +4231,24 @@ def _default_record(dt, filler):
     return tuple(_default_field(dt._fields[n][0], filler) for n in dt._names)
 
 
+# 结构化数组（列表表示）总字节安全阈值：Python 列表有 8× 指针放大 + 对象开销，
+# 总字节超过该阈值时递归构建默认值列表会 OOM/挂起。立即抛 MemoryError
+# （与 numpy 分配失败的 OOM 行为一致），避免 _default_subarray 递归挂起。
+_STRUCT_ALLOC_LIMIT = 2 ** 28
+
+
 def _make_struct_filled(shape, dt, filler):
-    rec = _default_record(dt, filler)
     if isinstance(shape, int):
         shape = (shape,)
     total = 1
     for s in shape:
         total *= s
+    _item = getattr(dt, '_itemsize', 0) or 0
+    if _item and total * _item > _STRUCT_ALLOC_LIMIT:
+        raise MemoryError(
+            f"cannot allocate structured array: {total * _item} bytes exceeds "
+            f"{_STRUCT_ALLOC_LIMIT}-byte safe limit for list-backed storage")
+    rec = _default_record(dt, filler)
     flat = [rec for _ in range(total)]
     if len(shape) <= 1:
         return flat
@@ -6969,6 +6980,12 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
             if ndmin > arr.ndim:
                 new_shape = (1,) * (ndmin - arr.ndim) + arr.shape
                 arr = ndarray._wrap(arr._array.reshape(new_shape), _dtype=arr._dtype)
+            if order == 'F':
+                # F 序逻辑标志（rs 无 strides,语义标志供 reshape/strides 用）
+                try:
+                    arr._rs_order = 'F'
+                except Exception:
+                    pass
             return arr
         # numpy 兼容：带 __array_struct__ 的包装对象先解包
         if not _is_ndarray(data) and hasattr(data, '__array_struct__'):

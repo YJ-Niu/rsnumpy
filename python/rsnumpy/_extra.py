@@ -1628,26 +1628,36 @@ def pad(array, pad_width, mode="constant", **kwargs):
 
 
 def trim_zeros(filt, trim="fb"):
-    """裁剪一维数组两端的零（纯 Python：Rust 版丢失 complex dtype 标签）。"""
+    """裁剪一维数组两端的零。
+
+    Rust 层 (trim_zeros_bounds) 扫描 (first, last) 非零边界（避免 Python
+    tolist），Python 层按边界切片以保留 dtype 标签（旧 Rust 版会丢 complex
+    dtype 标签，故不再直接用其返回值）；非标准数值类型回退纯 Python。
+    """
     np = _np()
     arr = _asarray(filt)
     if arr.size == 0:
         return arr
-    vals = arr.tolist()
-    n = len(vals)
+    n = int(arr.size)
+    try:
+        first, last = _core.trim_zeros_bounds(arr._array)
+    except Exception:
+        # Fallback：纯 Python（非标准数值类型等）
+        vals = arr.tolist()
+        vn = len(vals)
 
-    def _is_zero(v):
-        try:
-            return v == 0
-        except Exception:
-            return False
+        def _is_zero(v):
+            try:
+                return v == 0
+            except Exception:
+                return False
 
-    first = 0
-    while first < n and _is_zero(vals[first]):
-        first += 1
-    last = n - 1
-    while last >= 0 and _is_zero(vals[last]):
-        last -= 1
+        first = 0
+        while first < vn and _is_zero(vals[first]):
+            first += 1
+        last = vn - 1
+        while last >= 0 and _is_zero(vals[last]):
+            last -= 1
     if 'f' not in trim:
         first = 0
     if 'b' not in trim:

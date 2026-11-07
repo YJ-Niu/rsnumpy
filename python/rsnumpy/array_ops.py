@@ -84,9 +84,20 @@ def reshape(a, shape=None, order='C', *, newshape=None, copy=None):
     if order == 'F':
         flat = arr.ravel(order='F')
         out = _wrap(_core.reshape(flat._array, shape))
-        # numpy 语义:F 序无法对 C 序输入做视图,结果是新拷贝——
-        # 不标记 _rs_parent/_raw_data 血缘(shares_memory 应为 False)。
-        if copy is None:
+        # numpy 语义:F 序输入 + F 序 reshape = 视图（保血缘）;
+        # C 序输入 + F 序 reshape = 新拷贝（断血缘,shares_memory False）。
+        # numpy 语义:copy=False 要求视图,无法视图时必须拷贝 → ValueError;
+        # copy=None 时 F 序输入 = 视图（保血缘）,C 序输入 = 新拷贝（断血缘）。
+        _in_f = getattr(arr, '_rs_order', None) == 'F'
+        if copy is False and not _in_f:
+            raise ValueError("Unable to avoid creating a copy while reshaping.")
+        if _in_f:
+            try:
+                out._rs_parent = arr
+                out._rs_order = 'F'
+            except Exception:
+                pass
+        else:
             try:
                 out._rs_parent = None
             except Exception:
@@ -96,12 +107,10 @@ def reshape(a, shape=None, order='C', *, newshape=None, copy=None):
                     out._raw_data = None
                 except Exception:
                     pass
-        else:
-            try:
-                out._rs_parent = arr
-            except Exception:
-                pass
     else:
+        _in_c = getattr(arr, '_rs_order', None) != 'F'
+        if copy is False and not _in_c:
+            raise ValueError("Unable to avoid creating a copy while reshaping.")
         out = _wrap(_core.reshape(_ensure_raw(a), shape))
         try:
             out._rs_parent = arr
