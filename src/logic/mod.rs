@@ -34,6 +34,28 @@ fn isfinite(x: &NdArray) -> NdArray {
     }
 }
 
+/// 逐元素判断虚部是否为 0（isreal）。非 complex 全 True；
+/// complex 用 abs(imag) < 1e-15（对齐原 Python 语义，避免 tolist + 递归）。
+#[pyfunction]
+fn isreal(x: &NdArray) -> NdArray {
+    let data = match x.imag.as_ref() {
+        None => x.data.mapv(|_| 1.0),
+        Some(im) => im.clone().mapv(|iv| if iv.abs() < 1e-15 { 1.0 } else { 0.0 }),
+    };
+    NdArray { imag: None, data }
+}
+
+/// 逐元素判断虚部是否非 0（iscomplex）。非 complex 全 False；
+/// complex 用 imag != 0（对齐原 __init__ 语义，避免 tolist + 递归）。
+#[pyfunction]
+fn iscomplex(x: &NdArray) -> NdArray {
+    let data = match x.imag.as_ref() {
+        None => x.data.mapv(|_| 0.0),
+        Some(im) => im.clone().mapv(|iv| if iv != 0.0 { 1.0 } else { 0.0 }),
+    };
+    NdArray { imag: None, data }
+}
+
 #[pyfunction]
 fn maximum(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
     let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| a.max(b))?;
@@ -199,6 +221,8 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(isnan, m)?)?;
     m.add_function(wrap_pyfunction!(isinf, m)?)?;
     m.add_function(wrap_pyfunction!(isfinite, m)?)?;
+    m.add_function(wrap_pyfunction!(isreal, m)?)?;
+    m.add_function(wrap_pyfunction!(iscomplex, m)?)?;
     m.add_function(wrap_pyfunction!(maximum, m)?)?;
     m.add_function(wrap_pyfunction!(minimum, m)?)?;
     Ok(())

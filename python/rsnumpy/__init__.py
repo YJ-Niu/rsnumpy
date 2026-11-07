@@ -10006,14 +10006,12 @@ def isfinite(x):
 
 
 def iscomplex(x):
-    """逐元素检测元素的虚部是否非零（numpy 语义，返回 bool 数组）。"""
-    arr = ndarray(x)
+    """逐元素检测元素的虚部是否非零（numpy 语义，返回 bool 数组）。
 
-    def _chk(v):
-        if isinstance(v, (list, tuple)):
-            return [_chk(e) for e in v]
-        return builtins.complex(v).imag != 0
-    return array(_chk(arr.tolist()), dtype='bool')
+    Rust 版（num_core.iscomplex）：避免 tolist + Python 递归循环。
+    """
+    arr = ndarray(x)
+    return ndarray._wrap(np.iscomplex(arr._array), _dtype="bool")
 
 
 # AxisError 统一来源：rsnumpy.exceptions（测试自该模块导入）；
