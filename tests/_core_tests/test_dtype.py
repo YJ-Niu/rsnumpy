@@ -36,10 +36,12 @@ def assert_dtype_equal(a, b):
     assert_equal(hash(a), hash(b),
                  "two equivalent types do not hash to the same value !")
 
+
 def assert_dtype_not_equal(a, b):
     assert_(a != b)
     assert_(hash(a) != hash(b),
             "two different types hash to the same value !")
+
 
 class TestBuiltin:
     @pytest.mark.parametrize('t', [int, float, complex, np.int32, str, object])
@@ -129,13 +131,13 @@ class TestBuiltin:
             operation(np.dtype(np.int32), 7)
 
     @pytest.mark.parametrize("dtype",
-             ['Bool', 'Bytes0', 'Complex32', 'Complex64',
-              'Datetime64', 'Float16', 'Float32', 'Float64',
-              'Int8', 'Int16', 'Int32', 'Int64',
-              'Object0', 'Str0', 'Timedelta64',
-              'UInt8', 'UInt16', 'Uint32', 'UInt32',
-              'Uint64', 'UInt64', 'Void0',
-              "Float128", "Complex128"])
+                             ['Bool', 'Bytes0', 'Complex32', 'Complex64',
+                              'Datetime64', 'Float16', 'Float32', 'Float64',
+                              'Int8', 'Int16', 'Int32', 'Int64',
+                              'Object0', 'Str0', 'Timedelta64',
+                              'UInt8', 'UInt16', 'Uint32', 'UInt32',
+                              'Uint64', 'UInt64', 'Void0',
+                              "Float128", "Complex128"])
     def test_numeric_style_types_are_invalid(self, dtype):
         with assert_raises(TypeError):
             np.dtype(dtype)
@@ -158,11 +160,11 @@ class TestBuiltin:
             np.dtype("void0")
 
     @pytest.mark.parametrize(
-        'value',
-        ['m8', 'M8', 'datetime64', 'timedelta64',
-         'i4, (2,3)f8, f4', 'S3, 3u8, (3,4)S10',
-         '>f', '<f', '=f', '|f',
-        ])
+                          'value',
+                          ['m8', 'M8', 'datetime64', 'timedelta64',
+                           'i4, (2,3)f8, f4', 'S3, 3u8, (3,4)S10',
+                           '>f', '<f', '=f', '|f',
+                           ])
     def test_dtype_bytes_str_equivalence(self, value):
         bytes_value = value.encode('ascii')
         from_bytes = np.dtype(bytes_value)
@@ -190,10 +192,10 @@ class TestBuiltin:
     def test_bad_param(self):
         # Can't give a size that's too small
         assert_raises(ValueError, np.dtype,
-                        {'names': ['f0', 'f1'],
-                         'formats': ['i4', 'i1'],
-                         'offsets': [0, 4],
-                         'itemsize': 4})
+                      {'names': ['f0', 'f1'],
+                       'formats': ['i4', 'i1'],
+                       'offsets': [0, 4],
+                       'itemsize': 4})
         # If alignment is enabled, the alignment (4) must divide the itemsize
         assert_raises(ValueError, np.dtype,
                         {'names': ['f0', 'f1'],
@@ -975,6 +977,7 @@ class TestMetadata:
         d = np.dtype((np.void, np.dtype('i4,i4', metadata={'datum': 1})))
         assert_(d.metadata == {'datum': 1})
 
+
 class TestString:
     def test_complex_dtype_str(self):
         dt = np.dtype([('top', [('tiles', ('>f4', (64, 64)), (1,)),
@@ -1181,6 +1184,7 @@ class TestDtypeAttributes:
                 warnings.filterwarnings(action="ignore",
                                         category=DeprecationWarning)
                 arr.dtype = "i1"
+
 
 class TestDTypeMakeCanonical:
     def check_canonical(self, dtype, canonical):
@@ -1928,9 +1932,9 @@ class TestFromCTypes:
 
     def test_array(self):
         c8 = ctypes.c_uint8
-        self.check(     3 * c8,  (np.uint8, (3,)))
-        self.check(     1 * c8,  (np.uint8, (1,)))
-        self.check(     0 * c8,  (np.uint8, (0,)))
+        self.check(3 * c8, (np.uint8, (3,)))
+        self.check(1 * c8, (np.uint8, (1,)))
+        self.check(0 * c8, (np.uint8, (0,)))
         self.check(1 * (3 * c8), ((np.uint8, (3,)), (1,)))
         self.check(3 * (1 * c8), ((np.uint8, (1,)), (3,)))
 
@@ -2524,6 +2528,7 @@ def test_gh_31308_getfield():
     with pytest.raises(ValueError, match="is larger"):
         field = rec_arr.getfield(np.float64, offset=2**31 + 1)
 
+
 @pytest.mark.skipif(not IS_64BIT, reason="test requires 64-bit system")
 @requires_memory(free_bytes=2e9)
 def test_gh_31308_setfield():
@@ -2535,6 +2540,7 @@ def test_gh_31308_setfield():
     rec_arr.setfield(7, np.float64, offset=2**31)
     actual = rec_arr.getfield(np.float64, offset=2**31)
     assert_allclose(actual, 7)
+
 
 @pytest.mark.skipif(not IS_64BIT, reason="test requires 64-bit system")
 @requires_memory(free_bytes=2e9)
