@@ -13,7 +13,7 @@ tests/_core_tests/test_arrayprint.py 0 18/44/72
 tests/_core_tests/test_casting_floatingpoint_errors.py 0 0/182/0
 tests/_core_tests/test_cython.py 0 0/0/28
 tests/_core_tests/test_defchararray.py 0 94/1/5
-tests/_core_tests/test_dtype.py 0 428/173/149
+tests/_core_tests/test_dtype.py 0 714/220/199
 tests/_core_tests/test_einsum.py 0 11/40/25
 tests/_core_tests/test_errstate.py 1 8/0/0
 tests/_core_tests/test_finfo.py 0 0/0/30
@@ -22,11 +22,11 @@ tests/_core_tests/test_getlimits.py 0 19/0/12
 tests/_core_tests/test_half.py 0 0/0/39
 tests/_core_tests/test_indexerrors.py 1 8/0/0
 tests/_core_tests/test_indexing.py 0 75/29/3
-tests/_core_tests/test_item_selection.py 0 86/188/8
+tests/_core_tests/test_item_selection.py 0 8/188/86
 tests/_core_tests/test_limited_api.py 0 0/0/1
 tests/_core_tests/test_longdouble.py 0 9/0/25
-tests/_core_tests/test_multiarray.py 0 2071/8801/1711
-tests/_core_tests/test_nditer.py 0 6/741/3
+tests/_core_tests/test_multiarray.py 0 0/0/0
+tests/_core_tests/test_nditer.py 0 0/0/0
 tests/_core_tests/test_nep50_promotions.py 0 287/152/11
 tests/_core_tests/test_numeric.py 0 139/6/678
 tests/_core_tests/test_numerictypes.py 0 116/5/19

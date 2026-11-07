@@ -872,7 +872,7 @@ class TestBlock:
         assert_raises(ValueError, block, to_block)
 
     def test_no_lists(self, block):
-        assert_equal(block(1),         np.array(1))
+        assert_equal(block(1), np.array(1))
         assert_equal(block(np.eye(3)), np.eye(3))
 
     def test_invalid_nesting(self, block):
