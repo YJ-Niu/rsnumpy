@@ -57,6 +57,20 @@ def _flat_list(data):
     return out
 
 
+def _list_shape(l):
+    """嵌套列表 → 形状元组；不规则/空返回 None。"""
+    if not isinstance(l, (list, tuple)):
+        return ()
+    if len(l) == 0:
+        return None
+    sub = [_list_shape(v) for v in l]
+    if any(s is None for s in sub):
+        return None
+    if all(s == sub[0] for s in sub):
+        return (len(l),) + sub[0]
+    return None
+
+
 def _reshape_flat(flat, shape):
     """扁平列表 → 嵌套列表（C 序）；0-d 直接返回标量值。"""
     shape = tuple(shape)
@@ -453,12 +467,15 @@ def _percentile_engine(a, q, axis, keepdims, dtype, out=None, weights=None,
                 "reduction axis, or an array with the same shape as a")
     if hasattr(q, 'ndim'):
         qarr = q.ndim > 0
+        q_shape = tuple(q.shape) if qarr else ()
         qvals = _flat_list(q.tolist()) if qarr else [q.tolist()]
     elif isinstance(q, (list, tuple)):
         qarr = True
+        q_shape = _list_shape(q) or (len(_flat_list(q)),)
         qvals = _flat_list(q)
     else:
         qarr = False
+        q_shape = ()
         qvals = [q]
     qs = []
     for v in qvals:
@@ -528,11 +545,13 @@ def _percentile_engine(a, q, axis, keepdims, dtype, out=None, weights=None,
         red_shape = tuple(red_shape)
     else:
         red_shape = tuple(out_shape)
+    out_q_shape = q_shape + red_shape
     if sentinel is not None:
         # m8/M8：int64 存储 + 标签；0-d 结果保持 0-d ndarray（.dtype 可查）
-        if qarr:
-            res = rs.array(_reshape_flat(results, (len(qs),) + red_shape),
-                           dtype='int64')
+        if not results and 0 in out_q_shape:
+            res = rs.zeros(out_q_shape, dtype='int64')
+        elif qarr:
+            res = rs.array(_reshape_flat(results, out_q_shape), dtype='int64')
         elif not red_shape and len(results) == 1:
             res = rs.array([results[0]], dtype='int64').reshape(())
         else:
@@ -540,8 +559,10 @@ def _percentile_engine(a, q, axis, keepdims, dtype, out=None, weights=None,
         if relabel:
             res._dtype = relabel
         return res
-    if qarr:
-        res = rs.array(_reshape_flat(results, (len(qs),) + red_shape), dtype=dtype)
+    if not results and 0 in out_q_shape:
+        res = rs.zeros(out_q_shape, dtype=dtype)
+    elif qarr:
+        res = rs.array(_reshape_flat(results, out_q_shape), dtype=dtype)
     elif not red_shape and len(results) == 1:
         # 全归约 + 标量 q → 标量（numpy 语义：带 .dtype 的 np.generic）
         res = _scalar_of(dtype, results[0])
@@ -754,7 +775,11 @@ def _reduce_wrap(results, axes, shape, keepdims, dtype, out, src):
             except Exception:
                 pass
     else:
-        res = rs.array(_reshape_flat(list(results), shape_out), dtype=dtype)
+        # 空结果 + 含 0 维：嵌套列表无法表达 0 维形状，直接 zeros 构造
+        if not results and 0 in shape_out:
+            res = rs.zeros(shape_out, dtype=dtype)
+        else:
+            res = rs.array(_reshape_flat(list(results), shape_out), dtype=dtype)
     res = _keep_subclass(res, src)
     if out is not None:
         try:
@@ -1230,8 +1255,10 @@ def nanmedian(a, axis=None, out=None, overwrite_input=False, keepdims=False):
     if k == 'o' and len(shape) <= 1:
         from rsnumpy import statistics as _st
         return _st.median(a, axis=axis, out=out, keepdims=keepdims)
-    # 0-d 与标准 median 短路一致：保留输入 dtype（含 complex）
-    res_dt = dt if len(shape) == 0 else _reduction_dtype('median', dt)
+    # 0-d 与标准 median 一致：float/complex 保留精度，其余 float64
+    #（int 输入 0-d 也转 float64，与 _median_py 的 res_dt 规则对齐）
+    res_dt = (dt if k in 'efc' else 'float64') if len(shape) == 0 \
+        else _reduction_dtype('median', dt)
     if _simple_fast(a, axis, out):
         from rsnumpy import statistics as _st
         return _st.median(a, axis=axis, out=out, keepdims=keepdims)
@@ -1401,40 +1428,62 @@ def _percentile_public(a, q, axis, out, overwrite_input, method, keepdims,
                                   weights=weights, method=m, nan_filter=nan_filter,
                                   scale=scale, sentinel=_INT64_MIN, relabel=m8s)
     qvals, promote, exact01, qarr = _q_values(q, scale)
+    if isinstance(q, (list, tuple)):
+        q_shape = _list_shape(q) or (len(qvals),)
+    elif qarr and hasattr(q, 'shape'):
+        q_shape = tuple(q.shape)
+    else:
+        q_shape = ()
+
+    def _frac_results(vs):
+        _Frac = _frac_type()
+        n = len(vs)
+        res = []
+        for qv in qvals:
+            fqv = float(qv) / scale
+            if isinstance(qv, _Frac):
+                res.append(_frac_quantile(vs, _Frac(qv) / _Frac(int(scale)), m))
+            elif m in _INTERPOLATING_METHODS and fqv not in (0.0, 1.0):
+                # 浮点 q + 插值 method：float 结果（numpy 语义）
+                res.append(_quantile_of([float(x) for x in vs], fqv, m))
+            elif m == 'averaged_inverted_cdf':
+                kx = fqv * n
+                if kx == builtins.int(kx) and 0 < kx < n:
+                    res.append((vs[int(kx) - 1] + vs[int(kk)]) / 2)
+                else:
+                    idx = builtins.max(0, builtins.min(math.ceil(kx) - 1, n - 1))
+                    res.append(vs[idx])
+            else:
+                # 精确 0/1 或离散 method：保留原对象（Fraction 恒等性）
+                if fqv == 0.0:
+                    res.append(vs[0])
+                elif fqv == 1.0:
+                    res.append(vs[n - 1])
+                else:
+                    res.append(vs[_sel_idx(fqv, n, m)])
+        return res
+
+    def _frac_out(results):
+        rs = _rs()
+        if qarr:
+            r = rs.array(results, dtype='object')
+            if q_shape and int(getattr(r, 'size', 0) or 0) == _prod(q_shape):
+                r = r.reshape(q_shape)
+            return r
+        return results[0]
+
     # ---- Fraction 精确路径（object 输入 + Fraction q，全归约）
     if k == 'o' and axis is None:
         flat = _flat_list(a.tolist())
         if flat and all(isinstance(v, _frac_type()) for v in flat):
-            vs = sorted(flat)
-            _Frac = _frac_type()
-            n = len(vs)
-            results = []
-            for qv in qvals:
-                fqv = float(qv) / scale
-                if isinstance(qv, _Frac):
-                    results.append(_frac_quantile(vs, _Frac(qv) / _Frac(int(scale)), m))
-                elif m in _INTERPOLATING_METHODS and fqv not in (0.0, 1.0):
-                    # 浮点 q + 插值 method：float 结果（numpy 语义）
-                    results.append(_quantile_of([float(x) for x in vs], fqv, m))
-                elif m == 'averaged_inverted_cdf':
-                    kx = fqv * n
-                    if kx == builtins.int(kx) and 0 < kx < n:
-                        results.append((vs[int(kx) - 1] + vs[int(kx)]) / 2)
-                    else:
-                        idx = builtins.max(0, builtins.min(math.ceil(kx) - 1, n - 1))
-                        results.append(vs[idx])
-                else:
-                    # 精确 0/1 或离散 method：保留原对象（Fraction 恒等性）
-                    if fqv == 0.0:
-                        results.append(vs[0])
-                    elif fqv == 1.0:
-                        results.append(vs[n - 1])
-                    else:
-                        results.append(vs[_sel_idx(fqv, n, m)])
-            rs = _rs()
-            if qarr:
-                return rs.array(results, dtype='object')
-            return results[0]
+            return _frac_out(_frac_results(sorted(flat)))
+    # ---- int/bool 输入 + Fraction q：numpy 语义——插值算术保持 Fraction
+    #（q=Fraction(1), [1,2] → Fraction(2)；Fraction(.5) → Fraction(3,2)）
+    if (k in 'iu?b' and axis is None and weights is None
+            and any(isinstance(qv, _frac_type()) for qv in qvals)):
+        vals0 = _flat_list(a.tolist())
+        if vals0 and all(isinstance(v, (int, bool)) for v in vals0):
+            return _frac_out(_frac_results(sorted(vals0)))
     # ---- 结果 dtype 规则（numpy 2.x）
     interp = m in _INTERPOLATING_METHODS
     if k in 'ef':
@@ -1518,6 +1567,8 @@ def _median_py(a, axis, out, keepdims):
             red = tuple(out_shape)
         if not red:
             res = rs.array([results[0]], dtype='int64').reshape(())
+        elif not results and 0 in red:
+            res = rs.zeros(red, dtype='int64')
         else:
             res = rs.array(_reshape_flat(list(results), red), dtype='int64')
         res._dtype = m8s
@@ -1528,7 +1579,9 @@ def _median_py(a, axis, out, keepdims):
                 out[...] = res
             return out
         return res
-    res_dt = _dtype_name(dt) if k in 'ef' else 'float64'
+    # complex 保留自身 dtype（numpy 语义：median(c64) → c64；float64(c) 会
+    # 抛 TypeError 退化裸值）
+    res_dt = _dtype_name(dt) if k in 'efc' else 'float64'
     return _reduce_wrap(results, axes, shape, keepdims, res_dt, out, a)
 
 

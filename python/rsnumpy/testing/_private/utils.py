@@ -997,6 +997,16 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
     # original array for output formatting
     ox, oy = x, y
 
+    # 0-d object 操作数升为 (1,) object 数组（rs object == 的 0-d 广播失效，
+    # (1,) 对 (1,) 逐元素比较正确；保持 ndarray 契约避免下游 .shape 崩溃）
+    try:
+        if getattr(x, 'ndim', -1) == 0 and str(getattr(x, 'dtype', '')) == 'object':
+            x = np.array([x.tolist()[0]], dtype='object')
+        if getattr(y, 'ndim', -1) == 0 and str(getattr(y, 'dtype', '')) == 'object':
+            y = np.array([y.tolist()[0]], dtype='object')
+    except Exception:
+        pass
+
     def isnumber(x):
         # rsnumpy 所有数值 dtype 共用一个 DType 类，_is_numeric 按实例 kind 判定
         return getattr(getattr(x, 'dtype', None), '_is_numeric', False)
