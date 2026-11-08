@@ -160,7 +160,11 @@ fn qr_iter_eigvals_rs(companion: Vec<Vec<f64>>) -> Vec<f64> {
             let sq = rad.sqrt();
             let e1 = p2 + sq;
             let e2 = p2 - sq;
-            if (w - e1).abs() <= (w - e2).abs() { e1 } else { e2 }
+            if (w - e1).abs() <= (w - e2).abs() {
+                e1
+            } else {
+                e2
+            }
         } else {
             p2 // 复共轭对：取实部
         };
