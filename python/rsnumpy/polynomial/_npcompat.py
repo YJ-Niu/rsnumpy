@@ -247,16 +247,29 @@ def polyfit(x, y, deg, rcond=None, full=False, w=None, cov=False):
 
 
 def polyval(p, x):
-    """Horner 法求值；x 为 poly1d 时返回复合多项式。"""
+    """Horner 法求值；x 为 poly1d 时返回复合多项式。
+    MaskedArray 输入时结果恢复掩码（numpy 语义）。"""
     NX = _NX()
     p = NX.asarray(p)
+    _mask = None
     if isinstance(x, poly1d):
         y = 0
     else:
+        _m = getattr(x, '_mask', None)
+        if _m is not None and _m is not False:
+            _mask = NX.asarray(_m)
         x = NX.asanyarray(x)
         y = NX.zeros_like(x)
     for pv in p:
         y = y * x + pv
+    if _mask is not None:
+        return NX.ma.array(y, mask=_mask)
+    # ndarray 子类输入：结果保留子类（numpy 语义）
+    try:
+        if type(x) is not NX.ndarray and isinstance(x, NX.ndarray):
+            y = y.view(type(x))
+    except Exception:
+        pass
     return y
 
 

@@ -74,46 +74,116 @@ fn polyint_rs(coef: &NdArray, m: usize, k: f64) -> PyResult<NdArray> {
     })
 }
 
-// ========== QR 迭代求特征值（辅助函数） ==========
+// ========== 双移 QR 求特征值（Francis 隐式双移的显式实现） ==========
+// 无移位 QR 迭代对等模根（如 ±1）与复共轭对无法分离；
+// 这里取右下 2x2 的复共轭特征值 p±qi 作双移位：
+// B = (A - pI)^2 + q^2 I，显式 QR 分解后 A' = RQ（正交相似，加速收敛）。
+// 子对角元足够小时自底向上剥离（deflation）；2x2 块直接解特征值。
+// 返回按剥离顺序的实特征值（复共轭对返回实部），排序由 Python 层负责。
+
+fn eig2(a: f64, b: f64, c: f64, d: f64) -> (f64, f64, bool) {
+    // [[a, b], [c, d]] 的特征值 → (较大/实部, 较小/虚幅, 是否实根)
+    let tr = a + d;
+    let det = a * d - b * c;
+    let disc = tr * tr - 4.0 * det;
+    if disc >= 0.0 {
+        let sq = disc.sqrt();
+        ((tr + sq) / 2.0, (tr - sq) / 2.0, true)
+    } else {
+        (tr / 2.0, (-disc).sqrt() / 2.0, false)
+    }
+}
+
+fn qr_gram_schmidt(mat: &[Vec<f64>]) -> (Vec<Vec<f64>>, Vec<Vec<f64>>) {
+    let n = mat.len();
+    let mut q = vec![vec![0.0; n]; n];
+    let mut r = vec![vec![0.0; n]; n];
+    for j in 0..n {
+        let mut v: Vec<f64> = (0..n).map(|i| mat[i][j]).collect();
+        for i in 0..j {
+            let s: f64 = (0..n).map(|k| q[k][i] * v[k]).sum();
+            r[i][j] = s;
+            for k in 0..n {
+                v[k] -= s * q[k][i];
+            }
+        }
+        let norm: f64 = v.iter().map(|vv| vv * vv).sum::<f64>().sqrt();
+        r[j][j] = norm;
+        if norm > 1e-15 {
+            for k in 0..n {
+                q[k][j] = v[k] / norm;
+            }
+        }
+    }
+    (q, r)
+}
+
 fn qr_iter_eigvals_rs(companion: Vec<Vec<f64>>) -> Vec<f64> {
     let n = companion.len();
-    let mut ak = companion.clone();
+    let mut ak = companion;
+    let mut eig: Vec<f64> = vec![0.0; n];
+    let max_iter = 200 * n;
 
-    for _ in 0..200 {
-        let mut q = vec![vec![0.0; n]; n];
-        let mut r = vec![vec![0.0; n]; n];
-
-        for j in 0..n {
-            let mut v: Vec<f64> = (0..n).map(|i| ak[i][j]).collect();
-            for i in 0..j {
-                let s: f64 = (0..n).map(|k| q[k][i] * v[k]).sum();
-                r[i][j] = s;
-                for k in 0..n {
-                    v[k] -= s * q[k][i];
-                }
-            }
-            let norm: f64 = v.iter().map(|vv| vv * vv).sum::<f64>().sqrt();
-            r[j][j] = norm;
-            if norm > 1e-15 {
-                for k in 0..n {
-                    q[k][j] = v[k] / norm;
-                }
-            }
+    let mut m = n;
+    let mut it = 0;
+    while m > 2 {
+        it += 1;
+        // 剥离判定（dlahqr 标准测试）：子对角元足够小 → 右下角 1x1 分离
+        let x = ak[m - 1][m - 2];
+        let y = ak[m - 2][m - 2];
+        let v = ak[m - 2][m - 1];
+        let w = ak[m - 1][m - 1];
+        if x.abs() <= f64::EPSILON * (y.abs() + w.abs() + v.abs()) {
+            eig[m - 1] = w;
+            m -= 1;
+            it = 0;
+            continue;
         }
-
-        let mut nxt = vec![vec![0.0; n]; n];
-        for i in 0..n {
-            for j in 0..n {
+        if it > max_iter {
+            break; // 收敛失败：剩余块按对角元近似
+        }
+        // 右下 2x2 特征值 p ± qi（双移位）
+        let (p, q, _) = eig2(y, v, x, w);
+        // B = (A - pI)^2 + q^2 I（活跃块）
+        let mut b = vec![vec![0.0; m]; m];
+        for i in 0..m {
+            for j in 0..m {
                 let mut s = 0.0;
-                for k in 0..n {
-                    s += r[i][k] * q[k][j];
+                #[allow(clippy::needless_range_loop)]
+                for k in 0..m {
+                    let cik = if i == k { ak[i][k] - p } else { ak[i][k] };
+                    let ckj = if k == j { ak[k][j] - p } else { ak[k][j] };
+                    s += cik * ckj;
                 }
-                nxt[i][j] = s;
+                if i == j {
+                    s += q * q;
+                }
+                b[i][j] = s;
             }
         }
-        ak = nxt;
+        let (qmat, rmat) = qr_gram_schmidt(&b);
+        // A' = RQ
+        for i in 0..m {
+            for j in 0..m {
+                let mut s = 0.0;
+                for k in 0..m {
+                    s += rmat[i][k] * qmat[k][j];
+                }
+                ak[i][j] = s;
+            }
+        }
     }
-    (0..n).map(|i| ak[i][i]).collect()
+    // 收尾：2x2 块直接解特征值，剩余按对角元（收敛失败兜底）
+    if m == 2 {
+        let (l1, l2, is_real) = eig2(ak[0][0], ak[0][1], ak[1][0], ak[1][1]);
+        eig[0] = l1;
+        eig[1] = if is_real { l2 } else { l1 };
+    } else {
+        for i in 0..m {
+            eig[i] = ak[i][i];
+        }
+    }
+    eig
 }
 
 // ========== 多项式求根 ==========

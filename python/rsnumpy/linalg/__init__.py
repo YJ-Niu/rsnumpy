@@ -534,14 +534,40 @@ class linalg_module:
         - 性能：对于简单矩阵乘法，推荐使用matmul
         """
         from ..__init__ import ndarray
-        a_arr = a if hasattr(a, '_array') else ndarray(a)
-        b_arr = b if hasattr(b, '_array') else ndarray(b)
+
+        def _to_arr(z):
+            if hasattr(z, '_array'):
+                return z
+            if isinstance(z, (list, tuple)):
+                return ndarray(z)
+            if hasattr(z, '__iter__') and not isinstance(z, (str, bytes)):
+                # .flat 等迭代器参数（numpy 语义：dot 接受可迭代对象）
+                return ndarray(list(z))
+            return ndarray(z)
+
+        a_arr = _to_arr(a)
+        b_arr = _to_arr(b)
         if _is_complex_arr(a_arr) or _is_complex_arr(b_arr):
             res = _dot_nested(a_arr.tolist(), len(a_arr.shape), b_arr.tolist(), len(b_arr.shape))
             return ndarray(res) if isinstance(res, list) else res
-        result = _core.linalg.dot(_ensure(a), _ensure(b))
-        a_dtype = getattr(a, '_dtype', 'float64')
-        b_dtype = getattr(b, '_dtype', 'float64')
+        try:
+            result = _core.linalg.dot(a_arr._array, b_arr._array)
+        except ValueError:
+            # 回退：a 为 N-D、b 为 1-D 时按 numpy 语义沿 a 末轴收缩
+            if b_arr.ndim == 1 and a_arr.ndim >= 1 and a_arr.shape[-1] == b_arr.shape[0]:
+                lead = tuple(a_arr.shape[:-1])
+                a2 = a_arr.reshape((-1, a_arr.shape[-1]))
+                result = _core.linalg.dot(a2._array, b_arr._array)
+                a_dtype = getattr(a_arr, '_dtype', 'float64')
+                b_dtype = getattr(b_arr, '_dtype', 'float64')
+                if a_dtype in ('float64', 'float32', 'float16') or b_dtype in ('float64', 'float32', 'float16'):
+                    out = ndarray._wrap(result, _dtype='float64')
+                else:
+                    out = ndarray._wrap(result, _dtype='int64')
+                return out.reshape(lead) if lead else out
+            raise
+        a_dtype = getattr(a_arr, '_dtype', 'float64')
+        b_dtype = getattr(b_arr, '_dtype', 'float64')
         if a_dtype in ('float64', 'float32', 'float16') or b_dtype in ('float64', 'float32', 'float16'):
             return ndarray._wrap(result, _dtype='float64')
         return ndarray._wrap(result, _dtype='int64')

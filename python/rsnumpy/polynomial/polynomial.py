@@ -307,13 +307,17 @@ def _int1d(cvals, m, k, lbnd, scl):
     cur = list(cvals)
     for i in range(m):
         cur = [v * scl for v in cur]  # scl 每次积分都乘（numpy 语义）
-        nxt = [0] + [cur[j] / (j + 1) for j in range(len(cur))]
-        # lbnd 语义：第 i+1 次积分后的多项式在 lbnd 处取值恰为 k[i]
-        if lbnd is not None:
-            nxt[0] = nxt[0] + k[i] - _pyval(nxt, lbnd)
+        if builtins.len(cur) == 1 and cur[0] == 0:
+            # 长度为 1 的零多项式：保持长度，只累加积分常数（numpy 语义）
+            cur = [cur[0] + k[i]]
         else:
-            nxt[0] = nxt[0] + k[i]
-        cur = nxt
+            nxt = [0] + [cur[j] / (j + 1) for j in range(len(cur))]
+            # lbnd 语义：第 i+1 次积分后的多项式在 lbnd 处取值恰为 k[i]
+            if lbnd is not None:
+                nxt[0] = nxt[0] + k[i] - _pyval(nxt, lbnd)
+            else:
+                nxt[0] = nxt[0] + k[i]
+            cur = nxt
     return cur
 
 
@@ -366,14 +370,21 @@ def polyint(c, m=1, k=[], lbnd=0, scl=1, axis=0):
 # ========== 根 / 由根构造 / 拟合 ==========
 
 def polyroots(c):
-    """多项式根（Rust QR 伴矩阵特征值内核，降序约定）。"""
+    """多项式根（Rust QR 伴矩阵特征值内核，降序约定）。
+    结果按 (实部, 虚部) 排序——实根升序，与 numpy 实根情形一致。"""
     NX = _NX()
     c = NX.asarray(c)
     cvals = c.tolist()
     if len(cvals) <= 1:
         return NX.array([])
     desc = list(reversed(cvals))
-    return _wrap(_core().polyroots_rs(_raw(desc)))
+    raw = _wrap(_core().polyroots_rs(_raw(desc)))
+    vals = raw.tolist()
+    cv = [complex(v) for v in vals]
+    cv.sort(key=lambda z: (z.real, z.imag))
+    if all(z.imag == 0 for z in cv):
+        return NX.array([z.real for z in cv])
+    return NX.array([z for z in cv])
 
 
 def polyfromroots(roots):
@@ -440,6 +451,9 @@ def polyfit(x, y, deg, rcond=None, full=False, w=None, cov=False):
     Y = NX.array(yvals) if y.ndim == 1 else \
         NX.array([list(row) for row in yvals])
     sol, resids, rank, sv = NX.linalg.lstsq(NX.array(rows), Y, rcond=rcond)
+    if y.ndim == 1 and sol.ndim == 2:
+        # lstsq 对 1-D b 可能返回 (n,1) → 压平为 (n,)
+        sol = NX.array([v[0] for v in sol.tolist()])
     if full:
         return sol, resids, rank, sv
     return sol
@@ -562,15 +576,13 @@ def polyvander(x, deg):
     NX = _NX()
     x = NX.asarray(x)
     xv = x.tolist()
-    shape = tuple(x.shape)
 
-    def rec(v, d):
-        if d == len(shape) - 1:
-            return [v ** i for i in range(deg + 1)]
-        return [rec(u, d + 1) for u in v]
+    def rec(v):
+        if isinstance(v, (list, tuple)):
+            return [rec(u) for u in v]
+        return [v ** i for i in range(deg + 1)]
 
-    data = rec(xv, 0) if shape else [[xv ** i for i in range(deg + 1)]]
-    return NX.array(data)
+    return NX.array(rec(xv))
 
 
 def _vander_nd(pts, deg):
@@ -601,49 +613,131 @@ def _vander_nd(pts, deg):
     return NX.array(_unflat(per_point, shape))
 
 
+def _broadcast_flat(arr, bshape):
+    """把 arr 按广播规则铺到 bshape 后展平为 1-D 列表。"""
+    shape = tuple(arr.shape)
+    if shape == bshape:
+        return _flat_list(arr.tolist())
+    nd = builtins.len(bshape)
+    pad = [1] * (nd - builtins.len(shape)) + list(shape)
+    vals = _flat_list(arr.tolist())
+    npts = _flat_shape(bshape)
+    out = []
+    for k in range(npts):
+        q = _idx_unflat(k, bshape)
+        sidx = 0
+        for a in range(nd - builtins.len(shape), nd):
+            s = int(q[a] % pad[a])
+            sidx = sidx * builtins.int(pad[a]) + s
+        out.append(vals[builtins.int(sidx)])
+    return out
+
+
 def polyvander2d(x, y, deg):
-    if len(deg) != 2:
+    """2 点 Vandermonde：输出形状 broadcast(x, y).shape + (扁平网格,)，
+    网格按 (deg0, deg1) C 序展开。"""
+    if builtins.len(deg) != 2:
         raise ValueError("deg must be a length-2 sequence")
-    return _vander_nd((x, y), (deg[0], deg[1]))
+    NX = _NX()
+    x = NX.asarray(x)
+    y = NX.asarray(y)
+    xs, ys = tuple(x.shape), tuple(y.shape)
+    if not _can_broadcast((xs, ys)):
+        raise ValueError("incompatible point dimensions in polyvander2d")
+    bshape = _broadcast_shape((xs, ys))
+    npts = _flat_shape(bshape)
+    gridlen = (deg[0] + 1) * (deg[1] + 1)
+    xv = _broadcast_flat(x, bshape)
+    yv = _broadcast_flat(y, bshape)
+    data = []
+    for k in range(npts):
+        row = []
+        for i in range(deg[0] + 1):
+            for j in range(deg[1] + 1):
+                row.append(xv[k] ** i * yv[k] ** j)
+        data.append(row)
+    return NX.array(_unflat(data, bshape + (gridlen,)))
 
 
 def polyvander3d(x, y, z, deg):
-    if len(deg) != 3:
+    """3 点 Vandermonde：输出形状 broadcast(x, y, z).shape + (扁平网格,)，
+    网格按 (deg0, deg1, deg2) C 序展开。"""
+    if builtins.len(deg) != 3:
         raise ValueError("deg must be a length-3 sequence")
-    return _vander_nd((x, y, z), (deg[0], deg[1], deg[2]))
+    NX = _NX()
+    x = NX.asarray(x)
+    y = NX.asarray(y)
+    z = NX.asarray(z)
+    shapes = (tuple(x.shape), tuple(y.shape), tuple(z.shape))
+    if not _can_broadcast(shapes):
+        raise ValueError("incompatible point dimensions in polyvander3d")
+    bshape = _broadcast_shape(shapes)
+    npts = _flat_shape(bshape)
+    gridlen = (deg[0] + 1) * (deg[1] + 1) * (deg[2] + 1)
+    xv = _broadcast_flat(x, bshape)
+    yv = _broadcast_flat(y, bshape)
+    zv = _broadcast_flat(z, bshape)
+    data = []
+    for k in range(npts):
+        row = []
+        for i in range(deg[0] + 1):
+            for j in range(deg[1] + 1):
+                for t in range(deg[2] + 1):
+                    row.append(xv[k] ** i * yv[k] ** j * zv[k] ** t)
+        data.append(row)
+    return NX.array(_unflat(data, bshape + (gridlen,)))
 
 
 # ========== 多维求值 / 网格 ==========
 
+def _can_broadcast(shapes):
+    m = builtins.max(builtins.len(s) for s in shapes)
+    padded = [list(reversed(s)) + [1] * (m - builtins.len(s))
+              for s in shapes]
+    for d in range(m):
+        sizes = builtins.set(p[d] for p in padded)
+        sizes.discard(1)
+        if builtins.len(sizes) > 1:
+            return False
+    return True
+
+
+def _broadcast_shape(shapes):
+    m = builtins.max(builtins.len(s) for s in shapes)
+    b = [1] * m
+    for s in shapes:
+        for d, sz in enumerate(reversed(s)):
+            b[m - 1 - d] = builtins.max(b[m - 1 - d], sz)
+    return tuple(b)
+
+
 def _polyvalnd(pts, c):
+    """Σ c[idx] Π p_a**idx[a]（点数组按 numpy 广播规则）。"""
     NX = _NX()
     pts = [NX.asarray(p) for p in pts]
     if not pts:
         raise ValueError("pts must be non-empty")
-    shape = tuple(pts[0].shape)
-    for p in pts[1:]:
-        if tuple(p.shape) != shape:
-            raise ValueError("incompatible point dimensions in polyvalnd")
     c = NX.asarray(c)
-    if c.ndim != len(pts):
+    if c.ndim != builtins.len(pts):
         raise ValueError("coef array must have the same ndim as "
                          "number of points")
+    shapes = [tuple(p.shape) for p in pts]
+    if not _can_broadcast(shapes):
+        raise ValueError("incompatible point dimensions in polyvalnd: "
+                         + " ".join(repr(s) for s in shapes))
+    bshape = _broadcast_shape(shapes)
     cvals = c.tolist()
-    degs = list(c.shape)
-    flats = [p.ravel().tolist() for p in pts]
-    n = len(flats[0])
-    res = [0.0] * n
-    for idx in _itertools.product(*[range(d) for d in degs]):
+    res = NX.zeros(bshape)
+    for idx in _itertools.product(*[range(d) for d in c.shape]):
         cv = _multiget(cvals, idx)
         if cv == 0:
             continue
-        for k in range(n):
-            v = 1.0
-            for a in range(len(pts)):
-                if idx[a]:
-                    v *= flats[a][k] ** idx[a]
-            res[k] = res[k] + cv * v
-    return NX.array(_unflat(res, shape))
+        term = NX.array(cv)
+        for a, p in enumerate(pts):
+            if idx[a]:
+                term = term * (p ** idx[a])
+        res = res + term
+    return res
 
 
 def polyval2d(x, y, c):
@@ -671,19 +765,26 @@ def polyvalnd(pts, c):
 
 
 def polygrid2d(x1, x2, c):
+    """配对网格求值（xy 索引：输出形状 (len(x2), len(x1))）。"""
     r = _dispatch((x1, x2, c), polygrid2d)
     if r is not None:
         return r
     NX = _NX()
-    g1, g2 = NX.meshgrid(NX.asarray(x1), NX.asarray(x2))
-    return polyval2d(g1, g2, c)
+    a1 = NX.asarray(x1).ravel()
+    a2 = NX.asarray(x2).ravel()
+    return _polyvalnd((a1.reshape((1, a1.shape[0])),
+                       a2.reshape((a2.shape[0], 1))), c)
 
 
 def polygrid3d(x1, x2, x3, c):
+    """三维配对网格求值（输出形状 (len(x3), len(x2), len(x1))）。"""
     NX = _NX()
-    g1, g2, g3 = NX.meshgrid(NX.asarray(x1), NX.asarray(x2),
-                             NX.asarray(x3))
-    return polyval3d(g1, g2, g3, c)
+    a1 = NX.asarray(x1).ravel()
+    a2 = NX.asarray(x2).ravel()
+    a3 = NX.asarray(x3).ravel()
+    return _polyvalnd((a1.reshape((1, 1, a1.shape[0])),
+                       a2.reshape((1, a2.shape[0], 1)),
+                       a3.reshape((a3.shape[0], 1, 1))), c)
 
 
 # ========== Polynomial 类 ==========
@@ -704,7 +805,7 @@ class Polynomial:
 
     def __init__(self, c, domain=None, window=None, symbol='x'):
         NX = _NX()
-        c = NX.asarray(c)
+        c = _mk_array(c) if isinstance(c, (list, tuple)) else NX.asarray(c)
         if c.ndim > 1:
             c = c.ravel()
         elif c.ndim == 0:
@@ -714,8 +815,10 @@ class Polynomial:
             domain = NX.array([-1., 1.])
         if window is None:
             window = NX.array([-1., 1.])
-        self._domain = NX.asarray(domain)
-        self._window = NX.asarray(window)
+        self._domain = _mk_array(domain) if isinstance(domain, (list, tuple)) \
+            else NX.asarray(domain)
+        self._window = _mk_array(window) if isinstance(window, (list, tuple)) \
+            else NX.asarray(window)
         self._symbol = symbol
 
     # ---- 属性 ----
@@ -741,8 +844,9 @@ class Polynomial:
 
     # ---- domain → window 映射参数：mapped = x * sc + ofst ----
     def _mapparms(self):
-        d = self._domain.tolist()
-        w = self._window.tolist()
+        # 用数组元素访问保 dtype（f4 domain → f4 参数，弱标量语义）；
+        # object（Fraction）元素访问返回 Python 对象，走精确算术
+        d, w = self._domain, self._window
         sc = (w[1] - w[0]) / (d[1] - d[0])
         ofst = (w[0] * d[1] - w[1] * d[0]) / (d[1] - d[0])
         return ofst, sc
@@ -773,7 +877,7 @@ class Polynomial:
         if not self._same_basiss(other):
             raise ValueError("domains or windows must be the same")
         c = _py_add(self._coef.tolist(), other._coef.tolist())
-        return Polynomial(_NX().array(c), domain=self._domain,
+        return Polynomial(_mk_array(c), domain=self._domain,
                           window=self._window, symbol=self._symbol)
 
     __radd__ = __add__
@@ -786,21 +890,22 @@ class Polynomial:
         a = self._coef.tolist()
         b = other._coef.tolist()
         n = builtins.max(len(a), len(b))
-        c = [(a[i] if i < len(a) else 0) - (b[i] if i < len(b) else 0)
+        c = [(a[i] if i < builtins.len(a) else 0)
+             - (b[i] if i < builtins.len(b) else 0)
              for i in range(n)]
-        return Polynomial(_NX().array(c), domain=self._domain,
+        return Polynomial(_mk_array(c), domain=self._domain,
                           window=self._window, symbol=self._symbol)
 
     def __neg__(self):
-        return Polynomial(_NX().array([-v for v in self._coef.tolist()]),
+        return Polynomial(_mk_array([-v for v in self._coef.tolist()]),
                           domain=self._domain, window=self._window,
                           symbol=self._symbol)
 
     def _scaled(self, s):
         NX = _NX()
         vals = self._coef.tolist()
-        if str(NX.asarray(vals).dtype) == 'object':
-            c = NX.array([s * v for v in vals])
+        if any(_isfrac(v) for v in vals):
+            c = NX.array([s * v for v in vals], dtype='object')
         else:
             c = self._coef * s
         return Polynomial(c, domain=self._domain, window=self._window,
@@ -809,7 +914,7 @@ class Polynomial:
     def __mul__(self, other):
         if isinstance(other, Polynomial):
             c = _py_mul(self._coef.tolist(), other._coef.tolist())
-            return Polynomial(_NX().array(c), domain=self._domain,
+            return Polynomial(_mk_array(c), domain=self._domain,
                               window=self._window, symbol=self._symbol)
         if _is_py_scalar(other):
             return self._scaled(other)
@@ -828,13 +933,13 @@ class Polynomial:
             c = [1]
             for _ in range(n):
                 c = _py_mul(c, self._coef.tolist())
-        return Polynomial(_NX().array(c), domain=self._domain,
+        return Polynomial(_mk_array(c), domain=self._domain,
                           window=self._window, symbol=self._symbol)
 
     # ---- 导数 / 根 ----
     def deriv(self, m=1):
         c = _py_der(self._coef.tolist(), m)
-        return Polynomial(_NX().array(c), domain=self._domain,
+        return Polynomial(_mk_array(c), domain=self._domain,
                           window=self._window, symbol=self._symbol)
 
     def roots(self):
@@ -882,7 +987,8 @@ class Polynomial:
         xm = xarr * sc + ofst
         sol, _resids, rank, _sv = polyfit(xm, y, deg, rcond=rcond,
                                           full=True, w=w)
-        ncoef = deg if isinstance(deg, int) else len(deg)
+        # 秩亏阈值 = Vandermonde 列数 = 次数 + 1（deg 列表时取 max+1）
+        ncoef = (deg + 1) if isinstance(deg, int) else (builtins.max(deg) + 1)
         if rank < ncoef:
             import warnings
             warnings.warn("Polyfit may be poorly conditioned",
