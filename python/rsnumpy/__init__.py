@@ -6274,6 +6274,7 @@ class iinfo:
         if name not in self._BITS:
             # 兼容单字符码别名（long 平台差异 / 测试用 p/P 等）
             name = {'l': 'int64', 'p': 'int64', 'q': 'int64',
+                    'int': 'int64', 'long': 'int64',
                     'L': 'uint64', 'P': 'uint64', 'Q': 'uint64',
                     'b': 'int8', 'h': 'int16', 'i': 'int32',
                     'B': 'uint8', 'H': 'uint16', 'I': 'uint32'}.get(name, name)

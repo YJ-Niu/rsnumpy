@@ -81,19 +81,6 @@ fn polyint_rs(coef: &NdArray, m: usize, k: f64) -> PyResult<NdArray> {
 // 子对角元足够小时自底向上剥离（deflation）；2x2 块直接解特征值。
 // 返回按剥离顺序的实特征值（复共轭对返回实部），排序由 Python 层负责。
 
-fn eig2(a: f64, b: f64, c: f64, d: f64) -> (f64, f64, bool) {
-    // [[a, b], [c, d]] 的特征值 → (较大/实部, 较小/虚幅, 是否实根)
-    let tr = a + d;
-    let det = a * d - b * c;
-    let disc = tr * tr - 4.0 * det;
-    if disc >= 0.0 {
-        let sq = disc.sqrt();
-        ((tr + sq) / 2.0, (tr - sq) / 2.0, true)
-    } else {
-        (tr / 2.0, (-disc).sqrt() / 2.0, false)
-    }
-}
-
 fn qr_gram_schmidt(mat: &[Vec<f64>]) -> (Vec<Vec<f64>>, Vec<Vec<f64>>) {
     let n = mat.len();
     let mut q = vec![vec![0.0; n]; n];
@@ -119,6 +106,9 @@ fn qr_gram_schmidt(mat: &[Vec<f64>]) -> (Vec<Vec<f64>>, Vec<Vec<f64>>) {
 }
 
 fn qr_iter_eigvals_rs(companion: Vec<Vec<f64>>) -> Vec<f64> {
+    // 单移位 QR 迭代（Wilkinson 移位）+ 子对角剥离 + 2x2 直接求解。
+    // 注：显式双移 QR（B=(A-pI)²±q²I 后 A'=RQ）相似于 B 而非 A，特征值会漂移，
+    // 不可用；单移位保证 A' 与 A-σI 正交相似（特征值 = 原特征值 - σ）。
     let n = companion.len();
     let mut ak = companion;
     let mut eig: Vec<f64> = vec![0.0; n];
@@ -126,43 +116,63 @@ fn qr_iter_eigvals_rs(companion: Vec<Vec<f64>>) -> Vec<f64> {
 
     let mut m = n;
     let mut it = 0;
-    while m > 2 {
-        it += 1;
-        // 剥离判定（dlahqr 标准测试）：子对角元足够小 → 右下角 1x1 分离
+    let mut acc = 0.0; // 累计移位：当前活跃块 = 原块 - acc*I
+    while m > 1 {
         let x = ak[m - 1][m - 2];
         let y = ak[m - 2][m - 2];
         let v = ak[m - 2][m - 1];
         let w = ak[m - 1][m - 1];
+        // 剥离判定（dlahqr 标准测试）：子对角元足够小 → 右下角 1x1 分离
         if x.abs() <= f64::EPSILON * (y.abs() + w.abs() + v.abs()) {
-            eig[m - 1] = w;
+            eig[m - 1] = w + acc;
             m -= 1;
             it = 0;
             continue;
         }
+        if m == 2 {
+            // 2x2 直接解特征值：用稳定判别式 (a-d)²/4 + bc，
+            // 避免块量级 ~acc 时 tr²-4det 的灾难性抵消
+            let s = (y - w) / 2.0;
+            let rad = s * s + v * x;
+            let p2 = (y + w) / 2.0;
+            if rad >= 0.0 {
+                let sq = rad.sqrt();
+                eig[0] = p2 + sq + acc;
+                eig[1] = p2 - sq + acc;
+            } else {
+                // 复共轭对 → 实部
+                eig[0] = p2 + acc;
+                eig[1] = p2 + acc;
+            }
+            m = 0;
+            break;
+        }
         if it > max_iter {
             break; // 收敛失败：剩余块按对角元近似
         }
-        // 右下 2x2 特征值 p ± qi（双移位）
-        let (p, q, _) = eig2(y, v, x, w);
-        // B = (A - pI)^2 + q^2 I（活跃块）
+        it += 1;
+        // Wilkinson 移位：右下 2x2 中距 w 最近的特征值（稳定判别式形式；
+        // 取距 w 近者 = 同侧无抵消，远侧特征值可能抵消失真）
+        let s = (y - w) / 2.0;
+        let rad = s * s + v * x;
+        let p2 = (y + w) / 2.0;
+        let sigma = if rad >= 0.0 {
+            let sq = rad.sqrt();
+            let e1 = p2 + sq;
+            let e2 = p2 - sq;
+            if (w - e1).abs() <= (w - e2).abs() { e1 } else { e2 }
+        } else {
+            p2 // 复共轭对：取实部
+        };
+        // B = A - sigma I（活跃块）
         let mut b = vec![vec![0.0; m]; m];
         for i in 0..m {
             for j in 0..m {
-                let mut s = 0.0;
-                #[allow(clippy::needless_range_loop)]
-                for k in 0..m {
-                    let cik = if i == k { ak[i][k] - p } else { ak[i][k] };
-                    let ckj = if k == j { ak[k][j] - p } else { ak[k][j] };
-                    s += cik * ckj;
-                }
-                if i == j {
-                    s += q * q;
-                }
-                b[i][j] = s;
+                b[i][j] = ak[i][j] - if i == j { sigma } else { 0.0 };
             }
         }
         let (qmat, rmat) = qr_gram_schmidt(&b);
-        // A' = RQ
+        // A' = RQ（与 B 正交相似）
         for i in 0..m {
             for j in 0..m {
                 let mut s = 0.0;
@@ -172,16 +182,11 @@ fn qr_iter_eigvals_rs(companion: Vec<Vec<f64>>) -> Vec<f64> {
                 ak[i][j] = s;
             }
         }
+        acc += sigma;
     }
-    // 收尾：2x2 块直接解特征值，剩余按对角元（收敛失败兜底）
-    if m == 2 {
-        let (l1, l2, is_real) = eig2(ak[0][0], ak[0][1], ak[1][0], ak[1][1]);
-        eig[0] = l1;
-        eig[1] = if is_real { l2 } else { l1 };
-    } else {
-        for i in 0..m {
-            eig[i] = ak[i][i];
-        }
+    // 兜底：剩余块按对角元（+ 累计移位）
+    for i in 0..m {
+        eig[i] = ak[i][i] + acc;
     }
     eig
 }

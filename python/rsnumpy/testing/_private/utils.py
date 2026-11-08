@@ -535,6 +535,7 @@ def assert_equal(actual, desired, err_msg='', verbose=True, *, strict=False):
     except Exception:
         pass
 
+    isdesnat = isactnat = False
     try:
         isdesnat = isnat(desired)
         isactnat = isnat(actual)
@@ -553,7 +554,7 @@ def assert_equal(actual, desired, err_msg='', verbose=True, *, strict=False):
             else:
                 raise AssertionError(msg)
 
-    except (TypeError, ValueError, NotImplementedError):
+    except (AttributeError, TypeError, ValueError, NotImplementedError):
         pass
 
     # Inf/nan/negative zero handling

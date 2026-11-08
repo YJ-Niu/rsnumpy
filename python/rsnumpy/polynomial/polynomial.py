@@ -216,7 +216,8 @@ def polyval(x, c, tensor=True):
 def polyvalfromroots(x, roots, tensor=True):
     """Πᵢ (x - roots[i])；roots 多维时末轴组分别求值。
     tensor=True：输出形状 roots.shape[1:] + x.shape；
-    tensor=False：x.shape + roots.shape[1:]（roots 须 ≥2 维）。"""
+    tensor=False：x 与根组逐组配对（第 i 个 x 点配第 i 组根），
+    输出形状 roots.shape[1:]（roots 须 ≥2 维）。"""
     NX = _NX()
     x = NX.asanyarray(x)
     roots = NX.asarray(roots)
@@ -229,7 +230,7 @@ def polyvalfromroots(x, roots, tensor=True):
         rval = roots.tolist()
     xshape = tuple(x.shape)
     if len(rshape) > 1:
-        out_shape = rshape[1:] + xshape if tensor else xshape + rshape[1:]
+        out_shape = rshape[1:] + xshape if tensor else rshape[1:]
     elif tensor:
         out_shape = xshape
     else:
@@ -245,17 +246,27 @@ def polyvalfromroots(x, roots, tensor=True):
     if len(rshape) > 1:
         gshape = rshape[1:]
         ng = _flat_shape(gshape)
-        res = [0.0] * (ng * npts)
-        for gi in range(ng):
-            gidx = _idx_unflat(gi, gshape)
-            for k in range(npts):
+        if tensor:
+            res = [0.0] * (ng * npts)
+            for gi in range(ng):
+                gidx = _idx_unflat(gi, gshape)
+                for k in range(npts):
+                    v = 1.0
+                    for i in range(rshape[0]):
+                        v *= (xflat[k] - _multiget(rval, (i,) + gidx))
+                    res[gi * npts + k] = v
+        else:
+            # 逐组配对：x[i] 与第 i 组根
+            if npts < ng:
+                raise ValueError("x must have at least as many points "
+                                 "as root groups for tensor=False")
+            res = [0.0] * ng
+            for gi in range(ng):
+                gidx = _idx_unflat(gi, gshape)
                 v = 1.0
                 for i in range(rshape[0]):
-                    v *= (xflat[k] - _multiget(rval, (i,) + gidx))
-                if tensor:
-                    res[gi * npts + k] = v
-                else:
-                    res[k * ng + gi] = v
+                    v *= (xflat[gi] - _multiget(rval, (i,) + gidx))
+                res[gi] = v
         return NX.array(_unflat(res, out_shape))
     # 1 维 roots：单组
     res = []
@@ -405,6 +416,62 @@ def polyfromroots(roots):
     return NX.array(out)
 
 
+def _is_complex_data(vals):
+    """嵌套列表数据是否含 complex 元素。"""
+    if isinstance(vals, (list, tuple)):
+        flat = vals if all(not isinstance(v, (list, tuple))
+                           for v in vals) else _flat_list(vals)
+    else:
+        flat = [vals]
+    return any(isinstance(v, complex) for v in flat)
+
+
+def _gauss_complex(A, bvec):
+    """复数高斯消元（列主元）。"""
+    k = builtins.len(bvec)
+    M = [list(A[i]) + [bvec[i]] for i in range(k)]
+    for i in range(k):
+        p = i
+        best = builtins.abs(M[i][i])
+        for r in range(i + 1, k):
+            if builtins.abs(M[r][i]) > best:
+                best = builtins.abs(M[r][i])
+                p = r
+        M[i], M[p] = M[p], M[i]
+        piv = M[i][i]
+        if piv == 0:
+            continue
+        for r in range(i + 1, k):
+            f = M[r][i] / piv
+            if f != 0:
+                for c in range(i, k + 1):
+                    M[r][c] = M[r][c] - f * M[i][c]
+    x = [0j] * k
+    for i in range(k - 1, -1, -1):
+        s = M[i][k]
+        for c in range(i + 1, k):
+            s = s - M[i][c] * x[c]
+        x[i] = s / M[i][i] if M[i][i] != 0 else 0j
+    return x
+
+
+def _lstsq_normal(V, ycol):
+    """正规方程 (V^H V) c = V^H y 最小二乘（复数路径用；
+    rsnumpy 复数 lstsq 内核损坏，见 linalg 后续任务）。"""
+    n = builtins.len(V)
+    k = builtins.len(V[0])
+    A = [[0j] * k for _ in range(k)]
+    for i in range(n):
+        row = V[i]
+        for a in range(k):
+            ca = row[a].conjugate()
+            for b in range(k):
+                A[a][b] = A[a][b] + ca * row[b]
+    bvec = [sum(V[i][a].conjugate() * ycol[i] for i in range(n))
+            for a in range(k)]
+    return _gauss_complex(A, bvec)
+
+
 def polyfit(x, y, deg, rcond=None, full=False, w=None, cov=False):
     """最小二乘拟合。deg 可为 int 或严格递增非负幂列表；
     结果长度 max(deg)+1（缺失幂次补零）；支持复数 x、2-D y（逐列）、权重 w。"""
@@ -447,6 +514,21 @@ def polyfit(x, y, deg, rcond=None, full=False, w=None, cov=False):
     for i, xv in enumerate(xvals):
         s = (wvals[i] ** 0.5) if wvals is not None else 1.0
         rows.append([(xv ** d) * s for d in range(order + 1)])
+    if _is_complex_data(rows) or _is_complex_data(yvals):
+        # 复数路径：正规方程纯 Python 求解（复数 lstsq 内核损坏）
+        if y.ndim == 2:
+            ncol = builtins.len(yvals[0])
+            cols = [[row[i] for row in yvals] for i in range(ncol)]
+        else:
+            cols = [yvals]
+        sols = [_lstsq_normal(rows, col) for col in cols]
+        if y.ndim == 1:
+            sol = NX.array(sols[0])
+        else:
+            sol = NX.array([list(row) for row in sols])
+        if full:
+            return sol, NX.array([]), NX.array([order + 1]), NX.array([])
+        return sol
     # 1 维 y → 1 维解（numpy 语义）；2 维 y 逐列
     Y = NX.array(yvals) if y.ndim == 1 else \
         NX.array([list(row) for row in yvals])
@@ -651,11 +733,9 @@ def polyvander2d(x, y, deg):
     yv = _broadcast_flat(y, bshape)
     data = []
     for k in range(npts):
-        row = []
         for i in range(deg[0] + 1):
             for j in range(deg[1] + 1):
-                row.append(xv[k] ** i * yv[k] ** j)
-        data.append(row)
+                data.append(xv[k] ** i * yv[k] ** j)
     return NX.array(_unflat(data, bshape + (gridlen,)))
 
 
@@ -679,12 +759,10 @@ def polyvander3d(x, y, z, deg):
     zv = _broadcast_flat(z, bshape)
     data = []
     for k in range(npts):
-        row = []
         for i in range(deg[0] + 1):
             for j in range(deg[1] + 1):
                 for t in range(deg[2] + 1):
-                    row.append(xv[k] ** i * yv[k] ** j * zv[k] ** t)
-        data.append(row)
+                    data.append(xv[k] ** i * yv[k] ** j * zv[k] ** t)
     return NX.array(_unflat(data, bshape + (gridlen,)))
 
 
@@ -770,21 +848,28 @@ def polygrid2d(x1, x2, c):
     if r is not None:
         return r
     NX = _NX()
-    a1 = NX.asarray(x1).ravel()
-    a2 = NX.asarray(x2).ravel()
-    return _polyvalnd((a1.reshape((1, a1.shape[0])),
-                       a2.reshape((a2.shape[0], 1))), c)
+    a1 = NX.asarray(x1)
+    a2 = NX.asarray(x2)
+    # 输出 res[i, j] = f(x1[i], x2[j])（保留输入形状，测试规格 einsum 'i,j->ij'）
+    p1 = a1.reshape(a1.shape + (1,) * builtins.len(a2.shape))
+    p2 = a2.reshape((1,) * builtins.len(a1.shape) + a2.shape)
+    return _polyvalnd((p1, p2), c)
 
 
 def polygrid3d(x1, x2, x3, c):
     """三维配对网格求值（输出形状 (len(x3), len(x2), len(x1))）。"""
     NX = _NX()
-    a1 = NX.asarray(x1).ravel()
-    a2 = NX.asarray(x2).ravel()
-    a3 = NX.asarray(x3).ravel()
-    return _polyvalnd((a1.reshape((1, 1, a1.shape[0])),
-                       a2.reshape((1, a2.shape[0], 1)),
-                       a3.reshape((a3.shape[0], 1, 1))), c)
+    a1 = NX.asarray(x1)
+    a2 = NX.asarray(x2)
+    a3 = NX.asarray(x3)
+    # 输出形状 = s1 + s2 + s3：各输入占据互不重叠的轴块（其余轴 pad 1）
+    s1, s2, s3 = a1.shape, a2.shape, a3.shape
+    R = builtins.len(s1) + builtins.len(s2) + builtins.len(s3)
+    p1 = a1.reshape(s1 + (1,) * (R - builtins.len(s1)))
+    p2 = a2.reshape((1,) * builtins.len(s1) + s2
+                    + (1,) * (R - builtins.len(s1) - builtins.len(s2)))
+    p3 = a3.reshape((1,) * (builtins.len(s1) + builtins.len(s2)) + s3)
+    return _polyvalnd((p1, p2, p3), c)
 
 
 # ========== Polynomial 类 ==========

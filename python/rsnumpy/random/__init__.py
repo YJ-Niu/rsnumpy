@@ -4,6 +4,8 @@ import rsnumpy.num_core as _core
 import random as _py_random
 import rsnumpy as np
 
+from ._distributions import Samplers, _POISSON_LAM_MAX, _broadcast_shapes, _zeta
+
 
 # _core.random.Generator may be Python's built-in typing.Generator, not a
 # real RNG.  Provide a working fallback.
@@ -99,15 +101,364 @@ class _MT19937:
         return [type(self)(None) for _ in range(n_children)]
 
 
+def _is_arraylike(v):
+    return isinstance(v, (list, tuple, np.ndarray)) or hasattr(v, 'shape')
+
+
+def _norm_size(size):
+    if size is None:
+        return ()
+    if isinstance(size, float):
+        raise TypeError("size must be an integer or tuple of integers")
+    if isinstance(size, (list, tuple)):
+        return tuple(int(x) for x in size)
+    if _is_arraylike(size):
+        return tuple(int(x) for x in np.asarray(size).ravel().tolist())
+    return (int(size),)
+
+
+def _sample_dist(sampler, name, params, size, int_dist=False):
+    """按 numpy 语义：数组参数广播 → 前置 size → 逐点采样 → 封装
+    （标量 or ndarray）。params 为采样器位置参数序列（标量或数组）。"""
+    param_vals = []
+    arrs = []
+    for p in params:
+        if _is_arraylike(p):
+            a = np.asarray(p, dtype='float64')
+            if a.ndim == 0:
+                # 0-d：numpy 以 __float__ 提取标量，子类覆盖须被尊重
+                # （test_scalar_exception_propagation）
+                param_vals.append(('s', float(p)))
+                continue
+            param_vals.append(('a', a))
+            arrs.append(a)
+        else:
+            param_vals.append(('s', float(p)))
+    if arrs:
+        bcast = np.broadcast_arrays(*arrs)
+        bshape = tuple(bcast[0].shape)
+        idx = 0
+        flat_params = []
+        for kind, p in param_vals:
+            if kind == 's':
+                flat_params.append(('s', p))
+            else:
+                flat_params.append(('a', bcast[idx].ravel().tolist()))
+                idx += 1
+    else:
+        bshape = ()
+        flat_params = param_vals
+    ssize = _norm_size(size)
+    out_shape = ssize + bshape
+    total = 1
+    for d in out_shape:
+        total *= d
+    bn = 1
+    for d in bshape:
+        bn *= d
+    fn = getattr(sampler, name)
+    res = []
+    for i in range(total):
+        bidx = i % bn
+        vals = [d if k == 's' else d[bidx] for k, d in flat_params]
+        res.append(fn(*vals))
+    if out_shape == ():
+        return int(res[0]) if int_dist else res[0]
+    return np.asarray(res, dtype='int64' if int_dist else 'float64').reshape(out_shape)
+
+
+def _multinomial_impl(draw_u, n, pvals, size):
+    """numpy 语义 multinomial：pvals 必须 1-d；空 pvals → 尾维 0。"""
+    if isinstance(pvals, (str, bytes)) or (
+            not isinstance(pvals, (list, tuple, np.ndarray))
+            and not hasattr(pvals, 'shape')):
+        raise TypeError("pvals must be a 1-d sequence of probabilities")
+    parr = np.asarray(pvals, dtype='float64')
+    if parr.ndim != 1:
+        raise ValueError("pvals must be a 1-d sequence of probabilities")
+    k = int(parr.size)
+    pvals_list = parr.ravel().tolist()
+    if _is_arraylike(n):
+        n_arr = np.asarray(n, dtype='int64')
+        n_shape = tuple(n_arr.shape)
+        n_flat = n_arr.ravel().tolist()
+    else:
+        n_shape = ()
+        n_flat = [int(n)]
+    ssize = _norm_size(size)
+    draws_shape = ssize + n_shape
+    out_shape = draws_shape + (k,)
+    total = 1
+    for d in draws_shape:
+        total *= d
+    if k == 0:
+        return np.zeros(out_shape)
+    psum = sum(pvals_list)
+    if psum <= 0:
+        raise ValueError("pvals must sum to a positive value")
+    cdf = []
+    acc = 0.0
+    for pv in pvals_list:
+        acc += pv / psum
+        cdf.append(acc)
+    cdf[-1] = 1.0
+    bn_n = 1
+    for d in n_shape:
+        bn_n *= d
+    res = []
+    for i in range(total):
+        n_i = int(n_flat[i % bn_n])
+        counts = [0] * k
+        for _ in range(max(0, n_i)):
+            u = draw_u()
+            for ci, c in enumerate(cdf):
+                if u <= c:
+                    counts[ci] += 1
+                    break
+            else:
+                counts[k - 1] += 1
+        res.extend(counts)
+    return np.asarray(res, dtype='int64').reshape(out_shape)
+
+
+# legacy 分布名 → Samplers 方法名（uniform/normal/standard_normal 走 Rust 内核，
+# 不在此列，保持既有流不变）
+_RS_DIST_DISPATCH = {
+    'beta': 'beta',
+    'binomial': 'binomial',
+    'chisquare': 'chisquare',
+    'exponential': 'exponential',
+    'f': 'f',
+    'gamma': 'gamma',
+    'geometric': 'geometric',
+    'gumbel': 'gumbel',
+    'hypergeometric': 'hypergeometric',
+    'laplace': 'laplace',
+    'logistic': 'logistic',
+    'lognormal': 'lognormal',
+    'logseries': 'logseries',
+    'negative_binomial': 'negative_binomial',
+    'noncentral_chisquare': 'noncentral_chisquare',
+    'noncentral_f': 'noncentral_f',
+    'pareto': 'pareto',
+    'poisson': 'poisson',
+    'power': 'power',
+    'rayleigh': 'rayleigh',
+    'standard_cauchy': 'standard_cauchy',
+    'standard_exponential': 'standard_exponential',
+    'standard_gamma': 'standard_gamma',
+    'standard_t': 'standard_t',
+    't': 'standard_t',
+    'triangular': 'triangular',
+    'triangle': 'triangular',
+    'weibull': 'weibull',
+    'wald': 'wald',
+    'zipf': 'zipf',
+}
+_RS_INT_DISTS = {'binomial', 'geometric', 'hypergeometric', 'logseries',
+                 'negative_binomial', 'poisson', 'zipf'}
+
+# 每个分布的规范位置参数名（用于把关键字参数映射到正确槽位）
+_RS_DIST_PARAMS = {
+    'beta': ('a', 'b'),
+    'binomial': ('n', 'p'),
+    'chisquare': ('df',),
+    'exponential': ('scale',),
+    'f': ('dfnum', 'dfden'),
+    'gamma': ('shape', 'scale'),
+    'geometric': ('p',),
+    'gumbel': ('loc', 'scale'),
+    'hypergeometric': ('ngood', 'nbad', 'nsample'),
+    'laplace': ('loc', 'scale'),
+    'logistic': ('loc', 'scale'),
+    'lognormal': ('mean', 'sigma'),
+    'logseries': ('p',),
+    'negative_binomial': ('n', 'p'),
+    'noncentral_chisquare': ('df', 'nonc'),
+    'noncentral_f': ('dfnum', 'dfden', 'nonc'),
+    'pareto': ('a',),
+    'poisson': ('lam',),
+    'power': ('a',),
+    'rayleigh': ('scale',),
+    'standard_cauchy': (),
+    'standard_exponential': (),
+    'standard_gamma': ('shape',),
+    'standard_t': ('df',),
+    't': ('df',),
+    'triangular': ('left', 'mode', 'right'),
+    'triangle': ('left', 'mode', 'right'),
+    'weibull': ('a',),
+    'wald': ('mean', 'gamma'),
+    'zipf': ('a',),
+}
+
+# numpy legacy 分布缺省参数（与 mtrand 签名一致，参数缺失时填充）
+_RS_DIST_DEFAULTS = {
+    ('exponential', 'scale'): 1.0,
+    ('gamma', 'shape'): 1.0, ('gamma', 'scale'): 1.0,
+    ('gumbel', 'loc'): 0.0, ('gumbel', 'scale'): 1.0,
+    ('laplace', 'loc'): 0.0, ('laplace', 'scale'): 1.0,
+    ('logistic', 'loc'): 0.0, ('logistic', 'scale'): 1.0,
+    ('lognormal', 'mean'): 0.0, ('lognormal', 'sigma'): 1.0,
+    ('poisson', 'lam'): 1.0,
+    ('rayleigh', 'scale'): 1.0,
+    ('triangular', 'left'): 0.0, ('triangular', 'mode'): 0.5,
+    ('triangular', 'right'): 1.0,
+    ('triangle', 'left'): 0.0, ('triangle', 'mode'): 0.5,
+    ('triangle', 'right'): 1.0,
+}
+
+_MISSING = object()
+
+
+def _fold_seed(seed):
+    """任意 Python 种子 → Rust 可接受的 u64（新 API Generator 用，宽松）。"""
+    if seed is None:
+        return None
+    if isinstance(seed, _SeedSequence):
+        seed = seed.entropy
+    if not isinstance(seed, int) and hasattr(seed, 'item'):
+        seed = int(seed)
+    if not isinstance(seed, int):
+        if isinstance(seed, (list, tuple)):
+            acc = 0
+            for x in seed:
+                acc = (acc * 1000003 + int(x)) & ((1 << 64) - 1)
+            seed = acc
+        else:
+            try:
+                seed = int(seed)
+            except (TypeError, ValueError):
+                raise TypeError(f"cannot convert {type(seed).__name__} to a seed")
+    return seed & ((1 << 64) - 1)
+
+
+def _legacy_validate_seed(seed):
+    """numpy legacy RandomState 种子校验（严格）。
+
+    合法：None、单个 [0, 2**32) 整数、1-d 非空整数数组（元素同范围）。
+    越界/非整数 → ValueError/TypeError，与 numpy 对齐。
+    """
+    if seed is None:
+        return None
+    if isinstance(seed, _SeedSequence):
+        seed = seed.entropy
+    if isinstance(seed, int) and not isinstance(seed, bool):
+        if seed < 0 or seed >= 2 ** 32:
+            raise ValueError("Seed must be in [0, 2**32)")
+        return seed
+    if isinstance(seed, float) or isinstance(seed, bool):
+        raise TypeError("Seed must be a non-negative integer")
+    if not isinstance(seed, (list, tuple, np.ndarray)) and hasattr(seed, 'item'):
+        try:
+            iv = int(seed)
+        except (TypeError, ValueError):
+            raise TypeError("Seed must be a non-negative integer")
+        if iv < 0 or iv >= 2 ** 32:
+            raise ValueError("Seed must be in [0, 2**32)")
+        return iv
+    try:
+        arr = np.asarray(seed)
+    except Exception:
+        raise TypeError("Seed must be a non-negative integer or array of integers")
+    if arr.ndim != 1:
+        raise ValueError("Seed must be a 1-d array of integers or None")
+    if arr.size == 0:
+        raise ValueError("Seed must be a non-empty array or None")
+    out = 0
+    for v in arr.ravel().tolist():
+        if isinstance(v, float):
+            raise TypeError("Seed elements must be integers")
+        try:
+            iv = int(v)
+        except (TypeError, ValueError):
+            raise TypeError("Seed elements must be integers")
+        if iv != v:
+            raise TypeError("Seed elements must be integers")
+        if iv < 0 or iv >= 2 ** 32:
+            raise ValueError("Seed elements must be in [0, 2**32)")
+        out = (out * 1000003 + iv) % 2 ** 32
+    return out
+
+
+def _parse_int_dtype(name):
+    """'int32'/'i4'/'uint64'/'u8'/'bool'/'int' → ('int'|'uint', bits) / ('bool', None)。"""
+    name = name.strip()
+    if name in ('bool', '?'):
+        return 'bool', None
+    if name in ('int', 'l', 'long'):
+        return 'int', 64
+    if name.startswith('uint') and name[4:].isdigit():
+        return 'uint', int(name[4:])
+    if name.startswith('int') and name[3:].isdigit():
+        return 'int', int(name[3:])
+    # 单字母+数字简写是字节数（i4 = int32 / u8 = uint64），须 ×8 换成位宽
+    if name.startswith('u') and name[1:].isdigit():
+        return 'uint', int(name[1:]) * 8
+    if name.startswith('i') and name[1:].isdigit():
+        return 'int', int(name[1:]) * 8
+    return None
+
+
+def _python_shuffle(next_u, x, axis=0, warn_1d_object=False):
+    """Fisher-Yates 洗牌：list / ndarray（含 object/结构化/memoryview）。
+
+    object 数组逐元素搬运 Python 对象引用（不复制，保持对象身份）；
+    数值数组按行搬运（行 view 需 copy 后再写回）。
+    """
+    if isinstance(x, list):
+        n = len(x)
+        for i in range(n - 1, 0, -1):
+            j = int(next_u() * (i + 1))
+            x[i], x[j] = x[j], x[i]
+        return
+    if hasattr(x, 'shape'):
+        if hasattr(x, 'flags') and not x.flags.writeable:
+            raise ValueError("read-only array -- cannot shuffle in-place")
+        is_obj = False
+        try:
+            is_obj = str(x.dtype).strip() == 'object'
+        except Exception:
+            pass
+        if warn_1d_object and is_obj and len(x.shape) == 1:
+            import warnings
+            warnings.warn(
+                "Shuffling a one dimensional array of objects is a common "
+                "use case, but the result is a new array of the shuffled "
+                "objects; use a list instead.", UserWarning, stacklevel=3)
+        n = x.shape[0]
+        for i in range(n - 1, 0, -1):
+            j = int(next_u() * (i + 1))
+            if j == i:
+                continue
+            el = x[i]
+            tmp = el if (is_obj or not hasattr(el, 'copy')) else el.copy()
+            x[i] = x[j]
+            x[j] = tmp
+        return
+    import warnings
+    warnings.warn(
+        f"you are shuffling a '{type(x).__name__}' object, which is "
+        "treated as a sequence by rsnumpy.random.shuffle", UserWarning,
+        stacklevel=3)
+    n = len(x)
+    for i in range(n - 1, 0, -1):
+        j = int(next_u() * (i + 1))
+        x[i], x[j] = x[j], x[i]
+
+
 class _RandomStateWrapper:
     """Python wrapper around the core RandomState.
 
     Adds the legacy attributes SciPy expects (``_bit_generator``) and
-    distributions the Rust core does not implement (``multivariate_normal``).
+    distributions the Rust core does not implement (``multivariate_normal``
+    以及 _distributions 补齐的完整 legacy 分布集)。
     """
 
     def __init__(self, seed=None):
+        seed = _legacy_validate_seed(seed)
         self._seed = seed
+        self._sampler = Samplers(self._next_u, self._next_normal)
         self._inner = _core.random.RandomState(seed)
 
     def __deepcopy__(self, memo):
@@ -152,20 +503,49 @@ class _RandomStateWrapper:
             def choice(a, size=None, replace=True, p=None):
                 import rsnumpy as np
                 if isinstance(a, int):
+                    if a < 0:
+                        raise ValueError("'a' must be a non-negative integer")
                     pop = a
                 else:
                     arr0 = np.asarray(a)
-                    pop = arr0.shape[0]
-                if size is None:
-                    out = [self._draw_index(pop, p)]
-                    sz_shape = ()
-                elif isinstance(size, int):
-                    out = [self._draw_index(pop, p) for _ in range(size)]
-                    sz_shape = (size,)
-                else:
-                    sz_shape = tuple(size)
-                    out = [self._draw_index(pop, p)
-                           for _ in range(int(np.prod(sz_shape)))]
+                    if arr0.ndim != 1:
+                        raise ValueError(
+                            "'a' must be a 1-d array or a non-negative integer")
+                    pop = int(arr0.shape[0])
+                    if pop == 0:
+                        raise ValueError(
+                            "'a' must be a non-empty 1-d array or a non-negative integer")
+                if p is not None:
+                    parr = np.asarray(p, dtype='float64')
+                    if parr.ndim != 1:
+                        raise ValueError("'a' and 'p' must have same size")
+                    pl = parr.ravel().tolist()
+                    if len(pl) != pop:
+                        raise ValueError("'a' and 'p' must have same size")
+                    bad = False
+                    for v in pl:
+                        if v != v or v < 0:
+                            bad = True
+                            break
+                    if bad:
+                        raise ValueError("probabilities contain NaN or are negative")
+                    if abs(sum(pl) - 1.0) > 1e-8:
+                        raise ValueError("probabilities do not sum to 1")
+                    p = pl
+                nsize = 1
+                if size is not None:
+                    if isinstance(size, (tuple, list)):
+                        sz_shape = tuple(int(d) for d in size)
+                        for d in sz_shape:
+                            nsize *= d
+                    else:
+                        nsize = int(size)
+                        sz_shape = (nsize,)
+                if not replace and nsize > pop:
+                    raise ValueError(
+                        "Cannot take a larger sample than population "
+                        "when 'replace=False'")
+                out = [self._draw_index(pop, p) for _ in range(nsize)]
                 if not replace:
                     seen = set()
                     fixed = []
@@ -179,7 +559,8 @@ class _RandomStateWrapper:
                     res = np.asarray(out)
                 else:
                     res = np.take(np.asarray(a), np.asarray(out))
-                return res.reshape(sz_shape) if size is not None else res[()]
+                # 标量分支：rsnumpy 一维数组不支持 [()] 取元，取首元素
+                return res.reshape(sz_shape) if size is not None else res[0]
             return choice
         if name == 'permutation':
             def permutation(x):
@@ -209,12 +590,9 @@ class _RandomStateWrapper:
             return get_state
         if name == 'set_state':
             def set_state(state):
-                # Re-seed from the recorded seed when possible; the core
-                # cannot restore an arbitrary MT19937 buffer.
-                try:
-                    seed = state[1][0]
-                except (IndexError, TypeError):
-                    seed = None
+                # 用记录的关键字头重新播种；核心无法恢复任意 MT19937
+                # 缓冲（逐位精确流需 MT19937 内核支持）。
+                seed = _legacy_validate_seed(state[1][0])
                 self._inner = _core.random.RandomState(seed)
             return set_state
         if name == 'standard_normal':
@@ -222,39 +600,252 @@ class _RandomStateWrapper:
                 return self._inner.randn(*( (size,) if isinstance(size, int)
                                             else tuple(size) if size else (1,)))
             return standard_normal
-        if name == 'randint':
-            def randint(low, high=None, size=None, dtype=None, endpoint=False):
-                import rsnumpy as np
-                if high is None:
-                    low, high = 0, low
-                if size is None:
-                    vals = [low + int(self._next_u() * (high - low))]
-                    shape = ()
-                elif isinstance(size, int):
-                    vals = [low + int(self._next_u() * (high - low))
-                            for _ in range(size)]
-                    shape = (size,)
-                else:
-                    shape = tuple(size)
-                    n = int(np.prod(shape))
-                    vals = [low + int(self._next_u() * (high - low))
-                            for _ in range(n)]
-                res = np.asarray(vals, dtype=dtype or 'int64')
-                return res.reshape(shape) if shape else res.reshape(())[()]
-            return randint
+        if name == 'multinomial':
+            def multinomial(n, pvals, size=None):
+                return self._multinomial_impl(n, pvals, size)
+            return multinomial
+        if name == 'dirichlet':
+            def dirichlet(alpha, size=None):
+                return self._dirichlet_impl(alpha, size)
+            return dirichlet
+        if name == 'vonmises':
+            def vonmises(*args, **kwargs):
+                return self._vonmises_impl(*args, **kwargs)
+            return vonmises
+        if name in _RS_DIST_DISPATCH:
+            _sampler_name = _RS_DIST_DISPATCH[name]
+            _int = name in _RS_INT_DISTS
+            def _dist_method(*args, _sampler_name=_sampler_name, _int=_int,
+                             **kwargs):
+                return self._dist_call(_sampler_name, args, kwargs, _int)
+            return _dist_method
         return getattr(self._inner, name)
+
+    def _dist_call(self, sampler_name, args, kwargs, int_dist):
+        """位置 + 关键字参数 → 规范顺序；size 取 kwargs 或多余位置参数。"""
+        names = _RS_DIST_PARAMS.get(sampler_name, ())
+        size = kwargs.pop('size', None)
+        pos = list(args)
+        if size is None and len(pos) > len(names):
+            extra = pos[len(names):]
+            pos = pos[:len(names)]
+            size = tuple(extra) if len(extra) > 1 else extra[0]
+        vals = list(pos)
+        for i, nm in enumerate(names):
+            while len(vals) <= i:
+                vals.append(_MISSING)
+            if vals[i] is _MISSING and nm in kwargs:
+                vals[i] = kwargs.pop(nm)
+        for i, nm in enumerate(names):
+            if vals[i] is _MISSING:
+                vals[i] = _RS_DIST_DEFAULTS.get((sampler_name, nm))
+        while vals and vals[-1] is _MISSING:
+            vals.pop()
+        for v in vals:
+            if v is _MISSING:
+                raise TypeError(f"missing required argument for {sampler_name}")
+        if kwargs:
+            raise TypeError(
+                f"unexpected keyword argument {next(iter(kwargs))!r}")
+        return self._sample_dist(sampler_name, tuple(vals), size,
+                                 int_dist=int_dist)
+
+    # ------------------------------------------------------------------
+    # 纯 Python 补齐的 legacy 方法（统计正确；逐位兼容流需 MT19937 内核）
+    # ------------------------------------------------------------------
+    def _sample_dist(self, name, params, size, int_dist=False):
+        return _sample_dist(self._sampler, name, params, size, int_dist)
+
+    def _multinomial_impl(self, n, pvals, size):
+        return _multinomial_impl(self._next_u, n, pvals, size)
+
+    def _dirichlet_impl(self, alpha, size):
+        if isinstance(alpha, (str, bytes)) or (
+                not isinstance(alpha, (list, tuple, np.ndarray))
+                and not hasattr(alpha, 'shape')):
+            alpha = [float(alpha)]
+        arr = np.asarray(alpha, dtype='float64')
+        if arr.ndim != 1:
+            raise ValueError("alpha must be a 1-d sequence")
+        a_list = arr.ravel().tolist()
+        k = len(a_list)
+        ssize = _norm_size(size)
+        out_shape = ssize + (k,)
+        total = 1
+        for d in ssize:
+            total *= d
+        res = []
+        for _ in range(total):
+            res.extend(self._sampler.dirichlet(a_list))
+        if out_shape == ():
+            return res
+        return np.asarray(res, dtype='float64').reshape(out_shape)
+
+    def _vonmises_impl(self, *args, **kwargs):
+        """legacy (kappa, size) 与新 API 关键字 (mu=, kappa=, size=) 兼容。"""
+        size = kwargs.pop('size', None)
+        mu = kwargs.pop('mu', 0.0)
+        if 'kappa' in kwargs:
+            kappa = float(kwargs.pop('kappa'))
+        elif args:
+            kappa = float(args[0])
+            if len(args) >= 2 and size is None:
+                size = args[1]
+        else:
+            raise TypeError("kappa is required")
+        if kwargs:
+            raise TypeError("unexpected keyword arguments")
+        mu = float(mu)
+        ssize = _norm_size(size)
+        total = 1
+        for d in ssize:
+            total *= d
+
+        def _one():
+            return mu + self._sampler.vonmises(kappa)
+
+        if ssize == ():
+            return _one()
+        res = [_one() for _ in range(total)]
+        return np.asarray(res, dtype='float64').reshape(ssize)
+
+    def randint(self, low, high=None, size=None, dtype='int64', endpoint=False):
+        if high is None:
+            low, high = 0, int(low)
+        # dtype 解析：兼容 'int32'/'i4'/'uint64'/'u8'/Python 类型；
+        # 非原生字节序（'>i4' 等）按 numpy 语义发 DeprecationWarning。
+        raw = str(dtype)
+        if any(ch in raw for ch in '<>=|'):
+            import warnings
+            warnings.warn("non-native byteorder is not supported",
+                          DeprecationWarning)
+        name = raw.lstrip('<>=| ')
+        parsed = _parse_int_dtype(name)
+        if parsed is None:
+            name = str(np.dtype(dtype)).lstrip('<>=| ')
+            parsed = _parse_int_dtype(name)
+        if parsed is None:
+            raise TypeError(f"dtype {dtype!r} is not a valid integer dtype")
+        kind, bits = parsed
+        is_bool = (kind == 'bool')
+        signed = (kind == 'int')
+        if is_bool:
+            dmin, dmax = 0, 1
+        else:
+            dmin = 0 if not signed else -(1 << (bits - 1))
+            dmax = (1 << bits) - 1
+        # low/high 可为标量或数组（按 numpy 语义广播）
+        lo_arr = _is_arraylike(low)
+        hi_arr = _is_arraylike(high)
+        if lo_arr or hi_arr:
+            la = np.asarray(low, dtype='int64') if lo_arr else np.asarray(low)
+            ha = np.asarray(high, dtype='int64') if hi_arr else np.asarray(high)
+            la, ha = np.broadcast_arrays(la, ha)
+            los = la.ravel().tolist()
+            his = ha.ravel().tolist()
+            bshape = tuple(la.shape)
+        else:
+            los = [int(low)]
+            his = [int(high)]
+            bshape = ()
+        for lo, hi in zip(los, his):
+            if hi <= lo or lo < dmin or hi - 1 > dmax:
+                raise ValueError(
+                    f"low/high ({lo}, {hi}) out of range for dtype {name}")
+
+        def _one(lo, hi):
+            return lo + int(self._next_u() * (hi - lo))
+
+        ssize = _norm_size(size)
+        out_shape = ssize + bshape
+        total = 1
+        for d in out_shape:
+            total *= d
+        bn = 1
+        for d in bshape:
+            bn *= d
+        if total == 1 and ssize == () and bshape == ():
+            v = _one(los[0], his[0])
+            # 显式 Python 类型 → 返回 Python 标量（无 .dtype）
+            if dtype is bool:
+                return bool(v)
+            if dtype is int:
+                return v
+            if is_bool:
+                return np.asarray(1 if v else 0, dtype='bool')
+            if signed and bits < 64:
+                m = 1 << bits
+                v = ((v + (1 << (bits - 1))) % m) - (1 << (bits - 1))
+            return np.asarray(v, dtype=name)
+        vals = []
+        for i in range(total):
+            bidx = i % bn
+            vals.append(_one(los[bidx], his[bidx]))
+        if is_bool:
+            arr = np.asarray([1 if v else 0 for v in vals], dtype='bool')
+        elif signed and bits < 64:
+            m = 1 << bits
+            vals = [((v + (1 << (bits - 1))) % m) - (1 << (bits - 1))
+                    for v in vals]
+            arr = np.asarray(vals, dtype='int64').astype(name)
+        elif signed:
+            arr = np.asarray(vals, dtype='int64')
+        else:
+            if bits < 64:
+                m = 1 << bits
+                vals = [v % m for v in vals]
+            arr = np.asarray(vals, dtype='uint64' if bits == 64 else 'int64')
+            if bits < 64:
+                arr = arr.astype(name)
+        return arr.reshape(out_shape)
+
+    def random_integers(self, low, high=None, size=None):
+        import warnings
+        warnings.warn("random_integers is deprecated; use randint instead",
+                      DeprecationWarning)
+        if high is None:
+            high = low
+        return self.randint(low, high + 1, size=size)
+
+    def bytes(self, length=4):
+        return bytes(int(self._next_u() * 256) for _ in range(int(length)))
+
+    def tomaxint(self, type='int32'):
+        import re
+        m = re.match(r'[<>=|]?int(\d+)', str(type))
+        bits = int(m.group(1)) if m else 32
+        return (1 << (bits - 1)) - 1
+
+    def shuffle(self, x, axis=0):
+        if axis != 0 and hasattr(x, 'shape'):
+            x = np.moveaxis(x, axis, 0)
+        _python_shuffle(self._next_u, x, 0, warn_1d_object=True)
+
+    def seed(self, s=None):
+        s = _fold_seed(s)
+        self._seed = s
+        self._inner = _core.random.RandomState(s)
 
     def _draw_index(self, pop, p):
         if p is None:
-            return int(self._next_u() * pop)
-        import rsnumpy as np
-        cdf = np.cumsum(np.asarray(p, dtype='float64'))
-        u = self._next_u()
-        return int(np.searchsorted(cdf, u))
+            idx = int(self._next_u() * pop)
+        else:
+            import rsnumpy as np
+            cdf = np.cumsum(np.asarray(p, dtype='float64'))
+            u = self._next_u()
+            idx = int(np.searchsorted(cdf, u))
+        if idx >= pop:
+            idx = pop - 1
+        return idx
 
     @property
     def _bit_generator(self):
         return _MT19937(None)
+
+    @property
+    def _poisson_lam_max(self):
+        """Knuth 采样上限；超过后切换正态近似（测试读取此常数）。"""
+        return _POISSON_LAM_MAX
 
 
 def _mvn_sample(next_standard_normal, mean, cov, size):
@@ -266,12 +857,7 @@ def _mvn_sample(next_standard_normal, mean, cov, size):
     _, s, vt = np.linalg.svd(cov, full_matrices=False)
     sl = [max(float(x), 0.0) ** 0.5 for x in s.tolist()]
     vtl = [[float(x) for x in row] for row in vt.tolist()]
-    if size is None:
-        shape = ()
-    elif isinstance(size, int):
-        shape = (size,)
-    else:
-        shape = tuple(size)
+    shape = _norm_size(size)
     n = int(np.prod(shape)) if shape else 1
     out = []
     for _ in range(n):
@@ -354,6 +940,12 @@ class _WrappedGenerator:
         if hasattr(v, 'item'):
             v = v.item()
         return float(v)
+
+    def shuffle(self, x, axis=0):
+        """新 API 洗牌：object 数组不告警、保持对象身份。"""
+        if axis != 0 and hasattr(x, 'shape'):
+            x = np.moveaxis(x, axis, 0)
+        _python_shuffle(self._u, x, 0)
 
     def _make_choice(self):
         """NumPy-compatible ``choice`` (the Rust core only takes array `a`
@@ -600,6 +1192,10 @@ class mtrand_module:
     def __init__(self):
         self._rand = _RandomStateWrapper(None)
 
+    def __getattr__(self, name):
+        # np.random.mtrand.<分布>/方法 全部委托给 legacy RandomState
+        return getattr(self._rand, name)
+
 
 class _SeedSequence:
     """Minimal stand-in for ``np.random.SeedSequence``.
@@ -730,26 +1326,63 @@ SeedSequence = _default_rng.SeedSequence
 BitGenerator = _default_rng.BitGenerator
 mtrand = _default_rng.mtrand
 default_rng = _default_rng.default_rng
-seed = _default_rng.seed
 rand = _default_rng.rand
 randn = _default_rng.randn
-randint = _default_rng.randint
-uniform = _default_rng.uniform
 random = _default_rng.random
 random_sample = _default_rng.random
-normal = _default_rng.normal
 randn_like = _default_rng.randn_like
 rand_like = _default_rng.rand_like
-
 
 _legacy_state = None
 
 
+def _get_legacy_state():
+    global _legacy_state
+    if _legacy_state is None:
+        _legacy_state = _RandomStateWrapper(None)
+    return _legacy_state
+
+
+def seed(s=None):
+    """设置全局随机种子（legacy 状态 + Rust 全局流，共享）。"""
+    s = _legacy_validate_seed(s)
+    if s is not None:
+        try:
+            _default_rng._random.seed(s)
+        except Exception:
+            pass
+    _get_legacy_state().seed(s)
+
+
+def randint(low, high=None, size=None, dtype='int64'):
+    """legacy randint：完整 dtype 语义（校验/边界/位宽截断）。"""
+    return _get_legacy_state().randint(low, high, size=size, dtype=dtype)
+
+
+def uniform(low=0.0, high=1.0, size=None):
+    return _get_legacy_state()._sample_dist('uniform', (low, high), size)
+
+
+def normal(loc=0.0, scale=1.0, size=None):
+    return _get_legacy_state()._sample_dist('normal', (loc, scale), size)
+
+
+_legacy_func_cache = {}
+
+
 def __getattr__(name):
-    """PEP 562：补齐遗留 np.random.* 函数名（permutation/shuffle 等）。"""
-    if name in ('permutation', 'shuffle'):
-        global _legacy_state
-        if _legacy_state is None:
-            _legacy_state = _RandomStateWrapper(None)
-        return _legacy_state.__getattr__(name)
+    """PEP 562：补齐遗留 np.random.* 函数名（分布/permutation/shuffle 等）。
+
+    结果缓存：保证 ``np.random.geometric in (np.random.geometric,)`` 之类的
+    函数身份比较成立（tests 用 ``func in probfuncs`` 判定）。
+    """
+    if name in _RS_DIST_DISPATCH or name in (
+            'multinomial', 'dirichlet', 'vonmises', 'permutation', 'shuffle',
+            'choice', 'multivariate_normal', 'random_integers', 'bytes',
+            'tomaxint', 'standard_normal'):
+        f = _legacy_func_cache.get(name)
+        if f is None:
+            f = getattr(_get_legacy_state(), name)
+            _legacy_func_cache[name] = f
+        return f
     raise AttributeError(f"module 'rsnumpy.random' has no attribute {name!r}")
