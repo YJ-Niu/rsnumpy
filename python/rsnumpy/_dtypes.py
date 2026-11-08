@@ -550,6 +550,15 @@ class DType(metaclass=_DTypeMeta):
                 except Exception:
                     return NotImplemented
             return NotImplemented
+        # np.dtypes 命名空间的动态 dtype 类实例（ObjectDType/Float64DType/…，
+        # 仅带 _dt_name 属性的裸类）：按 dtype 名称比较（numpy 语义：
+        # np.dtype('O') == np.dtypes.ObjectDType()）
+        _onm = getattr(other, '_dt_name', None)
+        if _onm is not None:
+            try:
+                return self._eqkey() == dtype(_onm)._eqkey()
+            except Exception:
+                return NotImplemented
         try:
             return self._eqkey() == dtype(other)._eqkey()
         except Exception:

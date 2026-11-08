@@ -127,5 +127,6 @@ def polyroots(p):
     return Poly(p).roots()
 
 
-# Alias for NumPy compatibility
-Polynomial = Poly
+# numpy 2.x：np.polynomial.Polynomial 为新 API 类（升序系数）；
+# 旧 Poly（降序）保留供顶层旧 API 使用
+from .polynomial import Polynomial  # noqa: E402,F401

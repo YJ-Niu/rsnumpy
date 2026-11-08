@@ -357,7 +357,8 @@ fn polydiv(u: &NdArray, v: &NdArray) -> PyResult<(NdArray, NdArray)> {
                 r[k + j] -= d * v_vals[j];
             }
         }
-        let rem = r[m - n + 1..].to_vec();
+        // 余数长度 = 除数长度 n（numpy 语义）：切片起点 = len(q) - 1 = m - n
+        let rem = r[m - n..].to_vec();
         (q, rem)
     } else {
         (vec![0.0], r.clone())
