@@ -536,6 +536,19 @@ def _replace_nan(a, val):
         mask = rs.isnan(a)
     else:
         return a, None
+    if len(tuple(a.shape)) == 0:
+        # 0-d：布尔掩码 setitem 会抛 IndexError，按值判定后直接重建
+        v = _flat_list(a.tolist())[0]
+        try:
+            _c = complex(v)
+            _m = _c != _c
+        except Exception:
+            _m = (v is not None) and (v != v)
+        if _m:
+            b = rs.array([val], dtype=getattr(a, '_dtype', 'float64')).reshape(())
+        else:
+            b = rs.array(a, copy=True)
+        return b, mask
     b = rs.array(a, copy=True)
     b[mask] = val
     return b, mask
@@ -576,7 +589,7 @@ def _obj_delegate(a, name, **kw):
 _CHAR_DTYPE = {'?': 'bool', 'b': 'bool', 'i': 'int32', 'l': 'int64', 'q': 'int64',
                'u': 'uint32', 'L': 'uint64', 'Q': 'uint64',
                'e': 'float16', 'f': 'float32', 'd': 'float64',
-               'F': 'complex64', 'D': 'complex128'}
+               'F': 'complex64', 'D': 'complex128', 'G': 'complex128'}
 
 
 def _dtype_name(dtype):
@@ -637,10 +650,8 @@ def _reduction_dtype(kind, dt):
     if kind in ('minmax', 'sumprod'):
         return dt
     if kind == 'varstd':
-        if k in 'ef':
-            return dt
-        # complex 输入：方差/标准差为实值（numpy 语义），精度随复数实部
-        return 'float32' if _dtype_name(dt) == 'complex64' else 'float64'
+        # oracle 语义：var/std 结果恒 float64（complex 输入取实部）
+        return 'float64'
     return dt if k in 'efc' else 'float64'
 
 
@@ -728,7 +739,7 @@ def nansum(a, axis=None, dtype=None, out=None, keepdims=False, initial=None,
     rs = _rs()
     a = _as_nd(a)
     dt = getattr(a, '_dtype', 'float64')
-    if dtype is not None and _dt_kind(dtype) not in 'efdcgciubO':
+    if dtype is not None and _dt_kind(dtype) not in 'efdcgciubOFGD':
         raise TypeError(f"data type {dtype!r} is not supported by nansum")
     res_dt = dtype if dtype is not None else dt
     if _dt_kind(dt) == 'o' and len(tuple(a.shape)) <= 1:
@@ -756,7 +767,7 @@ def nanprod(a, axis=None, dtype=None, out=None, keepdims=False, initial=None,
     rs = _rs()
     a = _as_nd(a)
     dt = getattr(a, '_dtype', 'float64')
-    if dtype is not None and _dt_kind(dtype) not in 'efdcgciubO':
+    if dtype is not None and _dt_kind(dtype) not in 'efdcgciubOFGD':
         raise TypeError(f"data type {dtype!r} is not supported by nanprod")
     res_dt = dtype if dtype is not None else dt
     if _dt_kind(dt) == 'o' and len(tuple(a.shape)) <= 1:
@@ -866,8 +877,13 @@ def nanmean(a, axis=None, dtype=None, out=None, keepdims=False, where=True):
     rs = _rs()
     a = _as_nd(a)
     dt = getattr(a, '_dtype', 'float64')
-    if dtype is not None and _dt_kind(dtype) not in 'efc':
+    if dtype is not None and _dt_kind(dtype) not in 'efgdcFDG':
         raise TypeError(f"data type {dtype!r} not inexact")
+    if dtype is not None and _dt_kind(dtype) in 'cFDG':
+        # 复数 dtype：委托标准 mean（dtype 语义与 oracle 完全一致）
+        from rsnumpy import statistics as _st
+        return _st.mean(a, axis=axis, dtype=dtype, out=out, keepdims=keepdims,
+                        where=where)
     res_dt = dtype if dtype is not None else _reduction_dtype('mean', dt)
     if _dt_kind(dt) == 'o' and len(tuple(a.shape)) <= 1:
         return _obj_delegate(a, 'mean', axis=axis, dtype=dtype, out=out,
@@ -884,13 +900,106 @@ def nanmean(a, axis=None, dtype=None, out=None, keepdims=False, where=True):
     return _reduce_wrap(results, axes, tuple(a.shape), keepdims, res_dt, out, a)
 
 
+def _nan_var_std_given_mean(a, mean, axis, keepdims, ddof, want_std, out):
+    """nanvar/nanstd(mean=...) 路径：信任给定均值，仅干净值参与计算
+    （numpy masked 语义：count 排除 NaN，NaN 位置零贡献）。"""
+    import builtins as _bi
+    rs = _rs()
+    a = _as_nd(a)
+    dt = getattr(a, '_dtype', 'float64')
+    res_dt = _reduction_dtype('varstd', dt)
+    # 必须在原始数组上判 NaN（替换后的 0.0 会被误判为干净值）
+    shape = tuple(a.shape)
+    nd = len(shape)
+
+    def _clean(v):
+        try:
+            c = complex(v)
+        except Exception:
+            return None
+        return None if c != c else c
+
+    def _mval(m):
+        try:
+            return complex(m)
+        except Exception:
+            return m
+
+    def _unravel(idx, dims):
+        mi = []
+        for dm in reversed(dims):
+            mi.append(idx % dm)
+            idx //= dm
+        return list(reversed(mi))
+
+    def _cidx(mi, shp):
+        c = 0
+        for m, s in zip(mi, shp):
+            c = c * s + m
+        return c
+
+    if hasattr(mean, 'tolist'):
+        mshape = tuple(mean.shape)
+        mflat = _flat_list(mean.tolist())
+    else:
+        mshape = ()
+        mflat = [mean]
+
+    if axis is None:
+        vals = [c for c in map(_clean, _flat_list(a.tolist())) if c is not None]
+        m = _mval(mflat[0])
+        n = len(vals) - ddof
+        if n <= 0 or not vals:
+            s = float('nan')
+        else:
+            s = _bi.sum(abs(v - m) ** 2 for v in vals) / n
+        v = s ** 0.5 if want_std else s
+        return _reduce_wrap([v], tuple(range(nd)), shape, keepdims, res_dt,
+                            out, a)
+    ai = axis if axis >= 0 else axis + nd
+    dims = list(shape)
+    d = dims[ai]
+    inner = 1
+    for j in range(ai + 1, nd):
+        inner *= dims[j]
+    flat = _flat_list(a.tolist())
+    out_shape = dims[:ai] + dims[ai + 1:]
+    out_size = 1
+    for s in out_shape:
+        out_size *= s
+    results = []
+    for oi in range(out_size):
+        # 输出网格逐元素：slice = a[omi, k, imi]（k 沿轴方向，非轴内维）
+        omi = _unravel(oi // inner, dims[:ai]) if dims[:ai] else []
+        imi = _unravel(oi % inner, dims[ai + 1:]) if dims[ai + 1:] else []
+        if len(mshape) == nd:
+            midx = _cidx(omi + [0] + imi, mshape)
+        elif mshape:
+            midx = _cidx(omi + imi, mshape)
+        else:
+            midx = 0
+        m = _mval(mflat[midx])
+        vals = []
+        for kk in range(d):
+            c = _clean(flat[_cidx(omi + [kk] + imi, shape)])
+            if c is not None:
+                vals.append(c)
+        n = len(vals) - ddof
+        if n <= 0 or not vals:
+            s = float('nan')
+        else:
+            s = _bi.sum(abs(v - m) ** 2 for v in vals) / n
+        results.append(s ** 0.5 if want_std else s)
+    return _reduce_wrap(results, (ai,), shape, keepdims, res_dt, out, a)
+
+
 def nanvar(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False,
            where=True, correction=None, mean=None):
     """忽略 NaN 求方差（ddof/correction 互斥；mean= 走信任均值路径）。"""
     rs = _rs()
     a = _as_nd(a)
     dt = getattr(a, '_dtype', 'float64')
-    if dtype is not None and _dt_kind(dtype) not in 'ef':
+    if dtype is not None and _dt_kind(dtype) not in 'efgdcFDG':
         raise TypeError(f"data type {dtype!r} not inexact")
     if correction is not None:
         if ddof != 0:
@@ -898,9 +1007,9 @@ def nanvar(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False,
                 "ddof and correction can't be provided simultaneously.")
         ddof = correction
     if mean is not None:
-        from rsnumpy import statistics as _st
-        return _st._reduce_given_mean(a, mean, axis, keepdims, ddof, False, out)
-    if dtype is not None and _dt_kind(dtype) in 'cF':
+        return _nan_var_std_given_mean(a, mean, axis, keepdims, ddof,
+                                       False, out)
+    if dtype is not None and _dt_kind(dtype) in 'cFDG':
         # 复数 dtype：委托标准 var（dtype 语义与 oracle 完全一致）
         from rsnumpy import statistics as _st
         return _st.var(a, axis=axis, dtype=dtype, out=out, ddof=ddof,
@@ -931,7 +1040,7 @@ def nanstd(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False,
     rs = _rs()
     a = _as_nd(a)
     dt = getattr(a, '_dtype', 'float64')
-    if dtype is not None and _dt_kind(dtype) not in 'ef':
+    if dtype is not None and _dt_kind(dtype) not in 'efgdcFDG':
         raise TypeError(f"data type {dtype!r} not inexact")
     if correction is not None:
         if ddof != 0:
@@ -939,9 +1048,9 @@ def nanstd(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False,
                 "ddof and correction can't be provided simultaneously.")
         ddof = correction
     if mean is not None:
-        from rsnumpy import statistics as _st
-        return _st._reduce_given_mean(a, mean, axis, keepdims, ddof, True, out)
-    if dtype is not None and _dt_kind(dtype) in 'cF':
+        return _nan_var_std_given_mean(a, mean, axis, keepdims, ddof,
+                                       True, out)
+    if dtype is not None and _dt_kind(dtype) in 'cFDG':
         # 复数 dtype：委托标准 std（dtype 语义与 oracle 完全一致）
         from rsnumpy import statistics as _st
         return _st.std(a, axis=axis, dtype=dtype, out=out, ddof=ddof,
@@ -1125,88 +1234,17 @@ def nanquantile(a, q, axis=None, out=None, method='linear', keepdims=False,
 
 
 def _nancum_impl(a, axis, dtype, out, is_prod):
-    """忽略 NaN 的累积和/积（NaN → 0/1）。
-
-    结果标注与标准 cumsum/cumprod 一致：float16/float32/64/longdouble
-    保留输入精度，其余 float64；数值按双精度累积（避免输入 dtype 溢出），
-    0-d 输入返回 (1,)（与标准 cumsum 0-d 行为一致）。"""
+    """忽略 NaN 的累积和/积（numpy 实现：NaN → 0/1 替换后委托标准
+    cumsum/cumprod 内核——与标准结果逐位一致、标注规则天然一致）。"""
     rs = _rs()
     a = _as_nd(a)
-    dt = getattr(a, '_dtype', 'float64')
-    k = _dt_kind(dt)
-    if dtype is not None:
-        res_dt = _dtype_name(dtype)
-    else:
-        res_dt = dt if k in 'efgd' else 'float64'
     ident = 1.0 if is_prod else 0.0
-    real_in = k not in 'c'
-
-    def _cv(v):
-        try:
-            c = complex(v)
-        except Exception:
-            return ident
-        if c != c:
-            return ident
-        return c
-
-    shape = tuple(a.shape)
-    nd = len(shape)
-    if k == 'o' and nd <= 1:
-        # object 低维：委托标准 cumsum/cumprod（占位语义与 oracle 一致）
-        return _obj_delegate(a, 'cumsum' if not is_prod else 'cumprod',
-                             axis=axis, dtype=dtype, out=out)
-    flat = _flat_list(a.tolist())
-    if nd == 0:
-        c = _cv(flat[0]) if flat else ident
-        outv = [ident * c if is_prod else ident + c]
-        res_shape = (1,)
-    elif axis is None:
-        # axis=None：标准 cumsum 返回展平 (n,)（Rust 语义），保持一致
-        acc = ident
-        outv = []
-        for v in flat:
-            c = _cv(v)
-            acc = acc * c if is_prod else acc + c
-            outv.append(acc)
-        res_shape = (len(flat),)
-    else:
-        ai = axis if axis >= 0 else axis + nd
-        if ai < 0 or ai >= nd:
-            raise ValueError(
-                f"axis {axis} is out of bounds for array of dimension {nd}")
-        dims = list(shape)
-        d = dims[ai]
-        inner = 1
-        for j in range(ai + 1, nd):
-            inner *= dims[j]
-        base_step = d * inner
-        n_outer = len(flat) // base_step if base_step else 0
-        outv = []
-        for o in range(n_outer):
-            for i in range(d):
-                acc = ident
-                base = o * base_step + i * inner
-                for j in range(inner):
-                    c = _cv(flat[base + j])
-                    acc = acc * c if is_prod else acc + c
-                outv.append(acc)
-        res_shape = shape
-    if real_in:
-        outv = [v.real if isinstance(v, complex) else v for v in outv]
-    if 0 in res_shape:
-        # 含 0 维：_reshape_flat 无法重建空形状，直接零数组（值无意义）
-        res = rs.zeros(res_shape, dtype=res_dt)
-    else:
-        res = rs.array(_reshape_flat(outv, res_shape), dtype=res_dt)
-    res = _keep_subclass(res, a)
+    b, _mask = _replace_nan(a, ident)
+    func = rs.cumprod if is_prod else rs.cumsum
+    res = func(b, axis=axis, dtype=dtype, out=out)
     if out is not None:
-        try:
-            rs.copyto(out, res)
-        except Exception:
-            out[...] = res
-        return out
-    return res
+        return res
+    return _keep_subclass(res, a)
 
 
 def nancumsum(a, axis=None, dtype=None, out=None):

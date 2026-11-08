@@ -120,6 +120,23 @@ class _RandomStateWrapper:
     def __copy__(self, memo=None):
         return _RandomStateWrapper(self._seed)
 
+    def _rs_f64(self, vals):
+        """确保输出是带 _dtype 的正规 rsnumpy ndarray（Rust 原生对象转换）。"""
+        import rsnumpy as _np
+        if hasattr(vals, 'tolist') and not hasattr(vals, '_dtype'):
+            vals = vals.tolist()
+        return _np.asarray(vals, dtype='float64')
+
+    def rand(self, *args):
+        """生成均匀分布的随机数。"""
+        return self._rs_f64(self._inner.rand(1) if not args
+                            else self._inner.rand(*args))
+
+    def randn(self, *args):
+        """生成标准正态分布的随机数。"""
+        return self._rs_f64(self._inner.randn(1) if not args
+                            else self._inner.randn(*args))
+
     def _next_u(self):
         return float(self._inner.random(1).tolist()[0])
 

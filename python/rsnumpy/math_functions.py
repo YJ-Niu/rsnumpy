@@ -265,15 +265,6 @@ def absolute(x, out=None):
         res = x.copy()
     else:
         res = _wrap(_core.abs(_ensure_raw(x)))
-        # numpy 语义：abs 保持 float16/float32 精度（Rust 会提升为 f64，
-        # 使 np.abs(f16).dtype == f64，破坏 nanvar/nanstd 的 dtype 参照）
-        _xd = getattr(x, '_dtype', None)
-        if _xd in ('float16', 'float32'):
-            try:
-                from .__init__ import ndarray as _nd_cls
-                res = _nd_cls(res.tolist(), _dtype=_xd)
-            except Exception:
-                pass
     if out is not None:
         try:
             out[...] = res

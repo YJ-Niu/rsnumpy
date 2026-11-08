@@ -462,8 +462,12 @@ def assert_equal(actual, desired, err_msg='', verbose=True, *, strict=False):
         shp = getattr(x, 'shape', None)
         return shp is None or (hasattr(shp, '__len__') and len(shp) == 0)
     if _is_dtype_obj(actual) or _is_dtype_obj(desired):
-        if not (_is_dtype_obj(actual) and _is_dtype_obj(desired)
-                and actual == desired):
+        # dtype 对象与标量类（np.float32）互比走 __eq__（DType.__eq__ 支持类）
+        try:
+            _eq = bool(actual == desired)
+        except Exception:
+            _eq = False
+        if not _eq:
             raise AssertionError(
                 f'dtypes {actual!r}, {desired!r} mismatch'
                 + (f'\n{err_msg}' if err_msg else ''))

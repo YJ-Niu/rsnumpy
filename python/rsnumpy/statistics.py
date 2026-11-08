@@ -201,8 +201,9 @@ def _reduce_given_mean(a, mean, axis, keepdims, ddof, want_std, out,
     _v = _s / _n
     if want_std:
         _v = _v ** 0.5
-    if res_dt is not None and str(res_dt) != 'float64':
-        _v._dtype = res_dt
+    if res_dt is not None and str(res_dt) != str(getattr(_v, '_dtype', '')):
+        # 重标注须数据转换（tolist 重建），不能只换标签（f16 存储标 f64 会错位）
+        _v = _nd()(_v.tolist(), _dtype=res_dt)
     if keepdims:
         _new_shape = []
         _si = 0
@@ -394,9 +395,9 @@ def std(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False, where=True,
     """计算数组元素的标准差。"""
     _ = where
     # 0-d 短路：Rust 归约会 abort；numpy 返回按 dtype 规则标注的 0-d
+    # oracle 语义：未显式指定 dtype 时 var/std 结果恒 float64
     _a_raw = _ensure_raw(a)
-    arr_dtype = getattr(a, '_dtype', 'float64') if hasattr(a, '_dtype') else 'float64'
-    res_dt = _var_std_result_dtype(dtype if dtype is not None else arr_dtype)
+    res_dt = dtype if dtype is not None else 'float64'
     if not tuple(getattr(_a_raw, 'shape', ())):
         return _nd()(0.0, _dtype=res_dt)
     axis = _check_reduce_axis(a, axis)
@@ -445,9 +446,9 @@ def var(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False, where=True,
     """计算数组元素的方差。"""
     _ = where
     # 0-d 短路：Rust 归约会 abort；numpy 返回按 dtype 规则标注的 0-d
+    # oracle 语义：未显式指定 dtype 时 var/std 结果恒 float64
     _a_raw = _ensure_raw(a)
-    arr_dtype = getattr(a, '_dtype', 'float64') if hasattr(a, '_dtype') else 'float64'
-    res_dt = _var_std_result_dtype(dtype if dtype is not None else arr_dtype)
+    res_dt = dtype if dtype is not None else 'float64'
     if not tuple(getattr(_a_raw, 'shape', ())):
         return _nd()(0.0, _dtype=res_dt)
     axis = _check_reduce_axis(a, axis)
