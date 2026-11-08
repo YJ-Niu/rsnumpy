@@ -613,53 +613,22 @@ def _percentile_1d(col, q):
 
 
 def median(a, axis=None, out=None, overwrite_input=False, keepdims=False):
-    """计算数组的中位数（numpy 2.x 签名：overwrite_input 参数）。"""
-    _ = out, overwrite_input, keepdims
-    # 0-d 短路：Rust 归约会 abort；numpy 返回保持原 dtype 的 0-d
-    _a_raw = _ensure_raw(a)
-    if not tuple(getattr(_a_raw, 'shape', ())):
-        return _nd()(_a_raw, _dtype=getattr(a, '_dtype', 'float64'))
-    # 空数组：Rust median 对空 slice 减溢 panic → numpy 语义：结果全 nan；
-    # 结果非空发一次 RuntimeWarning，结果为空（如 axis=1 on (0,3)）不发。
-    _mshape = tuple(getattr(_a_raw, 'shape', ()))
-    if _mshape and int(getattr(_a_raw, 'size', 1) or 1) == 0:
-        import warnings as _wn
-        axis = _check_reduce_axis(a, axis)
-        if axis is None:
-            _rshape = ()
-        else:
-            _axs = axis if isinstance(axis, tuple) else (axis,)
-            _axn = [x % len(_mshape) for x in _axs]
-            _rshape = tuple(d for i, d in enumerate(_mshape)
-                            if i not in _axn)
-        if 0 not in _rshape:
-            _wn.warn("Mean of empty slice", RuntimeWarning, stacklevel=2)
-        _mdt = _mean_result_dtype(getattr(a, '_dtype', 'float64'))
-        _rsz = 1
-        for _d in _rshape:
-            _rsz *= _d
-        if not _rshape:
-            return _nd()([float('nan')], _dtype=_mdt).reshape(())
-        if _rsz == 0:
-            return _nd()([], _dtype=_mdt).reshape(_rshape)
-        return _nd()([float('nan')] * _rsz, _dtype=_mdt)
-    # 含 NaN 时 Rust 排序比较器非全序会 panic；走纯 Python 路径
-    try:
-        _flat = _flatten_c(_a_raw.tolist())
-        if any(isinstance(v, float) and v != v for v in _flat):
-            axis = _check_reduce_axis(a, axis)
-            if axis is None:
-                return _nd()(_median_1d(_flat), _dtype='float64')
-            return _nd()(_median_reduce(_a_raw.tolist(), axis, _median_1d),
-                         _dtype='float64')
-    except Exception:
-        pass
-    axis = _check_reduce_axis(a, axis)
-    raw = _core.median(_a_raw, axis)
-    if axis is None:
-        # 全归约(0-d)返回带 .dtype 的 0-d ndarray，与 0-d 短路路径一致
-        return _nd()._wrap(raw, _dtype=getattr(a, '_dtype', 'float64'))
-    return _wrap(raw)
+    """计算数组的中位数（numpy 2.x 签名：overwrite_input/keepdims；
+    axis 支持 int/元组；NaN 传染 slice；m8/M8 支持 NaT；子类保留）。
+    纯 Python 实现（委托 _nanfunctions_impl._median_py）——Rust _core.median
+    仅支持 f64/2D/线性，int/高维/元组轴会 panic abort。"""
+    _ = overwrite_input
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    arr = a if hasattr(a, '_array') else _wrap(a)
+    # 子类钩子（gh-3846）：override 了 mean 的 ndarray 子类 → 委托其 mean
+    _NDC = _nd()
+    t = _builtins.type(arr)
+    if (t is not _NDC and _builtins.isinstance(t, _builtins.type)
+            and _builtins.issubclass(t, _NDC)
+            and not t.__name__.startswith('Masked')
+            and getattr(t, 'mean', None) is not getattr(_NDC, 'mean', None)):
+        return arr.mean()
+    return _nfi._median_py(arr, axis, out, keepdims)
 
 
 def average(a, axis=None, weights=None, returned=False):
@@ -712,10 +681,13 @@ def quantile(a, q, axis=None, out=None, method='linear', keepdims=False,
         else:
             raise ValueError(
                 "interpolation and method cannot be used simultaneously")
-    if isinstance(q, (list, tuple)):
-        qs = [v * 100.0 for v in q]
-    else:
-        qs = q * 100.0
+    # * 100（整数乘法）：Fraction q 保持精确（Fraction*int=Fraction）；
+    # 嵌套列表递归缩放（结果形状按平铺 q，numpy 断言可广播）
+    def _scale_q(qq):
+        if isinstance(qq, (list, tuple)):
+            return [_scale_q(v) for v in qq]
+        return qq * 100
+    qs = _scale_q(q)
     return percentile(a, qs, axis=axis, out=out, method=method,
                       keepdims=keepdims, weights=weights)
 

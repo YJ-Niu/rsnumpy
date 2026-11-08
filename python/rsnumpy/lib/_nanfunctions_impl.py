@@ -331,62 +331,101 @@ def _initial_prod(a, initial):
 
 # ------------------------------------------------------------------ 分位数引擎
 
+# numpy 2.x 分位数 method 全集与"插值型"（参与结果 dtype 提升）子集
+QUANTILE_METHODS = [
+    'inverted_cdf', 'averaged_inverted_cdf', 'closest_observation',
+    'interpolated_inverted_cdf', 'hazen', 'weibull', 'linear',
+    'median_unbiased', 'normal_unbiased', 'nearest', 'lower', 'higher',
+    'midpoint']
+_INTERPOLATING_METHODS = [
+    'averaged_inverted_cdf', 'interpolated_inverted_cdf', 'hazen', 'weibull',
+    'linear', 'median_unbiased', 'normal_unbiased', 'midpoint']
+
+_INT64_MIN = -9223372036854775808  # m8/M8 的 NaT 哨兵（int64 存储）
+
+
 def _quantile_of(sorted_vals, q01, method, wsorted=None):
-    """已排序（无 NaN）实值列表 + q01∈[0,1] → float。"""
+    """已排序（无 NaN）实值列表 + q01∈[0,1] → float。
+
+    实现 numpy 2.x 全部 13 个 method（虚指数公式按真实 numpy 2.5 逐点验证）；
+    weights 仅支持 inverted_cdf（概念上按权重展开成重复观测再取无权重值）。
+    """
     n = len(sorted_vals)
     if n == 0:
         return float('nan')
     m = method or 'linear'
-    if wsorted is None:
-        ws = None
-        vs = sorted_vals
-    else:
+    vs = sorted_vals
+    ws = None
+    if wsorted is not None:
         vs, ws = wsorted
-    if m == 'inverted_cdf':
-        if ws is None:
-            idx = int(math.ceil(q01 * n)) - 1
-            return float(vs[builtins.max(0, builtins.min(idx, n - 1))])
+    if ws is not None:
         total = builtins.sum(ws)
-        if total <= 0:
-            return float(vs[0])
-        target = q01 * total
+        if not (total > 0) or total != total or total == float('inf'):
+            raise ValueError("Weights included NaN, inf or were all zero")
+        # 重复观测语义：展开数组中 0-based 位置 = max(ceil(q*W), 1) - 1
+        pos = builtins.max(math.ceil(q01 * total), 1) - 1
         c = 0.0
         for v, w in zip(vs, ws):
             c += w
-            if c >= target:
+            if c > pos:
                 return float(v)
         return float(vs[-1])
-    if ws is not None:
-        # 加权的其他方法: 退化为按值（权重不影响排序）的无权重公式
-        ws = None
-    if n == 1:
-        return float(vs[0])
-    h = q01 * (n - 1)
-    lo = int(math.floor(h))
-    hi = int(math.ceil(h))
-    if lo == hi:
-        if m in ('lower', 'higher', 'nearest', 'inverted_cdf', 'closest_observation'):
-            return float(vs[lo])
-        return float(vs[lo])
-    frac = h - lo
+    if m == 'inverted_cdf':
+        idx = builtins.max(0, builtins.min(math.ceil(q01 * n) - 1, n - 1))
+        return float(vs[idx])
+    if m == 'averaged_inverted_cdf':
+        k = q01 * n
+        if k == builtins.int(k) and 0 < k < n:
+            # q 恰在 CDF 跳变点：左右极限的均值
+            return float((vs[int(k) - 1] + vs[int(k)]) / 2.0)
+        idx = builtins.max(0, builtins.min(math.ceil(k) - 1, n - 1))
+        return float(vs[idx])
+    # 其余 method：统一"虚指数"（0-based 小数位置，clamp 到 [0, n-1]）
     if m == 'lower':
-        return float(vs[lo])
-    if m == 'higher':
-        return float(vs[hi])
-    if m in ('nearest', 'closest_observation'):
-        return float(vs[lo] if frac < 0.5 else vs[hi])
-    if m == 'midpoint':
-        return float((vs[lo] + vs[hi]) / 2.0)
-    # linear（默认）
+        vidx = math.floor(q01 * (n - 1))
+    elif m == 'higher':
+        vidx = math.ceil(q01 * (n - 1))
+    elif m == 'nearest':
+        vidx = round(q01 * (n - 1))  # Python round = 银行家舍入（tie→even）
+    elif m == 'closest_observation':
+        # numpy 2.x（#26656）：tie 向"偶数阶统计量"——1-based 位置做
+        # half-even 舍入，等价于 round(q*n) - 1
+        vidx = round(q01 * n) - 1
+    elif m == 'midpoint':
+        vidx = 0.5 * (math.floor(q01 * (n - 1)) + math.ceil(q01 * (n - 1)))
+    elif m == 'linear':
+        vidx = q01 * (n - 1)
+    elif m == 'hazen':
+        vidx = q01 * n - 0.5
+    elif m == 'weibull':
+        vidx = q01 * (n + 1.0) - 1.0
+    elif m == 'median_unbiased':
+        vidx = q01 * (n + 1.0 / 3.0) - 2.0 / 3.0
+    elif m == 'normal_unbiased':
+        vidx = q01 * (n + 0.25) - 0.625
+    elif m == 'interpolated_inverted_cdf':
+        vidx = q01 * n - 1.0
+    else:
+        raise ValueError(f"method {m!r} is not a valid method")
+    vidx = builtins.min(builtins.max(vidx, 0), n - 1)
+    if m in ('lower', 'higher', 'nearest', 'closest_observation'):
+        return float(vs[int(vidx)])
+    lo = int(math.floor(vidx))
+    hi = builtins.min(lo + 1, n - 1)
+    frac = vidx - lo
     return float(vs[lo] + (vs[hi] - vs[lo]) * frac)
 
 
 def _percentile_engine(a, q, axis, keepdims, dtype, out=None, weights=None,
-                       method='linear', nan_filter=True, scale=100.0):
+                       method='linear', nan_filter=True, scale=100.0,
+                       sentinel=None, relabel=None):
     """通用分位数引擎（Python 层，numpy 2.x 语义）。
     q: 标量或列表/数组（percentile 用 0-100、quantile 用 0-1，由 scale 归一）；
-    method: linear/lower/higher/nearest/midpoint，加权另支持 inverted_cdf 等；
-    weights: 与 a 同形状（NaN 位置权值自动忽略）；
+    method: 见 QUANTILE_METHODS（加权仅 inverted_cdf，公共层校验）；
+    weights: 与 a 同形状，或 1-D（长度 = 归约轴长 → 广播；
+             多轴时 = 每 slice 展平长 → 逐 slice 使用）；
+    sentinel: m8/M8 哨兵（NaT=int64 最小值）——slice 含哨兵/为空 → 哨兵结果，
+              数值结果 round 为 int；relabel: 结果数组 _dtype 标签（如 'm8[D]'）；
     全归约 + 标量 q → rsnumpy 标量（带 .dtype、isscalar 为 True）；
     out 被填充并返回；输入为 ndarray 子类时结果保持子类。
     """
@@ -395,18 +434,29 @@ def _percentile_engine(a, q, axis, keepdims, dtype, out=None, weights=None,
     nd = len(shape)
     axes = _reduce_axes(axis, nd)
     flat = _flat_list(a.tolist())
+    # ---- weights：全形状或 1-D
     wflat = None
+    w1d = None
+    red_size = _prod([shape[i] for i in axes]) if axes else 1
     if weights is not None:
         wsrc = weights if hasattr(weights, 'tolist') else rs.array(weights)
-        wflat = _flat_list(wsrc.tolist())
-        if len(wflat) != len(flat):
-            raise ValueError("weights must have the same shape as a")
+        wlist = _flat_list(wsrc.tolist())
+        if len(wlist) == len(flat):
+            wflat = wlist
+        elif len(axes) == 1 and len(wlist) == shape[axes[0]]:
+            w1d = wlist
+        elif len(axes) > 1 and len(wlist) == red_size:
+            w1d = wlist
+        else:
+            raise ValueError(
+                "weights must be a 1-D array with the same length as the "
+                "reduction axis, or an array with the same shape as a")
     if hasattr(q, 'ndim'):
         qarr = q.ndim > 0
         qvals = _flat_list(q.tolist()) if qarr else [q.tolist()]
     elif isinstance(q, (list, tuple)):
         qarr = True
-        qvals = list(q)
+        qvals = _flat_list(q)
     else:
         qarr = False
         qvals = [q]
@@ -424,34 +474,41 @@ def _percentile_engine(a, q, axis, keepdims, dtype, out=None, weights=None,
     results = []
     n_allnan = 0
     n_empty = 0
+    bad = float('nan') if sentinel is None else sentinel
+    multi = len(axes) > 1
     for q01 in qs:
-        for vals, wlist in slice_list:
+        for oi, (vals, wlist) in enumerate(slice_list):
             if not vals:
-                results.append(float('nan'))
+                results.append(bad)
                 n_empty += 1
                 continue
-            if wflat is not None:
-                if nan_filter:
-                    pairs = [(v, w) for v, w in zip(vals, wlist)
-                             if not _is_nan_v(v)]
-                else:
-                    pairs = list(zip(vals, wlist))
+            if w1d is not None:
+                wl = list(w1d) if not multi else w1d[:len(vals)]
             else:
-                if nan_filter:
-                    pairs = [v for v in vals if not _is_nan_v(v)]
-                else:
-                    pairs = list(vals)
-            if not pairs:
-                results.append(float('nan'))
-                n_allnan += 1
-                continue
-            if wflat is not None:
-                sv = sorted(pairs, key=lambda p: _ckey(p[0]))
+                wl = wlist
+            vw = list(builtins.zip(vals, wl)) if wl is not None \
+                else [(v, None) for v in vals]
+            if nan_filter:
+                vw = [p for p in vw if not _is_nan_v(p[0])]
+                if not vw:
+                    results.append(bad)
+                    n_allnan += 1
+                    continue
+            else:
+                if any(_is_nan_v(p[0]) for p in vw) or (
+                        sentinel is not None
+                        and any(p[0] == sentinel for p in vw)):
+                    results.append(bad)
+                    continue
+            if wl is not None:
+                sv = sorted(vw, key=lambda p: _ckey(p[0]))
                 vs = [p[0] for p in sv]
                 ws = [p[1] for p in sv]
-                results.append(_quantile_of(vs, q01, method, (vs, ws)))
+                r = _quantile_of(vs, q01, method, (vs, ws))
             else:
-                results.append(_quantile_of(sorted(pairs, key=_ckey), q01, method))
+                r = _quantile_of(sorted((p[0] for p in vw), key=_ckey),
+                                 q01, method)
+            results.append(builtins.int(round(r)) if sentinel is not None else r)
     if n_allnan:
         warnings.warn("All-NaN slice encountered", RuntimeWarning, stacklevel=5)
     if n_empty:
@@ -471,6 +528,18 @@ def _percentile_engine(a, q, axis, keepdims, dtype, out=None, weights=None,
         red_shape = tuple(red_shape)
     else:
         red_shape = tuple(out_shape)
+    if sentinel is not None:
+        # m8/M8：int64 存储 + 标签；0-d 结果保持 0-d ndarray（.dtype 可查）
+        if qarr:
+            res = rs.array(_reshape_flat(results, (len(qs),) + red_shape),
+                           dtype='int64')
+        elif not red_shape and len(results) == 1:
+            res = rs.array([results[0]], dtype='int64').reshape(())
+        else:
+            res = rs.array(_reshape_flat(results, red_shape), dtype='int64')
+        if relabel:
+            res._dtype = relabel
+        return res
     if qarr:
         res = rs.array(_reshape_flat(results, (len(qs),) + red_shape), dtype=dtype)
     elif not red_shape and len(results) == 1:
@@ -1181,29 +1250,286 @@ def nanmedian(a, axis=None, out=None, overwrite_input=False, keepdims=False):
     return _reduce_wrap(results, axes, shape, keepdims, res_dt, out, a)
 
 
-_WEIGHTED_METHODS = ('inverted_cdf', 'averaged_inverted_cdf',
-                     'closest_observation', 'nearest', 'interpolated_inverted_cdf')
-
-
 def _validate_method(method):
-    from rsnumpy.lib._function_base_impl import _QuantileMethods
-    ok = [m.value for m in _QuantileMethods] + list(_WEIGHTED_METHODS)
-    m = method.value if isinstance(method, _QuantileMethods) else method
-    if m not in ok:
-        raise ValueError(f"method {method!r} is not valid")
+    """numpy 2.x 报错："<m> is not a valid method. Use one of: 'inverted_cdf', ..."""
+    m = getattr(method, 'value', method)
+    if m not in QUANTILE_METHODS:
+        use = ', '.join("'%s'" % x for x in QUANTILE_METHODS)
+        raise ValueError(f"{m} is not a valid method. Use one of: {use}")
+    return m
+
+
+def _frac_type():
+    from fractions import Fraction
+    return Fraction
+
+
+def _promote_float(base, other):
+    """float 家族 dtype 提升（f16<f32<f64<f80）；非 float 基底按对方 float 提升。"""
+    order = {'float16': 0, 'float32': 1, 'float64': 2, 'longdouble': 3}
+    if base in order and other in order:
+        return base if order[base] >= order[other] else other
+    if base in order:
+        return base
+    if other in order:
+        return other
+    return 'float64'
+
+
+def _m8_label_of(dt):
+    """dtype 字符串/DType 的 m8[X]/M8[X] 标签（无则 None）。"""
+    if dt is None:
+        return None
+    s = dt if isinstance(dt, str) else str(dt)
+    t = s.lstrip('<>=|')
+    if (len(t) > 4 and t[1] == '8' and t[2] == '[' and t[-1] == ']'
+            and t[0] in 'Mm' and t[3:-1].isalpha()):
+        return t
+    return None
+
+
+def _q_values(q, scale):
+    """q → (Python 数值列表, 数组 q 的 float 提升 dtype|None, 是否全 0/1, 是否数组)。
+    校验范围并按 scale 给出 numpy 2.x 精确报错信息。"""
+    msg = ("Percentiles must be in the range [0, 100]" if scale > 1
+           else "Quantiles must be in the range [0, 1]")
+    promote = None
+    if isinstance(q, (list, tuple)):
+        qvals = _flat_list(q)
+        qarr = True
+    elif builtins.type(q) in (int, float, bool) or isinstance(q, _frac_type()):
+        # 纯 Python 标量：NEP50 不参与提升
+        qvals = [q]
+        qarr = False
+    else:
+        # rsnumpy ndarray / 数值标量（有 .dtype）：参与提升
+        _dtq = getattr(q, '_dtype', None) or getattr(q, 'dtype', None)
+        qk = _dt_kind(_dtq)
+        if qk in 'efd':
+            promote = _dtype_name(_dtq)
+        qarr = getattr(q, 'ndim', 0) > 0
+        qvals = _flat_list(q.tolist()) if qarr else [q.tolist()]
+    exact01 = True
+    for v in qvals:
+        try:
+            fv = float(v) / scale
+        except (TypeError, ValueError):
+            raise ValueError(msg)
+        if fv != fv or not (0.0 <= fv <= 1.0):
+            raise ValueError(msg)
+        if fv not in (0.0, 1.0):
+            exact01 = False
+    return qvals, promote, exact01, qarr
+
+
+def _frac_quantile(vs, qf, method):
+    """Fraction 精确分位数（vs 已排序 Fraction 列表，qf ∈ [0,1] 精确值）。"""
+    from fractions import Fraction as _Frac
+    n = len(vs)
+    if n == 0:
+        return _Frac(0)
+    m = method or 'linear'
+    if m == 'inverted_cdf':
+        idx = builtins.max(0, builtins.min(math.ceil(qf * n) - 1, n - 1))
+        return vs[idx]
+    if m == 'averaged_inverted_cdf':
+        k = qf * n
+        if k.denominator == 1 and 0 < k < n:
+            return (vs[k - 1] + vs[k]) / 2
+        idx = builtins.max(0, builtins.min(math.ceil(k) - 1, n - 1))
+        return vs[idx]
+    if m == 'lower':
+        vidx = math.floor(qf * (n - 1))
+    elif m == 'higher':
+        vidx = math.ceil(qf * (n - 1))
+    elif m == 'nearest':
+        # Fraction 精确 half-even（Python round 对 Fraction 是精确 tie→even）
+        vidx = round(qf * (n - 1))
+    elif m == 'closest_observation':
+        # 1-based 位置 half-even（numpy #26656）：round(q*n) - 1
+        vidx = round(qf * n) - 1
+    elif m == 'midpoint':
+        vidx = _Frac(math.floor(qf * (n - 1))
+                     + math.ceil(qf * (n - 1)), 2)
+    elif m == 'linear':
+        vidx = qf * (n - 1)
+    elif m == 'hazen':
+        vidx = qf * n - _Frac(1, 2)
+    elif m == 'weibull':
+        vidx = qf * (n + 1) - 1
+    elif m == 'median_unbiased':
+        vidx = qf * (n + _Frac(1, 3)) - _Frac(2, 3)
+    elif m == 'normal_unbiased':
+        vidx = qf * (n + _Frac(1, 4)) - _Frac(5, 8)
+    elif m == 'interpolated_inverted_cdf':
+        vidx = qf * n - 1
+    else:
+        raise ValueError(f"method {m!r} is not a valid method")
+    vidx = builtins.min(builtins.max(vidx, 0), n - 1)
+    if m in ('lower', 'higher', 'nearest', 'closest_observation'):
+        return vs[vidx]
+    lo = math.floor(vidx)
+    hi = builtins.min(lo + 1, n - 1)
+    frac = vidx - lo
+    return vs[lo] + (vs[hi] - vs[lo]) * frac
 
 
 def _percentile_public(a, q, axis, out, overwrite_input, method, keepdims,
                        weights, nan_filter, scale):
-    _validate_method(method)
+    m = _validate_method(method)
     a = _as_nd(a)
     dt = getattr(a, '_dtype', 'float64')
-    if _dt_kind(dt) == 'c':
-        raise TypeError("a must be an array of real numbers")
-    res_dt = dt if _dt_kind(dt) in 'ef' else 'float64'
+    k = _dt_kind(dt).lower()
+    if k == 'c':
+        raise TypeError(
+            "numpy is unable to avoid using the complex type with the "
+            "current version of the 'inplace-sort' used in the "
+            "'nanpercentile' function. Please make sure to cast your "
+            "input array to a real type before calling this function.")
+    # ---- weights 校验（仅 inverted_cdf；非负）
+    if weights is not None:
+        if m != 'inverted_cdf':
+            raise ValueError("Only method 'inverted_cdf' supports weights")
+        wsrc = weights if hasattr(weights, 'tolist') else _rs().array(weights)
+        for w in _flat_list(wsrc.tolist()):
+            if w < 0:
+                raise ValueError("Weights must be non-negative")
+    # ---- m8/M8：int64 哨兵路径
+    m8s = _m8_label_of(dt)
+    if m8s is not None:
+        return _percentile_engine(a, q, axis, keepdims, 'int64', out=out,
+                                  weights=weights, method=m, nan_filter=nan_filter,
+                                  scale=scale, sentinel=_INT64_MIN, relabel=m8s)
+    qvals, promote, exact01, qarr = _q_values(q, scale)
+    # ---- Fraction 精确路径（object 输入 + Fraction q，全归约）
+    if k == 'o' and axis is None:
+        flat = _flat_list(a.tolist())
+        if flat and all(isinstance(v, _frac_type()) for v in flat):
+            vs = sorted(flat)
+            _Frac = _frac_type()
+            n = len(vs)
+            results = []
+            for qv in qvals:
+                fqv = float(qv) / scale
+                if isinstance(qv, _Frac):
+                    results.append(_frac_quantile(vs, _Frac(qv) / _Frac(int(scale)), m))
+                elif m in _INTERPOLATING_METHODS and fqv not in (0.0, 1.0):
+                    # 浮点 q + 插值 method：float 结果（numpy 语义）
+                    results.append(_quantile_of([float(x) for x in vs], fqv, m))
+                elif m == 'averaged_inverted_cdf':
+                    kx = fqv * n
+                    if kx == builtins.int(kx) and 0 < kx < n:
+                        results.append((vs[int(kx) - 1] + vs[int(kx)]) / 2)
+                    else:
+                        idx = builtins.max(0, builtins.min(math.ceil(kx) - 1, n - 1))
+                        results.append(vs[idx])
+                else:
+                    # 精确 0/1 或离散 method：保留原对象（Fraction 恒等性）
+                    if fqv == 0.0:
+                        results.append(vs[0])
+                    elif fqv == 1.0:
+                        results.append(vs[n - 1])
+                    else:
+                        results.append(vs[_sel_idx(fqv, n, m)])
+            rs = _rs()
+            if qarr:
+                return rs.array(results, dtype='object')
+            return results[0]
+    # ---- 结果 dtype 规则（numpy 2.x）
+    interp = m in _INTERPOLATING_METHODS
+    if k in 'ef':
+        res_dt = _dtype_name(dt)
+    elif k in 'iu?b':
+        res_dt = _dtype_name(dt) if (not interp or exact01) else 'float64'
+    else:
+        res_dt = 'float64'
+    if promote is not None:
+        res_dt = _promote_float(res_dt, promote)
     return _percentile_engine(a, q, axis, keepdims, res_dt, out=out,
-                              weights=weights, method=method,
+                              weights=weights, method=m,
                               nan_filter=nan_filter, scale=scale)
+
+
+def _sel_idx(fqv, n, m):
+    """离散 method 的选择索引（0-based，clamp）；非离散返回 None。"""
+    if m == 'inverted_cdf':
+        return builtins.max(0, builtins.min(math.ceil(fqv * n) - 1, n - 1))
+    if m == 'lower':
+        return builtins.min(builtins.max(math.floor(fqv * (n - 1)), 0), n - 1)
+    if m == 'higher':
+        return builtins.min(builtins.max(math.ceil(fqv * (n - 1)), 0), n - 1)
+    if m == 'nearest':
+        return builtins.min(builtins.max(round(fqv * (n - 1)), 0), n - 1)
+    if m == 'closest_observation':
+        return builtins.min(builtins.max(round(fqv * n) - 1, 0), n - 1)
+    return None
+
+
+def _median_py(a, axis, out, keepdims):
+    """纯 Python 中位数（numpy 2.x 语义；任意 dtype/axis 形状，消除 Rust
+    _core.median 的 f64/2D 限制与空 slice 减溢 abort）。
+    NaN/NaT 传染 slice；空 slice → NaN + 两条 RuntimeWarning；
+    m8/M8 在 int64 存储上计算（NaT=INT64_MIN），结果重贴标签；
+    结果 dtype：float 保精度，其余 float64；子类/keepdims/out 保留。
+    """
+    rs = _rs()
+    a = _as_nd(a)
+    dt = getattr(a, '_dtype', 'float64')
+    k = _dt_kind(dt)
+    shape = tuple(a.shape)
+    nd = len(shape)
+    axes = _reduce_axes(axis, nd)
+    flat = _flat_list(a.tolist())
+    m8s = _m8_label_of(dt)
+    sentinel = _INT64_MIN if m8s else None
+    results = []
+    n_empty = 0
+    for vals, _wl in _slices(flat, shape, axes):
+        if not vals:
+            results.append(sentinel if sentinel is not None else float('nan'))
+            n_empty += 1
+            continue
+        if any(_is_nan_v(v) for v in vals) or (
+                sentinel is not None and any(v == sentinel for v in vals)):
+            results.append(sentinel if sentinel is not None else float('nan'))
+            continue
+        vs = sorted(vals, key=_ckey)
+        n = len(vs)
+        r = vs[n // 2] if n % 2 == 1 else (vs[n // 2 - 1] + vs[n // 2]) / 2
+        results.append(builtins.int(round(r)) if sentinel is not None else r)
+    if n_empty:
+        warnings.warn("Mean of empty slice", RuntimeWarning, stacklevel=4)
+        warnings.warn("invalid value encountered in scalar divide",
+                      RuntimeWarning, stacklevel=4)
+    if m8s:
+        axset = set(axes)
+        out_shape = [d for i, d in enumerate(shape) if i not in axset]
+        if keepdims:
+            red = []
+            kk = 0
+            for i in range(nd):
+                if i in axset:
+                    red.append(1)
+                else:
+                    red.append(out_shape[kk])
+                    kk += 1
+            red = tuple(red)
+        else:
+            red = tuple(out_shape)
+        if not red:
+            res = rs.array([results[0]], dtype='int64').reshape(())
+        else:
+            res = rs.array(_reshape_flat(list(results), red), dtype='int64')
+        res._dtype = m8s
+        if out is not None:
+            try:
+                rs.copyto(out, res)
+            except Exception:
+                out[...] = res
+            return out
+        return res
+    res_dt = _dtype_name(dt) if k in 'ef' else 'float64'
+    return _reduce_wrap(results, axes, shape, keepdims, res_dt, out, a)
 
 
 def nanpercentile(a, q, axis=None, out=None, overwrite_input=False,

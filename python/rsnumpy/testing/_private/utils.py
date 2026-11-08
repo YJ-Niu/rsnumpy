@@ -525,6 +525,15 @@ def assert_equal(actual, desired, err_msg='', verbose=True, *, strict=False):
     # isscalar test to check cases such as [np.nan] != np.nan
     if isscalar(desired) != isscalar(actual):
         raise AssertionError(msg)
+    # 标量 nan 对：numpy assert_equal 语义 nan==nan（rs 标量 __eq__ 按 IEEE
+    # 判不等，须在此短路）
+    try:
+        if (getattr(actual, 'ndim', 0) in (0, None)
+                and getattr(desired, 'ndim', 0) in (0, None)):
+            if (actual != actual) and (desired != desired):
+                return
+    except Exception:
+        pass
 
     try:
         isdesnat = isnat(desired)

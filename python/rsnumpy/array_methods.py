@@ -871,6 +871,38 @@ class NdArrayMethods:
     @staticmethod
     def repeat(arr, repeats, axis=None):
         """重复数组元素。"""
+        # 数组 repeats：Rust 仅支持标量 → Python 展开（1-D；2-D 轴展开）
+        if (isinstance(repeats, (list, tuple))
+                or (hasattr(repeats, 'ndim')
+                    and getattr(repeats, 'ndim', 0) > 0)):
+            from rsnumpy import ndarray as _ND
+            shp = tuple(arr.shape)
+            cnts = repeats.tolist() if hasattr(repeats, 'tolist') \
+                else list(repeats)
+            if not isinstance(cnts, (list, tuple)):
+                cnts = [cnts]
+            cnts = [int(c) for c in cnts]
+            if len(shp) <= 1:
+                flat = arr.ravel().tolist()
+                if not isinstance(flat, list):
+                    flat = [flat]
+                out = []
+                for v, c in zip(flat, cnts):
+                    out.extend([v] * c)
+                return _ND(out, _dtype=getattr(arr, '_dtype', 'float64'))
+            rows = arr.tolist()
+            if axis == 0:
+                out = []
+                for i, row in enumerate(rows):
+                    out.extend([row] * cnts[i])
+                return _ND(out, _dtype=getattr(arr, '_dtype', 'float64'))
+            out = []
+            for row in rows:
+                nr = []
+                for v, c in zip(row, cnts):
+                    nr.extend([v] * c)
+                out.append(nr)
+            return _ND(out, _dtype=getattr(arr, '_dtype', 'float64'))
         result = arr._array.repeat(repeats, axis)
         return _wrap_result(result)
     

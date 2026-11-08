@@ -766,6 +766,17 @@ class ndarray:
 
     def __getitem__(self, key):
         res = self._getitem_impl(key)
+        # 纯 int 索引 → numpy 视图语义：挂父引用使链式 setitem 写回
+        #（a[0][1] = v → a[(0, 1)] = v）
+        try:
+            _vk = key if isinstance(key, tuple) else (key,)
+            if (isinstance(res, ndarray)
+                    and builtins.all(isinstance(kk, int)
+                                     and not isinstance(kk, bool)
+                                     for kk in _vk)):
+                res._view_parent = (self, _vk)
+        except Exception:
+            pass
         # rs 布尔索引对 complex 数组丢虚部(Rust 层按 f64 占位):逐元素重建
         _bool_key = (isinstance(key, (list, tuple)) and key and builtins.all(isinstance(k, (bool, bool_)) for k in key))
         if not _bool_key and _is_ndarray(key):
@@ -1330,6 +1341,18 @@ class ndarray:
                 raise IndexError(
                     "too many indices for array: array is 0-dimensional, "
                     f"but {_n0} were indexed")
+        # 链式视图写回：a[0][1] = v → a[(0, 1)] = v（numpy 视图语义）
+        _vp = getattr(self, '_view_parent', None)
+        if _vp is not None:
+            _par, _pidx = _vp
+            _nk = key if isinstance(key, tuple) else (key,)
+            _par[_pidx + _nk] = value
+            return
+        # m8/M8 标签：'NaT' 字符串 → INT64_MIN 哨兵（timedelta/datetime 空值）
+        if str(getattr(self, '_dtype', '')).lstrip('<>=|')[:1] in 'Mm' \
+                and isinstance(value, str) \
+                and value.strip().lower() in ('nat', 'na', '<nat>'):
+            value = -9223372036854775808
         # numpy 语义：Ellipsis 展开为全切片（Rust 不支持 ... 索引）。
         # 注意必须用身份检查（`is`）：`in` 会触发 ndarray.__eq__ 崩溃；
         # 且不能用 any(...)——模块级 `any` 被 rsnumpy ufunc 遮蔽，对生成器恒 True。
@@ -1418,16 +1441,10 @@ class ndarray:
             _raw_o = _init_o
         if str(self._dtype) == 'object' and _raw_o is not None:
             keyseq = key if isinstance(key, tuple) else (key,)
-            if builtins.all(isinstance(k, int) and not isinstance(k, bool)
-                            for k in keyseq):
+            if builtins.all(isinstance(k, (int, slice))
+                            and not isinstance(k, bool) for k in keyseq):
                 try:
-                    cur = _raw_o
-                    for k in keyseq[:-1]:
-                        cur = cur[int(k)]
-                    if keyseq:
-                        cur[int(keyseq[-1])] = value
-                    elif isinstance(_raw_o, list) and len(_raw_o) == 1:
-                        _raw_o[0] = value
+                    _obj_setitem_walk(_raw_o, keyseq, value)
                     return
                 except Exception:
                     pass
@@ -6920,6 +6937,14 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
             _CopyMode.IF_NEEDED: None,
             _CopyMode.ALWAYS: True,
         }[copy]
+    # m8/M8：int64 存储 + 标签（NaT = INT64_MIN 哨兵，与 numpy 语义一致）
+    _m8s = _m8_label_of(dtype)
+    if _m8s is not None:
+        _src = data.tolist() if _is_ndarray(data) else data
+        _arr = array(_src, dtype='int64', copy=copy, order=order,
+                     subok=subok, ndmin=ndmin)
+        _arr._dtype = _m8s
+        return _arr
     # str 数据 + 'c' dtype：legacy numpy char 语义 → 逐字符 1-d S1。
     if isinstance(data, str) and dtype is not None and str(dtype) == 'c':
         return array(list(data), dtype='S1')
@@ -7214,7 +7239,12 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
         arr = ndarray._wrap(_maybe_native_complex(arr._array, _dtype), _dtype=_dtype)
     if ndmin > arr.ndim:
         new_shape = (1,) * (ndmin - arr.ndim) + arr.shape
-        arr = ndarray._wrap(arr._array.reshape(new_shape), _dtype=_dtype)
+        if int(getattr(arr, 'size', 0) or 0) == 0:
+            # Rust reshape 拒 0 维：直接按目标形状构造空数组
+            #（numpy 语义：np.array([], ndmin=3).shape == (1, 1, 0)）
+            arr = zeros(new_shape, dtype=_dtype)
+        else:
+            arr = ndarray._wrap(arr._array.reshape(new_shape), _dtype=_dtype)
     return arr
 
 
@@ -8457,6 +8487,54 @@ def identity(n, dtype=None):
     return eye(n, dtype=dtype)
 
 
+def _m8_label_of(dtype):
+    """m8[X]/M8[X] dtype 请求 → 规范化标签字符串；其他返回 None。"""
+    if dtype is None:
+        return None
+    s = dtype if isinstance(dtype, str) else str(dtype)
+    t = s.lstrip('<>=|')
+    if (len(t) > 4 and t[1] == '8' and t[2] == '[' and t[-1] == ']'
+            and t[0] in 'Mm' and t[3:-1].isalpha()):
+        return t
+    return None
+
+
+def _obj_setitem_walk(raw, keyseq, value):
+    """object 数组 _raw_data 嵌套列表的 int/slice 索引赋值（numpy 语义；
+    slice 支持标量广播赋值与按层列表赋值）。"""
+    if not keyseq:
+        if isinstance(raw, list) and len(raw) == 1:
+            raw[0] = value
+        return raw
+    k = keyseq[0]
+    rest = keyseq[1:]
+    if not isinstance(raw, list):
+        raise IndexError
+    if isinstance(k, slice):
+        idxs = list(range(*k.indices(len(raw))))
+        if not rest:
+            if isinstance(value, (list, tuple)):
+                vals = list(value)
+            else:
+                vals = [value] * len(idxs)
+            if len(vals) != len(idxs):
+                raise IndexError
+            for i, v in zip(idxs, vals):
+                raw[i] = v
+        else:
+            if isinstance(value, (list, tuple)):
+                if len(value) != len(idxs):
+                    raise IndexError
+                for i, v in zip(idxs, value):
+                    _obj_setitem_walk(raw[i], rest, v)
+            else:
+                for i in idxs:
+                    _obj_setitem_walk(raw[i], rest, value)
+    else:
+        _obj_setitem_walk(raw[k], rest, value)
+    return raw
+
+
 def arange(start_or_stop=0, stop=None, step=1, dtype=None, device=None,
            like=None):
     """返回给定间隔内均匀间隔的值。"""
@@ -8467,9 +8545,32 @@ def arange(start_or_stop=0, stop=None, step=1, dtype=None, device=None,
     if isinstance(start_or_stop, datetime64) or isinstance(stop, datetime64) \
             or isinstance(step, timedelta64):
         return _datetime_arange(start_or_stop, stop, step)
+    # m8/M8：int64 存储 + 标签（NaT = INT64_MIN 哨兵，与 numpy 语义一致）
+    _m8s = _m8_label_of(dtype)
+    if _m8s is not None:
+        return ndarray(np.arange(builtins.int(start_or_stop),
+                                 builtins.int(stop), builtins.int(step)),
+                       _dtype=_m8s)
     _dtype = _resolve_dtype(dtype) if dtype is not None else \
         _infer_int_dtype((start_or_stop, stop, step))
     return ndarray(np.arange(start_or_stop, stop, step), _dtype=_dtype)
+
+
+def isnat(a):
+    """值是否为 NaT（datetime64/timedelta64 空值）或 NaN（numpy 2.x 语义）。"""
+    if isinstance(a, (datetime64, timedelta64)):
+        _d = getattr(a, '_days', None)
+        return _d is None or _d != _d
+    if hasattr(a, '_dtype') and \
+            str(getattr(a, '_dtype', '')).lstrip('<>=|')[:1] in 'Mm':
+        r = a == -9223372036854775808
+        try:
+            if getattr(r, 'ndim', 1) == 0:
+                return bool(r.tolist())
+        except Exception:
+            pass
+        return r
+    return isnan(a)
 
 
 arange.__text_signature__ = (
