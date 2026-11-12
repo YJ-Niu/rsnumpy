@@ -64,6 +64,205 @@ from .exceptions import AxisError  # noqa E401
 
 ufunc = _core.ufunc  # numpy 顶层 ufunc 类型
 
+# ---------- ufunc.resolve_dtypes（NumPy 2.1+ API，numpy 兼容层契约）----------
+# numpy 的 np.ufunc 类提供 resolve_dtypes()：只根据输入 dtype 推导本次运算
+# 将使用的全部 dtype（不执行计算）。rsnumpy 的 ufunc 是 Rust 类型，此处按
+# numpy 2.1+ 语义补上该 API。scicore 兼容层（class _ufunc(np.ufunc) 及
+# special/_ufunc_tools 的模块级 `np.ufunc.resolve_dtypes.__doc__`）依赖它存在。
+
+_ufunc_CHAR_DT = {
+    'b': 'int8', 'B': 'uint8', 'h': 'int16', 'H': 'uint16',
+    'i': 'int32', 'I': 'uint32', 'l': 'int64', 'L': 'uint64',
+    'q': 'int64', 'Q': 'uint64', 'f': 'float32', 'd': 'float64',
+    'g': 'float128', 'F': 'complex64', 'G': 'complex128',
+}
+
+
+def _ufunc_can_cast(src, dst, rule):
+    """按 numpy casting 规则判断 src → dst 是否可转换（实用子集）。"""
+    if src == dst:
+        return True
+    if rule == 'unsafe':
+        return True
+    if rule == 'no':
+        return False
+    sk, dk, ss, ds = src.kind, dst.kind, src.itemsize, dst.itemsize
+    if rule == 'equiv':
+        return sk == dk and ss == ds
+    if sk == dk:
+        return ss <= ds
+    if rule not in ('safe', 'same_kind'):
+        return False
+    if sk == 'b':  # bool → 任意数值均 safe
+        return True
+    if dk == 'b':
+        return False
+    if sk in 'iu' and dk in 'iu':
+        # 整数族互转：safe 仅 u→i 且位宽增大；i→u 带符号恒非 safe
+        if rule != 'safe':
+            return True
+        return sk == 'u' and ss < ds
+    if sk in 'iu' and dk == 'f':
+        # 对齐 numpy 2.5.4 can_cast：i16→f32/u8→f32/i64→f64 safe；
+        # i32→f32/u32→f32/i64→f32 非 safe
+        if rule != 'safe':
+            return True
+        return ds > ss or (ss == 8 and ds == 8)
+    if sk == 'f' and dk == 'c':
+        return ss <= ds
+    return False
+
+
+def _ufunc_resolve_dtypes(self, dtypes, *, signature=None, casting=None,
+                          reduction=False):
+    """Find the dtypes this ufunc will use for the operation.
+
+    Mirrors :meth:`numpy.ufunc.resolve_dtypes` (NumPy 2.1+).  ``dtypes`` must
+    be a tuple of length ``ufunc.nargs``: one entry per operand, where output
+    operands may be ``None`` (resolved from the inputs) or a provided output
+    dtype.  Returns the dtypes the ufunc will actually use (inputs upcast to
+    the selected loop's dtypes, plus the resolved outputs).  Python
+    ``int``/``float``/``complex`` entries are weak types (NEP 50): they stick
+    to the dominant strong operand, or resolve to the ufunc's default dtype
+    (``int64``/``float64``/``complex128``) when no strong operand is present.
+    ``bool`` is rejected, as in NumPy.  ``signature``/``reduction`` are
+    accepted for API parity; gufunc core-dim matching is not implemented and
+    falls back to default promotion.
+    """
+    nargs = self.nargs
+    if len(dtypes) != nargs:
+        raise TypeError(
+            f"resolve_dtypes: The dtypes must be a tuple of `ufunc.nargs` length.")
+    nin = self.nin
+    loop_types = getattr(self, 'types', None) or []
+    loops = [t.split('->') for t in loop_types]
+    rule = casting or 'safe'
+
+    def _bad():
+        raise TypeError("Provided dtype must be a valid NumPy dtype, "
+                        "int, float, complex, or None.")
+
+    def _char_dt(c):
+        name = _ufunc_CHAR_DT.get(c)
+        return dtype(name) if name is not None else None
+
+    # 强类型输入；弱类型单独收集，bool 直接拒绝（与 numpy 一致）
+    strong = []
+    weak = []
+    for t in dtypes[:nin]:
+        if t is None:
+            raise TypeError(
+                "resolve_dtypes: input operands cannot have None dtype")
+        if t is _py_int or t is _py_float or t is _py_complex:
+            weak.append(t)
+        elif t is _py_bool:
+            _bad()
+        else:
+            strong.append(dtype(t))
+
+    # 输出项：None 待解析；弱类型映射到默认 64 位；其余强制为 dtype
+    outs = []
+    for t in dtypes[nin:]:
+        if t is None:
+            outs.append(None)
+        elif t is _py_int:
+            outs.append(dtype('int64'))
+        elif t is _py_float:
+            outs.append(dtype('float64'))
+        elif t is _py_complex:
+            outs.append(dtype('complex128'))
+        elif t is _py_bool:
+            _bad()
+        else:
+            outs.append(dtype(t))
+
+    def _dominant():
+        cs = [d for d in strong if d.kind == 'c']
+        if cs:
+            return max(cs, key=lambda d: d.itemsize)
+        fs = [d for d in strong if d.kind == 'f']
+        if fs:
+            return max(fs, key=lambda d: d.itemsize)
+        ints = [d for d in strong if d.kind in 'iu']
+        if not ints:
+            # 全弱类型：取 ufunc 默认 dtype（有 int 循环才落到 int64）
+            out_chars = ''.join(out for _, out in loops)
+            if _py_complex in weak:
+                return dtype('complex128')
+            if _py_float in weak:
+                return dtype('float64')
+            # numpy 语义：弱 int 只落 int loop（bool 不算）；无 int loop 落 float64
+            if _py_any(c in 'ilqLQ' for c in out_chars):
+                return dtype('int64')
+            return dtype('float64')
+        if len({d.kind for d in ints}) > 1:
+            return dtype('int64')
+        return max(ints, key=lambda d: d.itemsize)
+
+    resolved_in = []
+    for t in dtypes[:nin]:
+        if t is _py_int or t is _py_float or t is _py_complex:
+            resolved_in.append(_dominant())
+        else:
+            resolved_in.append(dtype(t))
+
+    if loops and signature is None:
+        chosen = None
+        for in_t, out_t in loops:  # 第一遍：精确匹配（numpy 语义）
+            in_dts = [_char_dt(c) for c in in_t]
+            out_dts = [_char_dt(c) for c in out_t]
+            if len(in_t) != nin or len(out_t) != self.nout:
+                continue
+            if any(d is None for d in in_dts + out_dts):
+                continue
+            if _py_all(resolved_in[i] == d for i, d in enumerate(in_dts)):
+                chosen = (in_dts, out_dts)
+                break
+        if chosen is None:  # 第二遍：按 casting 规则匹配
+            for in_t, out_t in loops:
+                in_dts = [_char_dt(c) for c in in_t]
+                out_dts = [_char_dt(c) for c in out_t]
+                if len(in_t) != nin or len(out_t) != self.nout:
+                    continue
+                if any(d is None for d in in_dts + out_dts):
+                    continue
+                if _py_all(_ufunc_can_cast(resolved_in[i], d, rule)
+                       for i, d in enumerate(in_dts)):
+                    chosen = (in_dts, out_dts)
+                    break
+        if chosen is None:
+            raise TypeError(
+                f"rsnumpy ufunc does not support the requested dtype(s) "
+                f"{tuple(str(t) for t in resolved_in)} under casting={rule!r}")
+        in_dts, out_dts = chosen
+        # numpy 语义：返回 loop 实际使用的 dtype——输入同样上投到 loop 的 dtype
+        result_in = list(in_dts)
+        result_out = []
+        for given, loop_dt in zip(outs, out_dts):
+            if given is None:
+                result_out.append(loop_dt)
+            elif not _ufunc_can_cast(loop_dt, given, rule):
+                raise TypeError(
+                    f"rsnumpy ufunc output cannot be cast from {loop_dt} "
+                    f"to {given} under casting={rule!r}")
+            else:
+                result_out.append(given)
+        return tuple(result_in) + tuple(result_out)
+
+    # 无 loop 元数据（桩 ufunc）或 gufunc 时的兜底：None 输出按输入族默认解析
+    if _py_any(t.kind == 'c' for t in resolved_in):
+        default = dtype('complex128')
+    else:
+        default = dtype('float64')
+    return tuple(resolved_in) + tuple(default for _ in range(self.nout))
+
+
+# 类上挂载（Rust 类型允许类属性赋值）；补齐 numpy ufunc 类的其余默认属性。
+ufunc.resolve_dtypes = _ufunc_resolve_dtypes
+for _a, _v in (('ntypes', 0), ('signature', None)):
+    if not hasattr(ufunc, _a):
+        setattr(ufunc, _a, _v)
+
 _current_module = _sys.modules[__name__]
 _sys.modules['rsnumpy'] = _current_module
 _sys.modules['rsnumpy.__init__'] = _current_module
@@ -81,6 +280,8 @@ _py_min = min
 # bool/int 在模块后段被 rsnumpy 标量类遮蔽（bool=bool_ 等），此处先捕获内建引用
 _py_bool = bool
 _py_int = int
+_py_float = float
+_py_complex = complex
 
 
 def _flatten_vals(x):
@@ -1584,14 +1785,10 @@ class ndarray:
                     k = key[key_idx]
                     key_idx += 1
                     if isinstance(k, slice):
-                        start = k.start if k.start is not None else 0
-                        stop = k.stop if k.stop is not None else dim_size
-                        step = k.step if k.step is not None else 1
-                        if hasattr(start, '__index__'):
-                            start = start.__index__()
-                        if hasattr(stop, '__index__'):
-                            stop = stop.__index__()
-                        target_shape.append(_py_max(0, (stop - start + step - 1) // step))
+                        # CPython 自身归一化（负索引/负步长全支持），
+                        # len(range(...)) 即切片精确长度。
+                        _s, _e, _st = k.indices(dim_size)
+                        target_shape.append(len(range(_s, _e, _st)))
                     elif isinstance(k, int):
                         continue
                     elif isinstance(k, list):

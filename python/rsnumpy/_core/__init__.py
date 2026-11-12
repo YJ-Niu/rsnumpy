@@ -137,6 +137,10 @@ class _UFuncMeta(type):
     """
 
     def __instancecheck__(cls, inst):
+        # 真正的类实例（含子类，如 scicore 兼容层的 _gufunc(np.ufunc) 桩）
+        # 按标准 MRO 判定；rsnumpy 标记函数（_rs_ufunc）再兜底识别。
+        if type.__instancecheck__(cls, inst):
+            return True
         return bool(getattr(inst, '_rs_ufunc', False))
 
 
