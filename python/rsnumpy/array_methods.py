@@ -144,15 +144,24 @@ class NdArrayMethods:
                     signed = name.startswith('int')  # noqa: F841
                     mask = (1 << bits) - 1
                     half = 1 << (bits - 1)
+                    _signed = name.startswith('int')
                     out = []
                     for v in fv:
                         if isinstance(v, float) and v != v:
                             out.append(0)  # NaN→0（numpy 未定义行为，与 array() 路径一致）
-                        else:
+                        elif _signed:
                             iv = int(v) & mask
                             if iv >= half:
-                                # 高位值（有符号越界 / u64 超出 i64 构造范围）：
-                                # 存 i64 补码负值，tolist 按位宽掩码还原
+                                # 有符号越界：存 i64 补码负值（与 asarray 一致）
+                                iv -= 1 << bits
+                            out.append(iv)
+                        else:
+                            # 无符号 <2^63：存值本身（与 asarray 约定一致）；符号扩展
+                            # 会把 u8 255 存成 -1.0，== 比较（f64 原值）必挂。
+                            # uint64 高位（≥2^63）f64 舍入会越界（2^64-5→2^64.0，
+                            # 下游 _check_int_coerce 抛 OverflowError），回落补码负值
+                            iv = int(v) & mask
+                            if bits == 64 and iv >= half:
                                 iv -= 1 << bits
                             out.append(iv)
                     if getattr(arr, 'ndim', 0) == 0:
@@ -330,6 +339,9 @@ class NdArrayMethods:
         out = ndarray._wrap(result, _dtype=getattr(arr, '_dtype', "float64"), _fields=getattr(arr, '_fields', None), _raw_data=getattr(arr, '_raw_data', None))
         # 继承结构化 DType（缺失会导致字段访问/属性查找失效）
         out._dtype_obj = getattr(arr, '_dtype_obj', None)
+        # 字符串数组：宽度存 _str_dtype（_dtype 是 'string_' 占位），缺失时
+        # 结果退化成裸 |S0（如 str 数组 reshape 后 dtype 失真）
+        out._str_dtype = getattr(arr, '_str_dtype', None)
         try:
             out._rs_parent = arr
         except Exception:
@@ -663,6 +675,27 @@ class NdArrayMethods:
             if _d == 0 or _i < -_d or _i >= _d:
                 raise IndexError(
                     f"index {_i} is out of bounds for axis {_ai} with size {_d}")
+        # object 数组：返回 _raw_data 存储的 Python 引用（numpy 保持对象身份；
+        # Rust 侧 f64 占位值对 object 无意义）
+        if str(getattr(arr, '_dtype', '')) == 'object':
+            _raw_i = getattr(arr, '_raw_data', None)
+            if _raw_i is not None:
+                if not idx:
+                    if int(arr.size) != 1:
+                        raise ValueError(
+                            "can only convert an array of size 1 "
+                            "to a Python scalar")
+                    cur = _raw_i
+                    while isinstance(cur, list) and len(cur) == 1:
+                        cur = cur[0]
+                    return cur
+                if len(idx) == 1 and isinstance(_raw_i, list):
+                    _i0 = idx[0]
+                    if _i0 < 0:
+                        _i0 += shp[0]
+                    if 0 <= _i0 < len(_raw_i) \
+                            and not isinstance(_raw_i[_i0], list):
+                        return _raw_i[_i0]
         if len(idx) == 1:
             v = arr._array.item(idx[0])
         elif idx:

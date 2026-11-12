@@ -178,6 +178,10 @@ class MaskedArray:
         """numpy.ma 语义：返回值（masked 位置保留原数据）。"""
         return self._data.tolist()
 
+    def copy(self):
+        """返回独立副本（data 与 mask 均拷贝）。"""
+        return MaskedArray(self._data.copy(), list(self._mask))
+
     # ------------------------------------------------------------------
     # 转置族（numpy.ma 语义：结果保留掩码）
     # ------------------------------------------------------------------

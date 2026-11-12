@@ -663,7 +663,24 @@ class ndarray:
 
     @property
     def data(self):
-        """缓冲区的 memoryview 视图（numpy ndarray.data 兼容）。"""
+        """缓冲区的 memoryview 视图（numpy ndarray.data 兼容）。
+
+        numpy 语义为元素级、可写（共享底层缓冲）。rsnumpy 数值数据在 Rust
+        侧，无法暴露共享可写缓冲，退而用 array.array 承载的可写副本
+        （元素级 format）；complex/字符串/object 保持字节级视图。
+        """
+        import array as _py_array
+        _code = {
+            'int8': 'b', 'uint8': 'B', 'int16': 'h', 'uint16': 'H',
+            'int32': 'i', 'uint32': 'I', 'int64': 'q', 'uint64': 'Q',
+            'float32': 'f', 'float64': 'd', 'bool': 'b',
+        }.get(str(self._dtype))
+        if _code is not None:
+            try:
+                _buf = _py_array.array(_code, self.flatten().tolist())
+                return memoryview(_buf)
+            except Exception:
+                pass
         return memoryview(self.tobytes())
 
     def tobytes(self, order='C'):
@@ -735,6 +752,10 @@ class ndarray:
         if getattr(self, '_complex_data', None) is not None or \
                 str(getattr(self, '_dtype', '')).startswith('complex'):
             raise BufferError("complex array does not support the buffer protocol")
+        if getattr(self, '_view_bytes', False):
+            # view 结果：暴露重解释后的逻辑 dtype 字节（numpy view 语义），
+            # hashlib/memoryview 看到的是目标 dtype 的真实字节。
+            return memoryview(bytearray(self.tobytes()))
         if self.ndim == 0:
             # Rust 0-d 缓冲协议长度损坏（len 返回标量值而非 itemsize，
             # bytes(np.array(567.)) 会得 567 字节）：按 dtype 逐元素编码，
@@ -4934,7 +4955,13 @@ def _view_dtype(arr, target):
                 for j in range(_n_sub)])
         return _build_plain_array(vals, _base_v, tuple(src_shape) + _sub_shp)
     vals = [_unpack_field(raw, i * tsize, tdt) for i in range(count)]
-    return _build_plain_array(vals, tdt, new_shape)
+    res = _build_plain_array(vals, tdt, new_shape)
+    # view 结果的 buffer 协议暴露逻辑 dtype 字节（numpy 语义，见
+    # __buffer__ 的 _view_bytes 分支）；普通数组底层存储 f64，缓冲保持
+    # 零拷贝快路径不变。
+    if tdt._itemsize > 0 and getattr(tdt, 'kind', 'V') in 'iubf':
+        res._view_bytes = True
+    return res
 
 
 # ---------- 比较 ----------
@@ -5462,6 +5489,14 @@ def _make_scalar_type(name, base, pybase, itemsize, zero):
             if (name.startswith('uint') and isinstance(val, builtins.int) and not isinstance(val, builtins.bool) and val < 0):
                 raise OverflowError(
                     f"Python -int cannot be converted to C {name}")
+            # 越界 Python int → OverflowError（test_int_raise_behaviour；
+            # 与 array 构造路径 7132-7137 的校验一致）
+            if (isinstance(val, builtins.int) and not isinstance(val, builtins.bool)
+                    and name in _INT_RANGES):
+                _lo_i, _hi_i = _INT_RANGES[name]
+                if val < _lo_i or val > _hi_i:
+                    raise OverflowError(
+                        f"Python int too large to convert to C {name}")
             inst = base.__new__(cls)
             inst._value = pybase(val)
             return inst
@@ -6917,6 +6952,12 @@ class _CopyMode(_enum.Enum):
     ALWAYS = 2
 
 
+def _tuple_to_nested_list(t):
+    """tuple 数据 → 嵌套 list。ndarray.__init__ 的首参 tuple 一律按 shape
+    解释（对齐 np.ndarray((3,0))），故 array() 的数据路径须先归一 tuple。"""
+    return [_tuple_to_nested_list(x) if isinstance(x, tuple) else x for x in t]
+
+
 def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
     """创建数组。
 
@@ -6938,6 +6979,10 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
             _CopyMode.IF_NEEDED: None,
             _CopyMode.ALWAYS: True,
         }[copy]
+    # numpy 语义：range 是 array-like，展开为 int 列表
+    # （asarray(range(10)) ≡ arange(10) → int64，而非 object 单元素）
+    if isinstance(data, range):
+        data = list(data)
     # m8/M8：int64 存储 + 标签（NaT = INT64_MIN 哨兵，与 numpy 语义一致）
     _m8s = _m8_label_of(dtype)
     if _m8s is not None:
@@ -7233,6 +7278,11 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
         _dt_obj = _as_struct_dtype(dtype)
         if _dt_obj is not None:
             return _make_structured_array(data, _dt_obj)
+    # 显式 dtype 数值路径：tuple 是数据而非 shape（ndarray.__init__ 会把
+    # 首参 tuple 当 shape），先归一为嵌套 list，否则 asarray((1,2), dtype=...)
+    # 会把值误读成形状。
+    if isinstance(data, tuple):
+        data = _tuple_to_nested_list(data)
     arr = _coerce_dtype(ndarray(data, _dtype=_dtype), _dtype)
     # 显式复数 dtype：即使输入已是实数 ndarray（__init__ 会沿用其 dtype），
     # 也需提升为原生复数（零虚部）。
@@ -7379,6 +7429,9 @@ def _finalize_view(inst, src):
 
 def asarray(a, dtype=None, order=None):
     """转换输入为数组。"""
+    # numpy 语义：range 是 array-like → 展开为 int 列表（asarray(range(10)) ≡ arange(10)）
+    if isinstance(a, range):
+        a = list(a)
     # isinstance 而非 _is_ndarray 的 hasattr 鸭子检查：__getattr__ 透传的
     # 包装对象会让 hasattr(obj, '_array') 为真，asarray 会误当作 ndarray 原样
     # 返回——numpy 的 asarray 应走 __array__ 协议（透传包装对象的警告/异常，
@@ -8093,11 +8146,21 @@ def _string_filled(shape, fill, dtype):
     """按形状生成字符串填充数组（zeros 填 ''、ones 填 '1'，与 numpy 一致）。"""
     if isinstance(shape, int):
         n = shape
+        shape_t = (n,)
     else:
+        shape_t = tuple(int(s) for s in shape)
         n = 1
-        for s in shape:
-            n *= int(s)
-    return array([fill] * n, dtype=dtype)
+        for s in shape_t:
+            n *= s
+    arr = array([fill] * n, dtype=dtype)
+    if len(shape_t) > 1:
+        if n == 0:
+            # 空数组：reshape 无法保持零维（空 reshape 退化为 (0,)），
+            # 用 shape override（与结构化空数组同一机制）
+            arr._rs_shape_override = shape_t
+        else:
+            arr = arr.reshape(shape_t)
+    return arr
 
 
 class memmap(ndarray):
@@ -8532,7 +8595,12 @@ def _obj_setitem_walk(raw, keyseq, value):
                 for i in idxs:
                     _obj_setitem_walk(raw[i], rest, value)
     else:
-        _obj_setitem_walk(raw[k], rest, value)
+        if not rest:
+            # 末端 int 键：直接赋值（旧实现递归进叶子值后静默 no-op，
+            # 导致一维 object 数组 setitem 全部失效）
+            raw[k] = value
+        else:
+            _obj_setitem_walk(raw[k], rest, value)
     return raw
 
 

@@ -47,6 +47,9 @@ def _ensure_raw(a):
         # Rust core cannot parse lists that contain array objects; promote
         # them to pure nested lists first (e.g. concatenate([[X[0]], [X[1]]])).
         return _core.ndarray(_nested_to_list(a))
+    if isinstance(a, range):
+        # numpy 语义：range 是 array-like（reshape(range(20),(5,4)) 等须可用）
+        return _core.ndarray(list(a))
     return _core.ndarray(a)
 
 
