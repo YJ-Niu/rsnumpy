@@ -244,7 +244,9 @@ and several `sort` / `indexing` / `statistics` bug fixes).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). Portions of the test suite and the
+`testing` support module are derived from the NumPy project
+(BSD-3-Clause); see [NOTICE](https://github.com/YJ-Niu/rsnumpy/blob/main/NOTICE).
 
 ## Links
 

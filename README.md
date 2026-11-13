@@ -503,7 +503,8 @@ A: 已对齐 NumPy 2.5.1，覆盖 ~140 个常用 API。但一些高级或实验�
 
 ## 📄 许可
 
-MIT License — 详见 [LICENSE](LICENSE)
+MIT License — 详见 [LICENSE](LICENSE)。测试套件与 `testing` 支持模块
+部分拷贝自 NumPy（BSD-3-Clause），归属声明见 [NOTICE](NOTICE)
 
 ---
 

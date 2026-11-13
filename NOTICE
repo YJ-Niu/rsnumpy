@@ -1,0 +1,46 @@
+# 第三方代码归属 / Third-party Attribution
+
+rsnumpy 本身以 MIT 许可证发布（见 `LICENSE`）。仓库中以下部分拷贝自
+NumPy 项目，按 NumPy 的 BSD-3-Clause 许可证分发（版权与许可文本附后）。
+这些代码仅作为测试参照与测试支持使用，不属于 rsnumpy 的运行时 API：
+
+- `tests/` — NumPy 测试套件的拷贝：`numpy/_core/tests`（含重命名为
+  `test_rsnumpy_*.py` 的适配副本，见 `tests/conftest.py`）以及
+  `ma`、`lib`、`linalg`、`random`、`polynomial`、`matrixlib`、
+  `typing`、`fft`、`testing` 各子测试套件。
+- `python/rsnumpy/testing/` — NumPy `numpy/testing` 测试支持模块的拷贝。
+
+------------------------------------------------------------------------------
+
+## NumPy — BSD-3-Clause
+
+Copyright (c) 2005-2025, NumPy Developers.
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+    * Redistributions of source code must retain the above copyright
+       notice, this list of conditions and the following disclaimer.
+
+    * Redistributions in binary form must reproduce the above
+       copyright notice, this list of conditions and the following
+       disclaimer in the documentation and/or other materials provided
+       with the distribution.
+
+    * Neither the name of the NumPy Developers nor the names of any
+       contributors may be used to endorse or promote products derived
+       from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
