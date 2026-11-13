@@ -893,6 +893,11 @@ class ndarray:
         raw = getattr(self, '_raw_data', None)
         sd = getattr(self, '_str_dtype', None)
         if raw is not None and sd is not None:
+            _vb = getattr(self, '_str_view_buf', None)
+            if _vb is not None:
+                # view 结果：返回共享的原始字节（numpy view 语义——
+                # tobytes/再 view 基于同一字节序列，往返才正确）
+                return _vb
             return _string_array_tobytes(_flatten_data(raw), sd)
         return _numeric_tobytes(self, order)
 
@@ -953,6 +958,11 @@ class ndarray:
         if getattr(self, '_complex_data', None) is not None or \
                 str(getattr(self, '_dtype', '')).startswith('complex'):
             raise BufferError("complex array does not support the buffer protocol")
+        _sd_buf = getattr(self, '_str_dtype', None)
+        if _sd_buf is not None:
+            # 字符串数组：底层存储是 f64 占位（memoryview 会得 format 'd'、
+            # itemsize 失真）——按声明的字符布局合成缓冲（numpy 语义）
+            return memoryview(_string_buffer_bytes(self, _sd_buf))
         if getattr(self, '_view_bytes', False):
             # view 结果：暴露重解释后的逻辑 dtype 字节（numpy view 语义），
             # hashlib/memoryview 看到的是目标 dtype 的真实字节。
@@ -987,6 +997,16 @@ class ndarray:
         return bitwise_not(self)
 
     def __getitem__(self, key):
+        # 字符串数组纯切片：Rust getitem 走 f64 占位存储（丢字符串数据、
+        # dtype 退化为 |S0）——Python 层按 tolist 平铺 C 序逐元素切片
+        _sd_g = getattr(self, '_str_dtype', None)
+        if _sd_g is not None and getattr(self, '_raw_data', None) is not None:
+            try:
+                _res_g = _string_slice_get(self, key)
+            except Exception:
+                _res_g = None
+            if _res_g is not None:
+                return _res_g
         res = self._getitem_impl(key)
         # 纯 int 索引 → numpy 视图语义：挂父引用使链式 setitem 写回
         #（a[0][1] = v → a[(0, 1)] = v）
@@ -1551,6 +1571,16 @@ class ndarray:
         return result
 
     def __setitem__(self, key, value):
+        # 0-d 字符串：Rust setitem_multi 不支持字符串占位存储（报
+        # "Unsupported data type"）——直接写 _raw_data（宽度截断，numpy 语义）
+        if self.shape == () and (key == () or key is Ellipsis) \
+                and getattr(self, '_str_dtype', None) is not None:
+            _sw = self._str_dtype[1]
+            _sv = value if isinstance(value, str) else str(value)
+            if isinstance(_sw, int) and _sw > 0:
+                _sv = _sv[:_sw]
+            self._raw_data = [_sv]
+            return
         # numpy 语义：0-d 数组只允许 ()/... 索引；任何带索引的 key →
         # IndexError（若放任到达 Rust setitem，越界会 panic abort 整个进程）。
         if self.shape == ():
@@ -4305,7 +4335,10 @@ def _struct_dt_of(arr):
     """返回数组的结构化富 DType：优先 _dtype_obj，否则从旧版 _fields 重建。"""
     dt = getattr(arr, '_dtype_obj', None)
     if dt is not None:
-        return dt
+        # 顶层字符串（S/U）_dtype_obj 只是字节序标记（view 往返），
+        # 不是结构化 dtype——误判会让 setitem 走 _struct_setitem 慢路径
+        if getattr(dt, '_kind', None) not in ('S', 'U'):
+            return dt
     fields = getattr(arr, '_fields', None)
     if not fields:
         return None
@@ -4611,7 +4644,9 @@ def _build_plain_array(nested, base_dt, shape):
         _n = 1
         for _d in (shape or ()):
             _n *= int(_d)
-        if shape and _n == len(flat):
+        if shape is not None and _n == len(flat):
+            # shape=() 时 _n=1：0-d 目标保持 0-d（不能用真值判断，
+            # 否则 view 的 0-d 字符串结果被抬成 (1,)）
             _shape = tuple(int(s) for s in shape)
         else:
             _shape = (len(flat),) if flat else (0,)
@@ -4619,6 +4654,9 @@ def _build_plain_array(nested, base_dt, shape):
                             _dtype='string_', _raw_data=list(flat))
         width = base_dt._itemsize // 4 if k == 'U' else base_dt._itemsize
         arr._str_dtype = (k, width)
+        # 保留目标 dtype（含字节序——view 到 newbyteorder 的字符串数组
+        # 须带目标字节序，二次 view 往返才正确）
+        arr._dtype_obj = base_dt
         return arr
     name = _scalar_name_of(base_dt)
     if k == 'c':
@@ -5096,7 +5134,10 @@ def _unpack_scalar(buf, off, fdt):
     if k == 'V':
         return void(seg)
     if k == 'U':
-        return seg.decode('utf-32-le').rstrip('\x00')
+        # 按 dtype 字节序解码（view 到 newbyteorder 须得到换字节序值）
+        _ubo = getattr(fdt, '_byteorder', None)
+        _uorder = 'utf-32-be' if _ubo == '>' else 'utf-32-le'
+        return seg.decode(_uorder).rstrip('\x00')
     return 0
 
 
@@ -5130,7 +5171,13 @@ def _view_dtype(arr, target):
     """按目标 dtype 重解释数组字节。"""
     tdt = target if isinstance(target, DType) else dtype(target)
     src_dt = getattr(arr, '_dtype_obj', None)
-    if src_dt is not None:
+    _src_sd = getattr(arr, '_str_dtype', None)
+    if _src_sd is not None:
+        # 字符串源：tobytes 已是字符布局字节（U→UCS4、S→原始字节），
+        # 须先于结构化分支判定（字符串 view 结果带 _dtype_obj）
+        raw = arr.tobytes()
+        ssize = 4 * int(_src_sd[1]) if _src_sd[0] == 'U' else int(_src_sd[1])
+    elif src_dt is not None:
         raw, _ = _struct_to_bytes(arr)
         ssize = src_dt._itemsize
     else:
@@ -5154,7 +5201,8 @@ def _view_dtype(arr, target):
     # rsnumpy 语义：view 仅改变最后一个轴的长度，其余轴保持不变。
     src_shape = tuple(arr.shape)
     if not src_shape:
-        new_shape = (count,)
+        # 0-d 源：单元素 view 保持 0-d（numpy 语义）
+        new_shape = () if count == 1 else (count,)
     else:
         last_bytes = src_shape[-1] * ssize
         if last_bytes % tsize != 0:
@@ -5186,6 +5234,10 @@ def _view_dtype(arr, target):
     # 零拷贝快路径不变。
     if tdt._itemsize > 0 and getattr(tdt, 'kind', 'V') in 'iubf':
         res._view_bytes = True
+    # 字符串源 → 字符串目标：继承原始字节序列（numpy view 语义——
+    # tobytes/再 view 基于同一字节序列，字节序往返才正确）
+    if _src_sd is not None and getattr(tdt, 'kind', None) in ('S', 'U'):
+        res._str_view_buf = raw
     return res
 
 
@@ -8367,6 +8419,106 @@ def _string_dtype_spec(dtype):
     return None
 
 
+def _string_slice_get(arr, key):
+    """字符串数组纯切片索引（单 slice 或 slice/Ellipsis 元组）：按 tolist
+    平铺 C 序逐元素切片重建。不适用（int/None/花式索引等）返回 None 交回
+    常规路径。"""
+    shp = tuple(arr.shape)
+    if not shp:
+        return None
+    if isinstance(key, slice):
+        specs = [key] + [None] * (len(shp) - 1)
+    elif isinstance(key, tuple):
+        if builtins.any(k is not Ellipsis and not isinstance(k, slice)
+                        for k in key):
+            return None
+        if len(key) > len(shp):
+            return None
+        specs = list(key) + [None] * (len(shp) - len(key))
+    else:
+        return None
+    _n_ell = builtins.sum(1 for k in specs if k is Ellipsis)
+    if _n_ell > 1:
+        return None
+    if _n_ell:
+        _i = next(i for i, k in enumerate(specs) if k is Ellipsis)
+        specs[_i:_i + 1] = [None] * (len(shp) - (len(specs) - _n_ell))
+    rngs = [builtins.range(*k.indices(s)) if isinstance(k, slice)
+            else builtins.range(s) for k, s in zip(specs, shp)]
+    _t = arr.tolist()
+    if not isinstance(_t, list):
+        _t = [_t]
+
+    def _fl(x):
+        o = []
+        for v in x:
+            o.extend(_fl(v) if isinstance(v, list) else [v])
+        return o
+    _flat = _fl(_t)
+    _acc = 1
+    _strides = []
+    for s in reversed(shp):
+        _strides.append(_acc)
+        _acc *= s
+    _strides = list(reversed(_strides))
+    if len(_flat) != _acc:
+        return None
+    out = []
+
+    def _gen(d, base):
+        if d == len(rngs):
+            out.append(_flat[base])
+            return
+        for i in rngs[d]:
+            _gen(d + 1, base + i * _strides[d])
+    _gen(0, 0)
+    _gbo = getattr(getattr(arr, '_dtype_obj', None), 'byteorder', None)
+    # builtins.max：模块级 max 被 rsnumpy ufunc 遮蔽（第二参会被当 axis）
+    _gdt = f'{arr._str_dtype[0]}{builtins.max(int(arr._str_dtype[1]), 1)}'
+    res = array(out, dtype=_gdt)
+    new_shape = tuple(len(r) for r in rngs)
+    if len(new_shape) > 1:
+        res = res.reshape(new_shape)
+    if _gbo in ('<', '>'):
+        try:
+            import rsnumpy._dtypes as _dts_g
+            res._dtype_obj = _dts_g._clone_with_byteorder(
+                _dts_g.DType(_gdt), _gbo)
+        except Exception:
+            pass
+    return res
+
+
+def _string_buffer_bytes(arr, sd):
+    """字符串数组的 PEP 3118 缓冲字节（numpy 布局）：U → UCS4 码元（按
+    dtype 字节序），S → 原始字节；每元素零填充至宽度。底层存储是 f64
+    占位，直接暴露原内存会让 memview 报 format 'd'/itemsize 失真。"""
+    _vb = getattr(arr, '_str_view_buf', None)
+    if _vb is not None:
+        # view 结果：共享原始字节（与 tobytes 同源，往返一致）
+        return _vb
+    kind, width = sd[0], int(sd[1])
+    _vals = arr.tolist()
+    if not isinstance(_vals, list):
+        _vals = [_vals]
+    _bo = getattr(getattr(arr, '_dtype_obj', None), 'byteorder', None)
+    if not isinstance(_bo, str) or _bo in ('|', '=', '@', 'n', 'native'):
+        _bo = '<'
+    _order = 'le' if _bo in ('<', '=') else 'be'
+    _parts = []
+    for _v in _vals:
+        if kind == 'U':
+            _s = _v if isinstance(_v, str) else str(_v)
+            _b = _s[:width].encode('utf-32-' + _order)
+            _n = 4 * width
+        else:
+            _b = _v[:width] if isinstance(_v, bytes) \
+                else str(_v).encode('utf-8')[:width]
+            _n = width
+        _parts.append(_b.ljust(_n, b'\x00'))
+    return b''.join(_parts)
+
+
 def _string_filled(shape, fill, dtype):
     """按形状生成字符串填充数组（zeros 填 ''、ones 填 '1'，与 numpy 一致）。"""
     if isinstance(shape, int):
@@ -8385,6 +8537,9 @@ def _string_filled(shape, fill, dtype):
             arr._rs_shape_override = shape_t
         else:
             arr = arr.reshape(shape_t)
+    if not shape_t:
+        # 0-d：array([...]) 会推断成 (1,)，用 shape override（同结构化 0-d）
+        arr._rs_shape_override = ()
     return arr
 
 

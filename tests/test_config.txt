@@ -43,7 +43,7 @@ tests/_core_tests/test_shape_base.py 0 265/1/0
 tests/_core_tests/test_strings.py 0 564/751/49
 tests/_core_tests/test_umath_accuracy.py 0 0/0/32
 tests/_core_tests/test_umath_complex.py 0 308/19/17
-tests/_core_tests/test_unicode.py 0 19/57/0
+tests/_core_tests/test_unicode.py 0 76/0/0
 tests/fft_tests/test_helper.py 1 8/0/0
 tests/lib_tests/test__version.py 1 8/0/0
 tests/lib_tests/test_arraysetops.py 0 117/10/5

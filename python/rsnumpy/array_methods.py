@@ -63,6 +63,60 @@ class NdArrayMethods:
                     return res
         except Exception:
             pass
+        # 字符串目标（S/U）：_resolve_dtype 会把 S/U 降解成 float64，须单独
+        # 处理（numpy 语义：S 源解码并在 null 截断、U 源编码、宽度变更截断/
+        # 补零；裸 S/U（无宽度）= 自动宽度）
+        _str_tgt = None
+        try:
+            import rsnumpy as _rn_st
+            import rsnumpy._dtypes as _dts_st2
+            _DType_st = _dts_st2.DType
+            if isinstance(dtype, str):
+                _core_st = dtype[1:] if dtype and dtype[0] in '<>|=' else dtype
+                _st_exp_w = (bool(_core_st) and _core_st[0] in 'SU'
+                             and _core_st[1:].isdigit())
+            else:
+                _st_exp_w = True
+            _tdt_st = dtype if isinstance(dtype, _DType_st) \
+                else _rn_st.dtype(dtype)
+            if getattr(_tdt_st, 'kind', None) in ('S', 'U'):
+                _str_tgt = (getattr(_tdt_st, '_kind', None), _st_exp_w)
+        except Exception:
+            _str_tgt = None
+        if _str_tgt is not None and getattr(arr, '_raw_data', None) is not None \
+                and getattr(arr, '_str_dtype', None) is not None:
+            _tk, _st_exp_w = _str_tgt
+            _st_vals = arr.tolist()
+            if not isinstance(_st_vals, list):
+                _st_vals = [_st_vals]
+            _st_norm = []
+            for _v in _st_vals:
+                if isinstance(_v, (bytes, bytearray)):
+                    _st_norm.append(
+                        bytes(_v).decode('latin-1').split('\x00')[0])
+                else:
+                    _st_norm.append(str(_v).split('\x00')[0])
+            if _tk == 'U':
+                _st_w = (_tdt_st._itemsize // 4) if _st_exp_w else \
+                    max([len(_s) for _s in _st_norm] + [1])
+                _st_out = [_s[:_st_w] for _s in _st_norm]
+            else:
+                _st_w = _tdt_st._itemsize if _st_exp_w else \
+                    max([len(_s) for _s in _st_norm] + [1])
+                _st_out = [_s.encode('latin-1')[:_st_w] for _s in _st_norm]
+            _st_bo = getattr(_tdt_st, '_byteorder', None)
+            _st_prefix = '>' if _st_bo == '>' else '<'
+            _st_res = _rn_st.array(_st_out, dtype=f'{_tk}{max(_st_w, 1)}')
+            if _st_bo in ('<', '>'):
+                try:
+                    import rsnumpy._dtypes as _dts_st
+                    _st_res._dtype_obj = _dts_st._clone_with_byteorder(
+                        _dts_st.DType(f'{_tk}{max(_st_w, 1)}'), _st_bo)
+                except Exception:
+                    pass
+            if _st_res.ndim < arr.ndim and arr.shape:
+                _st_res = _st_res.reshape(arr.shape)
+            return _st_res
         if isinstance(dtype, str):
             try:
                 import rsnumpy as _rn_asm
@@ -945,6 +999,60 @@ class NdArrayMethods:
                     nr.extend([v] * c)
                 out.append(nr)
             return _ND(out, _dtype=getattr(arr, '_dtype', 'float64'))
+        # 字符串数组：Rust repeat 作用于 f64 占位存储（产出 float 零、丢
+        # 字符串数据）——标量 repeats 路径须在 Python 层按元素重复
+        #（数组 repeats 已在上方分支 Python 展开）
+        _sd_r = getattr(arr, '_str_dtype', None)
+        if _sd_r is not None and getattr(arr, '_raw_data', None) is not None:
+            import rsnumpy as _rn_r
+            _rdt = f'{_sd_r[0]}{max(int(_sd_r[1]), 1)}'
+            _r = int(repeats)
+            shp = [int(s) for s in arr.shape]
+            if not shp:
+                _out = [arr.tolist()] * _r
+            elif axis is None:
+                # tolist 平铺 C 序（ravel 走 Rust 占位存储会丢字符串数据）
+                _t = arr.tolist()
+                if not isinstance(_t, list):
+                    _t = [_t]
+
+                def _fl(x):
+                    o = []
+                    for v in x:
+                        o.extend(_fl(v) if isinstance(v, list) else [v])
+                    return o
+                _flat = _fl(_t)
+                _out = [v for v in _flat for _ in range(_r)]
+            else:
+                _ax = int(axis) % len(shp)
+
+                def _ra(nested, a):
+                    if a == 0:
+                        return [v for v in nested for _ in range(_r)]
+                    return [_ra(row, a - 1) for row in nested]
+
+                def _unflat(flat, shape):
+                    if not shape or len(shape) == 1:
+                        return list(flat)
+                    _cnt = 1
+                    for _s in shape[1:]:
+                        _cnt *= _s
+                    return [_unflat(flat[i * _cnt:(i + 1) * _cnt], shape[1:])
+                            for i in range(shape[0])]
+                _t = arr.tolist()
+                if not isinstance(_t, list):
+                    _t = [[_t]]
+                # 多维字符串 tolist 可能返回平铺（C 序）：先重建嵌套
+                if len(shp) > 1 and _t and not isinstance(_t[0], list):
+                    _t = _unflat(_t, shp)
+                _out = _ra(_t, _ax)
+                shp[_ax] *= _r
+            # 模块级 array() 走真正的字符串构造路径（ndarray() 构造器
+            # 对 _dtype='U1' 只做重标注，会丢 _str_dtype/_raw_data）
+            _res = _rn_r.array(_out, dtype=_rdt)
+            if shp and axis is not None and _res.ndim < len(shp):
+                _res = _res.reshape(tuple(shp))
+            return _res
         result = arr._array.repeat(repeats, axis)
         return _wrap_result(result)
     

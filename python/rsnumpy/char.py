@@ -381,7 +381,47 @@ def replace(a, old, new, count=None):
 
 
 def expandtabs(a, tabsize=8):
-    return _str_op('expandtabs', a, tabsize)
+    """逐元素 str.expandtabs（numpy 语义：tab 对齐到下一个 tab stop，
+    \\n/\\r 后列号归零）。
+
+    Python 层实现：numpy 按 ``incr = tabsize - (line_pos % tabsize)`` 对齐
+    tab stop，而 Rust ``char_str_op`` 每个 tab 固定插 ``tabsize`` 个空格
+    不对齐；且结果超限时 Rust 层 abort 而非抛异常。故在此一次完成展开与
+    溢出检查（展开后长度 > INT_MAX → OverflowError，见 numpy PR #26589）。
+    """
+    ts = int(tabsize)
+    vals = _decode(_get_strings(a))
+    LIM = 2147483647  # INT_MAX
+    out = []
+    for v in vals:
+        new_len = 0
+        line_pos = 0
+        parts = []
+        for ch in v:
+            if ch == '\t':
+                if ts > 0:
+                    incr = ts - (line_pos % ts)
+                    line_pos += incr
+                    new_len += incr
+                    parts.append(' ' * incr)
+            else:
+                line_pos += 1
+                new_len += 1
+                parts.append(ch)
+                if ch in '\n\r':
+                    line_pos = 0
+            if new_len > LIM:
+                raise OverflowError("new string is too long")
+        out.append(''.join(parts))
+    # 以下与 _str_op 的输出约定一致（bytes 回转 / 标量 / shape 包装）
+    if _a_was_bytes(a):
+        out = [v.encode('utf-8', 'surrogateescape') for v in out]
+    shape = _shape_of(a)
+    if isinstance(a, (str, bytes)):
+        return out[0] if out else ''
+    if shape == ():
+        return out[0] if out else ''
+    return _wrap_str(out, shape)
 
 
 def join(sep, a):

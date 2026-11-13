@@ -339,11 +339,14 @@ class DType(metaclass=_DTypeMeta):
             byte order ('S').
         """
         if order == 'S' or order == 'native':
-            # Swap byte order
+            # Swap byte order（numpy 语义：native 返回对侧字节序）
             if self._byteorder == '<':
                 new_order = '>'
             elif self._byteorder == '>':
                 new_order = '<'
+            elif self._byteorder in ('|', '=', '@', 'native', 'n', None):
+                import sys as _sys_bo
+                new_order = '>' if _sys_bo.byteorder == 'little' else '<'
             else:
                 new_order = self._byteorder
         elif order in ('<', '>', '|', '=', 'I', 'L', 'B', 'n'):
