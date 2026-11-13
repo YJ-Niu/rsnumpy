@@ -1929,7 +1929,11 @@ class ndarray:
             a_flat = [a_flat]
         result = [x * scalar for x in a_flat]
         out = _wrap_result(result, dt)
-        if self.ndim > 1:
+        if self.ndim == 0:
+            # 0-d × Python 标量：ravel().tolist() 是标量（包成 1 元素列表），
+            # 须 reshape 回 0-d（否则结果变 (1,)）
+            out = out.reshape(())
+        elif self.ndim > 1:
             out = out.reshape(self.shape)
         _extra_module._fp_arith_check(self, other, out, 'multiply')
         return out
@@ -1993,7 +1997,9 @@ class ndarray:
         else:
             result = [x // bv for x, bv in pairs]
         out = _wrap_result(result, dt)
-        if self.ndim > 1:
+        if self.ndim == 0:
+            out = out.reshape(())
+        elif self.ndim > 1:
             out = out.reshape(self.shape)
         return out
 
@@ -2040,7 +2046,9 @@ class ndarray:
             a_vals = [a_vals]
         result = [x // y for x, y in zip(b_vals, a_vals)]
         out = _wrap_result(result, dt)
-        if self.ndim > 1:
+        if self.ndim == 0:
+            out = out.reshape(())
+        elif self.ndim > 1:
             out = out.reshape(self.shape)
         return out
 
@@ -2914,7 +2922,9 @@ class ndarray:
                 res = ndarray([complex(_n, 0.0)] * self.size, _dtype='complex128')
             else:
                 res = ndarray([_n] * self.size, _dtype='float64')
-            if self.ndim > 1:
+            if self.ndim == 0:
+                res = res.reshape(())
+            elif self.ndim > 1:
                 res = res.reshape(self.shape)
             if out is not None:
                 try:
@@ -3082,6 +3092,24 @@ class ndarray:
         """创建一个新的数组对象，共享相同的数据但拥有不同的视图。"""
         # 注意：参数名 type 遮蔽了内建 type，判断必须用 builtins.type
 
+        def _ensure_matrix_2d(inst, t, src):
+            """numpy 语义：view 到 matrix 强制 2-D（0-d → (1,1)、1-d → (1,n)、
+            >2-d 抛错）——view 路径绕过 matrix.__init__，须在此补齐。"""
+            if t is not matrix or getattr(inst, 'ndim', 2) == 2:
+                return inst
+            if inst.ndim == 0:
+                _resh = inst.reshape((1, 1))
+            elif inst.ndim == 1:
+                _resh = inst.reshape((1, builtins.len(inst.shape)))
+            else:
+                raise ValueError("matrix must be 2-dimensional")
+            new = t._wrap(_resh._array, _dtype=_resh._dtype,
+                          _fields=getattr(_resh, '_fields', None),
+                          _raw_data=getattr(_resh, '_raw_data', None))
+            new._dtype_obj = getattr(inst, '_dtype_obj', None)
+            _finalize_view(new, src)
+            return new
+
         def _apply_view_type(arr, t):
             """numpy 语义：view(..., type=T) 把结果实例化为 T（共享数据，
             不经子类 __init__——与 numpy view 的 C 层行为一致）。"""
@@ -3100,7 +3128,7 @@ class ndarray:
                     _d_t = _c_t
                 inst._dtype_obj = _d_t
                 _finalize_view(inst, arr)
-                return inst
+                return _ensure_matrix_2d(inst, t, arr)
             if isinstance(t, builtins.type):
                 try:
                     return t(arr)
@@ -3150,7 +3178,7 @@ class ndarray:
             if isinstance(type, builtins.type) and issubclass(type, ndarray):
                 inst = type._wrap(self._array, _dtype=self._dtype)
                 _finalize_view(inst, self)
-                return inst
+                return _ensure_matrix_2d(inst, type, self)
             if isinstance(type, builtins.type) and not issubclass(type, generic):
                 try:
                     return type(self)
@@ -9534,15 +9562,14 @@ def fromiter(iter, dtype=None, count=-1, *, like=None):
         if _sd_ft is not None and _sd_ft[1] == 0:
             raise ValueError(
                 f"Must specify length for dtype '{dtype}'")
-    # numpy 语义：fromiter 不支持结构化/子数组 dtype
+    # numpy 语义：fromiter 接受任意可迭代对象（list/generator 等）
+    _iter = builtins.iter(iter)
+    # 解析 dtype（参数 dtype 遮蔽了模块级 dtype 别名——必须直接调用
+    # DType 类；旧代码 dtype(dtype) 是实例调用 → TypeError 被 except
+    # 吞掉，检查整体失效）
+    _d_ft = None
     try:
-        _d_ft = dtype(dtype)
-        if isinstance(_d_ft, DType) and (
-                _d_ft._subdtype is not None or _d_ft._names is not None):
-            raise ValueError(
-                "fromiter does not support structured or subarray dtypes")
-    except ValueError:
-        raise
+        _d_ft = dtype if isinstance(dtype, DType) else DType(dtype)
     except Exception:
         pass
     _dtype = _resolve_dtype(dtype)
@@ -9550,19 +9577,50 @@ def fromiter(iter, dtype=None, count=-1, *, like=None):
         data = []
         for _ in range(count):
             try:
-                data.append(next(iter))
+                data.append(next(_iter))
             except StopIteration:
                 raise ValueError(
                     f"iterator too short: Expected {count} but iterator "
                     f"had only {len(data)} items.")
     else:
-        data = list(iter)
+        data = list(_iter)
     # numpy 语义：None 无法写入整型/布尔元素
     if _dtype in _INT_DTYPES or _dtype == 'bool':
         for _v in data:
             if _v is None:
                 raise TypeError(
                     f"cannot convert None to {_dtype} in fromiter")
+    # 结构化/子数组 dtype：ndarray() 构造器把 tuple 行摊平成额外维度
+    # （形状错误），改走 array() 正确构造（与 np.array(data, dtype=) 一致）
+    if _d_ft is not None and isinstance(_d_ft, DType) and (
+            _d_ft._names is not None or _d_ft._subdtype is not None):
+        if _d_ft._subdtype is not None:
+            # numpy 语义：每项须可转换为子数组形状（嵌套项按维度递归），
+            # 否则 itemsetting 失败抛 ValueError
+            _base, _shp = _d_ft._subdtype
+
+            def _fits(item, shape):
+                # item 的嵌套深度须与 shape 一致：元素个数 == 首维大小，
+                # 子项递归匹配剩余维度（shape (2,) 的 item 是 2 元素序列）
+                if builtins.len(shape) == 0:
+                    return True
+                try:
+                    parts = builtins.list(item)
+                except TypeError:
+                    return False
+                if builtins.len(parts) != shape[0]:
+                    return False
+                if builtins.len(shape) == 1:
+                    return True
+                _rest = shape[1:]
+                return builtins.all(_fits(p, _rest) for p in parts)
+
+            for _v in data:
+                if not _fits(_v, _shp):
+                    raise ValueError(
+                        "fromiter: could not broadcast input item into "
+                        f"subarray shape {_shp!r}")
+        return array(data, dtype=dtype)
     return ndarray(data, _dtype=_dtype)
 
 

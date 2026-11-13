@@ -314,12 +314,21 @@ class NdArrayMethods:
         for _d in shape:
             _sz *= _d
         if _sz == 0:
-            # Rust 拒绝零尺寸：直接构造同 dtype 零尺寸数组（与 np.reshape 模块
-            # 函数路径一致；旧占位 + override 方案的 tolist 读取不一致）。
+            # numpy 语义：零尺寸 reshape 保留目标形状（如 (1,0,1)）；
+            # Rust 拒绝零尺寸 → 经 zeros 按目标形状构造（继承元数据）。
             import rsnumpy as _rn
             _dt = getattr(arr, '_dtype', "float64")
             try:
-                return _rn.array([], dtype=_dt)
+                _z = _rn.zeros(shape, dtype=_dt)
+                _z._dtype_obj = getattr(arr, '_dtype_obj', None)
+                _z._str_dtype = getattr(arr, '_str_dtype', None)
+                _z._fields = getattr(arr, '_fields', None)
+                _z._raw_data = getattr(arr, '_raw_data', None)
+                try:
+                    _z._rs_parent = arr
+                except Exception:
+                    pass
+                return _z
             except Exception:
                 pass
             out = ndarray._wrap(_rn.zeros((1,)),

@@ -53,6 +53,16 @@ def _ensure_raw(a):
     return _core.ndarray(a)
 
 
+def _as_data(a):
+    """concat/stack 族：Python list/tuple/range/标量 → 数据语义 ndarray。
+    不能用 _wrap：ndarray() 构造器把裸 tuple 当 shape（np.zeros((2,3)) 契约），
+    concatenate((tuple,)) 会被误判成高维空数组。"""
+    if hasattr(a, '_array'):
+        return a
+    from .__init__ import array as _array_fn
+    return _array_fn(a)
+
+
 def _scalar_idx(x):
     """标量下标/形状参数：Python int/bool 或 rsnumpy 整数标量（非序列/数组）。
     rsnumpy 整型标量不再是 int 子类，需用 __index__ 协议识别。"""
@@ -81,9 +91,14 @@ def reshape(a, shape=None, order='C', *, newshape=None, copy=None):
     for _s in shape:
         _tot *= int(_s)
     if _tot == 0:
-        # Rust _core.reshape 拒绝零尺寸：直接构造同 dtype 零尺寸数组
-        # （复用非零 raw 占位 + shape 覆盖会导致 tolist 读取不一致）。
-        return _np().array([], dtype=getattr(arr, '_dtype', 'float64'))
+        # numpy 语义：零尺寸数组 reshape 保留目标形状（如 (1,0,1)）；
+        # Rust _core.reshape 拒绝零尺寸 → 经 zeros 按目标形状构造（继承元数据）。
+        _z = _np().zeros(shape, dtype=getattr(arr, '_dtype', 'float64'))
+        _z._dtype_obj = getattr(arr, '_dtype_obj', None)
+        _z._str_dtype = getattr(arr, '_str_dtype', None)
+        _z._fields = getattr(arr, '_fields', None)
+        _z._raw_data = getattr(arr, '_raw_data', None)
+        return _z
     if order == 'F':
         flat = arr.ravel(order='F')
         out = _wrap(_core.reshape(flat._array, shape))
@@ -564,7 +579,7 @@ def concatenate(arrays, axis=0, out=None, dtype=None, casting="same_kind"):
     arr_list = list(arrays)
     if not arr_list:
         raise ValueError("concatenate requires at least one array")
-    first = arr_list[0] if hasattr(arr_list[0], '_array') else _wrap(arr_list[0])
+    first = _as_data(arr_list[0])
     # S/U 目标 dtype：Rust concatenate 不支持字符串存储，改走 Python
     # 字符串重建。numpy 语义：裸 'S'/'U' 的宽度 = double 转字符串的宽度
     # （测试注释 "identical to a cast (of a double array)" → 'S3'），
@@ -639,10 +654,7 @@ def concatenate(arrays, axis=0, out=None, dtype=None, casting="same_kind"):
     # numpy 语义：ndim 不一致时报 "all the input arrays must have same
     # number of dimensions..."（Rust 层只有笼统的 incompatible shapes）
     if axis is not None:
-        _ndims = []
-        for _a in arr_list:
-            _wa = _a if hasattr(_a, '_array') else _wrap(_a)
-            _ndims.append(getattr(_wa, 'ndim', 0))
+        _ndims = [getattr(_as_data(_a), 'ndim', 0) for _a in arr_list]
         if _ndims and builtins.len(builtins.set(_ndims)) > 1:
             _i1 = builtins.next(
                 (i for i, d in builtins.enumerate(_ndims) if d != _ndims[0]), 1)
@@ -655,8 +667,7 @@ def concatenate(arrays, axis=0, out=None, dtype=None, casting="same_kind"):
                 builtins.set(_ndims)) == 1:
             _ax = axis % max(_ndims[0], 1)
             _shapes = [
-                builtins.tuple(
-                    (_a if hasattr(_a, '_array') else _wrap(_a)).shape)
+                builtins.tuple(_as_data(_a).shape)
                 for _a in arr_list]
             for _i in range(1, builtins.len(_shapes)):
                 for _d in range(_ndims[0]):
@@ -720,7 +731,7 @@ def concatenate(arrays, axis=0, out=None, dtype=None, casting="same_kind"):
         # numpy 语义：axis=None 时各数组展平后做一维拼接
         flat_list = []
         for a in arr_list:
-            arr = a if hasattr(a, '_array') else _wrap(a)
+            arr = _as_data(a)
             flat_list.append(_ensure_raw(arr.reshape((arr.size,))))
         result = _core.concatenate(flat_list, 0)
     else:
@@ -754,7 +765,7 @@ def stack(arrays, axis=0, out=None, dtype=None, casting="same_kind"):
     arr_list = list(arrays)
     if not arr_list:
         raise ValueError("need at least one array to stack")
-    first = arr_list[0] if hasattr(arr_list[0], '_array') else _wrap(arr_list[0])
+    first = _as_data(arr_list[0])
     nd = _nd()
     _dt0 = getattr(first, '_dtype', "float64")
     fields = getattr(first, '_fields', None)
@@ -798,7 +809,7 @@ def vstack(arrays, out=None, dtype=None, casting="same_kind"):
     for _i, _a in builtins.enumerate(arr_list):
         if hasattr(_a, '_array') and getattr(_a, 'ndim', 0) == 0:
             arr_list[_i] = _a.reshape((1,))
-    first = arr_list[0] if hasattr(arr_list[0], '_array') else _wrap(arr_list[0])
+    first = _as_data(arr_list[0])
     nd = _nd()
     dtype0 = getattr(first, '_dtype', "float64")
     fields = getattr(first, '_fields', None)
@@ -833,7 +844,7 @@ def hstack(arrays, out=None, dtype=None, casting="same_kind"):
     for _i, _a in builtins.enumerate(arr_list):
         if hasattr(_a, '_array') and getattr(_a, 'ndim', 0) == 0:
             arr_list[_i] = _a.reshape((1,))
-    first = arr_list[0] if hasattr(arr_list[0], '_array') else _wrap(arr_list[0])
+    first = _as_data(arr_list[0])
     nd = _nd()
     dtype0 = getattr(first, '_dtype', "float64")
     fields = getattr(first, '_fields', None)

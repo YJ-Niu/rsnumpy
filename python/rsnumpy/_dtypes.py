@@ -260,9 +260,14 @@ class DType(metaclass=_DTypeMeta):
         >>> np.dtype('float64').type
         <class 'rsnumpy.float64'>
         """
-        # 子数组 dtype：.type = 基类型（numpy 语义，如 ('i4',(2,)) → int32）
+        # numpy 语义：子数组 dtype 本身是 void dtype（携带 .shape），
+        # .type = np.void（如 ('i4',(2,)) → void，而非 int32）
         if self._subdtype is not None:
-            return self._subdtype[0].type
+            try:
+                import rsnumpy
+                return getattr(rsnumpy, 'void', bytes)
+            except Exception:
+                return bytes
         # 结构化 dtype（V）：record-view（np.dtype((record,spec)) / .view(recarray)
         # 标记）的 .type=record；普通结构化 .type=void（numpy 语义）。优先于
         # hook——hook 对 V 返回字符串标量类是错的。
