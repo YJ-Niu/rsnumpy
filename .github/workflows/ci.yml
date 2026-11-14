@@ -70,10 +70,11 @@ jobs:
         # ~3400 用例）耗时过重，不进入 CI，需要时在本地手动跑。
         run: |
           python -m pip install --quiet pytest
-          python -m pytest \
-            tests/test_buffer.py tests/test_arithmetic.py tests/test_creation.py \
-            tests/test_indexing.py tests/test_reduction.py tests/test_comparison.py \
-            tests/test_known_gaps.py -q
+          # 命令必须单行：PowerShell（Windows CI）不支持 bash 式 "\" 续行，
+          # 字面 "\" 会作为 pytest 收集路径被展开成盘符根（D:\）全盘扫描，
+          # 触发 System Volume Information 权限错误并收集 python/ 源码树
+          # （无 num_core 的 import 失败）——Windows 独有失败根因。
+          python -m pytest tests/test_buffer.py tests/test_arithmetic.py tests/test_creation.py tests/test_indexing.py tests/test_reduction.py tests/test_comparison.py tests/test_known_gaps.py -q
 
       - name: Run smoke test
         run: python tests/run_test.py

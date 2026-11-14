@@ -33,6 +33,15 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Visualization",
 ]
 
+[tool.pytest.ini_options]
+# 钉 rootdir 到仓库根：缺此段时 pytest 不把 pyproject.toml 当 ini 文件，
+# rootdir 会向上漂移到盘符根（Windows CI 曾因此全盘收集）；无参运行只
+# 收集 tests/。norecursedirs 额外排除源码树：python/ 的包链
+# （python/rsnumpy[/testing[/tests]]）带完整 __init__.py，一旦被收集 pytest
+# 会把 python/ 插入 sys.path，import rsnumpy 会加载无 num_core 的源码树。
+testpaths = ["tests"]
+norecursedirs = ["python", "target", "wheelhouse", "dist", ".venv"]
+
 [tool.maturin]
 module-name = "rsnumpy.num_core"
 python-source = "python"
