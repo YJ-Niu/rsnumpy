@@ -28,7 +28,7 @@ zip = { version = "9.5.1", default-features = false, features = [
     "deflate-flate2-zlib-rs",
 ] }
 num-complex = "0.4.6"
-thiserror = "2.0.20"
+thiserror = "2.0.21"
 
 # macOS：链接系统自带的 Accelerate 框架作为 BLAS 后端（无需额外安装），
 # matmul/dot 由 ndarray 的 blas 特性自动分派到原生高性能 GEMM。
