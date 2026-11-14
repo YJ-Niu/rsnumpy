@@ -696,6 +696,37 @@ class _MT19937Legacy:
         return v2 * r
 
 
+class _PCG64LegacyStream(_MT19937Legacy):
+    """适配器：legacy RandomState 流走 PCG64 位生成器。
+
+    复用 _MT19937Legacy 全部消费模式（res53 double、rk_interval、
+    buffered randint、polar normal），仅把 uint32 源换成 PCG64 next32
+    （含 uinteger 缓存）——与 numpy ``RandomState(PCG64())`` 的位级
+    流消费一致（numpy legacy 分布一律经 next32 的 res53 double 取流）。
+    """
+    __slots__ = ('_bg',)
+
+    def __init__(self, bg):
+        self._bg = bg
+        # 不走父类 __init__（那会初始化 MT 状态）；_mt/_mti 仅作
+        # get_state/set_state 闭包的兜底（bg 路径实际走 PCG64 state dict）
+        self._mt = []
+        self._mti = 0
+        self._gauss_cache = None
+
+    def u32(self):
+        return self._bg.next32()
+
+    def random_sample(self):
+        # numpy generic 位生成器：uint64_to_double(n) = (n >> 11) / 2^53
+        # （取高 53 位，非 MT 的 res53 移位法）
+        return (self._bg.next64() >> 11) * (1.0 / 9007199254740992.0)
+
+    def reseed(self, seed):
+        # numpy：非 MT 位生成器上 RandomState.seed 委托 bit_generator.seed
+        self._bg.seed(seed)
+
+
 class _RandomStateWrapper:
     """Python wrapper around the core RandomState.
 
@@ -705,6 +736,16 @@ class _RandomStateWrapper:
     """
 
     def __init__(self, seed=None):
+        if isinstance(seed, PCG64):
+            # 新 API 位生成器：legacy 分布走 PCG64 流（位级兼容
+            # numpy RandomState(bg)）
+            self._bg = seed
+            self._seed = None
+            self._mt = _PCG64LegacyStream(seed)
+            self._sampler = Samplers(self._next_u, self._next_normal)
+            # Rust 核流仅作未处理属性（如 randn）的回退，不属 legacy 流
+            self._inner = _core.random.RandomState(0)
+            return
         seed = _legacy_validate_seed(seed)
         self._seed = seed
         self._mt = _MT19937Legacy(seed)
@@ -1049,6 +1090,9 @@ class _RandomStateWrapper:
             return permutation
         if name == 'get_state':
             def get_state():
+                # numpy：非 MT 位生成器返回 bg 的 state dict
+                if '_bg' in self.__dict__:
+                    return self._bg.state
                 # numpy legacy 布局: ('MT19937', keys[624], pos, has_gauss, cached)
                 mt = self._mt
                 keys = list(mt._mt)
@@ -1059,6 +1103,10 @@ class _RandomStateWrapper:
             return get_state
         if name == 'set_state':
             def set_state(state):
+                # numpy：非 MT 位生成器设 bg 的 state dict
+                if '_bg' in self.__dict__:
+                    self._bg.state = state
+                    return
                 # 恢复完整 MT19937 缓冲 + 位置 + 高斯缓存（numpy legacy，逐位精确）。
                 # 兼容 3 元素旧格式（无 has_gauss/cached）。
                 keys = [int(k) & 0xffffffff for k in state[1]]
@@ -1456,14 +1504,25 @@ class _WrappedGenerator:
     这里只做一件事：转发所有属性，并把方法返回值里的核心数组换成 `rsnumpy.ndarray`。
     """
 
-    __slots__ = ('_inner', '_seed')
+    __slots__ = ('_inner', '_seed', '_pcg')
 
     def __init__(self, inner=None):
         # Accept NumPy-style construction: Generator(seed) or Generator()
         self._seed = inner
+        self._pcg = None
         if isinstance(inner, _WrappedGenerator):
             self._seed = inner._seed
             inner = inner._inner
+            if isinstance(inner, PCG64):
+                # copy 保留位生成器（numpy：Generator 拷贝共享 BitGenerator）
+                self._pcg = inner
+                inner = 0
+        elif isinstance(inner, PCG64):
+            # Generator(bit_generator)：shuffle/permutation 走 PCG64 精确
+            # 流；其余分布保持 Rust 核（见类 docstring 的既有差距说明）
+            self._pcg = inner
+            self._seed = inner
+            inner = 0
         elif not hasattr(inner, 'random'):
             try:
                 inner = _core.random.Generator(inner)
@@ -1472,6 +1531,11 @@ class _WrappedGenerator:
                 # fold them into the range the core understands.
                 inner = _core.random.Generator(int(inner) % (2**63))
         self._inner = inner
+        if self._pcg is None and self._seed is not None and \
+                isinstance(self._seed, (int, list, tuple, range)):
+            # default_rng(seed)：洗牌需位级兼容 numpy 的 PCG64 流
+            # （SeedSequence → pcg64_srandom_r）
+            self._pcg = PCG64(self._seed)
 
     def __deepcopy__(self, memo):
         return _WrappedGenerator(self._seed)
@@ -1489,17 +1553,42 @@ class _WrappedGenerator:
     def shuffle(self, x, axis=0):
         """新 API 洗牌：object 数组不告警、保持对象身份。
 
-        有界抽样走 Rust 内核 integers(0, i+1)。注：新 API 内核是 StdRng，
-        与 numpy PCG64 流不同，位级精确需另行移植 PCG64（见独立任务）。
+        有 PCG64 流时按 numpy Generator.random_interval（64 位流拒绝
+        抽样，j ∈ [0, i]）逐位精确；否则回退 Rust 核 integers（StdRng
+        流，与 numpy 不位级兼容，见类 docstring）。
         """
         if axis != 0 and hasattr(x, 'shape'):
             x = np.moveaxis(x, axis, 0)
+        if self._pcg is not None:
+            bg = self._pcg
 
-        def next_j(i):
-            v = self._inner.integers(0, i + 1)
-            if hasattr(v, 'item'):
-                v = v.item()
-            return int(v)
+            def next_j(i):
+                # numpy random_interval（distributions.c）：掩码拒绝 + uint32 流
+                if i == 0:
+                    return 0
+                mask = i
+                mask |= mask >> 1
+                mask |= mask >> 2
+                mask |= mask >> 4
+                mask |= mask >> 8
+                mask |= mask >> 16
+                mask |= mask >> 32
+                if i <= 0xffffffff:
+                    while True:
+                        v = bg.next32() & mask
+                        if v <= i:
+                            return v
+                else:
+                    while True:
+                        v = bg.next64() & mask
+                        if v <= i:
+                            return v
+        else:
+            def next_j(i):
+                v = self._inner.integers(0, i + 1)
+                if hasattr(v, 'item'):
+                    v = v.item()
+                return int(v)
         _python_shuffle(next_j, x, 0)
 
     def _make_choice(self):
@@ -1753,22 +1842,226 @@ class mtrand_module:
 
 
 class _SeedSequence:
-    """Minimal stand-in for ``np.random.SeedSequence``.
+    """numpy.random.SeedSequence 纯 Python 位级兼容移植。
 
-    Only the attributes downstream code inspects (``entropy``) are kept.
+    算法 = O'Neill seed_seq 的 numpy 修订版（numpy/random/
+    bit_generator.pyx）：4×uint32 池，hashmix（INIT_A/MULT_A）填充 +
+    全混合，generate_state 走 INIT_B/MULT_B 流。常量与调用顺序与
+    numpy 2.5.4 逐位一致（SeedSequence(42).generate_state(4) =
+    [3444837047, 2669555309, 2046530742, 3581440988]，10 组官方
+    参考向量全部吻合）。
     """
 
-    def __init__(self, entropy=None):
-        # 官方语义：entropy 为 int 或 1-d int 序列；嵌套序列（含 SeedSequence
-        # 自身与循环引用）拒绝——numpy 抛 TypeError。
-        if isinstance(entropy, _SeedSequence):
-            raise TypeError("SeedSequence does not accept nested sequences.")
-        if isinstance(entropy, (list, tuple)):
-            for _item in entropy:
-                if isinstance(_item, (list, tuple, _SeedSequence)):
-                    raise TypeError(
-                        "SeedSequence does not accept nested sequences.")
+    DEFAULT_POOL_SIZE = 4
+    _MASK32 = 0xFFFFFFFF
+    _INIT_A = 0x43B0D7E5
+    _MULT_A = 0x931E8875
+    _INIT_B = 0x8B51F9DD
+    _MULT_B = 0x58F38DED
+    _MIX_MULT_L = 0xCA01F9DD
+    _MIX_MULT_R = 0x4973F715
+
+    def __init__(self, entropy=None, spawn_key=(),
+                 pool_size=DEFAULT_POOL_SIZE, n_children_spawned=0):
+        if pool_size < self.DEFAULT_POOL_SIZE:
+            raise ValueError("The size of the entropy pool should be at least "
+                             f"{self.DEFAULT_POOL_SIZE}")
+        if entropy is None:
+            # numpy：secrets.randbits(pool_size * 32)（OS 熵）
+            entropy = _py_random.SystemRandom().getrandbits(pool_size * 32)
+        elif not isinstance(entropy, (int, list, tuple, range)):
+            raise TypeError('SeedSequence expects int or sequence of ints for '
+                            f'entropy not {entropy}')
         self.entropy = entropy
+        self.spawn_key = tuple(spawn_key)
+        self.pool_size = pool_size
+        self.n_children_spawned = n_children_spawned
+        self.pool = [0] * pool_size
+        self._mix_entropy(self.pool, self._assembled_entropy())
+
+    @property
+    def state(self):
+        return {'entropy': self.entropy, 'spawn_key': self.spawn_key,
+                'pool_size': self.pool_size,
+                'n_children_spawned': self.n_children_spawned}
+
+    def _assembled_entropy(self):
+        run = self._coerce(self.entropy)
+        spawn = self._coerce(self.spawn_key) if len(self.spawn_key) else []
+        if spawn and len(run) < self.pool_size:
+            # numpy 1.19+（gh-16539）：带 spawn_key 时先把 entropy
+            # 补零到 pool_size，避免与 spawn key 冲突
+            run = run + [0] * (self.pool_size - len(run))
+        return run + spawn
+
+    @classmethod
+    def _coerce(cls, x):
+        """numpy ``_coerce_to_uint32_array``：int/str/序列 → uint32 字。"""
+        if isinstance(x, str):
+            if x.startswith('0x'):
+                x = int(x, base=16)
+            elif x and all(c in '0123456789' for c in x):
+                x = int(x)
+            else:
+                raise ValueError("unrecognized seed string")
+        if isinstance(x, int):
+            if x < 0:
+                raise ValueError("expected non-negative integer")
+            if x == 0:
+                return [0]
+            words = []
+            while x > 0:
+                words.append(x & cls._MASK32)
+                x //= 2 ** 32
+            return words
+        if isinstance(x, float):
+            raise TypeError('seed must be integer')
+        if len(x) == 0:
+            return []
+        out = []
+        for v in x:
+            if hasattr(v, '__len__') and not isinstance(v, str):
+                raise TypeError("SeedSequence does not accept nested sequences.")
+            out.extend(cls._coerce(v))
+        return out
+
+    def _mix_entropy(self, mixer, entropy_array):
+        """numpy ``SeedSequence.mix_entropy``：hashmix 填充 + 全混合。
+
+        hash_const 是跨全部 hashmix 调用共享推进的可变值，调用顺序
+        与 numpy 完全一致（位级兼容的关键）。
+        """
+        hc = self._INIT_A
+
+        def hm(value):
+            nonlocal hc
+            value ^= hc
+            hc = (hc * self._MULT_A) & self._MASK32
+            value = (value * hc) & self._MASK32
+            value ^= value >> 16
+            return value & self._MASK32
+
+        def mx(a, b):
+            r = (self._MIX_MULT_L * a - self._MIX_MULT_R * b) & self._MASK32
+            r ^= r >> 16
+            return r & self._MASK32
+
+        # 阶段 1：entropy 不足 pool 位时用 0 继续 hash
+        for i in range(len(mixer)):
+            mixer[i] = hm(entropy_array[i] if i < len(entropy_array) else 0)
+        # 阶段 2：全混合（后位影响前位）
+        for i_src in range(len(mixer)):
+            for i_dst in range(len(mixer)):
+                if i_src != i_dst:
+                    mixer[i_dst] = mx(mixer[i_dst], hm(mixer[i_src]))
+        # 阶段 3：剩余 entropy 逐字与各 pool 位混合
+        for i_src in range(len(mixer), len(entropy_array)):
+            for i_dst in range(len(mixer)):
+                mixer[i_dst] = mx(mixer[i_dst], hm(entropy_array[i_src]))
+
+    def generate_state(self, n_words, dtype='uint32'):
+        """numpy ``SeedSequence.generate_state``：INIT_B/MULT_B 流输出。
+
+        dtype 为 uint64 时按对打包（小端：前字为低 32 位）。
+        """
+        if str(dtype).endswith('64'):
+            n_words *= 2
+        hc = self._INIT_B
+        out = []
+        for i in range(n_words):
+            v = self.pool[i % len(self.pool)]
+            v ^= hc
+            hc = (hc * self._MULT_B) & self._MASK32
+            v = (v * hc) & self._MASK32
+            v ^= v >> 16
+            out.append(v & self._MASK32)
+        if str(dtype).endswith('64'):
+            out = [out[i] | (out[i + 1] << 32) for i in range(0, len(out), 2)]
+        return out
+
+
+class PCG64:
+    """numpy.random.PCG64 纯 Python 位级兼容移植（PCG XSL-RR-128-64）。
+
+    状态 = (128-bit state, 128-bit inc) + uint32 缓存（has_uint32/
+    uinteger，legacy RandomState 的 res53 double 流消费）。种子链与
+    numpy 一致：SeedSequence(seed).generate_state(4, uint64) →
+    initstate/inc → pcg_setseq_128_srandom_r
+    （state=0; inc=(seq<<1)|1; step; state+=initstate; step）。
+    """
+
+    _MASK128 = (1 << 128) - 1
+    _MASK64 = (1 << 64) - 1
+    # numpy pcg64.h: PCG_DEFAULT_MULTIPLIER_128
+    _MULT128 = (2549297995355413924 << 64) | 4865540595714422341
+
+    def __init__(self, seed=None):
+        self._state = 0
+        self._inc = 0
+        self._has_uint32 = 0
+        self._uinteger = 0
+        self._seed_seq = None
+        self.seed(seed)
+
+    def seed(self, seed=None):
+        """重新播种（numpy ``PCG64.seed``）。"""
+        ss = _SeedSequence(seed)
+        self._seed_seq = ss
+        val = ss.generate_state(4, 'uint64')
+        initstate = (val[0] << 64) | val[1]
+        initseq = (val[2] << 64) | val[3]
+        self._state = 0
+        self._inc = ((initseq << 1) | 1) & self._MASK128
+        self._step()
+        self._state = (self._state + initstate) & self._MASK128
+        self._step()
+        self._has_uint32 = 0
+        self._uinteger = 0
+        return self
+
+    def _step(self):
+        self._state = (self._state * self._MULT128 + self._inc) & self._MASK128
+
+    def next64(self):
+        """一个 64 位输出（先步进后输出，XSL-RR）。"""
+        self._step()
+        hi = self._state >> 64
+        lo = self._state & self._MASK64
+        x = hi ^ lo
+        rot = (self._state >> 122) & 63
+        return ((x >> rot) | (x << ((-rot) & 63))) & self._MASK64
+
+    def next32(self):
+        """32 位输出，带 uinteger 缓存（对应 state 的 has_uint32 字段）。"""
+        if self._has_uint32:
+            self._has_uint32 = 0
+            return self._uinteger
+        n = self.next64()
+        self._has_uint32 = 1
+        self._uinteger = n >> 32
+        return n & 0xFFFFFFFF
+
+    @property
+    def state(self):
+        """numpy ``PCG64.state`` get：dict（state/inc 为 128-bit 整数）。"""
+        return {'bit_generator': 'PCG64',
+                'state': {'state': self._state, 'inc': self._inc},
+                'has_uint32': self._has_uint32,
+                'uinteger': self._uinteger}
+
+    @state.setter
+    def state(self, value):
+        if not isinstance(value, dict):
+            raise TypeError('state must be a dict')
+        if value.get('bit_generator', '') != 'PCG64':
+            raise ValueError('state must be for a PCG64 RNG')
+        self._state = int(value['state']['state']) & self._MASK128
+        self._inc = int(value['state']['inc']) & self._MASK128
+        self._has_uint32 = int(value['has_uint32'])
+        self._uinteger = int(value['uinteger']) & 0xFFFFFFFF
+
+    def __repr__(self):
+        return f'PCG64(seed={self._seed_seq.entropy!r})'
 
 
 class random_module:
@@ -1791,6 +2084,10 @@ class random_module:
     @property
     def SeedSequence(self):
         return _SeedSequence
+
+    @property
+    def PCG64(self):
+        return PCG64
 
     @property
     def BitGenerator(self):

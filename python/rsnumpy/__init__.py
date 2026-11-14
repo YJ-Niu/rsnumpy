@@ -55,7 +55,7 @@ from rsnumpy.num_core import (
 )
 from ._dtypes import (
     DType, dtype, _make_flexible, _make_subarray,
-    _build_struct, _scalar_typestr_short,
+    _build_struct, _scalar_typestr_short, _clone_with_byteorder,
 )
 from . import random  # np.random 指向 random 模块本身（numpy 中 np.random 是模块，from rsnumpy.random import rand 必须可用）
 import operator as _operator
@@ -296,6 +296,21 @@ def _flatten_vals(x):
     return out
 
 
+def _ravel_by_shape(x, ndim, depth=0):
+    """按形状深度展平嵌套列表（object 数组专用）。
+
+    列表嵌套仅在 depth < ndim 时视为形状维度；到达叶子深度后元素
+    （含 list/tuple 值）一律原样保留——object 数组的元素可以是
+    list/tuple 值，_flatten_vals 会误将其展开（元素数膨胀）。
+    """
+    if depth < ndim and isinstance(x, list):
+        out = []
+        for v in x:
+            out.extend(_ravel_by_shape(v, ndim, depth + 1))
+        return out
+    return [x]
+
+
 class ArrayFlags:
     """数组内存布局信息，与 rsnumpy 的 np.ndarray.flags 兼容。"""
 
@@ -464,6 +479,29 @@ class ndarray:
         # **_kw 吸收子类 __new__ 透传的自定义参数（numpy 风格子类化：
         # MyArray.__new__ 自定义参数会原样落到基类 __init__）。
         _ = _kw
+        # C 宽度别名源类（longlong/ulonglong/longdouble/clongdouble 独立
+        # 标量类）：存储归一到规范名（Rust 后端只认规范名），_dtype_class
+        # 记录源类供 .dtype 属性挂回 _type_override 标记，使 numpy 语义的
+        # arr.dtype.type is class 往返成立（显式 dtype= 参数或从数据标量
+        # 推断两条路径都捕获；数值路径不受影响）。
+        _dtype_class = None
+        if '_dtype_class' in _kw:
+            # array() 包装已预归一化 dtype（类身份丢失），其判定经 _dtype_class
+            # 透传（None 亦有意义：显式 dtype 非别名类，抑制下方数据标量
+            # 推断误触发）
+            _dtype_class = _kw['_dtype_class']
+        elif isinstance(dtype, type) and getattr(dtype, '__name__', '') in (
+                'longlong', 'ulonglong', 'longdouble', 'clongdouble'):
+            _dtype_class = dtype
+        elif isinstance(dtype, str) and dtype in (
+                'longlong', 'ulonglong', 'longdouble', 'clongdouble'):
+            _dtype_class = globals().get(dtype)
+        else:
+            _dtype_class = getattr(dtype, '_type_override', None)
+            if _dtype_class is None and dtype is None and data is not None:
+                _dtype_class = getattr(getattr(data, 'dtype', None),
+                                       '_type_override', None)
+        self._dtype_class = _dtype_class
         # numpy 语义:np.ndarray 第一位置参数是 shape 而非 data——
         # np.ndarray((3, 0)) 是 shape (3, 0) 的空数组(零填充),不是
         # 3 元素数据。tuple 首参(且无 buffer)一律按 shape 归一化。
@@ -2258,8 +2296,14 @@ class ndarray:
         # 字符串/字节数组：按原始 Python 值逐元素比较（底层是 f64 占位）
         if getattr(self, '_raw_data', None) is not None and \
                 _is_ndarray(other) and getattr(other, '_raw_data', None) is not None:
-            a_flat = _flatten_vals(self._raw_data)
-            b_flat = _flatten_vals(other._raw_data)
+            if self._dtype == 'object':
+                # object 数组：list/tuple 元素是值而非形状嵌套，按形状
+                # 深度展平（_flatten_vals 会误展开元组元素）
+                a_flat = _ravel_by_shape(self._raw_data, self.ndim)
+                b_flat = _ravel_by_shape(other._raw_data, other.ndim)
+            else:
+                a_flat = _flatten_vals(self._raw_data)
+                b_flat = _flatten_vals(other._raw_data)
             # StringDType 的 na_object：双方同为 na（含 nan）视为相等
             _na = getattr(getattr(self, '_dtype_obj', None), 'na_object', None)
             if _na is not None:
@@ -2636,7 +2680,14 @@ class ndarray:
         if sd is not None:
             kind, width = sd
             return _make_flexible(kind, width, None)
-        return DType(getattr(self, '_dtype', "float64"))
+        dt = DType(getattr(self, '_dtype', "float64"))
+        # C 宽度别名源类：存储为规范名，读取时挂回源类标记（dtype(class).type
+        # is class 往返；clone 避免污染单例）
+        ov = getattr(self, '_dtype_class', None)
+        if ov is not None:
+            dt = _clone_with_byteorder(dt, getattr(dt, '_byteorder', None) or '=')
+            dt._type_override = ov
+        return dt
 
     @dtype.setter
     def dtype(self, value):
@@ -6449,22 +6500,26 @@ short = int16
 intc = int32
 int_ = int64
 long = int64
-longlong = int64
+# 独立类型对象（numpy 语义：test_names_are_unique 要求 17 个 numeric 类型
+# 互不相同——longlong/ulonglong/longdouble/clongdouble 在 numpy 中是与
+# int64/uint64/float64/complex128 不同的标量类；dtype 解析仍按名字归一到
+# 8 字节整/浮/复 dtype，行为与别名时期一致）
+longlong = _make_scalar_type('longlong', signedinteger, int, 8, 0)
 intp = int64
 ubyte = uint8
 ushort = uint16
 uintc = uint32
 uint = uint64
 ulong = uint64
-ulonglong = uint64
+ulonglong = _make_scalar_type('ulonglong', unsignedinteger, int, 8, 0)
 uintp = uint64
 half = float16
 single = float32
 double = float64
-longdouble = float64
+longdouble = _make_scalar_type('longdouble', floating, float, 8, 0.0)
 csingle = complex64
 cdouble = complex128
-clongdouble = complex128
+clongdouble = _make_scalar_type('clongdouble', complexfloating, complex, 16, 0j)
 
 # 布尔常量与其他特殊常量
 True_ = bool_(True)
@@ -6603,6 +6658,9 @@ class finfo:
         if name in ('complex64',):
             name = 'float32'
         elif name in ('complex128',):
+            name = 'float64'
+        elif name in ('longdouble', 'clongdouble'):
+            # 独立别名类：底层即 float64（rsnumpy 无 80 位扩展精度）
             name = 'float64'
         if name not in cls._DATA:
             raise ValueError(f"data type {dtype} not compatible with finfo")
@@ -7375,6 +7433,9 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
             if _is_ndarray(data):
                 return array(data, dtype=dtype, copy=copy, order=order,
                              subok=subok, ndmin=ndmin)
+    # C 宽度别名源类初始化为 None（dtype=None 推断路径不在此捕获——
+    # ndarray.__init__ 从数据标量自行捕获；显式 dtype 路径在 else 分支覆盖）
+    _dtype_class = None
     if dtype is None:
         # ndarray 输入快速路径：直接沿用其 dtype，避免走回退路径产生 object dtype 警告。
         if _is_ndarray(data):
@@ -7466,6 +7527,12 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
                     # complex64 标量保留自身精度（列表构造默认 complex128；
                     # astype 需类形式——字符串 'complex64' 不走转换）
                     _arr = _arr.astype(complex64)
+                # 复数标量从数据推断：携带 C 宽度别名源类（如 clongdouble），
+                # 保 dtype(class).type 往返
+                _ov = getattr(getattr(data, 'dtype', None),
+                              '_type_override', None)
+                if _ov is not None:
+                    _arr._dtype_class = _ov
                 if ndmin > _arr.ndim:
                     _arr = _arr.reshape((1,) * (ndmin - _arr.ndim) + _arr.shape)
                 return _arr
@@ -7493,6 +7560,17 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
                 _dtype = _infer_smart_dtype(flat)
     else:
         _dtype = _resolve_dtype(dtype)
+        # C 宽度别名源类：上面归一化丢失类身份，捕获后经 _dtype_class
+        # 透传 ndarray（.dtype 属性挂回，dtype(class).type 往返）
+        _dtype_class = None
+        if isinstance(dtype, type) and getattr(dtype, '__name__', '') in (
+                'longlong', 'ulonglong', 'longdouble', 'clongdouble'):
+            _dtype_class = dtype
+        elif isinstance(dtype, str) and dtype in (
+                'longlong', 'ulonglong', 'longdouble', 'clongdouble'):
+            _dtype_class = globals().get(dtype)
+        else:
+            _dtype_class = getattr(dtype, '_type_override', None)
         # rsnumpy 复数标量 + 显式 dtype：ndarray() 构造会把标量数值化丢
         # 失精度标签（complex64 → complex128），改走 0-d 列表构造 + astype
         # 类形式（已验证保留 single 精度）。
@@ -7501,6 +7579,8 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
                 and _dtype in ('complex128', 'complex64')):
             _arr = (ndarray([complex(data)]).reshape(())
                     .astype(complex64 if _dtype == 'complex64' else complex128))
+            if _dtype_class is not None:
+                _arr._dtype_class = _dtype_class
             if ndmin > _arr.ndim:
                 _arr = _arr.reshape((1,) * (ndmin - _arr.ndim) + _arr.shape)
             return _arr
@@ -7673,7 +7753,8 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
     # 会把值误读成形状。
     if isinstance(data, tuple):
         data = _tuple_to_nested_list(data)
-    arr = _coerce_dtype(ndarray(data, _dtype=_dtype), _dtype)
+    _dc_kw = {} if dtype is None else {'_dtype_class': _dtype_class}
+    arr = _coerce_dtype(ndarray(data, _dtype=_dtype, **_dc_kw), _dtype)
     # 显式复数 dtype：即使输入已是实数 ndarray（__init__ 会沿用其 dtype），
     # 也需提升为原生复数（零虚部）。
     if _dtype in ('complex128', 'complex64') and not getattr(arr._array, 'is_complex', False):
@@ -8299,6 +8380,16 @@ def _resolve_dtype(dtype):
         return "complex128"
     if dt_str in ("int", "int_", "intp", "intc"):
         return "int64"
+    # C 宽度别名（longlong 等独立标量类）：存储归一到规范名（数值路径
+    # 全按规范名分派）；源类由构造器记录在 _dtype_class 供 .dtype 挂回
+    if dt_str == "longlong":
+        return "int64"
+    if dt_str == "ulonglong":
+        return "uint64"
+    if dt_str == "longdouble":
+        return "float64"
+    if dt_str == "clongdouble":
+        return "complex128"
     if dt_str in ("float", "double", "float64", "floating", "number"):
         return "float64"
     if dt_str in ("float32", "single"):

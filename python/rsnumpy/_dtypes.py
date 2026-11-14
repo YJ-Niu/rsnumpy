@@ -46,6 +46,10 @@ _KINDSIZE = {
     'b1': 'bool',
 }
 
+# 独立标量类的 C 宽度别名（dtype 归一到规范名，.type 返回源类）
+_WIDTH_ALIAS_TYPES = frozenset(
+    ('longlong', 'ulonglong', 'longdouble', 'clongdouble'))
+
 # 全名/别名 -> 规范名
 _CANON_FULL = {
     'int': 'int64', 'uint': 'uint64',
@@ -261,6 +265,11 @@ class DType(metaclass=_DTypeMeta):
         >>> np.dtype('float64').type
         <class 'rsnumpy.float64'>
         """
+        # _type_override：record-view 与 C 宽度别名类（longlong 等）的源类
+        # 标记，优先级最高（hook 按 str(dtype) 查表无法区分同规范名的实例）。
+        ov = getattr(self, '_type_override', None)
+        if ov is not None:
+            return ov
         # numpy 语义：子数组 dtype 本身是 void dtype（携带 .shape），
         # .type = np.void（如 ('i4',(2,)) → void，而非 int32）
         if self._subdtype is not None:
@@ -273,9 +282,6 @@ class DType(metaclass=_DTypeMeta):
         # 标记）的 .type=record；普通结构化 .type=void（numpy 语义）。优先于
         # hook——hook 对 V 返回字符串标量类是错的。
         if self._kind == 'V':
-            ov = getattr(self, '_type_override', None)
-            if ov is not None:
-                return ov
             try:
                 import rsnumpy
                 return getattr(rsnumpy, 'void', bytes)
@@ -614,6 +620,24 @@ def _clone_with_byteorder(dt, bo):
     return d
 
 
+def _width_alias_dtype(dt, name):
+    """C 宽度别名名(longlong 等)→ 带 _type_override 源类标记的 dtype 克隆。
+
+    numpy 语义：dtype('longlong').type 是独立的 longlong 标量类（dtype
+    本身仍是规范 8 字节整型）。必须克隆——直接改单例会污染同规范名
+    的其他 dtype 实例。rsnumpy 尚未完成初始化（模块导入早期）时优雅
+    回退为无标记 dtype。
+    """
+    try:
+        import rsnumpy
+        cls = getattr(rsnumpy, name)
+    except Exception:
+        return dt
+    d = _clone_with_byteorder(dt, getattr(dt, '_byteorder', None) or '=')
+    d._type_override = cls
+    return d
+
+
 def _make_scalar(name, bo):
     kind, itemsize, align = _SCALAR_INFO[name]
     if itemsize == 1 or kind == 'O':
@@ -761,6 +785,7 @@ def _parse_shape(s):
 
 def _parse_scalar_token(s):
     s = s.strip()
+    orig = s
     bo = None
     if s and s[0] in '<>=|':
         bo = s[0]
@@ -801,7 +826,11 @@ def _parse_scalar_token(s):
     if low in _SCALAR_INFO:
         return _make_scalar(low, bo)
     if low in _CANON_FULL:
-        return _make_scalar(_CANON_FULL[low], bo)
+        dt = _make_scalar(_CANON_FULL[low], bo)
+        # C 宽度别名：dtype 归一到规范 dtype，.type 返回独立别名类
+        if orig in _WIDTH_ALIAS_TYPES:
+            dt = _width_alias_dtype(dt, orig)
+        return dt
     # 规范化名 str<N>/bytes<N>：历史实现写 N=itemsize，numpy 规范为 N=itemsize*8
     # （str4=U1、bytes3=S3 两种约定都要能往返，故双约定接受）。
     if low.startswith('str') and low[3:].isdigit():
