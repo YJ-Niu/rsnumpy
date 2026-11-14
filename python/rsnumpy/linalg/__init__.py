@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """rsnumpy.linalg - 线性代数模块 - 薄包装，所有实现位于 Rust。"""
 
 import sys as _sys
@@ -534,14 +535,40 @@ class linalg_module:
         - 性能：对于简单矩阵乘法，推荐使用matmul
         """
         from ..__init__ import ndarray
-        a_arr = a if hasattr(a, '_array') else ndarray(a)
-        b_arr = b if hasattr(b, '_array') else ndarray(b)
+
+        def _to_arr(z):
+            if hasattr(z, '_array'):
+                return z
+            if isinstance(z, (list, tuple)):
+                return ndarray(z)
+            if hasattr(z, '__iter__') and not isinstance(z, (str, bytes)):
+                # .flat 等迭代器参数（numpy 语义：dot 接受可迭代对象）
+                return ndarray(list(z))
+            return ndarray(z)
+
+        a_arr = _to_arr(a)
+        b_arr = _to_arr(b)
         if _is_complex_arr(a_arr) or _is_complex_arr(b_arr):
             res = _dot_nested(a_arr.tolist(), len(a_arr.shape), b_arr.tolist(), len(b_arr.shape))
             return ndarray(res) if isinstance(res, list) else res
-        result = _core.linalg.dot(_ensure(a), _ensure(b))
-        a_dtype = getattr(a, '_dtype', 'float64')
-        b_dtype = getattr(b, '_dtype', 'float64')
+        try:
+            result = _core.linalg.dot(a_arr._array, b_arr._array)
+        except ValueError:
+            # 回退：a 为 N-D、b 为 1-D 时按 numpy 语义沿 a 末轴收缩
+            if b_arr.ndim == 1 and a_arr.ndim >= 1 and a_arr.shape[-1] == b_arr.shape[0]:
+                lead = tuple(a_arr.shape[:-1])
+                a2 = a_arr.reshape((-1, a_arr.shape[-1]))
+                result = _core.linalg.dot(a2._array, b_arr._array)
+                a_dtype = getattr(a_arr, '_dtype', 'float64')
+                b_dtype = getattr(b_arr, '_dtype', 'float64')
+                if a_dtype in ('float64', 'float32', 'float16') or b_dtype in ('float64', 'float32', 'float16'):
+                    out = ndarray._wrap(result, _dtype='float64')
+                else:
+                    out = ndarray._wrap(result, _dtype='int64')
+                return out.reshape(lead) if lead else out
+            raise
+        a_dtype = getattr(a_arr, '_dtype', 'float64')
+        b_dtype = getattr(b_arr, '_dtype', 'float64')
         if a_dtype in ('float64', 'float32', 'float16') or b_dtype in ('float64', 'float32', 'float16'):
             return ndarray._wrap(result, _dtype='float64')
         return ndarray._wrap(result, _dtype='int64')
@@ -948,10 +975,17 @@ class linalg_module:
         Rust 内核只覆盖 2x2 与 3x3 的方阵；其余形状或非默认 `mode` 走纯 Python
         的 Householder 反射实现 `_qr_householder`，两者约定一致。
         """
+        # NumPy >= 1.8：弃用别名 'full'/'f'/'economic'/'e' 已移除。
+        if mode in ('full', 'f'):
+            raise ValueError(
+                f"mode {mode!r} is deprecated in NumPy 1.8, use 'complete'")
+        if mode in ('economic', 'e'):
+            raise ValueError(
+                f"mode {mode!r} is deprecated in NumPy 1.8, use 'reduced'")
         core_a = _ensure(a)
         shape = tuple(core_a.shape)
         square_small = len(shape) == 2 and shape[0] == shape[1] and shape[0] in (2, 3)
-        if square_small and mode in ('reduced', 'economic'):
+        if square_small and mode == 'reduced':
             try:
                 q, r = _core.linalg.qr(core_a)
                 q = _round_array(q)
@@ -969,14 +1003,14 @@ class linalg_module:
 
         from ..__init__ import ndarray
 
-        if mode in ('reduced', 'economic'):
+        if mode == 'reduced':
             want_complete = False
-        elif mode in ('complete', 'full'):
+        elif mode == 'complete':
             want_complete = True
         else:
             raise ValueError(
-                "mode must be one of 'reduced', 'economic', 'complete', "
-                f"'full', got {mode!r}")
+                "mode must be one of 'reduced' or 'complete', "
+                f"got {mode!r}")
 
         rows = [list(row) for row in _ensure(a).tolist()]
         m = len(rows)
@@ -1143,6 +1177,172 @@ class linalg_module:
         """求解带状线性方程组。"""
         return _wrap(_core.linalg.solve_banded(lower, upper, _ensure(ab), _ensure(b)))
 
+    @staticmethod
+    def outer(a, b):
+        """外积（numpy.linalg.outer 兼容）：输入必须为一维。"""
+        import rsnumpy as _np
+        a = _np.asarray(a)
+        b = _np.asarray(b)
+        if a.ndim != 1 or b.ndim != 1:
+            raise ValueError("Input arrays must be one-dimensional")
+        return a.reshape((-1, 1)) * b.reshape((1, -1))
+
+    @staticmethod
+    def slogdet(a):
+        """(sign, log|det|)（numpy.linalg.slogdet 兼容）。"""
+        import rsnumpy as _np
+        a_arr = _np.asarray(a)
+        det = _np.linalg.det(a)
+        if _np.iscomplexobj(a_arr):
+            mag = abs(det)
+            sign = det / mag if mag != 0 else 0
+        else:
+            sign = _np.sign(det)
+        logabs = _np.log(abs(det)) if det != 0 else float('-inf')
+        return sign, logabs
+
+    @staticmethod
+    def cross(a, b, axisa=-1, axisb=-1, axisc=-1, axis=None):
+        """向量叉积（numpy.linalg.cross 兼容）。"""
+        import rsnumpy as _np
+        if axis is not None:
+            axisa = axisb = axisc = axis
+        a = _np.asarray(a)
+        b = _np.asarray(b)
+        if a.ndim:
+            a = _np.moveaxis(a, axisa, -1)
+        if b.ndim:
+            b = _np.moveaxis(b, axisb, -1)
+        if a.shape[-1] != 3 or b.shape[-1] != 3:
+            raise ValueError("input arrays must have 3 elements in the cross axis")
+        c0 = a[..., 1] * b[..., 2] - a[..., 2] * b[..., 1]
+        c1 = a[..., 2] * b[..., 0] - a[..., 0] * b[..., 2]
+        c2 = a[..., 0] * b[..., 1] - a[..., 1] * b[..., 0]
+        out = _np.stack((c0, c1, c2), axis=-1)
+        if axisc != -1:
+            out = _np.moveaxis(out, -1, axisc)
+        return out
+
+    @staticmethod
+    def tensordot(a, b, axes=2):
+        """张量收缩（numpy.linalg.tensordot 兼容）。"""
+        import rsnumpy as _np
+        a = _np.asarray(a)
+        b = _np.asarray(b)
+        if isinstance(axes, int):
+            axa = tuple(range(a.ndim - axes, a.ndim))
+            axb = tuple(range(axes))
+        else:
+            axa, axb = tuple(axes[0]), tuple(axes[1])
+        akeep = [i for i in range(a.ndim) if i not in axa]
+        bkeep = [i for i in range(b.ndim) if i not in axb]
+        pa = akeep + list(axa)
+        pb = list(axb) + bkeep
+        a2 = a.transpose(pa) if a.ndim > 1 else a
+        b2 = b.transpose(pb) if b.ndim > 1 else b
+        k = 1
+        for i in axa:
+            k *= a.shape[i]
+        if k == 0:
+            k = 1
+        a3 = a2.reshape((-1, k)) if a2.ndim > 0 and a2.size >= 0 else a2.reshape((k,))
+        b3 = b2.reshape((k, -1)) if b2.ndim > 0 and b2.size >= 0 else b2.reshape((k,))
+        c = _np.matmul(a3, b3)
+        out_shape = (tuple(a.shape[i] for i in akeep)
+                     + tuple(b.shape[i] for i in bkeep))
+        return c.reshape(out_shape)
+
+    @staticmethod
+    def tensorsolve(a, b, axes=2):
+        """张量方程求解（numpy.linalg.tensorsolve 兼容）。
+
+        求 X 使 tensordot(X, a, axes) == b：把 a 重排为 (N, k)、
+        b 重排为 (k, M)，解线性方程组。
+        """
+        import rsnumpy as _np
+        a = _np.asarray(a)
+        b = _np.asarray(b)
+        if isinstance(axes, int):
+            axa = tuple(range(a.ndim - axes, a.ndim))
+            axb = tuple(range(axes))
+        else:
+            axa, axb = tuple(axes[0]), tuple(axes[1])
+        akeep = [i for i in range(a.ndim) if i not in axa]
+        bkeep = [i for i in range(b.ndim) if i not in axb]
+        pa = akeep + list(axa)
+        k = 1
+        for i in axa:
+            k *= a.shape[i]
+        if k == 0:
+            k = 1
+        a2 = (a.transpose(pa) if a.ndim > 1 else a).reshape((-1, k))
+        b2 = b.reshape((k, -1))
+        x = _np.linalg.solve(a2, b2)
+        out_shape = (tuple(a.shape[i] for i in akeep)
+                     + tuple(b.shape[i] for i in bkeep))
+        return x.reshape(out_shape)
+
+    @staticmethod
+    def matrix_norm(x, ord=None, axis=(-2, -1), keepdims=False, **kwargs):
+        """矩阵范数（numpy.linalg.matrix_norm 兼容）。
+
+        Rust 层 norm 不接受元组 axis，这里按 NumPy 语义纯 Python 实现：
+        ord=None/'fro' 弗罗贝尼乌斯范数、1/-1 列和范数、2/-2 奇异值
+        范数、'nuc' 核范数；支持 ndim>2 的批量切片与 keepdims。
+        """
+        import rsnumpy as _np
+
+        def _mat_norm_2d(m, o):
+            if o in (None, 'fro'):
+                return _np.sqrt(_np.sum(abs(m) ** 2))
+            if o == 1:
+                return _np.max(_np.sum(abs(m), axis=0))
+            if o == -1:
+                return _np.min(_np.sum(abs(m), axis=0))
+            sv = linalg_module.svd(m, compute_uv=False)
+            if sv.size == 0:
+                return 0.0
+            if o == 2:
+                return sv.max()
+            if o == -2:
+                return sv.min()
+            if o == 'nuc':
+                return sv.sum()
+            raise ValueError(f"invalid norm order {o!r} for matrix norm")
+
+        x = _np.asarray(x)
+        axes = tuple(axis) if isinstance(axis, tuple) else (axis,)
+        a0, a1 = axes[0] % x.ndim, axes[1] % x.ndim
+        if x.ndim == 2:
+            res = _mat_norm_2d(x, ord)
+        else:
+            other = [i for i in range(x.ndim) if i not in (a0, a1)]
+            moved = x.transpose(other + [a0, a1])
+            shp = moved.shape
+            flat = moved.reshape((-1, shp[-2], shp[-1]))
+            parts = [_mat_norm_2d(flat[i], ord) for i in range(flat.shape[0])]
+            res = _np.asarray(parts).reshape(tuple(shp[:-2]))
+        if keepdims:
+            shp = list(x.shape)
+            shp[a0] = 1
+            shp[a1] = 1
+            res = _np.asarray(res).reshape(tuple(shp))
+        return res
+
+    @staticmethod
+    def matrix_transpose(x, axes=None):
+        """矩阵转置（numpy.linalg.matrix_transpose 兼容）。"""
+        import rsnumpy as _np
+        x = _np.asarray(x)
+        if axes is None:
+            return x.T
+        return x.transpose(axes)
+
+    @staticmethod
+    def eigvalsh(a, UPLO='L'):
+        """Hermitian/对称矩阵特征值（numpy.linalg.eigvalsh 兼容）。"""
+        return linalg_module.eigh(a)[0]
+
 
 def issymmetric(a, tol=None):
     """判断矩阵是否对称。"""
@@ -1165,3 +1365,7 @@ for _name in dir(linalg_module):
     if not _name.startswith('_'):
         setattr(_this_module, _name, getattr(linalg_module, _name))
 del _this_module, _name
+
+
+# 多矩阵连乘（numpy.linalg.multi_dot 兼容）：DP 求最优乘法顺序。
+from ._linalg import _multi_dot_matrix_chain_order, multi_dot  # noqa: E402,F401

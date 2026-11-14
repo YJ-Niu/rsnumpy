@@ -1,7 +1,10 @@
 [package]
 name = "rsnumpy"
-version = "1.2.9"
+version = "1.2.10"
 edition = "2024"
+description = "A Rust-powered NumPy-compatible array library."
+license = "MIT"
+repository = "https://github.com/YJ-Niu/rsnumpy"
 
 [lib]
 name = "rsnumpy"
@@ -21,11 +24,10 @@ num-traits = "0.2.19"
 rustfft = "6.4.1"
 # 仅用 Stored 写 + 读 .npz（含 np.savez_compressed 的 deflate）。
 # 关掉默认特性，避免链入 zstd(C)/lzma/bzip2/ppmd/xz/aes 等未用编解码器，显著减小 .so。
-zip = { version = "9.1.1", default-features = false, features = [
+zip = { version = "9.5.1", default-features = false, features = [
     "deflate-flate2-zlib-rs",
 ] }
 num-complex = "0.4.6"
-thiserror = "2.0.20"
 
 # macOS：链接系统自带的 Accelerate 框架作为 BLAS 后端（无需额外安装），
 # matmul/dot 由 ndarray 的 blas 特性自动分派到原生高性能 GEMM。

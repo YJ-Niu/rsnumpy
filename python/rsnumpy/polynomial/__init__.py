@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """多项式模块 - 所有实现位于 Rust，这里仅保留薄包装。"""
 
 import rsnumpy.num_core as _core
@@ -127,5 +128,6 @@ def polyroots(p):
     return Poly(p).roots()
 
 
-# Alias for NumPy compatibility
-Polynomial = Poly
+# numpy 2.x：np.polynomial.Polynomial 为新 API 类（升序系数）；
+# 旧 Poly（降序）保留供顶层旧 API 使用
+from .polynomial import Polynomial  # noqa: E402,F401

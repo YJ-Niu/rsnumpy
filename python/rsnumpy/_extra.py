@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """补充的 NumPy 兼容 API。
 
 计算全部复用已有的 Rust 原语（_core 或已导出的顶层函数），本层仅做组合与包装，
@@ -5,8 +6,10 @@
 """
 
 # import builtins as _builtins
+import builtins
 import cmath as _cmath
 import math as _math
+import re as _re
 
 import rsnumpy.num_core as _core
 
@@ -149,8 +152,20 @@ def exp2(x):
 
 
 def floor_divide(x1, x2):
-    """逐元素向下整除。"""
+    """逐元素向下整除（除零按浮点错误状态处理，numpy 语义）。"""
     np = _np()
+    a = _asarray(x1)
+    b = _asarray(x2)
+    if b.size:
+        try:
+            zero_mask = (b == 0)
+            has_zero = zero_mask.any()
+        except TypeError:
+            has_zero = False
+        if has_zero:
+            _fp_fire('divide', "divide by zero encountered in floor_divide")
+            res = np.floor(np.divide(a, np.where(zero_mask, 1, b)))
+            return np.where(zero_mask, 0, res)
     return np.floor(np.divide(x1, x2))
 
 
@@ -227,11 +242,18 @@ def logaddexp2(x1, x2):
     return np.add(m, np.log2(np.add(exp2(np.subtract(a, m)), exp2(np.subtract(b, m)))))
 
 
-def logical_not(x):
+def logical_not(x, out=None):
     """逐元素逻辑非。"""
     np = _np()
     arr = _asarray(x)
-    return np.equal(arr, np.full(arr.shape, 0.0))
+    res = np.equal(arr, np.full(arr.shape, 0.0))
+    if out is not None:
+        try:
+            out[...] = res
+            return out
+        except Exception:
+            pass
+    return res
 
 
 def gcd(x1, x2):
@@ -244,14 +266,141 @@ def lcm(x1, x2):
     return _wrap(_core.lcm(_asarray(x1)._array, _asarray(x2)._array), "int64")
 
 
+_NA_STRUCT = {
+    # struct 格式 / 位宽 / 无符号位型：C 库做精确 IEEE 往返（round-half-even）
+    'float32': (__import__('struct').Struct('<f'), 32, 'I'),
+    'float16': (__import__('struct').Struct('<e'), 16, 'H'),
+}
+
+
+def _nextafter_prec(a, b, st, width, ufmt):
+    """在给定精度（f16/f32）下计算 a 朝 b 方向的下一 ULP（a、b 为该精度可表示值）。"""
+    import struct as _struct
+    if a != a or b != b:
+        return float('nan')
+    if a < b:
+        step = 1
+    elif a > b:
+        step = -1
+    else:
+        return b
+    bits = _struct.unpack(ufmt, st.pack(a))[0]
+    sign = 1 << (width - 1)
+    # 单调映射：非负保持位型，负值翻转（-0.0 与 +最小次正规相邻）
+    mono = bits if bits < sign else (2 * sign - 1) - bits
+    mono += step
+    bits = mono if mono < sign else (2 * sign - 1) - mono
+    return st.unpack(_struct.pack(ufmt, bits))[0]
+
+
 def nextafter(x1, x2):
-    """逐元素返回 x1 朝 x2 方向的下一个可表示浮点数。"""
-    return _wrap(_core.nextafter(_asarray(x1)._array, _asarray(x2)._array))
+    """逐元素返回 x1 朝 x2 方向的下一个可表示浮点数。
+
+    numpy 语义：结果 dtype 跟随输入提升，next-ULP 按该精度计算
+    （f16/f32/f64 各自的相邻可表示值）。Rust 核心统一以 f64 存储，
+    f16/f32 结果在 Python 层按 IEEE 位级 next-ULP 计算（struct 'e'/'f'
+    的 C 转换保证 round-half-even），f64 结果走 Rust 快速路径。
+    """
+    a1 = _asarray(x1)
+    a2 = _asarray(x2)
+    dt_name = str(getattr(result_type(a1, a2), 'name', 'float64'))
+    if dt_name not in _NA_STRUCT:
+        return _wrap(_core.nextafter(a1._array, a2._array))
+    st, width, ufmt = _NA_STRUCT[dt_name]
+
+    def _flat(x):
+        out = []
+
+        def _r(v):
+            if isinstance(v, list):
+                for e in v:
+                    _r(e)
+            else:
+                out.append(v)
+        _r(x)
+        return out
+
+    sv = _flat(a1.tolist())
+    tv = _flat(a2.tolist())
+    if a1.ndim == 0 and a2.ndim == 0:
+        pairs = [(sv[0], tv[0])]
+        shape = ()
+    elif a1.ndim == 0:
+        pairs = [(sv[0], t) for t in tv]
+        shape = tuple(a2.shape)
+    elif a2.ndim == 0:
+        pairs = [(s, tv[0]) for s in sv]
+        shape = tuple(a1.shape)
+    elif tuple(a1.shape) == tuple(a2.shape):
+        pairs = list(zip(sv, tv))
+        shape = tuple(a1.shape)
+    else:
+        # 尾维对齐广播
+        nd = builtin_max(a1.ndim, a2.ndim)
+        ss = (1,) * (nd - a1.ndim) + tuple(a1.shape)
+        ts = (1,) * (nd - a2.ndim) + tuple(a2.shape)
+        if any(x != y and x != 1 and y != 1 for x, y in zip(ss, ts)):
+            return _wrap(_core.nextafter(a1._array, a2._array))
+        shape = tuple(builtin_max(x, y) for x, y in zip(ss, ts))
+
+        def _strides(sh):
+            out = [1]
+            for d in reversed(sh[:-1]):
+                out.append(out[-1] * d)
+            return list(reversed(out))
+
+        sst, tst, ostr = _strides(ss), _strides(ts), _strides(shape)
+        n = 1
+        for d in shape:
+            n *= d
+        pairs = []
+        for p in range(n):
+            si = ti = 0
+            for ax in range(nd):
+                idx = (p // ostr[ax]) % shape[ax]
+                si += (0 if ss[ax] == 1 else idx) * sst[ax]
+                ti += (0 if ts[ax] == 1 else idx) * tst[ax]
+            pairs.append((sv[si], tv[ti]))
+    vals = [_nextafter_prec(s, t, st, width, ufmt) for s, t in pairs]
+    np_ = _np()
+    if not shape:
+        return np_.ndarray([vals[0]] if vals else []).reshape(())
+    return np_.ndarray(vals).reshape(shape)
 
 
 def spacing(x):
-    """逐元素返回相邻浮点数间距。"""
-    return _wrap(_core.spacing(_asarray(x)._array))
+    """逐元素返回相邻浮点数间距(按输入 dtype 的尾数位数)。"""
+    import math as _math
+    import struct as _struct
+    arr = _asarray(x)
+    dt = str(getattr(arr, '_dtype', '') or '')
+    # Rust 层按 f64 计算间距,float32/16 需按各自尾数位数修正
+    if 'float32' in dt or 'float16' in dt:
+        _bits = 24 if 'float32' in dt else 11
+        _fmt = '<I' if 'float32' in dt else None
+
+        def _sp(v):
+            if v == 0:
+                return 2.0 ** (-149) if 'float32' in dt else 2.0 ** (-24)
+            if _math.isnan(v) or _math.isinf(v):
+                return float('nan')
+            if _fmt is not None:
+                bits = _struct.unpack(_fmt, _struct.pack('<f', v))[0]
+                if v > 0:
+                    nb = bits + 1
+                else:
+                    nb = bits - 1
+                nv = _struct.unpack('<f', _struct.pack('<I', nb & 0xFFFFFFFF))[0]
+                q = _struct.unpack('<f', _struct.pack('<f', v))[0]
+                return abs(nv - q)
+            # float16:近似用归一化公式
+            _, e = _math.frexp(abs(v))
+            return 2.0 ** (e - _bits)
+
+        vals = [_sp(float(v)) for v in arr.tolist()]
+        np_ = _np()
+        return np_.array(vals, dtype='float32' if 'float32' in dt else 'float16')
+    return _wrap(_core.spacing(arr._array))
 
 
 def ldexp(x1, x2):
@@ -287,13 +436,23 @@ def _reduce_last_along(c, axis):
 
 def prod(a, axis=None, dtype=None, out=None, keepdims=False, initial=None, where=True):
     """计算元素乘积。"""
-    _ = dtype, out, where
+    _ = out, where
     arr = _asarray(a)
+    dt = getattr(arr, '_dtype', 'float64')
+    res_dt = dtype if dtype is not None else dt
+    # 0-d 短路：Rust 归约对 0-d 输入会 abort；numpy 返回保持原 dtype 的 0-d
+    if not tuple(getattr(arr._array, 'shape', ())):
+        res = _wrap(arr._array, _dtype=res_dt)
+        if initial is not None:
+            np = _np()
+            res = np.multiply(res, initial)
+        return res
     result = _core.prod(arr._array, axis, keepdims)
     if initial is not None:
         np = _np()
-        result = np.multiply(result, initial)
-    return _wrap(result)
+        return np.multiply(result, initial)
+    # 与 sum 一致：按输入 dtype 标注（Rust 以 f64 计算）
+    return _wrap(result, _dtype=res_dt)
 
 
 def _shape_drop(shape, axis):
@@ -314,74 +473,115 @@ def _count_notnan(a, axis):
     return np.sum(mask, axis)
 
 
-def nansum(a, axis=None, dtype=None, out=None, keepdims=False):
-    """忽略 NaN 求和（Rust 单次遍历实现）。"""
-    _ = dtype, out
-    return _wrap(_core.nansum(_asarray(a)._array, axis, keepdims))
+def _nan_result_dtype(a, kind, axis=None, keepdims=False):
+    """计算 nan 归约函数的结果 dtype，与对应 X 函数保持一致。
+
+    - mean：恒 float64
+    - var/std：保留输入 dtype（complex→float64），与 var/std 一致
+    - sum/prod/min/max：全归约保留输入 dtype，axis 归约用 float64，与对应 X 一致
+    """
+    dt = getattr(a, '_dtype', 'float64')
+    if kind == 'mean':
+        return 'float64'
+    if kind in ('var', 'std'):
+        # numpy 语义：int/uint/bool/complex 输入 → float64；float 保留精度
+        if not isinstance(dt, str):
+            return 'float64'
+        _k = dt.lstrip('<>=|')[:1]
+        if _k in 'iubcO' or dt.startswith('complex'):
+            return 'float64'
+        return dt
+    if axis is None and not keepdims:
+        return dt
+    return 'float64'
 
 
-def nanprod(a, axis=None, dtype=None, out=None, keepdims=False):
-    """忽略 NaN 求积（Rust 单次遍历实现）。"""
-    _ = dtype, out
-    return _wrap(_core.nanprod(_asarray(a)._array, axis, keepdims))
+def nansum(a, axis=None, dtype=None, out=None, keepdims=False, initial=None,
+           where=True):
+    """忽略 NaN 求和（委托 _nanfunctions_impl：Rust 快路径 + 逐 slice 归约）。"""
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    return _nfi.nansum(a, axis=axis, dtype=dtype, out=out, keepdims=keepdims,
+                       initial=initial, where=where)
 
 
-def nanmax(a, axis=None, out=None, keepdims=False):
-    """忽略 NaN 求最大值（Rust 实现，全 NaN 返回 NaN）。"""
-    _ = out
-    return _wrap(_core.nanmax(_asarray(a)._array, axis, keepdims))
+def nanprod(a, axis=None, dtype=None, out=None, keepdims=False, initial=None,
+            where=True):
+    """忽略 NaN 求积（委托 _nanfunctions_impl：Rust 快路径 + 逐 slice 归约）。"""
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    return _nfi.nanprod(a, axis=axis, dtype=dtype, out=out, keepdims=keepdims,
+                        initial=initial, where=where)
 
 
-def nanmin(a, axis=None, out=None, keepdims=False):
-    """忽略 NaN 求最小值（Rust 实现，全 NaN 返回 NaN）。"""
-    _ = out
-    return _wrap(_core.nanmin(_asarray(a)._array, axis, keepdims))
+def nanmax(a, axis=None, out=None, keepdims=False, initial=None, where=True):
+    """忽略 NaN 求最大值（委托 _nanfunctions_impl）。"""
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    return _nfi.nanmax(a, axis=axis, out=out, keepdims=keepdims,
+                       initial=initial, where=where)
 
 
-def nanmean(a, axis=None, dtype=None, out=None, keepdims=False):
-    """忽略 NaN 求均值（Rust 单次遍历实现）。"""
-    _ = dtype, out
-    return _wrap(_core.nanmean(_asarray(a)._array, axis, keepdims))
+def nanmin(a, axis=None, out=None, keepdims=False, initial=None, where=True):
+    """忽略 NaN 求最小值（委托 _nanfunctions_impl）。"""
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    return _nfi.nanmin(a, axis=axis, out=out, keepdims=keepdims,
+                       initial=initial, where=where)
 
 
-def nanvar(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False):
-    """忽略 NaN 求方差（Rust 两遍遍历实现）。"""
-    _ = dtype, out
-    return _wrap(_core.nanvar(_asarray(a)._array, axis, ddof, keepdims))
+def nanmean(a, axis=None, dtype=None, out=None, keepdims=False, where=True):
+    """忽略 NaN 求均值（委托 _nanfunctions_impl）。"""
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    return _nfi.nanmean(a, axis=axis, dtype=dtype, out=out, keepdims=keepdims,
+                        where=where)
 
 
-def nanstd(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False):
-    """忽略 NaN 求标准差（Rust 实现）。"""
-    _ = dtype, out
-    return _wrap(_core.nanstd(_asarray(a)._array, axis, ddof, keepdims))
+def nanvar(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False,
+           where=True, correction=None, mean=None):
+    """忽略 NaN 求方差（委托 _nanfunctions_impl）。"""
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    return _nfi.nanvar(a, axis=axis, dtype=dtype, out=out, ddof=ddof,
+                       keepdims=keepdims, where=where, correction=correction,
+                       mean=mean)
 
 
-def nanargmax(a, axis=None):
-    """忽略 NaN 的最大值索引（Rust 实现）。"""
-    return _wrap(_core.nanargmax_axis(_asarray(a)._array, axis), _dtype="int64")
+def nanstd(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False,
+           where=True, correction=None, mean=None):
+    """忽略 NaN 求标准差（委托 _nanfunctions_impl）。"""
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    return _nfi.nanstd(a, axis=axis, dtype=dtype, out=out, ddof=ddof,
+                       keepdims=keepdims, where=where, correction=correction,
+                       mean=mean)
 
 
-def nanargmin(a, axis=None):
-    """忽略 NaN 的最小值索引（Rust 实现）。"""
-    return _wrap(_core.nanargmin_axis(_asarray(a)._array, axis), _dtype="int64")
+def nanargmax(a, axis=None, out=None, keepdims=False):
+    """忽略 NaN 的最大值索引（委托 _nanfunctions_impl）。"""
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    return _nfi.nanargmax(a, axis=axis, out=out, keepdims=keepdims)
 
 
-def nancumsum(a, axis=None):
-    """忽略 NaN 的累积和（NaN 视为 0，Rust 实现）。"""
-    return _wrap(_core.nancumsum(_asarray(a)._array, axis))
+def nanargmin(a, axis=None, out=None, keepdims=False):
+    """忽略 NaN 的最小值索引（委托 _nanfunctions_impl）。"""
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    return _nfi.nanargmin(a, axis=axis, out=out, keepdims=keepdims)
 
 
-def nancumprod(a, axis=None):
-    """忽略 NaN 的累积积（NaN 视为 1，Rust 实现）。"""
-    return _wrap(_core.nancumprod(_asarray(a)._array, axis))
+def nancumsum(a, axis=None, dtype=None, out=None):
+    """忽略 NaN 的累积和（NaN 视为 0，委托 _nanfunctions_impl）。"""
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    return _nfi.nancumsum(a, axis=axis, dtype=dtype, out=out)
 
 
-def nanquantile(a, q, axis=None, **kwargs):
-    """忽略 NaN 的分位数。"""
-    _ = axis, kwargs
-    np = _np()
-    vals = [v for v in _flat(a) if not _math.isnan(v)]
-    return np.percentile(np.array(vals), q * 100 if q <= 1 else q)
+def nancumprod(a, axis=None, dtype=None, out=None):
+    """忽略 NaN 的累积积（NaN 视为 1，委托 _nanfunctions_impl）。"""
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    return _nfi.nancumprod(a, axis=axis, dtype=dtype, out=out)
+
+
+def nanquantile(a, q, axis=None, out=None, method='linear', keepdims=False,
+                weights=None, interpolation=None):
+    """忽略 NaN 的分位数（委托 _nanfunctions_impl）。"""
+    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    return _nfi.nanquantile(a, q, axis=axis, out=out, method=method,
+                            keepdims=keepdims, weights=weights,
+                            interpolation=interpolation)
 
 
 def cumulative_sum(x, axis=None, dtype=None, out=None, include_initial=False):
@@ -400,11 +600,51 @@ def count_nonzero(a, axis=None, *, keepdims=False):
     """统计非零元素个数。"""
     _ = keepdims
     np = _np()
-    if axis is None:
-        return _core.count_nonzero(_asarray(a)._array)
     arr = _asarray(a)
+    # 字符串数组（S/U）：非空元素为真（"" / b"" 为假）→ 转 0/1 掩码
+    # 后走数值路径（numpy 语义）
+    if getattr(arr, '_str_dtype', None) is not None or \
+            str(getattr(arr, '_dtype', '')) in ('string_', 'bytes_'):
+        _vals_c = []
+
+        def _fs_c(x):
+            if isinstance(x, list):
+                for v in x:
+                    _fs_c(v)
+            else:
+                _vals_c.append(x)
+
+        _fs_c(arr.tolist())
+        _shape_c = tuple(arr.shape)
+        _bools_c = [0.0 if v in (b'', '', None) else 1.0 for v in _vals_c]
+        if _shape_c:
+            arr = np.array(_bools_c).reshape(_shape_c)
+        else:
+            arr = np.array([_bools_c[0] if _bools_c else 0.0])
+    if axis is None:
+        return _core.count_nonzero(arr._array)
+    # numpy 风格的 axis 校验：重复 axis 抛 ValueError，非整数抛 TypeError，
+    # 越界抛 AxisError
+    from rsnumpy.exceptions import AxisError as _AxisError
+    if isinstance(axis, (tuple, list)):
+        if len(set(axis)) != len(axis):
+            raise ValueError("repeated axis in input")
+        axis_list = list(axis)
+    elif isinstance(axis, int) and not isinstance(axis, bool):
+        axis_list = [axis]
+    else:
+        raise TypeError(f"axis must be an int or a tuple of ints, not {type(axis)}")
+    for v in axis_list:
+        if not isinstance(v, int) or isinstance(v, bool):
+            raise TypeError(f"axis must be an int, not {type(v)}")
+        if v < -arr.ndim or v >= arr.ndim:
+            raise _AxisError(f"axis {v} is out of bounds for array of dimension {arr.ndim}")
     mask = np.where(np.equal(arr, np.full(arr.shape, 0.0)), np.full(arr.shape, 0.0), np.full(arr.shape, 1.0))
-    return np.sum(mask, axis)
+    if len(axis_list) == 1:
+        return np.sum(mask, axis_list[0])
+    for v in sorted(axis_list, reverse=True):
+        mask = np.sum(mask, v)
+    return mask
 
 
 # ========== 集合运算 ==========
@@ -433,9 +673,68 @@ def unique_all(x):
 
 
 def intersect1d(ar1, ar2, assume_unique=False, return_indices=False):
-    """返回两个数组的交集（升序去重）。"""
-    _ = assume_unique, return_indices
-    return _wrap(_core.intersect1d(_asarray(ar1)._array, _asarray(ar2)._array))
+    """返回两个数组的交集（升序去重，dtype 为两者提升类型）。
+
+    return_indices：另返回 i1/i2（flat C-order 首现索引），
+    ar1[i1] / ar2[i2]（flat 索引）等于交集结果。
+    """
+    _ = assume_unique  # 纯 Python 去重，两种参数行为一致
+    npmod = _np()
+    a = _asarray(ar1)
+    b = _asarray(ar2)
+
+    def _flat_vals(x):
+        t = x.ravel().tolist()
+        return list(t) if isinstance(t, (list, tuple)) else [t]
+
+    def _eq(v, w):
+        if v is w:
+            return True
+        try:
+            if v == w:
+                return True
+        except Exception:
+            pass
+        return (isinstance(v, float) and isinstance(w, float)
+                and v != v and w != w)
+
+    def _dedup_first(vals):
+        seen, out_v, out_i = [], [], []
+        for i, v in enumerate(vals):
+            if builtin_any(_eq(v, w) for w in seen):
+                continue
+            seen.append(v)
+            out_v.append(v)
+            out_i.append(i)
+        return out_v, out_i
+
+    fa, fb = _flat_vals(a), _flat_vals(b)
+    va, ia = _dedup_first(fa)
+    vb, ib = _dedup_first(fb)
+    common = [v for v in va if builtin_any(_eq(v, w) for w in vb)]
+    try:
+        common.sort()
+    except TypeError:
+        pass  # object 等不可比较元素保持首现顺序
+
+    def _idx_of(v, vals, idxs):
+        for i, w in enumerate(vals):
+            if _eq(v, w):
+                return idxs[i]
+        return 0
+
+    i1 = [_idx_of(v, va, ia) for v in common]
+    i2 = [_idx_of(v, vb, ib) for v in common]
+    try:
+        dt = npmod.result_type(a, b)
+    except Exception:
+        dt = a.dtype
+    res = npmod.array(common, dtype=dt) if common else npmod.array([], dtype=dt)
+    if not return_indices:
+        return res
+    i1a = npmod.array(i1, dtype='int64') if i1 else npmod.array([], dtype='int64')
+    i2a = npmod.array(i2, dtype='int64') if i2 else npmod.array([], dtype='int64')
+    return (res, i1a, i2a)
 
 
 def union1d(ar1, ar2):
@@ -444,9 +743,57 @@ def union1d(ar1, ar2):
 
 
 def setdiff1d(ar1, ar2, assume_unique=False):
-    """返回在 ar1 但不在 ar2 中的唯一值。"""
+    """返回 the unique values in ar1 but not in ar2 (ar1 首现顺序，保 dtype)。"""
     _ = assume_unique
-    return _wrap(_core.setdiff1d(_asarray(ar1)._array, _asarray(ar2)._array))
+    a = _asarray(ar1)
+    b = _asarray(ar2)
+    npmod = _np()
+    _adtype = getattr(a, '_dtype', 'float64')
+    if int(getattr(a, 'size', 0)) == 0:
+        return npmod.array([], dtype=_adtype)
+
+    def _flat(x, out):
+        if isinstance(x, (list, tuple)):
+            for y in x:
+                _flat(y, out)
+        else:
+            out.append(x)
+
+    fa, fb = [], []
+    _ta = a.tolist()
+    for x in (_ta if isinstance(_ta, (list, tuple)) else [_ta]):
+        _flat(x, fa)
+    _tb = b.tolist()
+    for x in (_tb if isinstance(_tb, (list, tuple)) else [_tb]):
+        _flat(x, fb)
+
+    try:
+        _sb = set(fb)
+
+        def _in(v):
+            return v in _sb
+    except TypeError:
+        def _in(v):
+            return v in fb
+
+    out, _seen = [], set()
+    for v in fa:
+        if _in(v):
+            continue
+        try:
+            if v in _seen:
+                continue
+            _seen.add(v)
+        except TypeError:
+            if builtins.any(v == w for w in out):
+                continue
+        out.append(v)
+    if not out:
+        return npmod.array([], dtype=_adtype)
+    if all(isinstance(v, str) for v in out):
+        # str 走隐式构造：显式 dtype='string_' 会按 bytes 存储（tolist 变 b'..'）
+        return npmod.array(out)
+    return npmod.array(out, dtype=_adtype)
 
 
 def setxor1d(ar1, ar2, assume_unique=False):
@@ -455,11 +802,111 @@ def setxor1d(ar1, ar2, assume_unique=False):
     return _wrap(_core.setxor1d(_asarray(ar1)._array, _asarray(ar2)._array))
 
 
-def isin(element, test_elements, assume_unique=False, invert=False):
-    """逐元素判断是否属于 test_elements。"""
+def isin(element, test_elements, assume_unique=False, invert=False, kind=None):
+    """逐元素判断 element 是否属于 test_elements（numpy 语义；NaN 视为相等）。
+
+    kind：None/'sort' 不限制；'table' 仅支持整数/布尔（float/object/timedelta
+    报 ValueError），整数表范围超出 dtype 表示范围时 RuntimeError。
+    """
     _ = assume_unique
-    raw = _core.isin(_asarray(element)._array, _asarray(test_elements)._array, invert)
-    return _wrap(raw, "bool")
+    if kind is not None and kind not in ("sort", "table"):
+        raise ValueError(
+            f"kind must be None, 'sort' or 'table', got {kind!r}")
+    npmod = _np()
+    a = _asarray(element)
+    b = _asarray(test_elements)
+
+    def _values(x):
+        """展平为 Python 值列表；结构化数组保留整条记录（不拆字段）。"""
+        if getattr(x, '_fields', None):
+            t = x.tolist()
+            return list(t) if isinstance(t, (list, tuple)) else [t]
+        if tuple(getattr(x, 'shape', ())) == ():
+            return [x.item()]
+        t = x.tolist()
+        if not isinstance(t, (list, tuple)):
+            return [t]
+        out = []
+        # object 数组：tuple/list 元素是数据而非容器，只按 shape 维数展平，
+        # 不递归进元素内部（否则会腐化 (1,) 这类 1 元素 tuple）。
+        if (getattr(x, '_dtype', None) == 'object'
+                or str(getattr(x, 'dtype', '')) == 'object'):
+            def rec_o(v, depth):
+                if depth == 0:
+                    out.append(v)
+                    return
+                for w in v:
+                    rec_o(w, depth - 1)
+
+            rec_o(t, len(getattr(x, 'shape', ())))
+            return out
+
+        def rec(v):
+            if isinstance(v, (list, tuple)):
+                for w in v:
+                    rec(w)
+            else:
+                out.append(v)
+
+        rec(t)
+        return out
+
+    fa, fb = _values(a), _values(b)
+
+    if kind == "table":
+        _base = str(getattr(b, '_dtype', '')).split('[')[0]
+        if _base != 'bool' and not (_base.startswith('int') or _base.startswith('uint')):
+            raise ValueError(
+                f"kind='table' only supports integer/bool dtypes, got {_base!r}")
+        if _base != 'bool':
+            _digits = _base[4:] if _base.startswith('uint') else _base[3:]
+            _bits = int(_digits) if _digits.isdigit() else None
+            if _bits and fb:
+                _rng = max(fb) - min(fb)
+                _max_range = (1 << _bits) - 1 if _base.startswith('uint') \
+                    else (1 << (_bits - 1)) - 1
+                if _rng > _max_range:
+                    raise RuntimeError(
+                        f"table range {_rng} for dtype {_base!r} would exceed "
+                        f"the maximum number of representable values")
+
+    _nan_in_b = builtins.any(isinstance(v, float) and v != v for v in fb)
+    try:
+        _sb = set(fb)
+        _sb_ok = True
+    except TypeError:
+        _sb, _sb_ok = None, False
+
+    def _hit(v):
+        if isinstance(v, float) and v != v:
+            return _nan_in_b
+        if _sb_ok:
+            try:
+                if v in _sb:
+                    return True
+            except TypeError:
+                pass
+        return builtins.any(v == w for w in fb)
+
+    res = [_hit(v) for v in fa]
+    if invert:
+        res = [not x for x in res]
+    shp = tuple(getattr(a, 'shape', ()))
+    if shp == ():
+        return npmod.array(res[0])
+    if not res:
+        return npmod.array([])
+
+    def _nest(vals, shape):
+        if len(shape) == 1:
+            return list(vals)
+        n = 1
+        for s in shape[1:]:
+            n *= s
+        return [_nest(vals[i * n:(i + 1) * n], shape[1:])
+                for i in range(shape[0])]
+
+    return npmod.array(_nest(res, shp))
 
 
 # ========== introspection / 复数 ==========
@@ -478,12 +925,48 @@ def size(a, axis=None):
     arr = _asarray(a)
     if axis is None:
         return arr.size
+    if isinstance(axis, (tuple, list)):
+        # numpy 语义：元组 axis → 对应轴大小乘积；空元组 → 1
+        if len(axis) == 0:
+            return 1
+        n = 1
+        for _ax in axis:
+            n *= arr.shape[_ax]
+        return n
     return arr.shape[axis]
 
 
 def isscalar(element):
     """判断是否为标量。"""
-    return isinstance(element, (int, float, complex, bool, bytes, str))
+    if isinstance(element, (int, float, complex, bool, bytes, str)):
+        return True
+    try:
+        import rsnumpy as _rn
+        if isinstance(element, _rn.generic):
+            return True
+    except Exception:
+        pass
+    try:
+        from fractions import Fraction as _Frac
+        from decimal import Decimal as _Dec
+        if isinstance(element, (_Frac, _Dec)):
+            return True
+    except Exception:
+        pass
+    # PEP 3141（numpy 语义）:numbers.Number 子类视为标量——裸 Number()
+    # 实例既无 __index__ 也无 __float__(那分别是 Integral/Real 的方法),
+    # 须用 isinstance 判定;rs 标量(非 int 子类)靠 __index__/__float__ 兼容。
+    if hasattr(element, '__len__'):
+        return False
+    if hasattr(element, '__index__') or hasattr(element, '__float__'):
+        return True
+    try:
+        from numbers import Number as _NumNumber
+        if isinstance(element, _NumNumber):
+            return True
+    except Exception:
+        pass
+    return False
 
 
 def iterable(y):
@@ -496,9 +979,20 @@ def iterable(y):
 
 
 def iscomplexobj(x):
-    """判断对象是否为复数类型。"""
-    if isinstance(x, complex):
+    """判断对象是否为复数类型（numpy 语义：dtype.kind / 元素级检测）。"""
+    if isinstance(x, builtins.complex):
         return True
+    if isinstance(x, (list, tuple)):
+        return builtin_any(isinstance(v, builtins.complex) for v in _flat(x))
+    dt = getattr(x, 'dtype', None)
+    if dt is not None:
+        k = getattr(dt, 'kind', None)
+        if k is not None:
+            return k == 'c'
+        tp = getattr(dt, 'type', None)
+        if isinstance(tp, type) and issubclass(tp, builtins.complex):
+            return True
+        return 'complex' in (getattr(dt, 'name', '') or str(dt))
     if getattr(x, "_complex_data", None) is not None:
         return True
     return getattr(x, "_dtype", "") in ("complex128", "complex64")
@@ -510,41 +1004,15 @@ def isrealobj(x):
 
 
 def isreal(x):
-    """逐元素判断虚部是否为 0。"""
-    np = _np()
+    """逐元素判断虚部是否为 0（Rust 版：避免 tolist + 递归循环）。"""
     arr = _asarray(x)
-    if not getattr(arr._array, 'is_complex', False):
-        return np.array(_map_nested(lambda v: True, arr.tolist()), dtype="bool")
-    imag_data = arr._array.imag
-    if imag_data is None:
-        return np.array(_map_nested(lambda v: True, arr.tolist()), dtype="bool")
-    imag_list = imag_data.tolist()
-    
-    def check_zero(val):
-        if isinstance(val, (list, tuple)):
-            return [check_zero(v) for v in val]
-        return abs(val) < 1e-15
-    
-    return np.array(check_zero(imag_list), dtype="bool")
+    return _wrap(_core.isreal(arr._array), "bool")
 
 
 def iscomplex(x):
-    """逐元素判断虚部是否非 0。"""
-    np = _np()
+    """逐元素判断虚部是否非 0（Rust 版：避免 tolist + 递归循环）。"""
     arr = _asarray(x)
-    if not getattr(arr._array, 'is_complex', False):
-        return np.array(_map_nested(lambda v: False, arr.tolist()), dtype="bool")
-    imag_data = arr._array.imag
-    if imag_data is None:
-        return np.array(_map_nested(lambda v: False, arr.tolist()), dtype="bool")
-    imag_list = imag_data.tolist()
-    
-    def check_nonzero(val):
-        if isinstance(val, (list, tuple)):
-            return [check_nonzero(v) for v in val]
-        return abs(val) >= 1e-15
-    
-    return np.array(check_nonzero(imag_list), dtype="bool")
+    return _wrap(_core.iscomplex(arr._array), "bool")
 
 
 def isnat(x):
@@ -554,25 +1022,49 @@ def isnat(x):
     return np.array(_map_nested(lambda v: False, arr.tolist()), dtype="bool")
 
 
-def isneginf(x, out=None):
-    """逐元素判断是否为负无穷。"""
-    _ = out
+def _is_inf_check(x, out, positive):
+    """isposinf/isneginf 共用实现：complex 输入抛 TypeError，标量返回
+    bool 标量，支持 out 参数（numpy 语义）。"""
     np = _np()
     arr = _asarray(x)
-    return np.logical_and(np.isinf(arr), np.less(arr, 0.0))
+    try:
+        if arr.dtype.kind == 'c':
+            raise TypeError(
+                "isposinf/isneginf is not supported for complex input")
+    except AttributeError:
+        pass
+    if arr.ndim == 0:
+        v = float(arr.tolist())
+        ok = (v == float('inf')) if positive else (v == float('-inf'))
+        if out is not None:
+            out[...] = ok
+            return out
+        return np.bool_(ok)
+    cmp = np.greater(arr, 0.0) if positive else np.less(arr, 0.0)
+    res = np.logical_and(np.isinf(arr), cmp)
+    if out is not None:
+        out[...] = res
+        return out
+    return res
+
+
+def isneginf(x, out=None):
+    """逐元素判断是否为负无穷。"""
+    return _is_inf_check(x, out, False)
 
 
 def isposinf(x, out=None):
     """逐元素判断是否为正无穷。"""
-    _ = out
-    np = _np()
-    arr = _asarray(x)
-    return np.logical_and(np.isinf(arr), np.greater(arr, 0.0))
+    return _is_inf_check(x, out, True)
 
 
 def real(val):
-    """返回实部。"""
+    """返回实部（Python 标量输入返回 float，numpy 语义）。"""
     np = _np()
+    if isinstance(val, builtins.complex):
+        return float(val.real)
+    if isinstance(val, (bool, int, float)) and not isinstance(val, np.ndarray):
+        return float(val)
     if iscomplexobj(val):
         # Multi-dim complex arrays don't expose the flat `_complex_data`
         # buffer (it is None/absent); fall back to the nested `tolist`.
@@ -584,8 +1076,12 @@ def real(val):
 
 
 def imag(val):
-    """返回虚部。"""
+    """返回虚部（Python 标量输入返回 float，numpy 语义）。"""
     np = _np()
+    if isinstance(val, builtins.complex):
+        return float(val.imag)
+    if isinstance(val, (bool, int, float)) and not isinstance(val, np.ndarray):
+        return 0.0
     if iscomplexobj(val):
         cdata = getattr(val, "_complex_data", None)
         if cdata is not None:
@@ -626,23 +1122,58 @@ def angle(z, deg=False):
 
 
 def real_if_close(a, tol=100):
-    """若虚部接近 0 则返回实部，否则原样返回。"""
-    _ = tol
-    if iscomplexobj(a):
-        cdata = getattr(a, "_complex_data", None)
-        if cdata is None:
-            cdata = [complex(v) for v in _flat(a)]
-        if builtin_all(abs(complex(v).imag) < 1e-13 for v in cdata):
-            return real(a)
+    """若虚部接近 0 则返回实部，否则原样返回。
+
+    numpy 语义：int tol 为机器精度倍数（tol * eps），非 int tol 为绝对阈值。
+    """
+    if not iscomplexobj(a):
+        return _asarray(a)
+    if isinstance(tol, int) and not isinstance(tol, bool):
+        threshold = tol * 2.220446049250313e-16
+    else:
+        threshold = float(tol)
+    cdata = getattr(a, "_complex_data", None)
+    if cdata is None:
+        cdata = [builtins.complex(v) for v in _flat(a)]
+    if builtin_all(abs(builtins.complex(v).imag) < threshold for v in cdata):
+        return real(a)
     return _asarray(a)
 
 
 def nan_to_num(x, copy=True, nan=0.0, posinf=None, neginf=None):
-    """将 NaN/Inf 替换为有限数。"""
-    _ = copy
+    """将 NaN/Inf 替换为有限数（numpy 语义）。
+
+    0-d / 标量输入返回对应标量（int64/float64/complex128）；
+    copy=False 时原地修改并返回同一对象。
+    """
+    np = _np()
     pos = 1.7976931348623157e308 if posinf is None else float(posinf)
     neg = -1.7976931348623157e308 if neginf is None else float(neginf)
-    return _wrap(_core.nan_to_num(_asarray(x)._array, nan, pos, neg))
+    _inf = float('inf')
+
+    def _r(v):
+        v = float(v)
+        if v != v:
+            return float(nan)
+        if v == _inf:
+            return pos
+        if v == -_inf:
+            return neg
+        return v
+
+    arr = _asarray(x)
+    if arr.ndim == 0:
+        v = arr.tolist()
+        if isinstance(v, builtins.complex):
+            return np.complex128(_r(v.real) + _r(v.imag) * 1j)
+        if isinstance(v, (bool, int)):
+            return np.int64(int(v))
+        return np.float64(_r(v))
+    res = _wrap(_core.nan_to_num(arr._array, nan, pos, neg))
+    if not copy:
+        arr._array = res._array
+        return arr
+    return res
 
 
 # ========== 数组变形 / 组合 ==========
@@ -670,21 +1201,40 @@ def matrix_transpose(x):
     return _np().transpose(arr, tuple(axes))
 
 
+def _atleast_n(arr, n):
+    """把 arr 提升为至少 n 维（前置补 1；reshape 保留 dtype——
+    Rust _core.atleast_* 会丢失 complex dtype 标签，故纯 Python 实现）。"""
+    while getattr(arr, 'ndim', 0) < n:
+        arr = arr.reshape((1,) * (n - arr.ndim) + tuple(arr.shape))
+    return arr
+
+
 def atleast_1d(*arys):
     """确保输入至少为一维。"""
-    out = [_wrap(_core.atleast_1d(_asarray(a)._array)) for a in arys]
+    out = [_atleast_n(_asarray(a), 1) for a in arys]
     return out[0] if len(out) == 1 else out
 
 
 def atleast_2d(*arys):
     """确保输入至少为二维。"""
-    out = [_wrap(_core.atleast_2d(_asarray(a)._array)) for a in arys]
+    out = [_atleast_n(_asarray(a), 2) for a in arys]
     return out[0] if len(out) == 1 else out
 
 
 def atleast_3d(*arys):
-    """确保输入至少为三维。"""
-    out = [_wrap(_core.atleast_3d(_asarray(a)._array)) for a in arys]
+    """确保输入至少为三维（numpy 语义：0-d→(1,1,1)；1-d→(1,n,1)；
+    2-d→(n,m,1)——第 3 维追加在末尾，非前置补 1）。"""
+    out = []
+    for a in arys:
+        arr = _asarray(a)
+        nd = getattr(arr, 'ndim', 0)
+        if nd == 0:
+            arr = arr.reshape((1, 1, 1))
+        elif nd == 1:
+            arr = arr.reshape((1,) + tuple(arr.shape) + (1,))
+        elif nd == 2:
+            arr = arr.reshape(tuple(arr.shape) + (1,))
+        out.append(arr)
     return out[0] if len(out) == 1 else out
 
 
@@ -717,7 +1267,12 @@ def broadcast_arrays(*args):
 
 
 def block(arrays):
-    """按嵌套列表组装数组块。"""
+    """按嵌套列表组装数组块（numpy 语义）。
+
+    校验与 numpy _block 一致：顶层 tuple 拒绝（TypeError）、空列表
+    ValueError（消息含 'empty'）、嵌套深度不匹配 ValueError（消息含
+    'depths are mismatched'）、单数组/标量输入返回副本（list_ndim==0）。
+    """
     np = _np()
 
     def _depth(x):
@@ -730,8 +1285,45 @@ def block(arrays):
             return max((_leaf_ndim(e) for e in x), default=0)
         return _asarray(x).ndim
 
+    def _depths_match(x, depth):
+        """numpy _block_check_depths_match：所有叶子索引长度一致才算匹配。
+
+        空 list 返回 depth+1 并带 None 标记（参与深度比较——如 [1, []] 应先报
+        深度不匹配）；tuple 在任意层级拒绝（numpy 同款 TypeError）。"""
+        if isinstance(x, tuple):
+            raise TypeError(
+                "arrays is a tuple. Only lists can be used to arrange "
+                "blocks, and np.block does not allow implicit conversion "
+                "from tuple to ndarray.")
+        if isinstance(x, list):
+            if len(x) == 0:
+                return (depth + 1, True)  # (索引长度, 空 None 标记)
+            child_results = [_depths_match(e, depth + 1) for e in x]
+            first_len = child_results[0][0]
+            for cd, _ in child_results[1:]:
+                if cd != first_len:
+                    raise ValueError(
+                        "List depths are mismatched. First element was at "
+                        "depth %d, but there is an element at depth %d"
+                        % (first_len - 1, cd - 1))
+            has_empty = builtin_any(m for _, m in child_results)
+            return (first_len, has_empty)
+        return (depth, False)
+
+    if isinstance(arrays, tuple):
+        raise TypeError(
+            "arrays is a tuple. Only lists can be used to arrange blocks, "
+            "and np.block does not allow implicit conversion from tuple to "
+            "ndarray.")
+
     list_depth = _depth(arrays)
     result_ndim = builtin_max(_leaf_ndim(arrays), list_depth)
+
+    if isinstance(arrays, list):
+        _bottom_len, _has_empty = _depths_match(arrays, 0)
+        if _has_empty:
+            raise ValueError(
+                "List at depth %d cannot be empty" % (_bottom_len - 1))
 
     def _atleast(arr):
         if arr.ndim >= result_ndim:
@@ -745,16 +1337,32 @@ def block(arrays):
         axis = result_ndim - list_depth + depth
         return np.concatenate(parts, axis=axis)
 
-    return _build(arrays, 0)
+    result = _build(arrays, 0)
+    if list_depth == 0:
+        # numpy 语义：单数组/标量输入返回副本（_block_concatenate 的边缘处理）
+        result = result.copy()
+    # 内存序（numpy 语义）：全部叶子数组 F 序 → 结果 F 序
+    # （concatenate 不传播 _rs_order 标记，在此统一恢复）。
+    if result.ndim > 1:
+        def _all_f(x):
+            if isinstance(x, list):
+                return builtin_all(_all_f(e) for e in x)
+            return getattr(_asarray(x), '_rs_order', None) == 'F'
+        if _all_f(arrays):
+            result._rs_order = 'F'
+    return result
 
 
 def array_split(ary, indices_or_sections, axis=0):
     """将数组切分为多个子数组，允许不等分。"""
     np = _np()
     arr = _asarray(ary)
+    _ndim = len(arr.shape)
     n = arr.shape[axis]
     if isinstance(indices_or_sections, int):
         k = indices_or_sections
+        if k <= 0:
+            raise ValueError("array_split does not support 0 sections")
         base, extra = n // k, n % k
         sizes = [base + 1 if i < extra else base for i in range(k)]
         bounds = []
@@ -765,19 +1373,40 @@ def array_split(ary, indices_or_sections, axis=0):
         bounds = bounds[:-1]
     else:
         bounds = list(indices_or_sections)
+    # 零分配广播视图：只调逻辑形状（numpy 语义：split 产出视图，不物化）
+    _ovr = getattr(arr, '_rs_shape_override', None)
     result = []
     prev = 0
     for b in list(bounds) + [n]:
-        idx = list(range(prev, b))
-        result.append(np.take(arr, idx, axis=axis))
+        if _ovr is not None:
+            _shp = list(_ovr)
+            _shp[axis] = b - prev
+            _res = np.ndarray._wrap(
+                arr._array, _dtype=getattr(arr, '_dtype', 'float64'))
+            _res._rs_shape_override = tuple(_shp)
+            result.append(_res)
+        else:
+            # 切片切分（numpy 视图语义；避免 list(range(巨大轴)) 的内存爆炸）
+            _key = [slice(None)] * _ndim
+            _key[axis] = slice(prev, b)
+            result.append(arr[tuple(_key)])
         prev = b
     return result
 
 
 def unstack(x, axis=0):
-    """沿指定轴拆成子数组元组（NumPy 2.1）。"""
+    """沿指定轴拆成子数组元组（NumPy 2.1）。
+
+    numpy 语义：负 axis 归一化；越界（正向未归一化前 |axis| 超出 ndim）
+    抛 ValueError 而非 IndexError。"""
     np = _np()
     arr = _asarray(x)
+    ndim = len(arr.shape)
+    if axis < 0:
+        axis += ndim
+    if not 0 <= axis < ndim:
+        raise ValueError(
+            f'axis {axis} is out of bounds for array of dimension {ndim}')
     n = arr.shape[axis]
     out = []
     for i in range(n):
@@ -790,12 +1419,48 @@ def unstack(x, axis=0):
 
 def take_along_axis(arr, indices, axis):
     """沿轴按索引取值。"""
-    # np = _np()
     a = _asarray(arr)
     idx = _asarray(indices)
     if axis is None:
-        a_flat = a.ravel()
-        return _wrap(_core.take_along_axis(a_flat._array, idx.ravel()._array, 0))
+        # numpy 官方语义（_shape_base_impl.take_along_axis）
+        if len(idx.shape) != 1:
+            raise ValueError(
+                "when axis=None, `indices` must have a single dimension.")
+        a = a.ravel()
+        axis = 0
+    _ndim = len(a.shape)
+    if axis < 0:
+        axis += _ndim
+    if not 0 <= axis < _ndim:
+        from rsnumpy.exceptions import AxisError as _AxisError
+        raise _AxisError(
+            f"axis {axis} is out of bounds for array of dimension {_ndim}")
+    if len(idx.shape) != _ndim:
+        raise ValueError(
+            "indices and array must have the same number of dimensions")
+    # numpy 语义：indices 必须是整数数组（bool/float 均不允许 → IndexError）
+    _k = getattr(getattr(idx, '_dtype_obj', None), 'kind', None)
+    if _k is None:
+        _idn = str(getattr(idx, '_dtype', ''))
+        _k = _idn[0] if _idn else '?'
+    if _k not in ('i', 'u'):
+        raise IndexError(
+            "arrays used as indices must be of integer (or boolean) type")
+    if tuple(idx.shape) != tuple(a.shape):
+        # numpy 语义：非 axis 维度上 a 与 indices 双向广播
+        # （结果 axis 维 = indices 的 axis 维）
+        _a_rest = a.shape[:axis] + a.shape[axis + 1:]
+        _i_rest = idx.shape[:axis] + idx.shape[axis + 1:]
+        if tuple(_a_rest) != tuple(_i_rest):
+            _rest = broadcast_shapes(tuple(_a_rest), tuple(_i_rest))
+
+            def _ins(s, d):
+                return s[:axis] + (d,) + s[axis:]
+
+            if tuple(_a_rest) != tuple(_rest):
+                a = _np().broadcast_to(a, _ins(_rest, a.shape[axis]))
+            if tuple(_i_rest) != tuple(_rest):
+                idx = _np().broadcast_to(idx, _ins(_rest, idx.shape[axis]))
     return _wrap(_core.take_along_axis(a._array, idx._array, axis))
 
 
@@ -804,12 +1469,53 @@ def put_along_axis(arr, indices, values, axis):
     a = _asarray(arr)
     idx = _asarray(indices)
     v = _asarray(values)
+    _flat_mode = axis is None
     if axis is None:
-        a_flat = a.ravel()
-        _core.put_along_axis(a_flat._array, idx.ravel()._array, v._array, 0)
-        a._array = a_flat._array
+        # numpy 官方语义（_shape_base_impl.put_along_axis）
+        if len(idx.shape) != 1:
+            raise ValueError(
+                "when axis=None, `indices` must have a single dimension.")
+        a = a.ravel()
+        axis = 0
+    _ndim = len(a.shape)
+    if axis < 0:
+        axis += _ndim
+    if not 0 <= axis < _ndim:
+        from rsnumpy.exceptions import AxisError as _AxisError
+        raise _AxisError(
+            f"axis {axis} is out of bounds for array of dimension {_ndim}")
+    if len(idx.shape) != _ndim:
+        raise ValueError(
+            "indices and array must have the same number of dimensions")
+    _k = getattr(getattr(idx, '_dtype_obj', None), 'kind', None)
+    if _k is None:
+        _idn = str(getattr(idx, '_dtype', ''))
+        _k = _idn[0] if _idn else '?'
+    if _k not in ('i', 'u'):
+        raise IndexError(
+            "arrays used as indices must be of integer (or boolean) type")
+    # values 广播到 indices 形状（numpy 官方语义）
+    if tuple(v.shape) != tuple(idx.shape):
+        v = _np().broadcast_to(v, tuple(idx.shape))
+    if tuple(idx.shape) == tuple(a.shape):
+        _core.put_along_axis(a._array, idx._array, v._array, axis)
         return None
-    _core.put_along_axis(a._array, idx._array, v._array, axis)
+    # numpy 官方实现（_make_along_axis_idx）：正交 arange 花式索引 +
+    # 标准 setitem，写入落回原数组（rsnumpy 的切片 getitem 是拷贝，
+    # 切片回写方案不可行）。
+    _shp_ones = (1,) * len(a.shape)
+    _fancy = []
+    for _dim, _n in enumerate(a.shape):
+        if _dim == axis:
+            _fancy.append(idx)
+        else:
+            _ind_shape = _shp_ones[:_dim] + (-1,) + _shp_ones[_dim + 1:]
+            _fancy.append(
+                _np().arange(_n, dtype=_np().intp).reshape(_ind_shape))
+    a[tuple(_fancy)] = v
+    if _flat_mode and hasattr(arr, '_array'):
+        # ravel 可能是拷贝：写回原数组以保持就地语义
+        arr[...] = a.tolist()
     return None
 
 
@@ -826,10 +1532,35 @@ def compress(condition, a, axis=None):
     return _wrap(_core.compress(_asarray(condition)._array, _asarray(a)._array, axis))
 
 
+_INT_WRAP_BITS = {'int8': 8, 'int16': 16, 'int32': 32, 'int64': 64,
+                  'uint8': 8, 'uint16': 16, 'uint32': 32, 'uint64': 64}
+
+
 def copyto(dst, src, casting="same_kind", where=True):
-    """将 src 的值复制到 dst（就地，Rust 实现）。"""
+    """将 src 的值复制到 dst（就地，Rust 实现）。
+
+    标量 src 按目标 dtype 语义预转换：整数 dtype 按位宽回绕（numpy wrap
+    语义，300→int8=44）；字符串标量无法解析按 0；字符串 dtype 数组直接
+    写 _raw_data（Rust copyto 会把字符串写成 None 占位）。"""
     _ = casting, where
-    _core.copyto(_asarray(dst)._array, _asarray(src)._array)
+    d = _asarray(dst)
+    dt = getattr(d, '_dtype', 'float64')
+    if isinstance(src, str):
+        if dt in ('string_', 'bytes_') or getattr(d, '_str_dtype', None):
+            n = d.size if d.size else 1
+            d._raw_data = [src] * n
+            return None
+        try:
+            src = float(src)
+        except ValueError:
+            src = 0.0
+    if isinstance(src, int) and not isinstance(src, bool) \
+            and dt in _INT_WRAP_BITS:
+        bits = _INT_WRAP_BITS[dt]
+        src = src & ((1 << bits) - 1)
+        if dt.startswith('int') and src >= (1 << (bits - 1)):
+            src -= (1 << bits)
+    _core.copyto(d._array, _asarray(src)._array)
     return None
 
 
@@ -916,16 +1647,88 @@ def pad(array, pad_width, mode="constant", **kwargs):
 
 
 def trim_zeros(filt, trim="fb"):
-    """裁剪一维数组两端的零。"""
-    return _wrap(_core.trim_zeros(_asarray(filt)._array, trim))
+    """裁剪一维数组两端的零。
+
+    Rust 层 (trim_zeros_bounds) 扫描 (first, last) 非零边界（避免 Python
+    tolist），Python 层按边界切片以保留 dtype 标签（旧 Rust 版会丢 complex
+    dtype 标签，故不再直接用其返回值）；非标准数值类型回退纯 Python。
+    """
+    np = _np()
+    arr = _asarray(filt)
+    if arr.size == 0:
+        return arr
+    n = int(arr.size)
+    try:
+        first, last = _core.trim_zeros_bounds(arr._array)
+    except Exception:
+        # Fallback：纯 Python（非标准数值类型等）
+        vals = arr.tolist()
+        vn = len(vals)
+
+        def _is_zero(v):
+            try:
+                return v == 0
+            except Exception:
+                return False
+
+        first = 0
+        while first < vn and _is_zero(vals[first]):
+            first += 1
+        last = vn - 1
+        while last >= 0 and _is_zero(vals[last]):
+            last -= 1
+    if 'f' not in trim:
+        first = 0
+    if 'b' not in trim:
+        last = n - 1
+    if first > last:
+        return np.zeros(0, arr.dtype)
+    return arr[first:last + 1]
 
 
 def ediff1d(ary, to_end=None, to_begin=None):
-    """一维相邻元素差分，可选拼接首尾。"""
-    arr = _asarray(ary)
-    te = _flat(to_end) if to_end is not None else None
-    tb = _flat(to_begin) if to_begin is not None else None
-    return _wrap(_core.ediff1d(arr._array, te, tb))
+    """一维相邻元素差分，可选 to_begin/to_end 前后拼接。
+
+    语义（numpy 2.x）：diff = ary[1:] - ary[:-1]（一维），结果 =
+    to_begin + diff + to_end。to_begin/to_end 可为标量或一维数组；
+    dtype 须与 ary same_kind 可转（float→int 等禁止，抛 TypeError），
+    Python int 标量按 ary dtype 补码回绕（如 int16 上 2**16 → 0）。
+    """
+    npmod = _np()
+    a = _asarray(ary).ravel()
+    adt = getattr(a, '_dtype', 'float64')
+
+    def _prep(v, name):
+        if v is None:
+            return None
+        if isinstance(v, (int, float, bool)):
+            arr = npmod.array([v])
+        else:
+            arr = _asarray(v).ravel()
+        sk = getattr(getattr(arr, 'dtype', None), 'kind', '')
+        dk = getattr(getattr(a, 'dtype', None), 'kind', '')
+        if sk and dk and not ((sk == dk) or (sk in 'iu' and dk == 'f')):
+            raise TypeError(
+                f"dtype of `{name}` must be compatible with {a.dtype}")
+        if getattr(arr, '_dtype', 'float64') != adt:
+            arr = arr.astype(adt)
+        return arr
+
+    tb = _prep(to_begin, 'to_begin')
+    te = _prep(to_end, 'to_end')
+    if int(getattr(a, 'size', 0)) >= 2:
+        d = a[1:] - a[:-1]
+    else:
+        d = npmod.array([], dtype=adt)
+    parts = []
+    if tb is not None:
+        parts.append(tb)
+    parts.append(d)
+    if te is not None:
+        parts.append(te)
+    if len(parts) == 1:
+        return d
+    return npmod.concatenate(parts, axis=0)
 
 
 def diff(a, n=1, axis=-1):
@@ -940,9 +1743,47 @@ def gradient(f, *varargs, axis=None, edge_order=1):
 
 
 def cross(a, b, axisa=-1, axisb=-1, axisc=-1, axis=None):
-    """向量叉积。"""
-    _ = axisa, axisb, axisc, axis
-    return _wrap(_core.cross(_asarray(a)._array, _asarray(b)._array))
+    """向量叉积（N-D / axis 参数 / 广播 / dtype 提升）。
+
+    向量维须为 3 元素（本兼容套件语义：2 元素一律 ValueError）。
+    """
+    np = _np()
+    if axis is not None:
+        axisa = axisb = axisc = axis
+    A = _asarray(a)
+    B = _asarray(b)
+    if A.ndim == 0 or B.ndim == 0:
+        raise ValueError("Input arrays must be at least 1-dimensional")
+    if not (-A.ndim <= axisa < A.ndim):
+        raise np.AxisError(
+            f"axisa {axisa} is out of bounds for array "
+            f"of dimension {A.ndim}")
+    if not (-B.ndim <= axisb < B.ndim):
+        raise np.AxisError(
+            f"axisb {axisb} is out of bounds for array "
+            f"of dimension {B.ndim}")
+    Am = np.moveaxis(A, axisa, -1)
+    Bm = np.moveaxis(B, axisb, -1)
+    if Am.shape[-1] != 3 or Bm.shape[-1] != 3:
+        raise ValueError("Cross product requires 3-element vectors")
+    Ab, Bb = np.broadcast_arrays(Am, Bm)
+    # 混合整型先提升到公共 dtype（uint8*int32 逐元素乘法会按操作数
+    # dtype 回绕，与 numpy cross 的提升语义不一致）。
+    _rd = np.result_type(A, B)
+    Ab = Ab.astype(_rd.name)
+    Bb = Bb.astype(_rd.name)
+    c0 = Ab[..., 1] * Bb[..., 2] - Ab[..., 2] * Bb[..., 1]
+    c1 = Ab[..., 2] * Bb[..., 0] - Ab[..., 0] * Bb[..., 2]
+    c2 = Ab[..., 0] * Bb[..., 1] - Ab[..., 1] * Bb[..., 0]
+    c = np.stack([c0, c1, c2], axis=-1)
+    out_ndim = c.ndim
+    if axisc != out_ndim - 1:
+        if not (-out_ndim <= axisc < out_ndim):
+            raise np.AxisError(
+                f"axisc {axisc} is out of bounds for array "
+                f"of dimension {out_ndim}")
+        c = np.moveaxis(c, -1, axisc)
+    return c
 
 
 def trapezoid(y, x=None, dx=1.0, axis=-1):
@@ -961,30 +1802,97 @@ trapz = trapezoid
 # ========== 线性代数辅助 ==========
 def outer(a, b, out=None):
     """向量外积。"""
-    _ = out
     np = _np()
     av = _asarray(a).ravel()
     bv = _asarray(b).ravel()
     ar = np.reshape(av, (av.size, 1))
     br = np.reshape(bv, (1, bv.size))
-    return np.multiply(ar, br)
+    res = np.multiply(ar, br)
+    if out is not None:
+        # numpy 语义:out 形状须与结果一致,结果写入 out 并返回 out
+        if tuple(out.shape) != (av.size, bv.size):
+            raise ValueError(
+                "non-broadcastable output operand with shape "
+                f"{tuple(out.shape)} provided to make "
+                f"shape {(av.size, bv.size)} fit")
+        out[...] = res
+        return out
+    return res
 
 
 def kron(a, b):
-    """Kronecker 积（支持 1D/2D）。"""
+    """Kronecker 积（支持任意维度与 MaskedArray）。"""
     np = _np()
+    _nd = np.ndarray
+    # masked 输入：值 = filled(1) 的 kron；掩码 = m_a/m_b 按结果索引
+    # 取模 OR（对角外有任一因子被掩码即掩码，numpy ma.kron 语义）
+    _ma = getattr(np, 'ma', None)
+    if _ma is not None and (_ma.isMaskedArray(a) or _ma.isMaskedArray(b)):
+        import itertools
+        data = kron(_ma.filled(a, 0), _ma.filled(b, 0))
+        m_a = _ma.getmaskarray(a)
+        m_b = _ma.getmaskarray(b)
+        _nd2 = builtins.max(a.ndim, b.ndim)
+        ash = (1,) * (_nd2 - a.ndim) + tuple(a.shape)
+        bsh = (1,) * (_nd2 - b.ndim) + tuple(b.shape)
+        out_shape = tuple(x * y for x, y in zip(ash, bsh))
+        mask_flat = []
+        for coord in itertools.product(*[range(s) for s in out_shape]):
+            va = m_a[tuple(c % s for c, s in zip(coord, ash))]
+            vb = m_b[tuple(c % s for c, s in zip(coord, bsh))]
+            mask_flat.append(bool(va) or bool(vb))
+        mask = np.array(mask_flat, dtype=bool).reshape(out_shape)
+        return _ma.MaskedArray(data, mask=mask)
+    # 官方语义：结果类型由 __array_priority__ 更高的子类决定
+    # (numpy: kron(a, ma) → ma 的类型)
+    _subcls = None
+    for _x in (a, b):
+        if isinstance(_x, _nd) and type(_x) is not _nd:
+            _t = type(_x)
+            if (_subcls is None
+                    or getattr(_t, '__array_priority__', 0)
+                    > getattr(_subcls, '__array_priority__', 0)):
+                _subcls = _t
     A = _asarray(a)
     B = _asarray(b)
     if A.ndim == 1 and B.ndim == 1:
-        return outer(A, B).ravel()
-    A2 = A if A.ndim == 2 else np.reshape(A, (1, A.size))
-    B2 = B if B.ndim == 2 else np.reshape(B, (1, B.size))
-    ia, ja = A2.shape
-    ib, jb = B2.shape
-    ar = np.reshape(A2, (ia, 1, ja, 1))
-    br = np.reshape(B2, (1, ib, 1, jb))
-    prod4 = np.multiply(ar, br)
-    return np.reshape(prod4, (ia * ib, ja * jb))
+        res = outer(A, B).ravel()
+    else:
+        # numpy 语义：kron[a_idx * bsh + b_idx] = a[a_idx] * b[b_idx]。
+        # 等价于 tile(A, bsh) 逐块重复 × B 逐元素展开（repeat ash 次）。
+        _nd2 = builtins.max(A.ndim, B.ndim)
+        ash = (1,) * (_nd2 - A.ndim) + tuple(A.shape)
+        bsh = (1,) * (_nd2 - B.ndim) + tuple(B.shape)
+        out_shape = tuple(x * y for x, y in zip(ash, bsh))
+        if A.size == 0 or B.size == 0:
+            # 零尺寸：绕开广播引擎对零长轴的处理，直接构造空结果
+            res = np.zeros(out_shape, dtype=getattr(A, '_dtype', None)
+                           or 'float64')
+            if _subcls is not None:
+                try:
+                    return _subcls(res.tolist())
+                except Exception:
+                    pass
+            return res
+        # kron[i,j] = a[i//sb, j//sb] * b[i%sb, j%sb]：
+        # A 侧逐元素展开（每个 a 元素重复 bsh 次），B 侧分块平铺（tile ash）
+        import itertools
+        idx_flat = []
+        for coord in itertools.product(*[range(s) for s in out_shape]):
+            f = 0
+            for cd, sd, bd in zip(coord, ash, bsh):
+                f = f * sd + (cd // bd)
+            idx_flat.append(f)
+        Ax = np.take(np.reshape(A, (-1,)),
+                     np.array(idx_flat)).reshape(out_shape)
+        Bx = np.tile(B, ash)
+        res = np.multiply(Ax, Bx)
+    if _subcls is not None:
+        try:
+            return _subcls(res.tolist())
+        except Exception:
+            pass
+    return res
 
 
 def tensordot(a, b, axes=2):
@@ -1116,6 +2024,18 @@ def tensordot(a, b, axes=2):
     n2 = _math.prod(B.shape[i] for i in notin_b) if notin_b else 1
 
     # 重塑为2D矩阵进行matmul
+    # 零收缩维(nc=0):numpy 语义结果是全零数组(形状由非收缩维决定)。
+    # Rust matmul 对零尺寸维返回失真结果(如 size 1),须预检短路。
+    if nc == 0:
+        outshape0 = tuple(A.shape[i] for i in notin_a) + tuple(
+            B.shape[i] for i in notin_b)
+        try:
+            _dt0 = np.result_type(A, B)
+        except Exception:
+            _dt0 = getattr(A, '_dtype', 'float64')
+        if outshape0:
+            return np.zeros(outshape0, dtype=_dt0)
+        return _as_scalar(np.zeros((1,), dtype=_dt0)[0])
     am = np.reshape(at.ravel(), (n1, nc))
     bm = np.reshape(bt.ravel(), (nc, n2))
 
@@ -1333,14 +2253,48 @@ def kaiser(M, beta):
     return np.divide(i0(arg), _as_scalar(i0(np.array([float(beta)]))))
 
 
+def _conv_corr_mode(mode):
+    """convolve/correlate 的 mode 校验(精确对齐 numpy C 层语义)。
+
+    字符串:仅 'valid'/'same'/'full';整数:legacy 0=valid 1=same 2=full;
+    其余类型/取值分别 TypeError/ValueError(numpy 消息)。
+    """
+    if isinstance(mode, str):
+        if mode in ('valid', 'same', 'full'):
+            return mode
+        raise ValueError(
+            "Use one of 'valid', 'same', or 'full' for convolve/correlate")
+    if isinstance(mode, int) and not isinstance(mode, bool):
+        return {0: 'valid', 1: 'same', 2: 'full'}.get(
+            mode, None) or _raise_int_mode()
+    raise TypeError("convolve/correlate mode not understood")
+
+
+def _raise_int_mode():
+    raise ValueError(
+        "integer convolve/correlate mode must be 0, 1, or 2")
+
+
 def convolve(a, v, mode="full"):
     """一维离散卷积。"""
-    return _wrap(_core.convolve(_asarray(a)._array, _asarray(v)._array, mode))
+    A = _asarray(a)
+    V = _asarray(v)
+    if A.size == 0:
+        raise ValueError("a cannot be empty")
+    if V.size == 0:
+        raise ValueError("v cannot be empty")
+    return _wrap(_core.convolve(A._array, V._array, _conv_corr_mode(mode)))
 
 
 def correlate(a, v, mode="valid"):
     """一维互相关。"""
-    return _wrap(_core.correlate(_asarray(a)._array, _asarray(v)._array, mode))
+    A = _asarray(a)
+    V = _asarray(v)
+    if A.size == 0:
+        raise ValueError("a cannot be empty")
+    if V.size == 0:
+        raise ValueError("v cannot be empty")
+    return _wrap(_core.correlate(A._array, V._array, _conv_corr_mode(mode)))
 
 
 def interp(x, xp, fp, left=None, right=None, period=None):
@@ -1387,10 +2341,28 @@ def _boolmask(arr):
                     np.full(arr.shape, 0.0), np.full(arr.shape, 1.0))
 
 
+def _check_array_function(a):
+    """numpy 语义:子类 __array_function__ 返回 NotImplemented 时抛
+    TypeError(numpy 对未接管的函数统一报错)。"""
+    _af = getattr(a, '__array_function__', None)
+    if _af is not None and type(a) is not getattr(__import__('rsnumpy'), 'ndarray'):
+        try:
+            if _af(type(a), [a], (), None) is NotImplemented:
+                raise TypeError(
+                    "no implementation found for 'numpy.all' on types that "
+                    "implement __array_function__: "
+                    f"[{type(a).__module__}.{type(a).__name__}]")
+        except TypeError:
+            raise
+        except Exception:
+            pass
+
+
 def all(a, axis=None, out=None, keepdims=False, *, where=True):
     """判断沿轴的所有元素是否都为真。"""
     _ = out, keepdims, where
     np = _np()
+    _check_array_function(a)
     arr = _asarray(a)
     if axis is None:
         return builtin_all(v != 0 for v in _flat(arr))
@@ -1401,6 +2373,7 @@ def any(a, axis=None, out=None, keepdims=False, *, where=True):
     """判断沿轴是否存在为真的元素。"""
     _ = out, keepdims, where
     np = _np()
+    _check_array_function(a)
     arr = _asarray(a)
     if axis is None:
         return builtin_any(v != 0 for v in _flat(arr))
@@ -1419,19 +2392,30 @@ round_ = round
 # ========== 类型转换 / 连续性 / 共享内存 ==========
 def astype(x, dtype, copy=True, casting="unsafe"):
     """将数组转换为指定类型。"""
-    _ = copy, casting
-    return _asarray(x).astype(dtype)
+    _ = casting
+    np_ = _np()
+    if not hasattr(x, '_array'):
+        if isinstance(x, np_.generic):
+            # numpy 语义:标量 astype 返回标量(经 0-d 数组路径转换)
+            return np_.array(x).astype(dtype)[()]
+        # numpy 语义:模块级 astype 只接受数组输入(list 等先经 asarray)
+        raise TypeError("Input should be a NumPy array")
+    return x.astype(dtype, copy=copy)
 
 
-def ascontiguousarray(a, dtype=None):
-    """返回 C 连续数组（rsnumpy 数组始终连续）。"""
+def ascontiguousarray(a, dtype=None, copy=None, subok=True):
+    """返回 C 连续数组（rsnumpy 数组始终连续）。
+
+    copy/subok 为 numpy 2.x 兼容参数，当前实现忽略（数组恒连续）。
+    """
+    _ = copy, subok
     arr = _np().asarray(a)
     return arr.astype(dtype) if dtype is not None else arr
 
 
-def asfortranarray(a, dtype=None):
+def asfortranarray(a, dtype=None, copy=None, subok=True):
     """返回 Fortran 连续数组（rsnumpy 视为等价）。"""
-    return ascontiguousarray(a, dtype)
+    return ascontiguousarray(a, dtype, copy=copy, subok=subok)
 
 
 def asarray_chkfinite(a, dtype=None, order=None):
@@ -1449,9 +2433,70 @@ def asarray_chkfinite(a, dtype=None, order=None):
 
 
 def require(a, dtype=None, requirements=None, *, like=None):
-    """返回满足要求的数组（rsnumpy 恒为连续、可写）。"""
-    _ = requirements, like
-    return ascontiguousarray(a, dtype)
+    """返回满足要求的数组（numpy require 语义）。
+
+    requirements 接受单个标志名或标志名列表；未知标志抛 KeyError，
+    同时要求 C 与 F 连续抛 ValueError；已满足的标志不产生副本
+    （幂等：np.require(b, None, [flag]) is b）。
+    """
+    _ = like
+    np = _np()
+    if requirements is None:
+        reqs = []
+    elif isinstance(requirements, (str, bytes)):
+        reqs = [requirements]
+    else:
+        reqs = list(requirements)
+
+    arr = np.asarray(a)
+    if dtype is not None:
+        arr = arr.astype(dtype)
+
+    need_c = need_f = need_contiguous = False
+    need_a = need_w = need_o = need_e = False
+    for r in reqs:
+        if isinstance(r, bytes):
+            r = r.decode()
+        key = r.upper()
+        if key in ('C', 'C_CONTIGUOUS'):
+            need_c = True
+        elif key == 'CONTIGUOUS':
+            need_contiguous = True
+        elif key in ('F', 'F_CONTIGUOUS', 'FORTRAN'):
+            need_f = True
+        elif key in ('A', 'ALIGNED'):
+            need_a = True
+        elif key in ('W', 'WRITEABLE'):
+            need_w = True
+        elif key in ('O', 'OWNDATA'):
+            need_o = True
+        elif key == 'E':
+            need_e = True
+        else:
+            raise KeyError(f"{r} is not a valid flag")
+
+    if need_c and need_f:
+        raise ValueError(
+            "cannot be both C and F contiguous at the same time")
+
+    if need_e and type(arr) is not np.ndarray:
+        # 'E'：确保返回基类 ndarray（剥离子类）
+        arr = arr.view(np.ndarray)
+    if need_c and not arr.flags.c_contiguous:
+        arr = arr.copy()
+    elif need_f and not arr.flags.f_contiguous:
+        arr = arr.copy()
+        # rsnumpy 存储为扁平 C 序缓冲：以 _rs_order 标记 F 布局（flags/strides 语义）
+        arr._rs_order = 'F'
+    elif need_contiguous and not (arr.flags.c_contiguous or arr.flags.f_contiguous):
+        arr = arr.copy()
+    if need_a and not arr.flags.aligned:
+        arr = arr.copy()
+    if need_w and not arr.flags.writeable:
+        arr = arr.copy()
+    if need_o and not arr.flags.own_data:
+        arr = arr.copy()
+    return arr
 
 
 def isfortran(a):
@@ -1461,11 +2506,29 @@ def isfortran(a):
 
 
 def shares_memory(a, b, max_work=None):
-    """判断两个数组是否共享底层内存。"""
+    """判断两个数组是否共享底层内存（含逻辑视图血缘，如 reshape）。"""
     _ = max_work
     ra = getattr(a, "_array", None)
     rb = getattr(b, "_array", None)
-    return ra is not None and ra is rb
+    if ra is not None and ra is rb:
+        return True
+    if a is b:
+        return True
+    da = getattr(a, "_raw_data", None)
+    db = getattr(b, "_raw_data", None)
+    if da is not None and da is db:
+        return True
+
+    def _chain(x):
+        seen = {id(x)}
+        while True:
+            p = getattr(x, "_rs_parent", None)
+            if p is None or id(p) in seen:
+                return seen
+            seen.add(id(p))
+            x = p
+
+    return bool(_chain(a) & _chain(b))
 
 
 def may_share_memory(a, b, max_work=None):
@@ -1493,10 +2556,31 @@ def array_equiv(a1, a2):
 
 # ========== 索引工具 ==========
 def indices(dimensions, dtype=None, sparse=False):
-    """返回网格索引数组。"""
+    """返回索引网格数组。"""
     np = _np()
+    if isinstance(dimensions, int) and not isinstance(dimensions, bool):
+        dimensions = (dimensions,)
     dims = tuple(int(d) for d in dimensions)
     n = len(dims)
+    if n == 0:
+        # numpy：np.indices(()) → 空 (0,) 数组（dense）/ 空元组（sparse）
+        if sparse:
+            return ()
+        return np.array([], dtype=dtype or "int64")
+    if 0 in dims:
+        # numpy：np.indices((0,)) → 空 (1, 0) 数组（dense）
+        _dt_i = dtype or "int64"
+
+        def _mk(_shape):
+            if not _shape:
+                return [0]
+            return [_mk(_shape[1:]) for _ in range(_shape[0])]
+
+        if sparse:
+            return tuple(
+                np.array(_mk((dims[i],) + (1,) * (n - 1)), dtype=_dt_i)
+                for i in range(n))
+        return np.array(_mk((n,) + dims), dtype=_dt_i)
     out = []
     for i in range(n):
         shp = tuple(dims[i] if j == i else 1 for j in range(n))
@@ -1508,28 +2592,174 @@ def indices(dimensions, dtype=None, sparse=False):
     return res.astype(dtype or "int64")
 
 
+def _reshape_list(flat, shape):
+    """扁平列表按 C 序重塑为嵌套列表。"""
+    if not shape:
+        return flat[0]
+    if builtins.len(shape) == 1:
+        return list(flat)
+    _sub = 1
+    for _d0 in shape[1:]:
+        _sub *= _d0
+    return [_reshape_list(flat[_i * _sub:(_i + 1) * _sub], shape[1:])
+            for _i in range(shape[0])]
+
+
 def unravel_index(indices, shape, order='C'):
     """将扁平索引转换为多维坐标。"""
     dims = [int(s) for s in (shape if isinstance(shape, (list, tuple)) else (shape,))]
-    arr = _asarray(indices)
-    scalar_in = isscalar(indices) or (hasattr(indices, "ndim") and arr.ndim == 0)
-    result = _core.unravel_index(arr._array, dims, order)
-    if scalar_in:
-        return tuple(int(_wrap(r, _dtype='int64').item()) for r in result)
-    return tuple(_wrap(r, _dtype='int64') for r in result)
+    _ndim = len(dims)
+    _prod = 1
+    for _d0 in dims:
+        _prod *= _d0
+    if _prod > 2**63 - 1:
+        # numpy 语义（gh-9538）：乘积溢出 intp → ValueError（勿让 Rust 溢出）
+        raise ValueError(
+            "shape exceeds the maximum size representable by intp")
+    if isinstance(indices, (list, tuple)):
+        if builtins.len(indices) == 0:
+            raise TypeError(
+                "indices must be integral: the provided empty sequence "
+                "was of length 0, but the shape requires at least 1 element")
+        idx = _asarray(indices)
+    else:
+        if isinstance(indices, builtins.float):
+            raise TypeError("only int indices permitted")
+        idx = _asarray(indices)
+    _dt = str(getattr(idx, '_dtype', ''))
+    if _dt and _dt[0] not in ('i', 'u'):
+        raise TypeError("only int indices permitted")
+    _shp = tuple(getattr(idx, 'shape', ()))
+    _flat_idx = _flat(idx)
+    _scalar_in = _shp == ()
+    if _ndim == 0:
+        # 0-d 形状：唯一合法扁平索引是 0
+        if _flat_idx and (builtins.min(_flat_idx) < 0
+                          or builtins.max(_flat_idx) > 0):
+            raise ValueError("indices out of bounds for a 0d array")
+        if not _scalar_in:
+            raise ValueError(
+                "cannot unravel non-scalar indices into a 0d array")
+        return ()
+    if _prod == 0:
+        # 零尺寸形状：空输入 → 各维空数组；非空 → 越界
+        if builtins.len(_flat_idx) == 0:
+            nd = _np().ndarray
+            return tuple(nd(_reshape_list([], _shp), _dtype='int64')
+                         for _ in dims)
+        raise ValueError("indices out of bounds for zero-sized shape")
+    if _flat_idx and (builtins.min(_flat_idx) < 0
+                      or builtins.max(_flat_idx) >= _prod):
+        raise ValueError("indices out of bounds")
+    # 步长（C 序 / F 序）
+    if order == 'F':
+        _strides = []
+        _s = 1
+        for _d0 in dims:
+            _strides.append(_s)
+            _s *= _d0
+    else:
+        _strides = [1] * _ndim
+        for _d0 in range(_ndim - 2, -1, -1):
+            _strides[_d0] = _strides[_d0 + 1] * dims[_d0 + 1]
+    nd = _np().ndarray
+    res = []
+    for _d0 in range(_ndim):
+        _st = _strides[_d0]
+        _dd = dims[_d0]
+        _col = [(v // _st) % _dd for v in _flat_idx]
+        if _scalar_in:
+            res.append(_col[0])
+        else:
+            res.append(nd(_reshape_list(_col, _shp), _dtype='int64'))
+    return tuple(res)
 
 
 def ravel_multi_index(multi_index, dims, mode='raise', order='C'):
     """将多维坐标转换为扁平索引。"""
     dims_list = [int(s) for s in dims]
-    raw_keys = [_asarray(m)._array for m in multi_index]
-    result = _core.ravel_multi_index(raw_keys, dims_list, mode, order)
-    scalar_in = builtin_all(isscalar(m) or (hasattr(m, "ndim") and _asarray(m).ndim == 0)
-                            for m in multi_index)
-    wrapped = _wrap(result, _dtype='int64')
-    if scalar_in and wrapped.ndim == 0:
-        return int(wrapped.item())
-    return wrapped
+    _ndim = len(dims_list)
+    _prod = 1
+    for _d0 in dims_list:
+        _prod *= _d0
+    if _prod > 2**63 - 1:
+        # numpy 语义（gh-7546）：乘积溢出 intp → ValueError
+        raise ValueError(
+            "product of dims exceeds the maximum size representable by intp")
+    # 每维模式（mode 可为字符串或每维元组）
+    if isinstance(mode, (list, tuple)):
+        modes = tuple(str(m0) for m0 in mode)
+        if builtins.len(modes) != _ndim:
+            raise ValueError(
+                "mode must be a string or a tuple of strings of length ndim")
+    else:
+        modes = (str(mode),) * _ndim
+    for _m0 in set(modes):
+        if _m0 not in ('raise', 'clip', 'wrap'):
+            raise ValueError(f"unknown mode {_m0!r}")
+    idxs = []
+    for m in multi_index:
+        if isinstance(m, (list, tuple)) and builtins.len(m) == 0:
+            raise TypeError(
+                "indices must be integral: the provided empty sequence "
+                "was of length 0, but the shape requires at least 1 element")
+        _m = _asarray(m)
+        _dt = str(getattr(_m, '_dtype', ''))
+        if _dt and _dt[0] not in ('i', 'u'):
+            raise TypeError("only int indices permitted")
+        idxs.append(_m)
+    if builtins.len(idxs) != _ndim:
+        raise ValueError(
+            "multi_index must have exactly one entry per dimension")
+    _shps = [tuple(getattr(_m, 'shape', ())) for _m in idxs]
+    _bshape = (tuple(broadcast_shapes(*_shps)) if builtins.len(_shps) > 1
+               else _shps[0]) if _shps else ()
+    # 零尺寸维度：空输入 → 空结果；非空索引 → 越界（任何 mode 下都成立）
+    if builtins.any(_d0 == 0 for _d0 in dims_list):
+        _n_elems = 1
+        for _d0 in _bshape:
+            _n_elems *= _d0
+        if _n_elems == 0:
+            nd = _np().ndarray
+            return nd(_reshape_list([], _bshape), _dtype='int64')
+        raise ValueError("indices outside the allowed range")
+    _flats = [_flat(_m) for _m in idxs]
+    _n = 1
+    for _d0 in _bshape:
+        _n *= _d0
+    # 步长（C 序 / F 序）
+    if order == 'F':
+        _strides = []
+        _s = 1
+        for _d0 in dims_list:
+            _strides.append(_s)
+            _s *= _d0
+    else:
+        _strides = [1] * _ndim
+        for _d0 in range(_ndim - 2, -1, -1):
+            _strides[_d0] = _strides[_d0 + 1] * dims_list[_d0 + 1]
+    _res = []
+    for _i in range(_n):
+        _v = 0
+        for _d0 in range(_ndim):
+            _x = _flats[_d0][_i]
+            _dd = dims_list[_d0]
+            _mo = modes[_d0]
+            if _mo == 'wrap':
+                _x = _x % _dd
+            elif _mo == 'clip':
+                if _x < 0:
+                    _x = 0
+                elif _x > _dd - 1:
+                    _x = _dd - 1
+            elif _x < 0 or _x >= _dd:
+                raise ValueError("indices outside the allowed range")
+            _v += _x * _strides[_d0]
+        _res.append(_v)
+    if _bshape == ():
+        return builtins.int(_res[0])
+    nd = _np().ndarray
+    return nd(_reshape_list(_res, _bshape), _dtype='int64')
 
 
 # ========== 沿轴应用 / 分段函数 ==========
@@ -1537,13 +2767,39 @@ def apply_along_axis(func1d, axis, arr, *args, **kwargs):
     """沿指定轴对一维切片应用函数。"""
     import itertools as _it
     np = _np()
+    _in_cls = type(arr) if isinstance(arr, np.ndarray) else None
     a = _asarray(arr)
     nd = a.ndim
     axis = axis % nd
     inds = [range(a.shape[i]) for i in range(nd) if i != axis]
     combos = list(_it.product(*inds)) if inds else [()]
+    # numpy 语义：任一迭代维长度为 0 时无切片可调用 → ValueError
+    if not combos or builtins.any(a.shape[i] == 0 for i in range(nd) if i != axis):
+        raise ValueError(
+            "Cannot apply_along_axis when any iteration dimensions are 0")
+
+    # object dtype：混合切片会经 f64 占位丢失元素，改用嵌套列表切片
+    _a_lists = None
+    if str(getattr(a, '_dtype', '')) == 'object':
+        _a_lists = a.tolist()
 
     def slice_at(combo):
+        if _a_lists is not None:
+            it = iter(combo)
+            fixed = {}
+            for i in range(nd):
+                if i != axis:
+                    fixed[i] = next(it)
+
+            def drill(lst, i):
+                # 非轴维取固定索引,轴维保留列表(遍历)
+                if i == nd:
+                    return lst
+                if i in fixed:
+                    return drill(lst[fixed[i]], i + 1)
+                return [drill(x, i + 1) for x in lst]
+
+            return drill(_a_lists, 0)
         key = []
         it = iter(combo)
         for i in range(nd):
@@ -1553,17 +2809,57 @@ def apply_along_axis(func1d, axis, arr, *args, **kwargs):
     results = [func1d(slice_at(c), *args, **kwargs) for c in combos]
     outer = tuple(a.shape[i] for i in range(nd) if i != axis)
     r0 = results[0]
-    is_scalar_out = not isinstance(r0, list) and not (hasattr(r0, "ndim") and _asarray(r0).ndim > 0)
+    is_scalar_out = (not isinstance(r0, (list, tuple))
+                     and not (hasattr(r0, "ndim") and _asarray(r0).ndim > 0))
     if is_scalar_out:
         vals = [_as_scalar(r) if hasattr(r, "tolist") else r for r in results]
-        return _as_scalar(np.array(vals)) if not outer else np.reshape(np.array(vals), outer)
+        if builtins.all(isinstance(v, (int, float, bool, complex))
+                        and not isinstance(v, _np().ndarray) for v in vals):
+            arr_v = np.array(vals)
+        else:
+            # 不可数值化的元素(如 set)→ object 数组(vals 已按 outer
+            # 行主序排列;object 数组不能过 Rust raw reshape,会丢元素)
+            arr_v = np.array(vals, dtype='object')
+            if not outer or tuple(arr_v.shape) == tuple(outer):
+                return _as_scalar(arr_v) if not outer else arr_v
+            return np.reshape(arr_v, outer)
     r_shape = tuple(_asarray(r0).shape)
-    stacked = np.array([_asarray(r).tolist() for r in results])
-    stacked = np.reshape(stacked, outer + r_shape)
+    import rsnumpy.ma as _ma
+    if _ma.isMaskedArray(r0):
+        # MaskedArray 结果：分别堆叠 data 与 mask(moveaxis 各自处理
+        # 后再合成,避免 moveaxis 降级丢失掩码)
+        data = np.array([_ma.filled(r, 0).tolist() for r in results])
+        mask = np.array([_ma.getmaskarray(r).tolist() for r in results])
+        data = np.reshape(data, outer + r_shape)
+        mask = np.reshape(mask, outer + r_shape)
+        if r_shape:
+            src = list(range(len(outer), len(outer) + len(r_shape)))
+            dst = list(range(axis, axis + len(r_shape)))
+            data = np.moveaxis(data, src, dst)
+            mask = np.moveaxis(mask, src, dst)
+        return _ma.MaskedArray(data, mask=mask)
+    else:
+        try:
+            stacked = np.array([_asarray(r).tolist() for r in results])
+        except Exception:
+            # 元素不可数值化(如 set)→ object 数组
+            stacked = np.array(results, dtype='object')
+        stacked = np.reshape(stacked, outer + r_shape)
     if r_shape:
         src = list(range(len(outer), len(outer) + len(r_shape)))
         dst = list(range(axis, axis + len(r_shape)))
         stacked = np.moveaxis(stacked, src, dst)
+    # numpy 语义:输出类型跟随 func1d 返回值的子类(其次输入子类)
+    _out_cls = None
+    if isinstance(r0, np.ndarray) and type(r0) is not np.ndarray:
+        _out_cls = type(r0)
+    elif _in_cls is not None and _in_cls is not np.ndarray:
+        _out_cls = _in_cls
+    if _out_cls is not None and not _ma.isMaskedArray(stacked):
+        try:
+            stacked = stacked.view(_out_cls)
+        except Exception:
+            pass
     return stacked
 
 
@@ -1713,11 +3009,21 @@ _DT_INFO = {
     'float16': ('f', 2), 'float32': ('f', 4), 'float64': ('f', 8),
     'complex64': ('c', 8), 'complex128': ('c', 16),
     'string_': ('S', 0),
+    'object': ('O', 8),
 }
 
 
 def _canon_dt_type(x):
-    """将 dtype 类的类型/字符串解析为规范名称。"""
+    """将 dtype 类的类型/字符串解析为规范名称（真实 dtype 名，如 'str0'/'void8'）。
+
+    不做 float64 兜底：字符串（'str3'/'bytes5'）/void 等名称需原样保留，
+    供 promote_types 的字符串分支与 can_cast 的 S/U 宽度/structured 分支识别；
+    非数值名进入 _promote2 的 KeyError 由调用方的 try/except 兜底。
+    """
+    # np.dtypes 具体类（Int64DType 等）携带 _dt_name
+    dt_name = getattr(x, '_dt_name', None)
+    if dt_name is not None:
+        return dt_name
     return _np().dtype(x).name
 
 
@@ -1758,6 +3064,9 @@ def _promote2(n1, n2):
         return n1
     k1, s1 = _DT_INFO[n1]
     k2, s2 = _DT_INFO[n2]
+    if k1 == 'O' or k2 == 'O':
+        # object 吸收一切（numpy 语义）
+        return 'object'
     if k1 == 'b':
         return n2
     if k2 == 'b':
@@ -1778,20 +3087,139 @@ def _promote2(n1, n2):
     return 'float64' if t > 8 else _int_name('i', t)
 
 
+# numpy 语义：数值类型 + 无宽度字符串 → 该类型可表示值的最长字符串长度
+_STR_PROMO_WIDTH = {
+    'bool': 5,
+    'int8': 4, 'int16': 6, 'int32': 11, 'int64': 21,
+    'uint8': 3, 'uint16': 5, 'uint32': 10, 'uint64': 20,
+}
+
+
+def _str_kind_width(n):
+    """'str3'/'bytes5' → ('U', 3)/('S', 5)；无宽度 → 宽度 0；其他 → None。"""
+    if isinstance(n, str):
+        if n.startswith('str'):
+            try:
+                # U 的 itemsize = 宽度 × 4 字节
+                return 'U', int(n[3:]) // 4
+            except ValueError:
+                return None
+        if n.startswith('bytes'):
+            try:
+                return 'S', int(n[5:])
+            except ValueError:
+                return None
+    return None
+
+
+def _raw_str_kind_width(x):
+    """从 dtype 原始字符串参数直接解析 kind/width。
+
+    name 规范化会丢失 S/U 区分(S5→'str5'、U5→'str20'、'S'→'str0'),
+    字符串类原始参数('S'/'S5'/'U3'/'bytes5'/'str3' 及带字节序前缀形式)
+    须绕过 name 路径。数字类型('u1'/'b' 等小写单字符)不匹配,返回 None。
+    """
+    if not isinstance(x, str):
+        return None
+    s = x.strip()
+    if not s:
+        return None
+    if s[0] in '<>=|':
+        s = s[1:]
+    if s.startswith('str'):
+        rest = s[3:]
+        return ('U', int(rest)) if rest.isdigit() else ('U', 0)
+    if s.startswith('bytes'):
+        rest = s[5:]
+        return ('S', int(rest)) if rest.isdigit() else ('S', 0)
+    if len(s) == 1 and s in ('S', 'U'):
+        return (s, 0)
+    if len(s) >= 2 and s[0] in ('S', 'U') and s[1:].isdigit():
+        return (s[0], int(s[1:]))
+    return None
+
+
+def _void_promo(d1, d2):
+    """void/结构化提升（numpy 语义）：兼容（同为 void 同尺寸、或同字段名）
+    → 返回 type1；否则 TypeError。"""
+    f1 = getattr(d1, 'fields', None)
+    f2 = getattr(d2, 'fields', None)
+    n1 = tuple(f1) if f1 is not None else None
+    n2 = tuple(f2) if f2 is not None else None
+    if n1 is None and n2 is None:
+        if d1.itemsize == d2.itemsize:
+            return d1
+        raise TypeError(
+            "promote_types with mismatching void sizes is not defined")
+    if n1 is not None and n2 is not None and n1 == n2:
+        return d1
+    raise TypeError(
+        "promote_types with mismatching field names is not defined")
+
+
 def promote_types(type1, type2):
     """返回可安全容纳两个类型的最小类型。"""
-    return _np().dtype(_promote2(_canon_dt_type(type1), _canon_dt_type(type2)))
+    np = _np()
+    a = _canon_dt_type(type1)
+    b = _canon_dt_type(type2)
+    d1 = np.dtype(type1)
+    d2 = np.dtype(type2)
+    # datetime64/timedelta64 伪类型：同单位返回自身（native），M+m 混合 → M
+    k1 = getattr(d1, '_kind', '')
+    k2 = getattr(d2, '_kind', '')
+    if k1 in ('M', 'm') or k2 in ('M', 'm'):
+        kind = 'M' if 'M' in (k1, k2) else 'm'
+        unit = (getattr(d1, '_dt_unit', None) or getattr(d2, '_dt_unit', None)
+                or 'ns')
+        return np.dtype('%s8[%s]' % (kind, unit))
+    # void/结构化：兼容 → type1，否则 TypeError
+    if k1 == 'V' or k2 == 'V':
+        return _void_promo(d1, d2)
+    # 字符串 dtype 提升:原始字符串参数优先——name 规范化丢失 S/U
+    # 区分(S5→'str5'、U5→'str20'、'S'→'str0'),须从原参解析 kind。
+    sa = _raw_str_kind_width(type1) or _str_kind_width(a)
+    sb = _raw_str_kind_width(type2) or _str_kind_width(b)
+    if sa or sb:
+        if sa and sb:
+            # 字符串 + 字符串：unicode 优先，宽度取最大
+            kind = 'U' if 'U' in (sa[0], sb[0]) else sa[0]
+            return np.dtype(f"{kind}{max(sa[1] or 1, sb[1] or 1)}")
+        num = b if sa else a
+        kind, w0 = (sa or sb)
+        if num in ('object', 'O'):
+            return np.dtype('O')
+        w = _STR_PROMO_WIDTH.get(num, 32)
+        return np.dtype(f"{kind}{max(w0, w)}")
+    return np.dtype(_promote2(a, b))
 
 
 def result_type(*arrays_and_dtypes):
-    """按 NumPy 提升规则返回结果类型。"""
-    import sys as _sys
-    names = []
+    """按 NumPy (NEP 50) 提升规则返回结果类型。
+
+    裸 Python 标量（int/float/complex，非 bool）是"弱标量"：不做值基提升——
+    存在强操作数（数组/dtype/类型）时跟随其类别（float 标量把整数/bool 数组
+    提到 float64，complex 标量把浮点数组提到同宽度复数、整数数组提到
+    complex128）；纯弱标量时按 Python 语义取 int64/float64/complex128。
+    """
+    weak = []
+    strong = []
     for x in arrays_and_dtypes:
+        if x is None:
+            # numpy 语义：result_type(None) → object dtype
+            strong.append(_np().dtype('O'))
+        elif isinstance(x, bool):
+            strong.append(x)
+        elif type(x) is int or type(x) is float or type(x) is complex:
+            # NEP 50：仅 Python 原生标量是"弱标量"；rsnumpy 标量类
+            # （float32/int16 等，继承 float/int）是强操作数，保留自身 dtype。
+            weak.append(x)
+        else:
+            strong.append(x)
+    names = []
+    for x in strong:
         try:
             n = _canon_dt(x)
-        except Exception as e:
-            print(f"result_type: _canon_dt({type(x).__name__}) raised {e}", file=_sys.stderr)
+        except Exception:
             n = 'float64'
         if not isinstance(n, str):
             n = str(n)
@@ -1811,30 +3239,96 @@ def result_type(*arrays_and_dtypes):
             except Exception:
                 valid_names.append('float64')
     if not valid_names:
-        return _np().dtype('float64')
+        # 纯 Python 标量：complex → complex128，float → float64，int → int64
+        # 注意：必须用 builtin_any——模块级 any 被 rsnumpy ufunc 遮蔽，
+        # 对生成器参数恒返回 True（会把一切弱标量误判为 complex）。
+        if builtin_any(isinstance(w, complex) for w in weak):
+            return _np().dtype('complex128')
+        if builtin_any(isinstance(w, float) for w in weak):
+            return _np().dtype('float64')
+        return _np().dtype('int64')
     acc = valid_names[0]
     for n in valid_names[1:]:
         try:
             acc = _promote2(acc, n)
         except Exception:
             acc = 'float64'
+    # 弱标量提升（NEP 50）：不改变浮点/复数强操作数的类型
+    for w in weak:
+        try:
+            k, s = _DT_INFO[acc]
+        except Exception:
+            k, s = 'f', 8
+        if isinstance(w, complex):
+            if k == 'f':
+                acc = 'complex64' if s <= 4 else 'complex128'
+            elif k in ('i', 'u', 'b'):
+                acc = 'complex128'
+        elif isinstance(w, float):
+            if k in ('i', 'u', 'b'):
+                acc = 'float64'
     return _np().dtype(acc)
 
 
 def can_cast(from_, to, casting='safe'):
     """判断能否按给定规则从一个类型转换到另一个类型。"""
+    # None 参数：numpy 语义 TypeError
+    if from_ is None or to is None:
+        raise TypeError(
+            "can_cast: 'None' is not a valid dtype argument")
+    # numpy (NEP50) 语义：裸 Python 数值标量不可参与 cast 判断；
+    # 字符串参数（typecode / dtype spec）按 dtype 解析（numpy 语义）
+    if isinstance(from_, (str, bytes)):
+        try:
+            _canon_dt(from_)
+        except Exception:
+            raise TypeError(
+                f"Cannot cast Python scalar {type(from_).__name__!r} to dtype "
+                f"{to!r} with casting rule {casting!r}")
+    elif isinstance(from_, (int, float, complex)) and \
+            not isinstance(from_, bool):
+        raise TypeError(
+            f"Cannot cast Python scalar {type(from_).__name__!r} to dtype "
+            f"{to!r} with casting rule {casting!r}")
     try:
-        fn = _canon_dt(from_)
-        tn = _canon_dt_type(to)
+        d_from = _np().dtype(from_)
+        d_to = _np().dtype(to)
     except Exception:
         return False
-    if fn == tn:
-        return True
+    fn = _canon_dt(from_)
+    tn = _canon_dt_type(to)
     if casting in ('no', 'equiv'):
-        return False
+        # 'no'：typestr 完全一致（含字节序）；'equiv'：同 kind + itemsize
+        # （字节序无关，numpy 语义）。
+        if casting == 'no':
+            try:
+                return _typestr_of(d_from) == _typestr_of(d_to)
+            except Exception:
+                return False
+        return (getattr(d_from, '_kind', None) == getattr(d_to, '_kind', None)
+                and getattr(d_from, '_itemsize', -1) == getattr(d_to, '_itemsize', -1))
     if casting == 'unsafe':
+        # 结构化 → 非结构化：仅单字段链允许（字段可为简单类型/子数组/
+        # 单字段结构化；任一层多字段则不可）。
+        if getattr(d_from, '_names', None) and not getattr(d_to, '_names', None):
+            if not _single_field_chain(d_from):
+                return False
         return True
-    # 非数值类型（字符串/void/object/datetime 等）无通用提升规则，仅同名可转换
+    # 数值 → 固定宽字符串：按最大值的十进制位宽判定（numpy 语义）。
+    k_to = getattr(d_to, '_kind', '')
+    if k_to in ('S', 'U') and fn in _NUM_STR_WIDTH:
+        need_s, need_u = _NUM_STR_WIDTH[fn]
+        need = need_s if k_to == 'S' else need_u
+        width = (d_to._itemsize // 4) if k_to == 'U' else d_to._itemsize
+        return width >= need
+    # object 语义：仅 object ↔ object 可转换
+    k_from = getattr(d_from, '_kind', '')
+    if k_from == 'O' or k_to == 'O':
+        return k_from == 'O' and k_to == 'O'
+    # 结构化 ↔ 任何类型：safe/same_kind 均不允许（unsafe 已在上方处理）
+    if getattr(d_from, '_names', None) or getattr(d_to, '_names', None):
+        return False
+    # 非数值类型（字符串/void/datetime 等）无通用提升规则，仅同名可转换
     if fn not in _DT_INFO or tn not in _DT_INFO:
         return False
     prom = _promote2(fn, tn)
@@ -1842,8 +3336,43 @@ def can_cast(from_, to, casting='safe'):
         return prom == tn
     if prom == tn:
         return True
+    if casting == 'same_kind':
+        k1, k2 = _DT_INFO[fn][0], _DT_INFO[tn][0]
+        # signed → unsigned 不属于 same_kind（numpy 语义）
+        if k1 == 'i' and k2 == 'u':
+            return False
     group = {'b': 0, 'u': 1, 'i': 1, 'f': 2, 'c': 3}
     return group[_DT_INFO[fn][0]] <= group[_DT_INFO[tn][0]]
+
+
+# 数值 → 固定宽字符串所需最小宽度（S, U）：按最大值十进制位宽（含符号位），
+# numpy can_cast 语义（bool→S5 'False'/U4 'True'，int32→11，int64→21，
+# uint64→20 等）。
+_NUM_STR_WIDTH = {
+    'bool': (5, 4),
+    'int8': (4, 4), 'int16': (6, 6), 'int32': (11, 11), 'int64': (21, 21),
+    'uint8': (3, 3), 'uint16': (5, 5), 'uint32': (10, 10), 'uint64': (20, 20),
+}
+
+
+def _single_field_chain(dt):
+    """结构化 dtype 是否满足"单字段链"：仅一个字段，且该字段（或其子数组
+    基类型）递归满足同样条件。numpy 结构化→简单 unsafe cast 的判定。"""
+    names = getattr(dt, '_names', None)
+    if names is None:
+        return True
+    if builtins.len(names) != 1:
+        return False
+    fdt = dt._fields[names[0]][0]
+    if getattr(fdt, '_subdtype', None) is not None:
+        fdt = fdt._subdtype[0]
+    return _single_field_chain(fdt)
+
+
+def _typestr_of(dt):
+    """dtype 的 array-protocol typestr（含字节序前缀）。"""
+    from ._dtypes import _typestr
+    return _typestr(dt)
 
 
 def min_scalar_type(value):
@@ -1871,8 +3400,21 @@ def min_scalar_type(value):
 
 
 def common_type(*arrays):
-    """返回若干数组的公共（浮点/复数）标量类型。"""
+    """返回若干数组的公共（浮点/复数）标量类型。
+
+    gh-30890：传入 dtype 对象或标量类型类 → 明确的 TypeError（提示用
+    np.result_type / np.promote_types）。
+    """
     np = _np()
+    for a in arrays:
+        if isinstance(a, type) and issubclass(a, np.generic):
+            raise TypeError(
+                "passing a scalar type to np.common_type is not supported; "
+                "use np.result_type or np.promote_types")
+        if builtins.type(a).__name__ == 'DType' and hasattr(a, 'kind'):
+            raise TypeError(
+                "passing a dtype object to np.common_type is not supported; "
+                "use np.result_type or np.promote_types")
     has_complex = False
     prec = 4
     for a in arrays:
@@ -1892,6 +3434,10 @@ def common_type(*arrays):
 
 def isdtype(dtype, kind):
     """判断 dtype 是否属于指定类别（Array API）。"""
+    # numpy 2.x 语义：首参必须是 dtype 实例或标量类型（不允许裸 str）
+    if isinstance(dtype, str):
+        raise TypeError(
+            "isdtype's first argument must be a rsnumpy dtype, not a string")
     n = _canon_dt_type(dtype)
     k = _DT_INFO[n][0]
 
@@ -1908,6 +3454,16 @@ def isdtype(dtype, kind):
             }
             if kk in table:
                 return table[kk]
+            # str 必须是已知 kind 名（dtype 名如 "int64" 非法）
+            raise ValueError(f"'{kk}' is not a known kind name")
+        # 纯 Python 数值（int/float/bool/complex 值）不是合法 kind
+        if type(kk) in (int, float, bool, complex):
+            raise TypeError(
+                "kind argument must be a dtype, a dtype class, or a kind name")
+        # np.dtypes abstract 类（IntegerAbstractDType 等）：按 kind 字符集合判定
+        ks = getattr(kk, '_kind_set', None)
+        if isinstance(ks, frozenset):
+            return k in ks
         return _canon_dt_type(kk) == n
 
     if isinstance(kind, (tuple, list)):
@@ -2071,37 +3627,222 @@ def format_float_scientific(x, precision=None, unique=True, trim='k', sign=False
 
 
 # ========== 浮点错误状态 ==========
-_ERRSTATE = {'divide': 'warn', 'over': 'warn', 'under': 'ignore', 'invalid': 'warn'}
-_ERRCALL = [None]
+# numpy 2.x 语义：状态存于 contextvars —— 每个 asyncio Task / 线程有独立
+# 上下文副本，errstate 的 set/reset 经 token 恢复，天然并发安全（官方
+# test_asyncio_safe 依赖此语义：交叉的上下文互不破坏）。
+import contextvars as _contextvars
+
+_ERR_DEFAULT = {'divide': 'warn', 'over': 'warn', 'under': 'ignore',
+                'invalid': 'warn'}
+_err_state_ctx = _contextvars.ContextVar('rsnumpy_errstate', default=None)
+_err_call_ctx = _contextvars.ContextVar('rsnumpy_errcall', default=None)
 _BUFSIZE = [8192]
+_ERR_MODES = ('ignore', 'warn', 'raise', 'call', 'print')
+_NO_CALL = object()
+
+
+def _fp_flat(vals):
+    """把 tolist 的嵌套列表展平为扁平序列。"""
+    def rec(x):
+        if isinstance(x, (list, tuple)):
+            for v in x:
+                yield from rec(v)
+        else:
+            yield x
+    yield from rec(vals)
+
+
+def _current_errstate():
+    """当前上下文的浮点错误状态（未设置时为默认值）。"""
+    st = _err_state_ctx.get()
+    return dict(st) if st is not None else dict(_ERR_DEFAULT)
+
+
+def _fp_fire(kind, msg):
+    """按当前 errstate 处理一次浮点错误事件（numpy 语义）。"""
+    state = _err_state_ctx.get()
+    mode = (state or _ERR_DEFAULT).get(kind, 'warn')
+    if mode == 'ignore':
+        return
+    if mode == 'raise':
+        raise FloatingPointError(msg)
+    if mode == 'call':
+        cb = _err_call_ctx.get()
+        if cb is not None:
+            cb(msg)
+        return
+    if mode == 'warn':
+        import warnings as _warnings
+        _warnings.warn(msg, RuntimeWarning, stacklevel=4)
+    elif mode == 'print':
+        print(msg)
+
+
+def _fp_divide_check(num, den, res, op='true_divide'):
+    """true_divide 的 errstate 触发（numpy 语义）：除零 → 'divide'，
+    0/0 → 'invalid'。仅当存在非 ignore 模式时扫描，避免常态开销。"""
+    st = _err_state_ctx.get()
+    eff = st or _ERR_DEFAULT
+    if (eff.get('divide', 'warn') == 'ignore'
+            and eff.get('invalid', 'warn') == 'ignore'):
+        return
+    try:
+        def _flat(x):
+            if isinstance(x, (list, tuple)):
+                out = []
+                for e in x:
+                    out.extend(_flat(e))
+                return out
+            if hasattr(x, 'ravel'):
+                v = x.ravel().tolist()
+                return v if isinstance(v, list) else [v]
+            return [x]
+        den_flat = _flat(den)
+        if not builtins.any(v == 0 for v in den_flat):
+            return
+        for v in _flat(res):
+            if isinstance(v, float):
+                if _math.isinf(v):
+                    _fp_fire('divide', f'divide by zero encountered in {op}')
+                    return
+                if _math.isnan(v):
+                    _fp_fire('invalid', f'invalid value encountered in {op}')
+                    return
+    except (FloatingPointError, TypeError):
+        raise
+    except Exception:
+        pass
+
+
+def _fp_arith_check(num, oth, res, op):
+    """add/subtract/multiply 的 errstate 触发（numpy 语义）：
+    overflow（有限输入 → ±inf）与 invalid（inf-inf / 0*inf / inf+(-inf)）。"""
+    st = _err_state_ctx.get()
+    eff = st or _ERR_DEFAULT
+    if (eff.get('overflow', 'warn') == 'ignore'
+            and eff.get('invalid', 'warn') == 'ignore'
+            and eff.get('under', 'warn') == 'ignore'):
+        return
+    try:
+        _TINY64 = 2.2250738585072014e-308
+        def _flat(x):
+            if isinstance(x, (list, tuple)):
+                out = []
+                for e in x:
+                    out.extend(_flat(e))
+                return out
+            if hasattr(x, 'ravel'):
+                v = x.ravel().tolist()
+                return v if isinstance(v, list) else [v]
+            return [x]
+        na = _flat(num)
+        nb = _flat(oth)
+        if len(na) == 1 and len(nb) > 1:
+            na = na * len(nb)
+        elif len(nb) == 1 and len(na) > 1:
+            nb = nb * len(na)
+        n = min(len(na), len(nb))
+        ra = _flat(res)
+        if len(ra) == 1 and n > 1:
+            ra = ra * n
+        fired_ov = False
+        fired_inv = False
+        fired_un = False
+        for i in range(n):
+            a = na[i] if i < len(na) else 0
+            b = nb[i] if i < len(nb) else 0
+            r = ra[i] if i < len(ra) else 0
+            if not builtins.all(isinstance(v, float) for v in (a, b, r)):
+                continue
+            ai, bi, ri = _math.isinf(a), _math.isinf(b), _math.isinf(r)
+            if op == 'multiply':
+                if ri and not (ai or bi) and a != 0 and b != 0:
+                    if not fired_ov:
+                        _fp_fire('overflow', f'overflow encountered in {op}')
+                        fired_ov = True
+                    continue
+                if _math.isnan(r):
+                    if not fired_inv:
+                        _fp_fire('invalid', f'invalid value encountered in {op}')
+                        fired_inv = True
+                    continue
+                if ri and (ai or bi) and (a == 0 or b == 0):
+                    if not fired_inv:
+                        _fp_fire('invalid', f'invalid value encountered in {op}')
+                        fired_inv = True
+                    continue
+                # underflow：两个有限非零输入 → 结果为 0（完全下溢）
+                # 或次正规数（|r| < tiny）
+                if (not (ai or bi) and a != 0 and b != 0
+                        and not _math.isnan(r)
+                        and (r == 0 or builtins.abs(r) < _TINY64)):
+                    if not fired_un:
+                        _fp_fire('under', f'underflow encountered in {op}')
+                        fired_un = True
+                continue
+            # add / subtract：overflow = 有限输入 → ±inf
+            if op == 'add':
+                ov = (a > 0 and b > 0 and ri and r > 0) or \
+                     (a < 0 and b < 0 and ri and r < 0)
+            else:
+                ov = ((a > 0 and b < 0 and ri and r > 0)
+                      or (a < 0 and b > 0 and ri and r < 0))
+            if ov and not (ai or bi):
+                if not fired_ov:
+                    _fp_fire('overflow', f'overflow encountered in {op}')
+                    fired_ov = True
+            # invalid：inf - inf / inf + (-inf) → nan
+            if ai and bi and _math.isnan(r):
+                if not fired_inv:
+                    _fp_fire('invalid', f'invalid value encountered in {op}')
+                    fired_inv = True
+    except (FloatingPointError, TypeError):
+        raise
+    except Exception:
+        pass
+
+
+def _check_err_mode(v, name=None):
+    """seterr 参数校验（numpy 语义：非字符串 → TypeError）。"""
+    if not isinstance(v, str):
+        raise TypeError(
+            "seterr: argument must be a string or None, got "
+            f"{type(v).__name__}")
+    if v not in _ERR_MODES:
+        raise ValueError(f"seterr: {name!r} is not a valid error mode")
 
 
 def geterr():
     """返回当前浮点错误处理状态。"""
-    return dict(_ERRSTATE)
+    return _current_errstate()
 
 
 def seterr(all=None, divide=None, over=None, under=None, invalid=None):
     """设置浮点错误处理状态，返回旧状态。"""
-    old = dict(_ERRSTATE)
+    old = _current_errstate()
+    new = dict(old)
     if all is not None:
-        for k in _ERRSTATE:
-            _ERRSTATE[k] = all
-    for k, v in {'divide': divide, 'over': over, 'under': under, 'invalid': invalid}.items():
+        _check_err_mode(all, 'all')
+        for k in new:
+            new[k] = all
+    for k, v in {'divide': divide, 'over': over, 'under': under,
+                 'invalid': invalid}.items():
         if v is not None:
-            _ERRSTATE[k] = v
+            _check_err_mode(v, k)
+            new[k] = v
+    _err_state_ctx.set(new)
     return old
 
 
 def geterrcall():
     """返回当前浮点错误回调。"""
-    return _ERRCALL[0]
+    return _err_call_ctx.get()
 
 
 def seterrcall(func):
     """设置浮点错误回调，返回旧回调。"""
-    old = _ERRCALL[0]
-    _ERRCALL[0] = func
+    old = _err_call_ctx.get()
+    _err_call_ctx.set(func)
     return old
 
 
@@ -2118,39 +3859,105 @@ def setbufsize(size):
 
 
 class errstate:
-    """临时修改浮点错误处理状态的上下文管理器。"""
+    """临时修改浮点错误处理状态的上下文管理器（可作装饰器，单次使用）。
 
-    def __init__(self, *, call=None, **kwargs):
+    numpy 2.x 语义：状态存于 contextvar（每个 Task/线程独立），退出经
+    token 恢复到进入前的状态；实例不可重复进入。
+    """
+
+    def __init__(self, *, call=_NO_CALL, **kwargs):
         self._kw = kwargs
         self._call = call
-        self._saved = None
-        self._saved_call = None
+        self._token = None
+        self._call_token = None
+
+    def _make_extobj(self):
+        """当前状态与本上下文设置合并为新状态（all 优先，逐键覆盖）。"""
+        st = _current_errstate()
+        if 'all' in self._kw:
+            _check_err_mode(self._kw['all'], 'all')
+            for k in st:
+                st[k] = self._kw['all']
+        for k in ('divide', 'over', 'under', 'invalid'):
+            if k in self._kw:
+                _check_err_mode(self._kw[k], k)
+                st[k] = self._kw[k]
+        return st
 
     def __enter__(self):
-        self._saved = seterr(**self._kw)
-        if self._call is not None:
-            self._saved_call = seterrcall(self._call)
-        return None
+        if self._token is not None:
+            raise TypeError("Cannot enter `np.errstate` twice")
+        self._token = _err_state_ctx.set(self._make_extobj())
+        if self._call is not _NO_CALL:
+            self._call_token = _err_call_ctx.set(self._call)
+        return self
 
     def __exit__(self, *exc):
-        seterr(**self._saved)
-        if self._call is not None:
-            seterrcall(self._saved_call)
+        if self._token is not None:
+            _err_state_ctx.reset(self._token)
+        if self._call_token is not None:
+            _err_call_ctx.reset(self._call_token)
         return False
+
+    def __call__(self, function):
+        """装饰器用法：每次调用独立 enter/exit（可重复调用，asyncio 安全）。"""
+        if not callable(function):
+            raise TypeError("errstate can only decorate callable objects")
+        import functools
+
+        @functools.wraps(function)
+        def wrapper(*args, **kwargs):
+            token = _err_state_ctx.set(self._make_extobj())
+            call_token = None
+            if self._call is not _NO_CALL:
+                call_token = _err_call_ctx.set(self._call)
+            try:
+                return function(*args, **kwargs)
+            finally:
+                _err_state_ctx.reset(token)
+                if call_token is not None:
+                    _err_call_ctx.reset(call_token)
+        return wrapper
 
 
 # ========== 解析 / IO ==========
-def fromstring(string, dtype=float, count=-1, sep=''):
-    """从文本字符串解析一维数组。"""
+_CPX_NUM = r'(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?'
+_CPX_STRICT_RE = _re.compile(
+    r'^[+-]?' + _CPX_NUM + r'$'
+    r'|^[+-]?' + _CPX_NUM + r'j$'
+    r'|^[+-]?' + _CPX_NUM + r'[+-]' + _CPX_NUM + r'j$')
+
+
+def fromstring(string, dtype=float, count=-1, sep='', *, like=None):
+    """从文本字符串解析一维数组（numpy 语义：空 token/非法 token → ValueError）。"""
+    _ = like
     np = _np()
     if sep == '':
         raise ValueError("fromstring() with binary data is not supported")
     if sep == ' ':
         parts = string.split()
     else:
+        # 不过滤空 token：连续分隔符/纯分隔符 → float('') 自然 ValueError
         parts = [p.strip() for p in string.split(sep)]
-        parts = [p for p in parts if p != '']
-    vals = [float(p) for p in parts]
+    _dt_str = str(dtype) if dtype is not None else ''
+    _is_cpx = (_dt_str.startswith('complex')
+               or _dt_str in ('c8', 'c16', 'c', 'cdouble', 'csingle')
+               or dtype in (builtins.complex, np.complex64, np.complex128))
+    if _is_cpx:
+        # numpy 严格文本复数文法（Python complex() 过宽：容忍 '1+j' 等）：
+        # 纯实数 | 实数j | 实数±实数j；token 内不允许空白。
+        def _cpx_tok(p):
+            for ch in p:
+                if ch.isspace():
+                    raise ValueError(
+                        "whitespace in complex number: %r" % p)
+            if not _CPX_STRICT_RE.match(p):
+                raise ValueError(
+                    "malformed complex number: %r" % p)
+            return builtins.complex(p)
+        vals = [_cpx_tok(p) for p in parts]
+    else:
+        vals = [builtins.float(p) for p in parts]
     if count >= 0:
         vals = vals[:count]
     arr = np.array(vals)
@@ -2163,9 +3970,9 @@ def savez_compressed(file, *args, **kwds):
 
 
 # ========== 由 Python 函数构造 ufunc / 向量化 ==========
-def frompyfunc(func, nin, nout, *, identity=None):
+def frompyfunc(func, nin, nout, *, kwargs=None):
     """将任意 Python 函数封装为逐元素的 ufunc 风格可调用对象。"""
-    _ = identity
+    _ = kwargs
     np = _np()
 
     def wrapper(*args):
@@ -2296,7 +4103,7 @@ class vectorize:
 
         arrs = [_asarray(a) for a in args]
 
-        # 排除excluded参数（不参与广播）
+        # 排除excluded参数（不参与广播，按原值传入 pyfunc）
         excluded_indices = set()
         excluded_values = {}
         if self.excluded:
@@ -2307,11 +4114,14 @@ class vectorize:
                     excluded_values[ex] = kwargs.pop(ex)
 
         # 参与广播的参数
-        active_arrs = [arrs[i] for i in range(len(arrs)) if i not in excluded_indices]
+        active_idx = [i for i in range(len(arrs)) if i not in excluded_indices]
+        active_arrs = [arrs[i] for i in active_idx]
 
         if not active_arrs:
-            # 所有参数都被排除
-            return self.pyfunc(**kwargs, **excluded_values)
+            # 所有参数都被排除：按原样调用
+            _kw = {**excluded_values, **kwargs}
+            return self.pyfunc(*[args[i] for i in range(len(args))
+                                 if i in excluded_indices], **_kw)
 
         # 广播所有输入数组到相同形状
         shp = broadcast_shapes(*[a.shape for a in active_arrs])
@@ -2323,8 +4133,20 @@ class vectorize:
         pyfunc = self.pyfunc
         kwargs_copy = kwargs.copy()
 
-        # 【核心性能优化】使用列表推导 + 预绑定
-        if len(flats) == 1:
+        if excluded_indices:
+            # 有排除的位置参数：逐元素按原位置重组（排除位传原值）
+            def _mkargs(i):
+                out_a = []
+                ai = 0
+                for k in range(len(args)):
+                    if k in excluded_indices:
+                        out_a.append(args[k])
+                    else:
+                        out_a.append(flats[ai][i])
+                        ai += 1
+                return out_a
+            res = [pyfunc(*_mkargs(i), **kwargs_copy) for i in range(n)]
+        elif len(flats) == 1:
             # 单参数快速路径
             flat0 = flats[0]
             res = [pyfunc(flat0[i], **kwargs_copy) for i in range(n)]
@@ -2692,9 +4514,9 @@ def einsum(subscripts, *operands, **kwargs):
                                 self._arr[i, j, j] = value
                 else:
                     raise NotImplementedError('Complex slice assignment not supported')
-        
+
         return _DiagView(arr, result)
-    
+
     if subscripts == 'ijj->ij,':
         arr = _asarray(operands[0])
         n, m, _ = arr.shape
@@ -4241,3 +6063,20 @@ __all__ = [
     "var_string_array", "bigint_array",
     "detect_integer_overflow", "smart_int_array",
 ]
+
+
+# ---- TestTextSignatures 兼容：numpy 2.x 风格 __text_signature__ 声明 ----
+fromstring.__text_signature__ = (
+    "(string, dtype='float64', count=-1, sep='', *, like=None)")
+frompyfunc.__text_signature__ = "(func, nin, nout, *, kwargs=None)"
+datetime_data.__text_signature__ = "(dtype,)"
+promote_types.__text_signature__ = "(type1, type2)"
+
+
+# ---- 多项式旧 API：完整移植版覆盖上方薄实现（语义与 numpy 2.x 一致，
+# 实现见 polynomial/_npcompat.py：poly1d 对齐排版/pq 元组/polyfit cov/
+# roots dtype 保持等）。此处 re-import 使模块属性指向新实现，
+# __init__.py 的 __all__ 挂载循环随之导出新版本。 ----
+from .polynomial._npcompat import (  # noqa: E402,F401
+    poly, roots, polyint, polyder, polyval, polyadd,
+    polysub, polymul, polydiv, poly1d)

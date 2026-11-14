@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 //! 线程池控制模块 - 真正的 rayon 线程池管理
 //!
 //! 【设计要点】

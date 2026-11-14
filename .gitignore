@@ -51,9 +51,11 @@ test2*.py
 map*.jpeg
 bench_extra.py
 debug/
+debug_test/
 *.png
 runtest_matplotlib.py
-
+tests/debug_report.log
+tests/all_report.log
 # Environment
 .venv
 .env

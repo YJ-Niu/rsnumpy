@@ -1,4 +1,8 @@
+# SPDX-License-Identifier: MIT
 """数学函数模块 - 所有实现位于 Rust，这里仅保留薄包装。"""
+
+import builtins
+import operator as _pyop
 
 import rsnumpy.num_core as _core
 
@@ -136,9 +140,46 @@ def log1p(x):
 
 # ========== 舍入函数 ==========
 def around(a, decimals=0):
-    """四舍五入到指定小数位（使用 Rust round）。"""
+    """四舍六入五成双（numpy 语义：rint(x*10^d)/10^d 的 half-even）。
+
+    与 Python round 的十进制正确舍入算法不同：6.35*10 恰好二进制舍入到
+    63.5 → rint half-even → 64 → 6.4（numpy 行为）。
+    """
+    import builtins as _b
     arr = a if hasattr(a, '_array') else _nd()(a)
-    return arr.round(decimals)
+    _dt = str(getattr(arr, '_dtype', 'float64'))
+    if _dt in ('int8', 'int16', 'int32', 'int64', 'uint8', 'uint16',
+               'uint32', 'uint64', 'bool') and decimals >= 0:
+        # numpy 语义：整数数组 decimals>=0 时 around 为无操作
+        return arr.copy()
+
+    def _rnd(v):
+        if decimals >= 0:
+            _f = 10 ** decimals
+            return _b.round(v * _f) / _f
+        _f = 10 ** (-decimals)
+        return _b.round(v / _f) * _f
+
+    def _rec(x):
+        out = []
+        for v in x:
+            if isinstance(v, list):
+                out.append(_rec(v))
+            else:
+                out.append(_rnd(v))
+        return out
+
+    try:
+        tl = arr.tolist()
+        if not isinstance(tl, list):
+            tl = [tl]
+        res = _nd()(_rec(tl))
+        if getattr(arr, 'ndim', 0) == 0:
+            res = res.reshape(())
+            return res.astype(_dt) if _dt != 'float64' else res
+        return res.astype(_dt) if _dt != 'float64' else res
+    except Exception:
+        return arr.round(decimals)
 
 
 def floor(x):
@@ -156,15 +197,52 @@ def trunc(x):
     return _wrap(_core.trunc(_ensure_raw(x)))
 
 
-def fix(x):
-    """向零取整。"""
-    return _wrap(_core.fix(_ensure_raw(x)))
+def fix(x, out=None, **kwargs):
+    """向零取整（与 numpy 一致：已弃用，等价于 trunc/ceil）。"""
+    import warnings as _warnings
+    _warnings.warn(
+        "rsnumpy.fix is deprecated: use rsnumpy.trunc/ceil instead",
+        DeprecationWarning, stacklevel=2)
+    np = _nd()
+    raw = _core.fix(_ensure_raw(x))
+    if hasattr(x, '_array'):
+        res = _wrap(raw)
+        # ufunc 子类保持：经输入对象的 __array_wrap__ 包装（numpy 语义）。
+        # 注意 _nd() 返回的就是 ndarray 类本身。
+        if type(x) is not np and hasattr(type(x), '__array_wrap__'):
+            res = x.__array_wrap__(res, context=None, return_scalar=False)
+        if out is not None:
+            out[...] = res
+            return out
+        return res
+    # 标量输入返回 float64 标量（numpy 语义），不衰减为 ndarray。
+    from .__init__ import float64 as _float64
+    val = float(raw.tolist())
+    if out is not None:
+        out[...] = val
+        return out
+    return _float64(val)
 
 
 # ========== 特殊函数 ==========
+def _sqrt_has_negative(x):
+    try:
+        from ._extra import _fp_flat
+        if hasattr(x, '_array'):
+            return builtins.any(v < 0 for v in _fp_flat(x.tolist()))
+        return x < 0
+    except Exception:
+        return False
+
+
 def sqrt(x):
-    """计算平方根。"""
-    return _wrap(_core.sqrt(_ensure_raw(x)))
+    """计算平方根（负数输入按 errstate 触发 invalid 浮点错误事件）。"""
+    raw = _ensure_raw(x)
+    res = _wrap(_core.sqrt(raw))
+    if _sqrt_has_negative(x):
+        from ._extra import _fp_fire
+        _fp_fire('invalid', "invalid value encountered in sqrt")
+    return res
 
 
 def square(x):
@@ -177,13 +255,25 @@ def cbrt(x):
     return _wrap(_core.cbrt(_ensure_raw(x)))
 
 
-def absolute(x):
+def absolute(x, out=None):
     """计算绝对值。"""
     import builtins
     if isinstance(x, complex):
         from .__init__ import ndarray
-        return ndarray([builtins.abs(x)])
-    return _wrap(_core.abs(_ensure_raw(x)))
+        res = ndarray([builtins.abs(x)])
+    # numpy 语义:bool 数组的 abs 保持 bool(恒等映射);float 化后
+    # 位运算会失真(~0.0f 按位翻转 = -1.0)。
+    elif getattr(x, '_dtype', None) == 'bool':
+        res = x.copy()
+    else:
+        res = _wrap(_core.abs(_ensure_raw(x)))
+    if out is not None:
+        try:
+            out[...] = res
+            return out
+        except Exception:
+            pass
+    return res
 
 
 abs = absolute
@@ -210,24 +300,88 @@ def heaviside(x, h0=0.5):
 
 
 # ========== 算术运算 ==========
-def add(x1, x2):
-    """逐元素加法。"""
-    return _wrap(_core.add(_ensure_raw(x1), _ensure_raw(x2)))
+def add(x1, x2, out=None, **kwargs):
+    """逐元素加法。NEP50：Python 弱标量不提升结果 dtype（uint8+3→uint8）；
+    str 标量按 np.copyto 同款宽松转换（无法解析按 0），使 ufunc 与
+    copyto 的 casting 行为一致（casting 关键字接受但不参与弱标量判定）。"""
+    kwargs.pop('casting', None)
+    # 字符串数组 + 字符串数组/标量 = 逐元素连接（numpy 语义）；结果超
+    # intc max → TypeError（large_string_addition 回归）
+    if getattr(x1, '_str_dtype', None) is not None:
+        from rsnumpy import char as _char_add
+        res = _char_add.add(x1, x2)
+        if out is not None:
+            try:
+                out[...] = res
+            except Exception:
+                pass
+            return out
+        return res
+    if (hasattr(x1, '_array')
+            and isinstance(x2, (builtins.int, builtins.float,
+                                builtins.complex, builtins.str))):
+        dt = getattr(x1, '_dtype', 'float64')
+        if isinstance(x2, builtins.str):
+            # copyto 语义：无法解析的字符串标量按 0 参与数值运算
+            try:
+                x2v = builtins.float(x2)
+            except ValueError:
+                x2v = 0.0
+            if dt == 'string_':
+                res = x1.copy()
+            else:
+                res = x1 + x2v
+        else:
+            res = x1 + x2
+        if out is not None:
+            try:
+                out[...] = res
+            except Exception:
+                pass
+            return out
+        return res
+    res = _wrap(_core.add(_ensure_raw(x1), _ensure_raw(x2)))
+    if out is not None:
+        try:
+            out[...] = res
+        except Exception:
+            pass
+    return res
 
 
-def subtract(x1, x2):
+def subtract(x1, x2, out=None, **kwargs):
     """逐元素减法。"""
-    return _wrap(_core.subtract(_ensure_raw(x1), _ensure_raw(x2)))
+    res = _wrap(_core.subtract(_ensure_raw(x1), _ensure_raw(x2)))
+    if out is not None:
+        try:
+            out[...] = res
+        except Exception:
+            pass
+    return res
 
 
-def multiply(x1, x2):
+def multiply(x1, x2, out=None, **kwargs):
     """逐元素乘法。"""
-    return _wrap(_core.multiply(_ensure_raw(x1), _ensure_raw(x2)))
+    res = _wrap(_core.multiply(_ensure_raw(x1), _ensure_raw(x2)))
+    if out is not None:
+        try:
+            out[...] = res
+        except Exception:
+            pass
+    return res
 
 
-def divide(x1, x2):
+def divide(x1, x2, out=None, **kwargs):
     """逐元素除法。"""
-    return _wrap(_core.divide(_ensure_raw(x1), _ensure_raw(x2)))
+    res = _wrap(_core.divide(_ensure_raw(x1), _ensure_raw(x2)))
+    from . import _extra as _ex
+    _ex._fp_divide_check(x1, x2, res, 'true_divide')
+    if out is not None:
+        try:
+            out[...] = res
+        except Exception:
+            pass
+    return res
 
 
 _INT_BITS = {
@@ -286,59 +440,370 @@ remainder = mod  # mod 的别名
 
 
 # ========== 比较运算 ==========
-def greater(x1, x2):
+def _str_kind_of(x):
+    """字符串数组种类（'S'/'U'）；非字符串返回 None。"""
+    dt = getattr(x, 'dtype', None)
+    k = getattr(dt, 'kind', None)
+    if k in ('S', 'U'):
+        return k
+    d = str(getattr(x, '_dtype', '') or '')
+    return d.lstrip('<>=|')[:1] if d.lstrip('<>=|')[:1] in ('S', 'U') else None
+
+
+def _string_cmp(opname, py_op, core_fn, x1, x2, signature=None, casting=None):
+    """字符串数组比较的 numpy ufunc 语义：
+
+    - 同种类（S/S 或 U/U）：底层是 f64 占位，须按原始 Python 值逐元素比较；
+    - 混合 S/U：无匹配 loop → _UFuncNoLoopError（TypeError，消息含
+      "did not contain a loop"）；显式 signature + casting='unsafe' 时
+      先把双方 cast 到目标种类再比较（numpy 语义）。
+    """
+    k1 = _str_kind_of(x1)
+    k2 = _str_kind_of(x2)
+    if not (k1 in ('S', 'U') and k2 in ('S', 'U')):
+        return _wrap_bool(core_fn(_ensure_raw(x1), _ensure_raw(x2)))
+    if k1 != k2:
+        from rsnumpy._core._exceptions import _UFuncNoLoopError
+        if signature is None or casting != 'unsafe':
+            raise _UFuncNoLoopError(
+                f"'{opname}' ufunc did not contain a loop with signature "
+                f"matching types (dtype('{x1.dtype}'), dtype('{x2.dtype}')).")
+        _tgt = str(signature).lstrip('<>=|')[:1]
+        x1 = x1.astype(_tgt)
+        x2 = x2.astype(_tgt)
+    from rsnumpy import _flatten_vals
+    from rsnumpy import char as _char
+    a = (x1._raw_data if getattr(x1, '_raw_data', None) is not None
+         else x1.tolist())
+    b = (x2._raw_data if getattr(x2, '_raw_data', None) is not None
+         else x2.tolist())
+    flat_a = _flatten_vals(a)
+    flat_b = _flatten_vals(b)
+    sh_a = tuple(getattr(x1, 'shape', ()))
+    sh_b = tuple(getattr(x2, 'shape', ()))
+    bshape = _char._bc_shapes([sh_a, sh_b])
+    res = [py_op(_char._bc_get(flat_a, sh_a, idx),
+                 _char._bc_get(flat_b, sh_b, idx))
+           for idx in _char._iter_indices(bshape)]
+    out = _nd()(res)
+    out._dtype = 'bool'
+    return out.reshape(bshape)
+
+
+def greater(x1, x2, signature=None, casting=None):
     """逐元素大于比较。"""
-    return _wrap_bool(_core.greater(_ensure_raw(x1), _ensure_raw(x2)))
+    return _string_cmp('greater', _pyop.gt, _core.greater, x1, x2,
+                       signature, casting)
 
 
-def less(x1, x2):
+def less(x1, x2, signature=None, casting=None):
     """逐元素小于比较。"""
-    return _wrap_bool(_core.less(_ensure_raw(x1), _ensure_raw(x2)))
+    return _string_cmp('less', _pyop.lt, _core.less, x1, x2,
+                       signature, casting)
 
 
-def equal(x1, x2):
+def equal(x1, x2, signature=None, casting=None):
     """逐元素相等比较。"""
+    if _str_kind_of(x1) in ('S', 'U') and _str_kind_of(x2) in ('S', 'U'):
+        return _string_cmp('equal', _pyop.eq, _core.equal, x1, x2,
+                           signature, casting)
+    # object dtype：Rust 层对 object 占位失真，逐元素 Python ==
+    _a1 = x1 if hasattr(x1, '_array') else None
+    if _a1 is not None and getattr(_a1, '_dtype', None) == 'object':
+        from rsnumpy import _flatten_vals
+        flat = (_a1.flatten().tolist() if getattr(_a1, '_raw_data', None) is None
+                else _flatten_vals(_a1._raw_data))
+        if hasattr(x2, '_array') and getattr(x2, 'ndim', 0) == 0:
+            x2 = x2.item()
+        if hasattr(x2, '_array') and getattr(x2, '_dtype', None) == 'object':
+            flat2 = (x2.flatten().tolist()
+                     if getattr(x2, '_raw_data', None) is None
+                     else _flatten_vals(x2._raw_data))
+            flat_r = ([a == b for a, b in zip(flat, flat2)]
+                      if len(flat) == len(flat2) else [False] * len(flat))
+        else:
+            flat_r = [a == x2 for a in flat]
+        res = _nd()._wrap(_nd()(flat_r), _dtype='bool')
+        return res.reshape(_a1.shape)
     return _wrap_bool(_core.equal(_ensure_raw(x1), _ensure_raw(x2)))
 
 
-def not_equal(x1, x2):
+def not_equal(x1, x2, signature=None, casting=None):
     """逐元素不相等比较。"""
-    return _wrap_bool(_core.not_equal(_ensure_raw(x1), _ensure_raw(x2)))
+    return _string_cmp('not_equal', _pyop.ne, _core.not_equal, x1, x2,
+                       signature, casting)
 
 
-def greater_equal(x1, x2):
+def greater_equal(x1, x2, signature=None, casting=None):
     """逐元素大于等于比较。"""
-    return _wrap_bool(_core.greater_equal(_ensure_raw(x1), _ensure_raw(x2)))
+    return _string_cmp('greater_equal', _pyop.ge, _core.greater_equal, x1, x2,
+                       signature, casting)
 
 
-def less_equal(x1, x2):
+def less_equal(x1, x2, signature=None, casting=None):
     """逐元素小于等于比较。"""
-    return _wrap_bool(_core.less_equal(_ensure_raw(x1), _ensure_raw(x2)))
+    return _string_cmp('less_equal', _pyop.le, _core.less_equal, x1, x2,
+                       signature, casting)
 
 
-def logical_and(x1, x2):
+def logical_and(x1, x2, out=None, **kwargs):
     """逐元素逻辑与。"""
-    return _wrap_bool(_core.logical_and(_ensure_raw(x1), _ensure_raw(x2)))
+    res = _wrap_bool(_core.logical_and(_ensure_raw(x1), _ensure_raw(x2)))
+    if out is not None:
+        try:
+            out[...] = res
+        except Exception:
+            pass
+    return res
 
 
-def logical_or(x1, x2):
+def logical_or(x1, x2, out=None, **kwargs):
     """逐元素逻辑或。"""
-    return _wrap_bool(_core.logical_or(_ensure_raw(x1), _ensure_raw(x2)))
+    res = _wrap_bool(_core.logical_or(_ensure_raw(x1), _ensure_raw(x2)))
+    if out is not None:
+        try:
+            out[...] = res
+        except Exception:
+            pass
+    return res
 
 
-def logical_xor(x1, x2):
+def logical_xor(x1, x2, out=None, **kwargs):
     """逐元素逻辑异或。"""
-    return _wrap_bool(_core.logical_xor(_ensure_raw(x1), _ensure_raw(x2)))
+    res = _wrap_bool(_core.logical_xor(_ensure_raw(x1), _ensure_raw(x2)))
+    if out is not None:
+        try:
+            out[...] = res
+        except Exception:
+            pass
+    return res
 
 
-def isclose(a, b, rtol=1e-05, atol=1e-08):
-    """逐元素判断是否接近。"""
-    return _wrap_bool(_core.isclose(_ensure_raw(a), _ensure_raw(b), rtol, atol))
+def _isclose_arrays(arr_a, arr_b, rtol, atol, equal_nan):
+    """isclose 的数值核心（numpy 语义，Python 逐元素实现）。
+
+    底层 Rust 数组比较对非有限值有缺口（inf==inf → False、
+    nan != nan → False），故展平后用 Python 原生浮点语义逐元素判断：
+    两者皆有限 → |a-b| <= atol + rtol*|b|；非有限 → 仅 a == b 时 True；
+    双 NaN → equal_nan。atol/rtol 支持 list/tuple 数组。
+    形状不可广播 → ValueError（numpy 语义，避免直达 Rust panic）。
+    """
+    import math as _m
+    nd = _nd()
+
+    def _fin(x):
+        # 复数元素：math.isfinite 不接受 complex → 实/虚部分别判
+        if isinstance(x, builtins.complex):
+            return _m.isfinite(x.real) and _m.isfinite(x.imag)
+        return _m.isfinite(x)
+
+    def _num(x):
+        if isinstance(x, (list, tuple)):
+            return nd(list(x))
+        return x
+
+    def _flat(x):
+        if not isinstance(x, (list, tuple)):
+            # 0-d 数组 tolist() 返回标量
+            return [x]
+        o = []
+        for v in x:
+            if isinstance(v, list):
+                o.extend(_flat(v))
+            else:
+                o.append(v)
+        return o
+
+    _rt, _at = _num(rtol), _num(atol)
+    # 广播前置校验（形状不匹配 → ValueError）
+    try:
+        _sa = builtins.tuple(arr_a.shape)
+    except Exception:
+        _sa = ()
+    for _x in (arr_b, _at, _rt):
+        try:
+            _sx = builtins.tuple(_x.shape)
+        except Exception:
+            _sx = ()
+        for _da, _db in zip(builtins.reversed(_sa), builtins.reversed(_sx)):
+            if _da != _db and _da != 1 and _db != 1:
+                raise ValueError(
+                    "operands could not be broadcast together with shapes "
+                    f"{_sa} {_sx}")
+    # 0-d 数组提升为 1-d：Rust 广播对 0-d 参与运算会静默降维
+    # （0d - (3,) → 0-d），先 reshape 成 (1,) 让 (1,) 广播语义生效
+    if getattr(arr_a, 'shape', None) == () and hasattr(arr_a, 'reshape'):
+        arr_a = arr_a.reshape((1,))
+    if getattr(arr_b, 'shape', None) == () and hasattr(arr_b, 'reshape'):
+        arr_b = arr_b.reshape((1,))
+    # 全 Python 广播 + 逐元素计算：Rust 广播算术对 (1,) vs (N,) 也会
+    # 静默产出 size-1 结果，不可信
+
+    def _shp(x):
+        try:
+            return builtins.tuple(x.shape)
+        except Exception:
+            return ()
+
+    _sa, _sb = _shp(arr_a), _shp(arr_b)
+    _at_is_arr = hasattr(_at, 'shape')
+    _rt_is_arr = hasattr(_rt, 'shape')
+    _st = _shp(_at) if _at_is_arr else ()
+    _sr = _shp(_rt) if _rt_is_arr else ()
+    _ndim = builtins.max(len(_sa), len(_sb), len(_st), len(_sr))
+    _out_shape = []
+    for _d in range(_ndim):
+        _dims = []
+        for _s in (_sa, _sb, _st, _sr):
+            _l = len(_s)
+            _dims.append(_s[_l - _ndim + _d] if _d >= _ndim - _l else 1)
+        _mx = builtins.max(_dims)
+        if builtins.any(x != 1 and x != _mx for x in _dims):
+            raise ValueError(
+                "operands could not be broadcast together with shapes "
+                f"{_sa} {_sb} {_st} {_sr}")
+        _out_shape.append(_mx)
+    _total = 1
+    for _s in _out_shape:
+        _total *= _s
+
+    def _bcast(flat, shp):
+        """把 flat 值按 shp 广播到 _out_shape，返回展平列表。"""
+        shp = (1,) * (_ndim - len(shp)) + tuple(shp)
+        _strides = [1] * _ndim
+        for _i in range(_ndim - 2, -1, -1):
+            _strides[_i] = _strides[_i + 1] * _out_shape[_i + 1]
+        _ost = [0 if shp[_i] == 1 else _strides[_i] for _i in range(_ndim)]
+        _res = []
+        _idx = [0] * _ndim
+        for _ in range(_total):
+            _off = builtins.sum(_idx[_k] * _ost[_k] for _k in range(_ndim))
+            _res.append(flat[_off])
+            for _k in range(_ndim - 1, -1, -1):
+                _idx[_k] += 1
+                if _idx[_k] < _out_shape[_k]:
+                    break
+                _idx[_k] = 0
+        return _res
+
+    _bva = _bcast(_flat(arr_a.tolist()), _sa)
+    _bvb = _bcast(_flat(arr_b.tolist()), _sb)
+    _bat = _bcast(_flat(_at.tolist()), _st) if _at_is_arr else None
+    _brt = _bcast(_flat(_rt.tolist()), _sr) if _rt_is_arr else None
+    _out = []
+    for _i in range(_total):
+        _av, _bv = _bva[_i], _bvb[_i]
+        _atv = _bat[_i] if _bat is not None else atol
+        _rtv = _brt[_i] if _brt is not None else rtol
+        if _av != _av and _bv != _bv:
+            # 双 NaN
+            _out.append(builtins.bool(equal_nan))
+        elif _av == _bv:
+            # 相等值（含 inf==inf / -inf==-inf）恒 close
+            _out.append(True)
+        elif _fin(_av) and _fin(_bv):
+            _out.append(builtins.bool(abs(_av - _bv) <=
+                                      _atv + _rtv * abs(_bv)))
+        else:
+            # 非有限对（inf/-inf 不相等）→ False
+            _out.append(False)
+    _shape = builtins.tuple(_out_shape)
+    res = nd([1.0 if v else 0.0 for v in _out])
+    if _shape:
+        res = res.reshape(_shape)
+    res._dtype = 'bool'
+    return res
 
 
-def allclose(a, b, rtol=1e-05, atol=1e-08):
-    """判断两个数组是否元素级接近。"""
-    return _core.allclose(_ensure_raw(a), _ensure_raw(b), rtol, atol)
+def isclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False):
+    """逐元素判断是否接近（numpy 语义，Python 层实现）。
+
+    |a-b| <= atol + rtol*|b|；相等值（含 inf==inf）恒 close；
+    NaN 默认 False，equal_nan=True 时同位 NaN 为 True。
+    标量输入返回 np.bool 标量单例（np.True_/np.False_）。
+    """
+    import math as _m
+    try:
+        if (not _m.isfinite(rtol) or rtol < 0 or
+                not _m.isfinite(atol) or atol < 0):
+            import warnings as _warn_is
+            _warn_is.warn(
+                f"One of rtol or atol is not valid, atol: {atol}, "
+                f"rtol: {rtol}", RuntimeWarning, stacklevel=3)
+    except (TypeError, ValueError):
+        pass
+    nd = _nd()
+    _a_arr = hasattr(a, '_array')
+    _b_arr = hasattr(b, '_array')
+    if not _a_arr and not _b_arr and \
+            not isinstance(a, (list, tuple)) and \
+            not isinstance(b, (list, tuple)):
+        # 标量 × 标量：纯 Python 计算（绕开 0-d 数组 item/bool 缺口），
+        # 返回 np.bool 标量单例（numpy 语义）
+        try:
+            _va, _vb = a, b
+            if isinstance(_va, builtins.bool) or isinstance(_vb, builtins.bool):
+                _va, _vb = builtins.bool(_va), builtins.bool(_vb)
+            else:
+                _va, _vb = builtins.complex(_va), builtins.complex(_vb)
+            if _va != _va and _vb != _vb:
+                _val = builtins.bool(equal_nan)
+            elif _va == _vb:
+                # 相等值（含 inf==inf / -inf==-inf）恒 close
+                _val = True
+            else:
+                # numpy 语义：非有限对（含 inf/-inf）仅在相等时 close
+                _va_f = builtins.bool(_va == _va and
+                                      abs(_va) != builtins.float('inf'))
+                _vb_f = builtins.bool(_vb == _vb and
+                                      abs(_vb) != builtins.float('inf'))
+                if _va_f and _vb_f:
+                    _val = builtins.bool(abs(_va - _vb) <=
+                                         atol + rtol * abs(_vb))
+                else:
+                    _val = False
+        except Exception:
+            _val = False
+        try:
+            from .__init__ import True_ as _t_one, False_ as _f_one
+        except Exception:
+            return _val
+        return _t_one if _val else _f_one
+    arr_a = a if _a_arr else nd(a)
+    arr_b = b if _b_arr else nd(b)
+    # NEP50 弱类型：f32/f16 数组与 Python float（type 精确匹配；float64/
+    # float32 标量为强类型不降级）比较 → float 降到数组精度
+    _dt_a = getattr(arr_a, '_dtype', '')
+    if _dt_a in ('float32', 'float16'):
+        try:
+            from .__init__ import _round_scalar_to_f
+            if not _b_arr and type(b) is float:
+                b = _round_scalar_to_f(_dt_a, b)
+                arr_b = nd(b)
+            if type(atol) is float:
+                atol = _round_scalar_to_f(_dt_a, atol)
+            if type(rtol) is float:
+                rtol = _round_scalar_to_f(_dt_a, rtol)
+        except Exception:
+            pass
+    res = _isclose_arrays(arr_a, arr_b, rtol, atol, equal_nan)
+    return res
+
+
+def allclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False, *args, **kwargs):
+    """判断两个数组是否全部元素级接近（numpy 语义）。
+
+    与 NumPy 对齐：``equal_nan=True`` 时同位置的 NaN 视为相等。
+    标量输入返回 Python bool。
+    """
+    _ = args, kwargs
+    res = isclose(a, b, rtol=rtol, atol=atol, equal_nan=equal_nan)
+    try:
+        if hasattr(res, 'all'):
+            return builtins.bool(res.all())
+        return builtins.bool(res)
+    except Exception:
+        return False
 
 
 # 反双曲函数别名

@@ -4,11 +4,14 @@ build-backend = "maturin"
 
 [project]
 name = "rsnumpy"
-version = "1.2.9"
+version = "1.2.10"
 requires-python = ">=3.10"
 description = "A Rust-powered NumPy-compatible array library."
 readme = "PYPI.md"
-license = { file = "LICENSE" }
+# PEP 639：license 表达式 + 随包分发的许可文件（NOTICE 声明 NumPy 测试
+# 代码的 BSD-3 归属，见仓库根目录 NOTICE）
+license = "MIT"
+license-files = ["LICENSE", "NOTICE"]
 authors = [
     { name = "YJ-Niu" },
 ]
@@ -21,14 +24,23 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: MacOS",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
     "Topic :: Scientific/Engineering :: Visualization",
 ]
+
+[tool.pytest.ini_options]
+# 钉 rootdir 到仓库根：缺此段时 pytest 不把 pyproject.toml 当 ini 文件，
+# rootdir 会向上漂移到盘符根（Windows CI 曾因此全盘收集）；无参运行只
+# 收集 tests/。norecursedirs 额外排除源码树：python/ 的包链
+# （python/rsnumpy[/testing[/tests]]）带完整 __init__.py，一旦被收集 pytest
+# 会把 python/ 插入 sys.path，import rsnumpy 会加载无 num_core 的源码树。
+testpaths = ["tests"]
+norecursedirs = ["python", "target", "wheelhouse", "dist", ".venv"]
 
 [tool.maturin]
 module-name = "rsnumpy.num_core"

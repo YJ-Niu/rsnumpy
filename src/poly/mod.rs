@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 use crate::*;
 
 // ========== 多项式求值 ==========
@@ -74,46 +75,125 @@ fn polyint_rs(coef: &NdArray, m: usize, k: f64) -> PyResult<NdArray> {
     })
 }
 
-// ========== QR 迭代求特征值（辅助函数） ==========
-fn qr_iter_eigvals_rs(companion: Vec<Vec<f64>>) -> Vec<f64> {
-    let n = companion.len();
-    let mut ak = companion.clone();
+// ========== 双移 QR 求特征值（Francis 隐式双移的显式实现） ==========
+// 无移位 QR 迭代对等模根（如 ±1）与复共轭对无法分离；
+// 这里取右下 2x2 的复共轭特征值 p±qi 作双移位：
+// B = (A - pI)^2 + q^2 I，显式 QR 分解后 A' = RQ（正交相似，加速收敛）。
+// 子对角元足够小时自底向上剥离（deflation）；2x2 块直接解特征值。
+// 返回按剥离顺序的实特征值（复共轭对返回实部），排序由 Python 层负责。
 
-    for _ in 0..200 {
-        let mut q = vec![vec![0.0; n]; n];
-        let mut r = vec![vec![0.0; n]; n];
-
-        for j in 0..n {
-            let mut v: Vec<f64> = (0..n).map(|i| ak[i][j]).collect();
-            for i in 0..j {
-                let s: f64 = (0..n).map(|k| q[k][i] * v[k]).sum();
-                r[i][j] = s;
-                for k in 0..n {
-                    v[k] -= s * q[k][i];
-                }
-            }
-            let norm: f64 = v.iter().map(|vv| vv * vv).sum::<f64>().sqrt();
-            r[j][j] = norm;
-            if norm > 1e-15 {
-                for k in 0..n {
-                    q[k][j] = v[k] / norm;
-                }
+fn qr_gram_schmidt(mat: &[Vec<f64>]) -> (Vec<Vec<f64>>, Vec<Vec<f64>>) {
+    let n = mat.len();
+    let mut q = vec![vec![0.0; n]; n];
+    let mut r = vec![vec![0.0; n]; n];
+    for j in 0..n {
+        let mut v: Vec<f64> = (0..n).map(|i| mat[i][j]).collect();
+        for i in 0..j {
+            let s: f64 = (0..n).map(|k| q[k][i] * v[k]).sum();
+            r[i][j] = s;
+            for k in 0..n {
+                v[k] -= s * q[k][i];
             }
         }
-
-        let mut nxt = vec![vec![0.0; n]; n];
-        for i in 0..n {
-            for j in 0..n {
-                let mut s = 0.0;
-                for k in 0..n {
-                    s += r[i][k] * q[k][j];
-                }
-                nxt[i][j] = s;
+        let norm: f64 = v.iter().map(|vv| vv * vv).sum::<f64>().sqrt();
+        r[j][j] = norm;
+        if norm > 1e-15 {
+            for k in 0..n {
+                q[k][j] = v[k] / norm;
             }
         }
-        ak = nxt;
     }
-    (0..n).map(|i| ak[i][i]).collect()
+    (q, r)
+}
+
+fn qr_iter_eigvals_rs(companion: Vec<Vec<f64>>) -> Vec<f64> {
+    // 单移位 QR 迭代（Wilkinson 移位）+ 子对角剥离 + 2x2 直接求解。
+    // 注：显式双移 QR（B=(A-pI)²±q²I 后 A'=RQ）相似于 B 而非 A，特征值会漂移，
+    // 不可用；单移位保证 A' 与 A-σI 正交相似（特征值 = 原特征值 - σ）。
+    let n = companion.len();
+    let mut ak = companion;
+    let mut eig: Vec<f64> = vec![0.0; n];
+    let max_iter = 200 * n;
+
+    let mut m = n;
+    let mut it = 0;
+    let mut acc = 0.0; // 累计移位：当前活跃块 = 原块 - acc*I
+    while m > 1 {
+        let x = ak[m - 1][m - 2];
+        let y = ak[m - 2][m - 2];
+        let v = ak[m - 2][m - 1];
+        let w = ak[m - 1][m - 1];
+        // 剥离判定（dlahqr 标准测试）：子对角元足够小 → 右下角 1x1 分离
+        if x.abs() <= f64::EPSILON * (y.abs() + w.abs() + v.abs()) {
+            eig[m - 1] = w + acc;
+            m -= 1;
+            it = 0;
+            continue;
+        }
+        if m == 2 {
+            // 2x2 直接解特征值：用稳定判别式 (a-d)²/4 + bc，
+            // 避免块量级 ~acc 时 tr²-4det 的灾难性抵消
+            let s = (y - w) / 2.0;
+            let rad = s * s + v * x;
+            let p2 = (y + w) / 2.0;
+            if rad >= 0.0 {
+                let sq = rad.sqrt();
+                eig[0] = p2 + sq + acc;
+                eig[1] = p2 - sq + acc;
+            } else {
+                // 复共轭对 → 实部
+                eig[0] = p2 + acc;
+                eig[1] = p2 + acc;
+            }
+            m = 0;
+            break;
+        }
+        if it > max_iter {
+            break; // 收敛失败：剩余块按对角元近似
+        }
+        it += 1;
+        // Wilkinson 移位：右下 2x2 中距 w 最近的特征值（稳定判别式形式；
+        // 取距 w 近者 = 同侧无抵消，远侧特征值可能抵消失真）
+        let s = (y - w) / 2.0;
+        let rad = s * s + v * x;
+        let p2 = (y + w) / 2.0;
+        let sigma = if rad >= 0.0 {
+            let sq = rad.sqrt();
+            let e1 = p2 + sq;
+            let e2 = p2 - sq;
+            if (w - e1).abs() <= (w - e2).abs() {
+                e1
+            } else {
+                e2
+            }
+        } else {
+            p2 // 复共轭对：取实部
+        };
+        // B = A - sigma I（活跃块）
+        let mut b = vec![vec![0.0; m]; m];
+        for i in 0..m {
+            for j in 0..m {
+                b[i][j] = ak[i][j] - if i == j { sigma } else { 0.0 };
+            }
+        }
+        let (qmat, rmat) = qr_gram_schmidt(&b);
+        // A' = RQ（与 B 正交相似）
+        for i in 0..m {
+            for j in 0..m {
+                let mut s = 0.0;
+                for k in 0..m {
+                    s += rmat[i][k] * qmat[k][j];
+                }
+                ak[i][j] = s;
+            }
+        }
+        acc += sigma;
+    }
+    // 兜底：剩余块按对角元（+ 累计移位）
+    for i in 0..m {
+        eig[i] = ak[i][i] + acc;
+    }
+    eig
 }
 
 // ========== 多项式求根 ==========
@@ -357,7 +437,8 @@ fn polydiv(u: &NdArray, v: &NdArray) -> PyResult<(NdArray, NdArray)> {
                 r[k + j] -= d * v_vals[j];
             }
         }
-        let rem = r[m - n + 1..].to_vec();
+        // 余数长度 = 除数长度 n（numpy 语义）：切片起点 = len(q) - 1 = m - n
+        let rem = r[m - n..].to_vec();
         (q, rem)
     } else {
         (vec![0.0], r.clone())

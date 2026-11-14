@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Stride-based view helpers (a compatible subset of `numpy.lib.stride_tricks`).
 
 `rsnumpy` arrays always own one contiguous row-major buffer, so a true
@@ -60,9 +61,11 @@ def as_strided(x, shape=None, strides=None, subok=False, writeable=True):
 
     itemsize = int(x.itemsize)
     # Element-count steps; a stride that is not a whole number of elements
-    # cannot be walked element-wise at all.
-    for value in strides:
-        if value % itemsize != 0:
+    # cannot be walked element-wise at all.  Strides on length-1 axes are
+    # never walked (offset contribution is always 0), so NumPy's "relaxed
+    # strides" allow arbitrary values there — skip the check for them.
+    for value, dim in zip(strides, shape):
+        if dim > 1 and value % itemsize != 0:
             raise ValueError(
                 f'stride {value} is not a multiple of the itemsize '
                 f'{itemsize} of dtype {x.dtype}')

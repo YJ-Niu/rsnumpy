@@ -1,9 +1,10 @@
+# SPDX-License-Identifier: MIT
 """rsnumpy.fft - 快速傅里叶变换模块。
 
 与 numpy.fft 对齐：既支持 `import rsnumpy as np; np.fft.fftshift(...)`，
 也支持 `from rsnumpy.fft import fft, ifft, rfft, irfft, fftshift, ifftshift`。
 
-底层一维变换由 Rust (`rsnumpy._core`) 实现，复数结果以形状 ``[n, 2]``
+底层一维变换由 Rust (`rsnumpy.num_core`) 实现，复数结果以形状 ``[n, 2]``
 的实数数组表示（每行为 ``[实部, 虚部]``）。fftshift/ifftshift/fftfreq/rfftfreq
 则参考 numpy 的实现用纯 Python 组合现有原语完成。
 """
@@ -12,8 +13,10 @@ import math as _math
 
 import rsnumpy.num_core as _core
 
+
+
 __all__ = [
-    'fft', 'ifft', 'rfft', 'irfft',
+    'fft', 'ifft', 'rfft', 'irfft', 'irfftn',
     'fftshift', 'ifftshift', 'fftfreq', 'rfftfreq',
 ]
 
@@ -154,6 +157,32 @@ def rfft(a, n=None, axis=-1, norm=None):
 def irfft(a, n=None, axis=-1, norm=None):
     """计算 rfft 的逆变换（返回实数数组）。"""
     return _fft_nd(a, n, axis, norm, 'irfft', is_inverse=True)
+
+
+def irfftn(a, s=None, axes=None, norm=None):
+    """计算 rfftn 的逆变换（实数输出）。
+
+    对 axes[-1] 做 irfft，对其余 axes 做 ifft（与 numpy 语义一致）。
+    """
+    np = _np()
+    arr = a if hasattr(a, '_array') else np.ndarray(a)
+    ndim = arr.ndim
+    if axes is None:
+        axes = list(range(ndim))
+    if isinstance(axes, int):
+        axes = (axes,)
+    axes = tuple(ax if ax >= 0 else ax + ndim for ax in axes)
+    axes = tuple(dict.fromkeys(axes))
+    if not axes:
+        raise ValueError("irfftn: at least one axis must be provided")
+    _s = list(s) if s is not None else [None] * len(axes)
+    if len(_s) < len(axes):
+        _s = _s + [None] * (len(axes) - len(_s))
+    out = arr
+    for ax, n_ax in zip(axes[:-1], _s[:-1]):
+        out = ifft(out, n=n_ax, axis=ax, norm=norm)
+    out = irfft(out, n=_s[-1], axis=axes[-1], norm=norm)
+    return out
 
 
 def _shift(x, axes, inverse):

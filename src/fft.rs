@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 use ndarray::{Array, IxDyn};
 use pyo3::prelude::*;
 use rustfft::{FftPlanner, num_complex::Complex as FftComplex};

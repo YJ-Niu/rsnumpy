@@ -1,0 +1,26 @@
+"""Common test support for all rsnumpy test scripts.
+
+This single module should provide all the common functionality for rsnumpy tests
+in a single location, so that test scripts can just import it and work right
+away.
+
+"""
+from unittest import TestCase
+
+from . import _private, overrides
+from ._private import extbuild  # noqa E401
+from ._private.utils import *  # noqa E401
+from ._private.utils import _assert_valid_refcount, _gen_alignment_data  # noqa E401
+
+__all__ = (
+    _private.utils.__all__ + ['TestCase', 'overrides']
+)
+
+try:
+    from rsnumpy._pytesttester import PytestTester
+
+    test = PytestTester(__name__)
+    del PytestTester
+except ImportError:
+    # rsnumpy has no _pytesttester yet
+    test = None

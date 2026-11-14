@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 fn main() {
     // On macOS a Python extension module is dlopen'ed at import time and the
     // Python C-API symbols are resolved dynamically, so the linker must allow

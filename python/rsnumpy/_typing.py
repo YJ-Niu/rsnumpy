@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Type aliases and annotations for rsnumpy.
 
 This module provides type hints used across rsnumpy and by downstream

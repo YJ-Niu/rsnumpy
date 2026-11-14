@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 use crate::*;
 
 // ========== I/O: 保存为 .npy ==========
