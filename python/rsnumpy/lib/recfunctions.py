@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """结构化数组辅助函数（numpy.lib.recfunctions 的兼容子集）。
 
 实现直接操作 rsnumpy 结构化数组的纯 Python 记录模型（_dtype_obj / _raw_data），

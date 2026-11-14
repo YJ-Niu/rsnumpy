@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """numpy.linalg._linalg 兼容实现（私有算法）。
 
 multi_dot 的矩阵链乘法顺序由动态规划给出（Cormen 教材的标准

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """rsnumpy.linalg - 线性代数模块 - 薄包装，所有实现位于 Rust。"""
 
 import sys as _sys

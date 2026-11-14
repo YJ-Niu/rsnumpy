@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """numpy.lib._stride_tricks_impl 兼容实现。
 
 公共名从 rsnumpy 顶层 / rsnumpy.lib.stride_tricks 再导出。

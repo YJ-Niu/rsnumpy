@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """numpy._core.strings 兼容门面：strings 底层 ufunc 的 Python 等价物。
 
 NumPy 中这是 C 层 ufunc 模块；rsnumpy 的 ufunc 是 Python 层可调用

@@ -1,6 +1,8 @@
 # 第三方代码归属 / Third-party Attribution
 
-rsnumpy 本身以 MIT 许可证发布（见 `LICENSE`）。仓库中以下部分拷贝自
+rsnumpy 本身以 MIT 许可证发布（见 `LICENSE`）。rsnumpy 自有的源文件
+（`src/`、`build.rs`、`python/rsnumpy/`，不含下述 NumPy 拷贝部分）每文件
+首行标注 `SPDX-License-Identifier: MIT`。仓库中以下部分拷贝自
 NumPy 项目，按 NumPy 的 BSD-3-Clause 许可证分发（版权与许可文本附后）。
 这些代码仅作为测试参照与测试支持使用，不属于 rsnumpy 的运行时 API：
 

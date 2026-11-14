@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """rsnumpy - A Rust-powered rsnumpy-compatible array library.
 
 rsnumpy provides a rsnumpy-compatible API implemented in Rust for better

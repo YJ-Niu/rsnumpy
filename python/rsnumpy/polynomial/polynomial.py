@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """numpy.polynomial.polynomial 兼容模块（新 API：升序系数，低次在前）。
 
 数值内核复用 Rust _core（polyadd/polysub/polymul/polydiv/polyroots，

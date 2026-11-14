@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 class AxisError(ValueError, IndexError):
     def __init__(self, axis, ndim=None, msg_prefix=None):
         # numpy 语义：单参数调用时 axis 就是完整消息（此时 axis/ndim 属性为 None）

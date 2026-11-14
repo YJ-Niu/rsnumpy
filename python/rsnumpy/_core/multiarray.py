@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """numpy._core.multiarray 兼容实现（C-helper 的 Python 版）。
 
 提供 ``_vec_string``（字符串方法向量化）、``scalar``（pickle 协议

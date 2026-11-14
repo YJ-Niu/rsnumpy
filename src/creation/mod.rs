@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 use crate::*;
 
 /// 在 Rust 中单次完成展平 + dtype 推断，构造数组并返回 dtype 编码。

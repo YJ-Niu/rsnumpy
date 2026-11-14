@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """numpy.strings 风格字符串 API（np.strings.*）。
 
 与 numpy 2.x 的 ``np.strings`` 命名空间对齐：逐元素作用于

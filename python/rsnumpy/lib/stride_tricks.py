@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """Stride-based view helpers (a compatible subset of `numpy.lib.stride_tricks`).
 
 `rsnumpy` arrays always own one contiguous row-major buffer, so a true

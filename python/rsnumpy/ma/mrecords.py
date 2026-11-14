@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """掩码记录数组（numpy.ma.mrecords 兼容实现）。
 
 MaskedRecords：基于结构化（记录）数据的掩码数组；逐记录访问返回

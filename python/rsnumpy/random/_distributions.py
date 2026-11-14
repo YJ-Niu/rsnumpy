@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """纯 Python 分布采样器（legacy RandomState / 模块级函数补齐用）。
 
 设计：无状态。每个采样器由 ``next_u``（返回 [0,1) 均匀浮点）与

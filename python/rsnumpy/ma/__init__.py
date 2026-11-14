@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """掩码数组（numpy.ma 兼容层）。
 
 子模块布局与 NumPy 一致：

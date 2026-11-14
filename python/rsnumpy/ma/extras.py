@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """掩码数组扩展函数（numpy.ma.extras 兼容实现）。
 
 在 rsnumpy.ma.core 基础上实现 numpy.ma.extras 的公共 API：

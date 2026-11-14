@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 # Vendored implementation of pandas.NA, adapted from pandas/_libs/missing.pyx
 #
 # This is vendored to avoid adding pandas as a test dependency.

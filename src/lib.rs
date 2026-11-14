@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 pub(crate) use ndarray::{Array, ArrayViewD, Axis, IxDyn, Slice, Zip};
 pub(crate) use pyo3::exceptions::{PyBufferError, PyIndexError, PyTypeError, PyValueError};
 use pyo3::prelude::*;

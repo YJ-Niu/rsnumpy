@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """numpy._core.umath 兼容门面：按名暴露 rsnumpy 的 ufunc 集合。
 
 NumPy 中这是 C 层 ufunc 模块；rsnumpy 的 ufunc 是 Python 层可调用

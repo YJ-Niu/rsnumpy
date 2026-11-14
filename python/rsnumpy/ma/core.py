@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """掩码数组核心（numpy.ma.core 兼容子集）。
 
 包装底层 ndarray 与逐元素布尔掩码；提供 numpy.ma.core 移植测试

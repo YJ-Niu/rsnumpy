@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """补充的 NumPy 兼容 API。
 
 计算全部复用已有的 Rust 原语（_core 或已导出的顶层函数），本层仅做组合与包装，

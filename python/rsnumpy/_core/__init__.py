@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """rsnumpy._core — NumPy 2.x ``numpy._core`` 兼容层。
 
 Rust 核心（rsnumpy.num_core）提供计算；本包提供命名空间与 C-helper

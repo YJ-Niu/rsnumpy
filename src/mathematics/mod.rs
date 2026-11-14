@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 use crate::*;
 
 fn unary_math_op(py: Python<'_>, x: &NdArray, threshold: usize, op: fn(f64) -> f64) -> NdArray {

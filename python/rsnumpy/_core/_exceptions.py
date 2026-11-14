@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """numpy._core._exceptions 兼容实现。
 
 ufunc 无适用 loop 时的错误类型（移植测试直接从此路径导入）；

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """rsnumpy._core._internal —— numpy._core._internal 的 Python 层兼容子集。
 
 目前提供 ``_dtype_from_pep3118``：把 PEP 3118 格式串解析为 dtype，

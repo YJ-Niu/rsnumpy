@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """mgrid/ogrid/r_ 的实现模块（numpy.lib._index_tricks_impl 对应）。
 
 rsnumpy 的 mgrid/ogrid/r_ 实现位于顶层模块；本模块以带完整文档的

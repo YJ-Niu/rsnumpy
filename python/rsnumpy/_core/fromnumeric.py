@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """numpy._core.fromnumeric 兼容层：从 rsnumpy 顶层再导出。
 
 rsnumpy 的逐元素/构造公共 API 直接挂在顶层命名空间；本模块提供

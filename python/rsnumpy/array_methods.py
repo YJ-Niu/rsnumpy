@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """
 ndarray 对象方法模块
 

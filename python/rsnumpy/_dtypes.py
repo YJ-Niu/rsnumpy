@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """完整的 dtype 语义实现（解析、属性、str/repr），逐字节对齐 numpy。
 
 DType 采用富数据模型，支持标量、结构化、子数组、标题、对齐等全部语法，

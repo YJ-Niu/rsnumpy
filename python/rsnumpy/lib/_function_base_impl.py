@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """numpy.lib._function_base_impl 兼容实现。
 
 rsnumpy 的 function_base 公共实现在 ``rsnumpy._core.function_base``；

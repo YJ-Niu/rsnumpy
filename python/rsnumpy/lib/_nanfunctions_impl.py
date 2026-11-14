@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """numpy.lib._nanfunctions_impl 兼容实现。
 
 包含:

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """rsnumpy.char - 向量化字符串操作模块（Rust 层实现，本模块为薄包装）。
 
 所有元素级字符串运算由 Rust 端 ``num_core.char_str_op/char_int_op/

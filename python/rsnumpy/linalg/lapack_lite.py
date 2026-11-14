@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """numpy.linalg.lapack_lite 兼容桩。
 
 NumPy 中该模块暴露底层 LAPACK 例程；rsnumpy 无对应 C 层，仅提供

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """rsnumpy.typing - 类型注解支持，对齐 numpy.typing。
 
 提供 `NDArray`、`ArrayLike`、`DTypeLike`，主要用于类型注解，

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """numpy._core.numerictypes 兼容实现（标量类型表与转换工具）。
 
 对齐 NumPy 2.x 语义；与更新版 NumPy 行为不一致处（如 ``sctype2char(1)``

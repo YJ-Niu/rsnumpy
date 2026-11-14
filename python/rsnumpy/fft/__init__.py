@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """rsnumpy.fft - 快速傅里叶变换模块。
 
 与 numpy.fft 对齐：既支持 `import rsnumpy as np; np.fft.fftshift(...)`，

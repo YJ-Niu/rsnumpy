@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """numpy._core._rational_tests 兼容实现。
 
 NumPy 在该模块定义测试专用 ``rational`` 标量 dtype（C 层类型：真实

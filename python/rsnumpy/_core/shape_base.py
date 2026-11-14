@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """numpy._core.shape_base 内部辅助兼容模块。
 
 rsnumpy 的 ``np.block`` 不经过 NumPy 内部的 ``_block_*`` 入口；这些

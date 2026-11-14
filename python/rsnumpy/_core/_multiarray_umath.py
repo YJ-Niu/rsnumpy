@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """numpy._core._multiarray_umath 兼容实现（Python 版）。
 
 MAXDIMS 与 rsnumpy 嵌套序列发现路径的实际维度上限一致（64）。

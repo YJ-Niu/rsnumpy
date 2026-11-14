@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """rsnumpy.random - 随机数生成模块"""
 
 import rsnumpy.num_core as _core

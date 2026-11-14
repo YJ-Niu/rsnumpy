@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """多项式模块 - 所有实现位于 Rust，这里仅保留薄包装。"""
 
 import rsnumpy.num_core as _core

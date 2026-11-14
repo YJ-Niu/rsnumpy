@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """rsnumpy.matlib - 矩阵库模块"""
 
 import rsnumpy.num_core as _core

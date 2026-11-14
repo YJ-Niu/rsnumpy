@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """记录数组（numpy.rec 兼容层）。
 
 NumPy 中 ``numpy.rec`` 是 ``numpy._core.records`` 的 star-import；

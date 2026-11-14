@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """numpy._core.function_base 兼容实现（文档工具）。
 
 ``add_newdoc`` 与 NumPy 2.x 行为一致：文档无法写入时静默忽略，

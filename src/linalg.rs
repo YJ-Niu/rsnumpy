@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 use ndarray::linalg::Dot;
 use ndarray::{Array, Ix2, IxDyn};
 use pyo3::exceptions::PyValueError;

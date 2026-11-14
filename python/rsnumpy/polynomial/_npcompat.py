@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """多项式旧 API 移植（与 numpy 2.x lib/_polynomial_impl.py 行为对齐）。
 
 包含 poly / roots / polyint / polyder / polyfit / polyval / polyadd /

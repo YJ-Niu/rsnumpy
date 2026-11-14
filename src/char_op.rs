@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 //! 字符串批量算子（np.char 的 Rust 层实现）。
 //!
 //! 一次跨边界调用完成整列字符串运算，Python 层只保留薄包装。

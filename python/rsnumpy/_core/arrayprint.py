@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """numpy._core.arrayprint 兼容实现。
 
 _typelessdata：把数组值转成与 dtype 无关的字符串表示（repr 测试用）。

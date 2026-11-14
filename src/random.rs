@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 use ndarray::{Array, IxDyn};
 use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;

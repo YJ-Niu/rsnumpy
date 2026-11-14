@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """I/O 模块 - 所有实现位于 Rust，这里仅保留薄包装。"""
 
 from itertools import accumulate as _accumulate

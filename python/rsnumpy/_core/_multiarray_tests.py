@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MIT
 """numpy._core._multiarray_tests 兼容实现（C 测试辅助的 Python 版）。"""
 
 __all__ = ['array_indexing']
