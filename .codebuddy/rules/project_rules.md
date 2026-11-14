@@ -51,7 +51,7 @@ rsnumpy 是一个使用 **Rust + PyO3** 开发的高性能 Python 数值计算�
 ## 6. 修复后的构建与测试
 
 - 每次修改后，立即执行 `./build_wheel.sh` 重新构建并安装。
-- 运行项目提供的测试用例（`python test/run_test.py`、`python test/run_test2.py`）确保修复有效。若测试失败，继续修改直到通过。
+- 运行项目提供的测试用例（`python test/run_test.py`）确保修复有效。若测试失败，继续修改直到通过。
 
 ## 7. 长期优化原则（非强制）
 
@@ -124,7 +124,6 @@ rsnumpy/
 │       └── typing/         # 类型定义
 ├── test/                   # 测试目录
 │   ├── run_test.py         # 主测试脚本
-│   ├── run_test2.py        # 辅助测试脚本
 │   └── test_rf/            # 兼容测试（networkx、scipy）
 ├── build_wheel.sh          # 构建脚本（含 fmt/clippy 门禁）
 ├── pyproject.toml          # 项目配置

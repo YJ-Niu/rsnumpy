@@ -153,7 +153,7 @@ rsnumpy/
 │   ├── math_functions.py, statistics.py
 │   ├── linalg/, polynomial/, random/, fft/, lib/, typing/
 ├── test/                      # regression & compat tests
-│   ├── run_test.py, run_test2.py
+│   ├── run_test.py
 │   └── test_rf/               # networkx / scipy compatibility
 ├── debug/                     # benchmarks & debug scripts
 ├── Cargo.toml                 # Rust manifest & release profile

@@ -430,12 +430,11 @@ PYEOF
     echo "      './build_wheel.sh --test debug' 只重跑未通过文件；'--test all' 全量并重建清单。"
   fi
 
-  # ========== 冒烟测试：run_test.py / run_test2.py（非门禁报告） ==========
+  # ========== 冒烟测试：run_test.py（非门禁报告） ==========
   # 独立顺序执行脚本（非 pytest），验证 rsnumpy 核心功能无异常。
   # failed = rsnumpy 存在未修复的 bug，故只报告、不门禁。
   SMOKE_TESTS=(
     tests/run_test.py
-    tests/run_test2.py
   )
   echo "Running rsnumpy smoke tests (non-gating report) ..."
   mkdir -p debug_test

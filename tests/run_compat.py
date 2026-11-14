@@ -86,6 +86,11 @@ def main(files):
         # (test_buffer.py etc.) lives here too but is the *gate*, not the survey.
         files = sorted(f for f in os.listdir(HERE)
                        if f.startswith("test_rsnumpy_") and f.endswith(".py"))
+        if not files:
+            print("no top-level test_rsnumpy_*.py copies — the compat suite "
+                  "now lives in tests/*_tests/; pass explicit paths to survey it",
+                  file=sys.stderr)
+            return 0
         files = [f"{RELPATH}/{f}" for f in files]
     else:
         files = [f if "/" in f else f"{RELPATH}/{f}" for f in files]
