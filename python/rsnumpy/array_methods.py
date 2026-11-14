@@ -79,7 +79,7 @@ class NdArrayMethods:
                 _st_exp_w = True
             _tdt_st = dtype if isinstance(dtype, _DType_st) \
                 else _rn_st.dtype(dtype)
-            if getattr(_tdt_st, 'kind', None) in ('S', 'U'):
+            if getattr(_tdt_st, 'kind', None) in ('S', 'U', 'T'):
                 _str_tgt = (getattr(_tdt_st, '_kind', None), _st_exp_w)
         except Exception:
             _str_tgt = None
@@ -96,17 +96,36 @@ class NdArrayMethods:
                         bytes(_v).decode('latin-1').split('\x00')[0])
                 else:
                     _st_norm.append(str(_v).split('\x00')[0])
-            if _tk == 'U':
+            # 裸目标（无显式宽度）：numpy 宽度保持语义——源有显式宽度时
+            # 目标宽度 = 源宽度（否则按内容推断最小宽度）
+            _src_sd = getattr(arr, '_str_dtype', None)
+            _src_w = _src_sd[1] if _src_sd is not None else 0
+            if not _src_w:
+                _src_w = 0
+            if _tk in ('U', 'T'):
                 _st_w = (_tdt_st._itemsize // 4) if _st_exp_w else \
-                    max([len(_s) for _s in _st_norm] + [1])
+                    (_src_w if _src_w > 0 else
+                     max([len(_s) for _s in _st_norm] + [1]))
                 _st_out = [_s[:_st_w] for _s in _st_norm]
             else:
                 _st_w = _tdt_st._itemsize if _st_exp_w else \
-                    max([len(_s) for _s in _st_norm] + [1])
+                    (_src_w if _src_w > 0 else
+                     max([len(_s) for _s in _st_norm] + [1]))
                 _st_out = [_s.encode('latin-1')[:_st_w] for _s in _st_norm]
+            # numpy 语义：目标 itemsize 不得超 intc max（超 → TypeError，
+            # large_string_cast 回归）；T 按 U 存储计 4 字节/字符
+            if _st_w * (4 if _tk in ('U', 'T') else 1) > 2147483647:
+                raise TypeError(
+                    f"string target of itemsize {_st_w * (4 if _tk in ('U', 'T') else 1)} "
+                    "bytes exceeds the maximum representable size (intc max)")
             _st_bo = getattr(_tdt_st, '_byteorder', None)
             _st_prefix = '>' if _st_bo == '>' else '<'
-            _st_res = _rn_st.array(_st_out, dtype=f'{_tk}{max(_st_w, 1)}')
+            if _tk == 'T':
+                # T 无固定宽度记法：按 U 构造后打变长标记（内部存储仍为 U）
+                _st_res = _rn_st.array(_st_out, dtype=f'U{max(_st_w, 1)}')
+                _st_res._strdtype_T = True
+            else:
+                _st_res = _rn_st.array(_st_out, dtype=f'{_tk}{max(_st_w, 1)}')
             if _st_bo in ('<', '>'):
                 try:
                     import rsnumpy._dtypes as _dts_st

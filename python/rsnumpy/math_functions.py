@@ -1,6 +1,7 @@
 """数学函数模块 - 所有实现位于 Rust，这里仅保留薄包装。"""
 
 import builtins
+import operator as _pyop
 
 import rsnumpy.num_core as _core
 
@@ -303,6 +304,18 @@ def add(x1, x2, out=None, **kwargs):
     str 标量按 np.copyto 同款宽松转换（无法解析按 0），使 ufunc 与
     copyto 的 casting 行为一致（casting 关键字接受但不参与弱标量判定）。"""
     kwargs.pop('casting', None)
+    # 字符串数组 + 字符串数组/标量 = 逐元素连接（numpy 语义）；结果超
+    # intc max → TypeError（large_string_addition 回归）
+    if getattr(x1, '_str_dtype', None) is not None:
+        from rsnumpy import char as _char_add
+        res = _char_add.add(x1, x2)
+        if out is not None:
+            try:
+                out[...] = res
+            except Exception:
+                pass
+            return out
+        return res
     if (hasattr(x1, '_array')
             and isinstance(x2, (builtins.int, builtins.float,
                                 builtins.complex, builtins.str))):
@@ -426,18 +439,73 @@ remainder = mod  # mod 的别名
 
 
 # ========== 比较运算 ==========
-def greater(x1, x2):
+def _str_kind_of(x):
+    """字符串数组种类（'S'/'U'）；非字符串返回 None。"""
+    dt = getattr(x, 'dtype', None)
+    k = getattr(dt, 'kind', None)
+    if k in ('S', 'U'):
+        return k
+    d = str(getattr(x, '_dtype', '') or '')
+    return d.lstrip('<>=|')[:1] if d.lstrip('<>=|')[:1] in ('S', 'U') else None
+
+
+def _string_cmp(opname, py_op, core_fn, x1, x2, signature=None, casting=None):
+    """字符串数组比较的 numpy ufunc 语义：
+
+    - 同种类（S/S 或 U/U）：底层是 f64 占位，须按原始 Python 值逐元素比较；
+    - 混合 S/U：无匹配 loop → _UFuncNoLoopError（TypeError，消息含
+      "did not contain a loop"）；显式 signature + casting='unsafe' 时
+      先把双方 cast 到目标种类再比较（numpy 语义）。
+    """
+    k1 = _str_kind_of(x1)
+    k2 = _str_kind_of(x2)
+    if not (k1 in ('S', 'U') and k2 in ('S', 'U')):
+        return _wrap_bool(core_fn(_ensure_raw(x1), _ensure_raw(x2)))
+    if k1 != k2:
+        from rsnumpy._core._exceptions import _UFuncNoLoopError
+        if signature is None or casting != 'unsafe':
+            raise _UFuncNoLoopError(
+                f"'{opname}' ufunc did not contain a loop with signature "
+                f"matching types (dtype('{x1.dtype}'), dtype('{x2.dtype}')).")
+        _tgt = str(signature).lstrip('<>=|')[:1]
+        x1 = x1.astype(_tgt)
+        x2 = x2.astype(_tgt)
+    from rsnumpy import _flatten_vals
+    from rsnumpy import char as _char
+    a = (x1._raw_data if getattr(x1, '_raw_data', None) is not None
+         else x1.tolist())
+    b = (x2._raw_data if getattr(x2, '_raw_data', None) is not None
+         else x2.tolist())
+    flat_a = _flatten_vals(a)
+    flat_b = _flatten_vals(b)
+    sh_a = tuple(getattr(x1, 'shape', ()))
+    sh_b = tuple(getattr(x2, 'shape', ()))
+    bshape = _char._bc_shapes([sh_a, sh_b])
+    res = [py_op(_char._bc_get(flat_a, sh_a, idx),
+                 _char._bc_get(flat_b, sh_b, idx))
+           for idx in _char._iter_indices(bshape)]
+    out = _nd()(res)
+    out._dtype = 'bool'
+    return out.reshape(bshape)
+
+
+def greater(x1, x2, signature=None, casting=None):
     """逐元素大于比较。"""
-    return _wrap_bool(_core.greater(_ensure_raw(x1), _ensure_raw(x2)))
+    return _string_cmp('greater', _pyop.gt, _core.greater, x1, x2,
+                       signature, casting)
 
 
-def less(x1, x2):
+def less(x1, x2, signature=None, casting=None):
     """逐元素小于比较。"""
-    return _wrap_bool(_core.less(_ensure_raw(x1), _ensure_raw(x2)))
+    return _string_cmp('less', _pyop.lt, _core.less, x1, x2,
+                       signature, casting)
 
 
-def equal(x1, x2):
+def equal(x1, x2, signature=None, casting=None):
     """逐元素相等比较。"""
+    if _str_kind_of(x1) in ('S', 'U') and _str_kind_of(x2) in ('S', 'U'):
+        return _string_cmp('equal', _pyop.eq, _core.equal, x1, x2,
+                           signature, casting)
     # object dtype：Rust 层对 object 占位失真，逐元素 Python ==
     _a1 = x1 if hasattr(x1, '_array') else None
     if _a1 is not None and getattr(_a1, '_dtype', None) == 'object':
@@ -459,19 +527,22 @@ def equal(x1, x2):
     return _wrap_bool(_core.equal(_ensure_raw(x1), _ensure_raw(x2)))
 
 
-def not_equal(x1, x2):
+def not_equal(x1, x2, signature=None, casting=None):
     """逐元素不相等比较。"""
-    return _wrap_bool(_core.not_equal(_ensure_raw(x1), _ensure_raw(x2)))
+    return _string_cmp('not_equal', _pyop.ne, _core.not_equal, x1, x2,
+                       signature, casting)
 
 
-def greater_equal(x1, x2):
+def greater_equal(x1, x2, signature=None, casting=None):
     """逐元素大于等于比较。"""
-    return _wrap_bool(_core.greater_equal(_ensure_raw(x1), _ensure_raw(x2)))
+    return _string_cmp('greater_equal', _pyop.ge, _core.greater_equal, x1, x2,
+                       signature, casting)
 
 
-def less_equal(x1, x2):
+def less_equal(x1, x2, signature=None, casting=None):
     """逐元素小于等于比较。"""
-    return _wrap_bool(_core.less_equal(_ensure_raw(x1), _ensure_raw(x2)))
+    return _string_cmp('less_equal', _pyop.le, _core.less_equal, x1, x2,
+                       signature, casting)
 
 
 def logical_and(x1, x2, out=None, **kwargs):

@@ -13,8 +13,11 @@ from rsnumpy.exceptions import (  # noqa: F401
 )
 
 
-class _UFuncNoLoopError(ValueError):
-    """ufunc 找不到适用 loop 时抛出（numpy._core._exceptions 同名）。"""
+class _UFuncNoLoopError(TypeError, ValueError):
+    """ufunc 找不到适用 loop 时抛出（numpy._core._exceptions 同名）。
+
+    numpy 中 UFuncNoLoopError 是 TypeError 子类；同时保留 ValueError
+    基类以兼容既有按 ValueError 捕获的代码。"""
 
 
 class _ArrayMemoryError(MemoryError):

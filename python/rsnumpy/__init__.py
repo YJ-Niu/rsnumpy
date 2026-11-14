@@ -1933,6 +1933,15 @@ class ndarray:
         return _wrap_result(other - self._array, dt)
 
     def __mul__(self, other):
+        # 字符串数组 × 整型标量：逐元素重复（numpy 语义：新数组、宽度
+        # 可增长；超长 → OverflowError）。非整数 → ValueError
+        # （defchararray "Can only multiply by integers" 语义）
+        if getattr(self, '_str_dtype', None) is not None and \
+                not _is_ndarray(other):
+            if not isinstance(other, int) or isinstance(other, bool):
+                raise ValueError("Can only multiply by integers")
+            from rsnumpy import char as _char_m
+            return _char_m.multiply(self, other)
         dt = _promote_dtype(self._dtype, other)
         if self.size == 0:
             return self.copy()
@@ -1972,6 +1981,42 @@ class ndarray:
         dt = _promote_dtype(self._dtype, other)  # noqa: F841
         if self.size == 0:
             return self.copy()
+        return self.__mul__(other)
+
+    def __imul__(self, other):
+        """字符串数组原位重复（*=，gh-30495 语义）。
+
+        不重新分配：每个元素重复后截断到原有容量（定宽 dtype 的
+        赋值语义）；元素重复后总长超 intp 上限 → OverflowError
+        （如 'foo ' * sys.maxsize）；小倍数（如 *20）仅截断不报错。"""
+        if getattr(self, '_str_dtype', None) is not None and \
+                not _is_ndarray(other):
+            if not isinstance(other, int) or isinstance(other, bool):
+                return self.__mul__(other)
+            from rsnumpy import char as _char_m
+            _kind = self._str_dtype[0]
+            _isize = int(getattr(self.dtype, 'itemsize', 0) or 0)
+            _cap = (_isize // 4) if _kind == 'U' else _isize
+            _max_intp = 2 ** 63 - 1
+            if getattr(self, '_strdtype_T', False):
+                # StringDType 变长：原位重复不截断（无定宽容量）
+                _cap = _max_intp
+            vals = _char_m._decode(_char_m._get_strings(self))
+            for v in vals:
+                if builtins.len(v) * builtins.int(other) > _max_intp:
+                    raise OverflowError(
+                        "repeated string would be larger than max size")
+            _wb = _char_m._a_was_bytes(self)
+            new = [(v * other)[:_cap] for v in vals]
+            if _wb:
+                new = [s.encode('utf-8', 'surrogateescape') for s in new]
+            _rd = self._raw_data
+            if _rd is not None:
+                for _j in builtins.range(builtins.min(
+                        builtins.len(_rd), builtins.len(new))):
+                    _rd[_j] = new[_j]
+            return self
+        # 数值原位乘：退化为 __mul__（重绑定，与 numpy 语义一致）
         return self.__mul__(other)
 
     def __truediv__(self, other):
@@ -2373,6 +2418,10 @@ class ndarray:
         return _wrap_result(self._array.__ne__(other), "bool")
 
     def __lt__(self, other):
+        # 字符串/字节数组：Rust 层是 f64 占位，按原始值逐元素比较
+        if getattr(self, '_raw_data', None) is not None and \
+                _is_ndarray(other) and getattr(other, '_raw_data', None) is not None:
+            return _string_bc_cmp(self, other, _operator.lt)
         if self._dtype in ('float32', 'float16') and \
                 isinstance(other, float) and not isinstance(other, bool):
             other = _round_scalar_to_f(self._dtype, other)
@@ -2383,6 +2432,9 @@ class ndarray:
         return _wrap_result(self._array.__lt__(other), "bool")
 
     def __le__(self, other):
+        if getattr(self, '_raw_data', None) is not None and \
+                _is_ndarray(other) and getattr(other, '_raw_data', None) is not None:
+            return _string_bc_cmp(self, other, _operator.le)
         if self._dtype in ('float32', 'float16') and \
                 isinstance(other, float) and not isinstance(other, bool):
             other = _round_scalar_to_f(self._dtype, other)
@@ -2393,6 +2445,9 @@ class ndarray:
         return _wrap_result(self._array.__le__(other), "bool")
 
     def __gt__(self, other):
+        if getattr(self, '_raw_data', None) is not None and \
+                _is_ndarray(other) and getattr(other, '_raw_data', None) is not None:
+            return _string_bc_cmp(self, other, _operator.gt)
         if self._dtype in ('float32', 'float16') and \
                 isinstance(other, float) and not isinstance(other, bool):
             other = _round_scalar_to_f(self._dtype, other)
@@ -2403,6 +2458,9 @@ class ndarray:
         return _wrap_result(self._array.__gt__(other), "bool")
 
     def __ge__(self, other):
+        if getattr(self, '_raw_data', None) is not None and \
+                _is_ndarray(other) and getattr(other, '_raw_data', None) is not None:
+            return _string_bc_cmp(self, other, _operator.ge)
         if self._dtype in ('float32', 'float16') and \
                 isinstance(other, float) and not isinstance(other, bool):
             other = _round_scalar_to_f(self._dtype, other)
@@ -2564,6 +2622,9 @@ class ndarray:
         dobj = getattr(self, '_dtype_obj', None)
         if dobj is not None:
             return dobj
+        if getattr(self, '_strdtype_T', False):
+            # StringDType（numpy 2.x 变长字符串）：itemsize 恒 1
+            return _make_flexible('T', 0, None)
         sd = getattr(self, '_str_dtype', None)
         if sd is not None:
             kind, width = sd
@@ -2715,6 +2776,7 @@ class ndarray:
         _rd = getattr(self, '_raw_data', None)
         result._raw_data = list(_rd) if isinstance(_rd, list) else _rd
         result._str_dtype = getattr(self, '_str_dtype', None)
+        result._strdtype_T = getattr(self, '_strdtype_T', False)
         result._fields = getattr(self, '_fields', None)
         _cd = getattr(self, '_complex_data', None)
         result._complex_data = list(_cd) if isinstance(_cd, list) else _cd
@@ -3496,6 +3558,7 @@ def _view_as_recarray(src):
     # 携带字符串/复数/object/形状元数据（与 copy 路径一致），否则字段
     # 数组经 view(recarray) 后丢 _str_dtype（U 字段 dtype 退化为 S0）。
     res._str_dtype = getattr(src, '_str_dtype', None)
+    res._strdtype_T = getattr(src, '_strdtype_T', False)
     res._complex_data = getattr(src, '_complex_data', None)
     res._na_object = getattr(src, '_na_object', None)
     res._rs_unaligned = getattr(src, '_rs_unaligned', None)
@@ -6001,14 +6064,38 @@ def _round_scalar_to_f(dtype, v):
         return v
 
 
+def _string_bc_cmp(self, other, py_op):
+    """字符串/字节数组逐元素比较（numpy 广播语义，供有序比较 dunder 使用）。
+
+    底层是 f64 占位，须按原始 Python 值逐元素比较；形状取广播形状
+    （0 尺寸时 res 为空，reshape 到广播形状）。"""
+    from rsnumpy import char as _char
+    a_flat = _flatten_vals(self._raw_data)
+    b_flat = _flatten_vals(other._raw_data)
+    sh_a = tuple(self.shape)
+    sh_b = tuple(other.shape)
+    bshape = _char._bc_shapes([sh_a, sh_b])
+    res = [py_op(_char._bc_get(a_flat, sh_a, idx),
+                 _char._bc_get(b_flat, sh_b, idx))
+           for idx in _char._iter_indices(bshape)]
+    out = ndarray(res)
+    out._dtype = 'bool'
+    return out.reshape(bshape)
+
+
 def _zero_size_bool_result(a, b):
     """零尺寸比较结果：无元素 → 直接构造零尺寸 bool 数组。
 
-    零尺寸数组的内部 _array 可能是 (1,) 占位 + _rs_shape_override
-    （Rust 不接受 0 维），两侧内部形状不一致时 Rust 层比较会
-    Broadcasting failed；结果无元素，内容空、形状取逻辑形状。
+    形状取两侧广播形状（numpy 语义：broadcast_shapes(a, b)，0/1 维
+    广播为 0）。零尺寸数组的内部 _array 可能是 (1,) 占位 +
+    _rs_shape_override（Rust 不接受 0 维），两侧内部形状不一致时 Rust
+    层比较会 Broadcasting failed；结果无元素，内容空。
     """
-    shp = a.shape if a.shape == b.shape else a.shape
+    try:
+        from rsnumpy import char as _char
+        shp = _char._bc_shapes([tuple(a.shape), tuple(b.shape)])
+    except Exception:
+        shp = a.shape if a.shape == b.shape else a.shape
     return zeros(shp, dtype='bool')
 
 
@@ -7528,6 +7615,12 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
                 flat = [data]
                 _s_scalar = True
             kind, width = sd
+            # T（StringDType 变长）：内部按 U 存储（既有代码的 kind 分支
+            # 全部按 S/U 设计），T 语义经 _strdtype_T 标记表达（dtype
+            # 属性/原位乘法不截断/结果标记传播）。
+            _is_t_str = (kind == 'T')
+            if _is_t_str:
+                kind = 'U'
             # S 目标：元素统一存 bytes；U 目标：统一存 str（numpy S/U dtype
             # 存储语义），宽度推断基于转换后长度。
             if kind == 'S':
@@ -7540,9 +7633,20 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
                               if isinstance(v, (bytes, bytearray)) else str(v))
                         for v in flat]
             if width == 0:
-                # numpy 的裸 'S'/'U'：按数据推断最小宽度
+                # numpy 的裸 'S'/'U'/'T'：按数据推断最小宽度
                 width = _py_max((len(v) for v in flat), default=0)
                 sd = (kind, width)
+            # numpy 语义：字符串 dtype 的 itemsize 与数组总字节数均不得超
+            # intc max（超 → TypeError，在任何大分配之前；large_string
+            # coercion/cast 回归）；T 按 U 存储计 4 字节/字符
+            _char_w = 4 if kind in ('U', 'T') else 1
+            _bytes_total = (builtins.len(flat) * builtins.max(width, 0)
+                            * _char_w)
+            if builtins.max(width, 0) * _char_w > 2147483647 or \
+                    _bytes_total > 2147483647:
+                raise TypeError(
+                    f"string array of itemsize {builtins.max(width, 0) * _char_w} "
+                    "bytes exceeds the maximum representable size (intc max)")
             arr = ndarray._wrap(np.zeros((len(flat),)), _dtype='string_', _raw_data=list(flat))
             if _s_shape is not None and _s_shape != (len(flat),):
                 arr = arr.reshape(_s_shape)
@@ -7550,6 +7654,8 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
                 arr = arr.reshape(())
             # reshape 返回新对象：_str_dtype 必须在最终对象上设置
             arr._str_dtype = sd
+            if _is_t_str:
+                arr._strdtype_T = True
             return arr
         # 结构化 dtype：统一走富 DType 模型
         _dt_obj = _as_struct_dtype(dtype)
@@ -8046,6 +8152,14 @@ def _parse_str_dtype(dtype):
         return ('S', 0)
     if dtype is str:
         return ('U', 0)
+    # DType 对象：直接取 kind/width（np.dtype(('S', n)) 等元组形式构造）
+    _k0 = getattr(dtype, '_kind', None)
+    if _k0 == 'T':
+        # StringDType（变长）：无宽度
+        return ('T', 0)
+    if _k0 in ('S', 'U'):
+        _w0 = getattr(dtype, '_itemsize', 0) or 0
+        return (_k0, _w0 // 4 if _k0 == 'U' else _w0)
     if not isinstance(dtype, str):
         return None
     s = dtype.lstrip('<>=|').strip()
@@ -8054,6 +8168,9 @@ def _parse_str_dtype(dtype):
         return ('S', 0)
     if s in ('str_', 'unicode', 'unicode_'):
         return ('U', 0)
+    # numpy 2.x StringDType：'T'（变长字符串，无宽度）
+    if s in ('T', 'StringDType'):
+        return ('T', 0)
     if not s:
         return None
     if ',' in s:
@@ -8077,7 +8194,7 @@ def _string_array_tobytes(items, str_dtype):
     kind, width = str_dtype
     out = bytearray()
     for v in items:
-        if kind == 'U':
+        if kind in ('U', 'T'):
             if isinstance(v, (bytes, bytearray)):
                 v = bytes(v).decode('latin-1')
             enc = str(v).encode('utf-32-le')

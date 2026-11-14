@@ -230,6 +230,44 @@ def broadcast_to(a, shape, subok=None, device=None):
     dtype = getattr(arr, '_dtype', "float64")
     fields = getattr(arr, '_fields', None)
     raw_data = getattr(arr, '_raw_data', None)
+    if getattr(arr, '_array', None) is None:
+        # 无 Rust 层 _array（None/object 等 Python 层数据）：Python 层
+        # 物化。numpy: broadcast_to(None, (2,)) → object 数组 [None, None]。
+        if shape == () or shape == []:
+            return nd(a)
+        _shp = ((int(shape),) if (isinstance(shape, int) or _scalar_idx(shape))
+                else tuple(int(s) for s in shape))
+        _tot = 1
+        for _s in _shp:
+            _tot *= _s
+        _out = nd([a] * _tot)
+        return _out.reshape(_shp)
+    # numpy 语义：Python int（/整数列表）广播结果保持整型（int64），
+    # 迭代出可 __index__ 的 int；rsnumpy 默认 int→f64 会让元素变成
+    # float 而无法用作切片下标。
+    if isinstance(a, (list, tuple)) and a and all(
+            isinstance(x, int) and not isinstance(x, bool) for x in a):
+        _flat_src = a
+    elif isinstance(a, int) and not isinstance(a, bool):
+        _flat_src = [a]
+    else:
+        _flat_src = None
+    if _flat_src is not None:
+        if shape == () or shape == []:
+            _out = nd(_flat_src[0])
+            _out._dtype = 'int64'
+            return _out
+        _shp = ((int(shape),) if (isinstance(shape, int) or _scalar_idx(shape))
+                else tuple(int(s) for s in shape))
+        _tot = 1
+        for _s in _shp:
+            _tot *= _s
+        _out = nd([_flat_src[0] if len(_flat_src) == 1 else
+                   _flat_src[i % len(_flat_src)] for i in range(_tot)])
+        _out._dtype = 'int64'
+        if _shp:
+            _out = _out.reshape(_shp)
+        return _out
     # Handle broadcasting to scalar shape ()
     if shape == () or shape == []:
         result = arr._array  # 0-d array is already scalar-shaped

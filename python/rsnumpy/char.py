@@ -124,6 +124,25 @@ def _iter_indices(shape):
         yield builtins.tuple(reversed(idx))
 
 
+def _str_input_kind(x):
+    """字符串输入种类（'S'/'U'/'T'）；非字符串输入返回 None（numpy: no-loop）。"""
+    if isinstance(x, bytes):
+        return 'S'
+    if isinstance(x, str):
+        return 'U'
+    if isinstance(x, (builtins.list, builtins.tuple)):
+        flat = _flatten(builtins.list(x), [])
+        if not flat:
+            return None
+        if builtins.all(isinstance(v, bytes) for v in flat):
+            return 'S'
+        if builtins.all(isinstance(v, str) for v in flat):
+            return 'U'
+        return None
+    k = getattr(getattr(x, 'dtype', None), 'kind', None)
+    return k if k in ('S', 'U', 'T') else None
+
+
 def _operand(x):
     """把 values 输入转成 (flat 列表, shape)；str 标量 → 单元素。
 
@@ -175,20 +194,23 @@ def _wrap_str(vals, shape, was_bytes=False):
 
 
 def _str_op(op, a, arg1=None, arg2=None, arg3=None):
-    """字符串算子薄包装：解码 → Rust → 编码 → 包装。"""
+    """字符串算子薄包装：解码 → Rust → 编码 → 包装。
+
+    S 输入结果保持 S dtype（was_bytes 传递，numpy S→S 语义）。"""
     vals = _decode(_get_strings(a))
     out = _core.char_str_op(op, vals,
                             None if arg1 is None else _as_str_arg(arg1),
                             None if arg2 is None else _as_str_arg(arg2),
                             None if arg3 is None else _as_str_arg(arg3))
-    if _a_was_bytes(a):
+    _wb = _a_was_bytes(a)
+    if _wb:
         out = [v.encode('utf-8', 'surrogateescape') for v in out]
     shape = _shape_of(a)
     if isinstance(a, (str, bytes)):
         return out[0] if out else ''
     if shape == ():
         return out[0] if out else ''
-    return _wrap_str(out, shape)
+    return _wrap_str(out, shape, was_bytes=_wb)
 
 
 def _as_str_arg(x):
@@ -238,10 +260,20 @@ def _bool_op(op, a, arg1=None, other=None):
 # ==================== 模块级函数（np.char.*） ====================
 
 def add(x1, x2):
-    """逐元素字符串连接（np.char.add）。"""
+    """逐元素字符串连接（np.char.add / np.strings.add / np.add 字符串语义）。"""
     v1 = _decode(_get_strings(x1))
     v2 = _decode(_get_strings(x2))
     out = _core.char_add(v1, v2)
+    # numpy 语义：结果总字节数不得超 intc max（超 → TypeError，
+    # large_string_addition 回归）
+    if out:
+        _w = 1 if _a_was_bytes(x1) else 4
+        _total = builtins.max(builtins.len(s) for s in out) * _w \
+            * builtins.len(out)
+        if _total > 2147483647:
+            raise TypeError(
+                f"string result of size {_total} bytes exceeds the "
+                "maximum representable size (intc max)")
     if _a_was_bytes(x1):
         out = [v.encode('utf-8', 'surrogateescape') for v in out]
     shape = _shape_of(x1)
@@ -249,34 +281,48 @@ def add(x1, x2):
         return out[0] if out else ''
     if shape == ():
         shape = _shape_of(x2)
-    res = _wrap_str(out, shape)
+    res = _wrap_str(out, shape, was_bytes=_a_was_bytes(x1))
     if isinstance(x1, chararray) or isinstance(x2, chararray):
         return _as_chararray(res)
     return res
 
 
 def multiply(a, i):
-    """逐元素重复（np.char.multiply）。"""
+    """逐元素重复（np.char.multiply / np.strings.multiply 语义）。
+
+    numpy 语义：i 必须整型（float/bool → TypeError "unsupported type ...
+    for operand 'i'"）；0-d 整数数组按标量处理；重复后总长超 intp 上限
+    → OverflowError；i≤0 → 空串。"""
     vals = _decode(_get_strings(a))
     if hasattr(i, 'tolist'):
-        fl = []
-        _flatten(i.tolist(), fl)
-        ns = [builtins.int(v) for v in fl]
+        _t = i.tolist()
+        fl = _flatten([_t] if not isinstance(_t, list) else _t, [])
+        if fl and hasattr(i, 'dtype') and \
+                getattr(getattr(i, 'dtype', None), 'kind', None) not in 'iub':
+            raise TypeError(
+                f"unsupported type {i.dtype} for operand 'i'")
     elif isinstance(i, (builtins.list, builtins.tuple)):
-        fl = []
-        _flatten(builtins.list(i), fl)
-        ns = [builtins.int(v) for v in fl]
+        fl = _flatten(builtins.list(i), [])
     else:
-        if not isinstance(i, (int,)) or isinstance(i, bool):
-            raise ValueError('Can only multiply by integers')
-        ns = [builtins.int(i)]
+        if not isinstance(i, int) or isinstance(i, bool):
+            _tname = getattr(type(i), '__name__', 'float')
+            raise TypeError(f"unsupported type {_tname} for operand 'i'")
+        fl = [i]
+    ns = [builtins.int(v) for v in fl]
+    _max_intp = 2 ** 63 - 1
+    if ns and builtins.max(len(v) for v in vals) * builtins.max(ns) > _max_intp:
+        raise OverflowError(
+            "repeated string would be larger than max size")
+    if builtins.len(ns) == 1:
+        ns = ns * builtins.max(builtins.len(vals), 1)
     out = _core.char_multiply(vals, ns)
-    if _is_bytes(_get_strings(a)):
+    _wb = _is_bytes(_get_strings(a))
+    if _wb:
         out = [v.encode('utf-8', 'surrogateescape') for v in out]
     shape = _shape_of(a)
     if shape == ():
         return out[0] if out else ''
-    return _wrap_str(out, shape)
+    return _wrap_str(out, shape, was_bytes=_wb)
 
 
 def capitalize(a):
@@ -318,13 +364,23 @@ def rstrip(a, chars=None):
 
 
 def _pad_op(op, a, width, fillchar=None):
-    """center/ljust/rjust/zfill：width 支持标量/数组（numpy 广播）。"""
+    """center/ljust/rjust/zfill：width/fillchar 支持标量/数组（numpy 广播）。
+
+    numpy 语义：fillchar 非单字符 → TypeError("The fill character must be
+    exactly one character long")。"""
     vals = _decode(_get_strings(a))
     a_shape = _shape_of(a)
     was_bytes = _a_was_bytes(a)
     w_flat, w_shape = _operand(width)
     bshape = _bc_shapes([a_shape, w_shape]) if w_shape else a_shape
-    fc = _as_str_arg(fillchar) if fillchar is not None else ' '
+    if fillchar is None:
+        fc_flat, fc_shape = [' '], ()
+    else:
+        fc_flat = _decode(_get_strings(fillchar))
+        fc_shape = _shape_of(fillchar)
+        if fc_flat and builtins.len(fc_flat[0]) != 1:
+            raise TypeError(
+                'The fill character must be exactly one character long')
     out = []
     for idx in _iter_indices(bshape):
         v = _bc_get(vals, a_shape, idx)
@@ -332,7 +388,12 @@ def _pad_op(op, a, width, fillchar=None):
         if op == 'zfill':
             out.append(v.zfill(w))
         else:
+            fc = _bc_get(fc_flat, fc_shape, idx)
             out.append(getattr(v, op)(w, fc))
+    if was_bytes:
+        # numpy S (bytes) dtype 仅接受 ASCII：非 ASCII → ValueError
+        # ("'ascii' codec can't encode ...")
+        out = [v.encode('ascii').decode('ascii') for v in out]
     res = _wrap_str(out, bshape, was_bytes=was_bytes)
     if isinstance(a, chararray):
         return _as_chararray(res)
@@ -357,7 +418,16 @@ def zfill(a, width):
 
 
 def replace(a, old, new, count=None):
-    """逐元素替换（old/new/count 支持数组广播，numpy 语义）。"""
+    """逐元素替换（old/new/count 支持数组广播，numpy 语义）。
+
+    ArrayLike 输入经 __array__ 转换（恰好一次，numpy 语义）。"""
+    from rsnumpy import asarray as _asarray
+    if not hasattr(a, '_raw_data'):
+        a = _asarray(a)
+    if not hasattr(old, '_raw_data'):
+        old = _asarray(old)
+    if not hasattr(new, '_raw_data'):
+        new = _asarray(new)
     vals = _decode(_get_strings(a))
     a_shape = _shape_of(a)
     was_bytes = _a_was_bytes(a)
@@ -375,6 +445,10 @@ def replace(a, old, new, count=None):
         c = -1 if c_flat is None else _bc_get(c_flat, c_shape, idx)
         out.append(v.replace(o, n, c))
     res = _wrap_str(out, bshape, was_bytes=was_bytes)
+    # T（StringDType 变长）标记传播：输入为 T 时结果保持 T dtype
+    # （内部存储仍为 U，语义经 _strdtype_T 表达）
+    if getattr(a, '_strdtype_T', False) and hasattr(res, '_str_dtype'):
+        res._strdtype_T = True
     if isinstance(a, chararray):
         return _as_chararray(res)
     return res
@@ -389,12 +463,35 @@ def expandtabs(a, tabsize=8):
     不对齐；且结果超限时 Rust 层 abort 而非抛异常。故在此一次完成展开与
     溢出检查（展开后长度 > INT_MAX → OverflowError，见 numpy PR #26589）。
     """
+    # 非字符串输入 → numpy ufunc no-loop 错误（TypeError 子类）
+    if not _str_input_kind(a):
+        from rsnumpy._core._exceptions import _UFuncNoLoopError
+        raise _UFuncNoLoopError(
+            "'_expandtabs' ufunc did not contain a loop with signature "
+            "matching types")
     ts = int(tabsize)
     vals = _decode(_get_strings(a))
     LIM = 2147483647  # INT_MAX
-    out = []
+    # 第一遍（对齐 numpy string_expandtabs_length）：仅计长度，超限即抛
+    # OverflowError——不能先构建展开串（' ' * 2**63 会先 MemoryError）
     for v in vals:
         new_len = 0
+        line_pos = 0
+        for ch in v:
+            if ch == '\t':
+                if ts > 0:
+                    new_len += ts - (line_pos % ts)
+                    line_pos += ts - (line_pos % ts)
+            else:
+                line_pos += 1
+                new_len += 1
+                if ch in '\n\r':
+                    line_pos = 0
+            if new_len > LIM:
+                raise OverflowError("new string is too long")
+    # 第二遍：长度已保证 ≤ INT_MAX，构建展开串
+    out = []
+    for v in vals:
         line_pos = 0
         parts = []
         for ch in v:
@@ -402,26 +499,25 @@ def expandtabs(a, tabsize=8):
                 if ts > 0:
                     incr = ts - (line_pos % ts)
                     line_pos += incr
-                    new_len += incr
                     parts.append(' ' * incr)
             else:
                 line_pos += 1
-                new_len += 1
                 parts.append(ch)
                 if ch in '\n\r':
                     line_pos = 0
-            if new_len > LIM:
-                raise OverflowError("new string is too long")
         out.append(''.join(parts))
-    # 以下与 _str_op 的输出约定一致（bytes 回转 / 标量 / shape 包装）
-    if _a_was_bytes(a):
+    # 输出约定与 _str_op 一致（bytes 回转 / 标量 / shape 包装）；numpy
+    # 保留输入 dtype 种类（S→S、U→U，见 numpy/_core/strings.py expandtabs）
+    _wb = _a_was_bytes(a)
+    if _wb:
         out = [v.encode('utf-8', 'surrogateescape') for v in out]
     shape = _shape_of(a)
     if isinstance(a, (str, bytes)):
         return out[0] if out else ''
+    # 0-d 数组输入：numpy 返回数组（含 .dtype），非裸标量
     if shape == ():
-        return out[0] if out else ''
-    return _wrap_str(out, shape)
+        return _wrap_str(out, (), was_bytes=_wb)
+    return _wrap_str(out, shape, was_bytes=_wb)
 
 
 def join(sep, a):
@@ -450,33 +546,130 @@ def join(sep, a):
     return res
 
 
+def _bc_int_arg(x):
+    """start/end 整型参数 → (flat int 列表, shape)；None → (None, ())。"""
+    if x is None:
+        return None, ()
+    if isinstance(x, (builtins.list, builtins.tuple)):
+        flat = _flatten(builtins.list(x), [])
+        shape = _nested_shape(x)
+    elif hasattr(x, 'tolist') and hasattr(x, 'shape'):
+        _t = x.tolist()
+        flat = _flatten([_t] if not isinstance(_t, list) else _t, [])
+        shape = builtins.tuple(x.shape)
+    else:
+        flat = [x]
+        shape = ()
+    flat = [builtins.int(v) for v in flat]
+    return flat, shape
+
+
+def _range_search(a, sub, start, end, py_fn, kind):
+    """带 start/end 范围的逐元素搜索（numpy 广播语义，Python 实现）。
+
+    numpy 语义：end=None → intp.max；start/end 按 slice 语义作用于
+    每个元素。kind='int' → int64 数组（find/rfind/count/index/rindex）；
+    kind='bool' → bool 数组（startswith/endswith）。"""
+    vals = _decode(_get_strings(a))
+    a_shape = _shape_of(a)
+    subs = _decode(_get_strings(sub))
+    s_shape = _shape_of(sub)
+    bshape = _bc_shapes([a_shape, s_shape])
+    st, st_shape = _bc_int_arg(start)
+    ep, ep_shape = _bc_int_arg(end)
+    _max = 2 ** 63 - 1
+    out = []
+    for _idx in _iter_indices(bshape):
+        _v = _bc_get(vals, a_shape, _idx)
+        _s = _bc_get(st, st_shape, _idx) if st is not None else 0
+        _e = _bc_get(ep, ep_shape, _idx) if ep is not None else _max
+        out.append(py_fn(_v, _bc_get(subs, s_shape, _idx), _s, _e))
+    from .__init__ import ndarray
+    if isinstance(a, (str, bytes)) or bshape == ():
+        _v0 = out[0] if out else (0 if kind == 'int' else False)
+        if kind == 'int':
+            res = ndarray([builtins.float(_v0)], _dtype='int64')
+            return res.reshape(())
+        res = ndarray([1.0 if _v0 else 0.0])
+        res._dtype = 'bool'
+        return res.reshape(())
+    if kind == 'int':
+        res = ndarray([builtins.float(v) for v in out], _dtype='int64')
+        return res.reshape(bshape)
+    res = ndarray([1.0 if v else 0.0 for v in out])
+    res._dtype = 'bool'
+    return res.reshape(bshape)
+
+
 def find(a, sub, start=0, end=None):
-    """逐元素 str.find（未找到返回 -1）。"""
-    return _int_op('find', a, sub, start, end)
+    """逐元素 str.find（未找到返回 -1）；start/end 支持标量/数组。"""
+    return _range_search(a, sub, start, end,
+                         lambda v, s_, st_, e_: v.find(s_, st_, e_), 'int')
 
 
 def rfind(a, sub, start=0, end=None):
-    return _int_op('rfind', a, sub, start, end)
+    """逐元素 str.rfind（未找到返回 -1）；start/end 支持标量/数组。"""
+    return _range_search(a, sub, start, end,
+                         lambda v, s_, st_, e_: v.rfind(s_, st_, e_), 'int')
 
 
 def index(a, sub, start=0, end=None):
-    return _int_op('index', a, sub, start, end)
+    """逐元素 str.index（未找到抛 ValueError）。"""
+    def _f(v, s_, st_, e_):
+        _r = v.find(s_, st_, e_)
+        if _r < 0:
+            raise ValueError('substring not found')
+        return _r
+    return _range_search(a, sub, start, end, _f, 'int')
 
 
 def rindex(a, sub, start=0, end=None):
-    return _int_op('rindex', a, sub, start, end)
+    """逐元素 str.rindex（未找到抛 ValueError）。"""
+    def _f(v, s_, st_, e_):
+        _r = v.rfind(s_, st_, e_)
+        if _r < 0:
+            raise ValueError('substring not found')
+        return _r
+    return _range_search(a, sub, start, end, _f, 'int')
 
 
 def count(a, sub, start=0, end=None):
-    return _int_op('count', a, sub)
+    """逐元素 str.count；start/end 支持标量/数组。"""
+    return _range_search(a, sub, start, end,
+                         lambda v, s_, st_, e_: v.count(s_, st_, e_), 'int')
+
+
+def _range_valid(st_, e_, ln):
+    """numpy 语义的区间有效性：负索引归一（不归零），start > end → 无效。
+
+    与 C 层 string_startswith/endswith 一致：('','',1,0)→False 而
+    ('','',0,0)→True；('hello','',-3,-3)→True。"""
+    _s = st_ + ln if st_ < 0 else st_
+    _e = e_ + ln if e_ < 0 else e_
+    return _s <= _e
 
 
 def startswith(a, prefix, start=0, end=None):
-    return _bool_op('startswith', a, prefix)
+    """逐元素 startswith（检查 a[start:end] 前缀）；start/end 支持标量/数组。
+
+    numpy 语义：负索引先加长度归一，start > end → False（Python 原生
+    切片在此处不一致，故不走 v[st_:e_].startswith）。"""
+    def _sw(v, s_, st_, e_):
+        if not _range_valid(st_, e_, builtins.len(v)):
+            return False
+        return v[st_:e_].startswith(s_)
+    return _range_search(a, prefix, start, end, _sw, 'bool')
 
 
 def endswith(a, suffix, start=0, end=None):
-    return _bool_op('endswith', a, suffix)
+    """逐元素 endswith（检查 a[start:end] 后缀）；start/end 支持标量/数组。
+
+    numpy 语义同 startswith（区间无效 → False）。"""
+    def _ew(v, s_, st_, e_):
+        if not _range_valid(st_, e_, builtins.len(v)):
+            return False
+        return v[st_:e_].endswith(s_)
+    return _range_search(a, suffix, start, end, _ew, 'bool')
 
 
 def equal(x1, x2):
@@ -516,7 +709,18 @@ def isalpha(a):
     return _is_method(a, 'isalpha')
 
 
+def _unicode_only_guard(a, name):
+    """numpy unicode-only strings 函数无 bytes loop：S 输入 → no-loop
+    错误（_UFuncNoLoopError 是 TypeError 子类）。"""
+    if _a_was_bytes(a):
+        from rsnumpy._core._exceptions import _UFuncNoLoopError
+        raise _UFuncNoLoopError(
+            f"'{name}' ufunc did not contain a loop with signature "
+            "matching types")
+
+
 def isdecimal(a):
+    _unicode_only_guard(a, 'isdecimal')
     return _is_method(a, 'isdecimal')
 
 
@@ -529,6 +733,7 @@ def islower(a):
 
 
 def isnumeric(a):
+    _unicode_only_guard(a, 'isnumeric')
     return _is_method(a, 'isnumeric')
 
 
@@ -1261,9 +1466,14 @@ class chararray:
         return add(other, self)
 
     def __mul__(self, other):
+        # numpy chararray 语义：仅整数倍重复，非整数 → ValueError
+        if not isinstance(other, int) or isinstance(other, bool):
+            raise ValueError("Can only multiply by integers")
         return multiply(self, other)
 
     def __rmul__(self, other):
+        if not isinstance(other, int) or isinstance(other, bool):
+            raise ValueError("Can only multiply by integers")
         return multiply(self, other)
 
     def __mod__(self, other):
@@ -1343,24 +1553,36 @@ def asarray(obj, itemsize=None, unicode=None):
 def compare_chararrays(a1, a2, cmp='asciibetical', rstrip=False):
     """逐元素比较字符数组（numpy.char.compare_chararrays 兼容）。
 
-    cmp='asciibetical' 按 ASCII/码点比较（默认）；'lexicographic' 为
-    locale 感知比较（rsnumpy 无 locale 层，退化为码点比较）。
+    cmp 接受比较符号（'=='/'!='/'<'/'<='/'>'/>='，numpy 2.x ufunc
+    语义）或 'asciibetical'/'lexicographic'（legacy，均按码点比较，
+    默认语义为 a > b）。
     """
+    import operator as _pyop
     import rsnumpy as np
-    if cmp not in ('asciibetical', 'lexicographic'):
+    _ops = {'==': _pyop.eq, '!=': _pyop.ne, '<': _pyop.lt,
+            '<=': _pyop.le, '>': _pyop.gt, '>=': _pyop.ge}
+    if cmp in _ops:
+        op = _ops[cmp]
+    elif cmp in ('asciibetical', 'lexicographic'):
+        op = _pyop.gt
+    else:
         raise ValueError("cmp must be 'asciibetical' or 'lexicographic'")
-    x1 = [str(v).rstrip() if rstrip else str(v)
-          for v in np.asarray(a1).ravel().tolist()]
-    x2 = [str(v).rstrip() if rstrip else str(v)
-          for v in np.asarray(a2).ravel().tolist()]
-    if len(x1) == 1 and len(x2) != 1:
-        x1 = x1 * len(x2)
-    elif len(x2) == 1 and len(x1) != 1:
-        x2 = x2 * len(x1)
-    elif len(x1) != len(x2):
-        raise ValueError('operands could not be broadcast together')
-    res = [(a > b) for a, b in zip(x1, x2)]
-    return np.asarray(res, dtype='bool')
+    arr1 = np.asarray(a1)
+    arr2 = np.asarray(a2)
+    x1 = _decode(_get_strings(arr1))
+    x2 = _decode(_get_strings(arr2))
+    if rstrip:
+        x1 = [v.rstrip() for v in x1]
+        x2 = [v.rstrip() for v in x2]
+    sh1 = _shape_of(arr1)
+    sh2 = _shape_of(arr2)
+    bshape = _bc_shapes([sh1, sh2])
+    res = [op(_bc_get(x1, sh1, idx), _bc_get(x2, sh2, idx))
+           for idx in _iter_indices(bshape)]
+    out = np.asarray(res, dtype='bool')
+    if bshape:
+        out = out.reshape(bshape)
+    return out
 
 
 compare_chararrays.__text_signature__ = (

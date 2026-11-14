@@ -205,7 +205,8 @@ def __getattr__(name):
     if name in ('numerictypes', 'function_base', 'multiarray',
                 'shape_base', '_multiarray_umath', '_multiarray_tests',
                 '_rational_tests', 'umath', 'tests', 'numeric',
-                '_exceptions', 'arrayprint', 'fromnumeric', 'records'):
+                '_exceptions', 'arrayprint', 'fromnumeric', 'records',
+                'strings'):
         from importlib import import_module
         return import_module(f'.{name}', __name__)
     raise AttributeError(f"module 'rsnumpy._core' has no attribute {name!r}")

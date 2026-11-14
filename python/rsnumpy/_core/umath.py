@@ -101,6 +101,69 @@ for _name, _types in _UFUNC_TYPES.items():
 del _name, _types, _f
 
 
+def _slice(a, start, stop, step):
+    """``numpy._core.umath._slice`` 等价：逐元素字符串切片。
+
+    start/stop/step 为 int 标量或序列（rsnumpy.strings.slice 完成哨兵
+    归一后传入）；None 按 step 符号逐元素展开为 intp 极值（对齐 numpy
+    ``np.where(step < 0, ...)``）；step=0 → ValueError。返回与 a 同
+    dtype 种类（S→S、U→U）、形状 = a.shape 的数组。
+    """
+    import builtins
+    import rsnumpy as _np
+    from rsnumpy import char as _char
+    vals = _char._decode(_char._get_strings(a))
+    shape = _char._shape_of(a)
+    was_bytes = _char._a_was_bytes(a)
+    size = max(len(vals), 1)
+
+    def _flat(x, name):
+        if x is None:
+            return None
+        if isinstance(x, (list, tuple)):
+            f = list(x)
+        elif hasattr(x, 'tolist'):
+            t = x.tolist()
+            f = _char._flatten([t] if not isinstance(t, list) else t, [])
+        else:
+            f = [x]
+        try:
+            f = [int(v) for v in f]
+        except (TypeError, ValueError):
+            _dt = str(getattr(x, 'dtype', ''))
+            raise TypeError(
+                f"Cannot cast ufunc '_slice' input {name} from "
+                f"dtype('{_dt}') to dtype('int64') with casting rule "
+                f"'same_kind'") from None
+        if len(f) == 1 and size != 1:
+            f = f * size
+        return f
+
+    st = _flat(start, 'start')
+    ep = _flat(stop, 'stop')
+    sp = _flat(step, 'step')
+    if sp is None:
+        sp = [1] * size
+    # 注意：本模块命名空间里 any 是 rsnumpy 的 ufunc（对生成器求值失真），
+    # 必须用内置 any
+    if builtins.any(s == 0 for s in sp):
+        raise ValueError("slice step cannot be zero")
+    _iinfo = _np.iinfo(_np.intp)
+    _imax, _imin = int(_iinfo.max), int(_iinfo.min)
+    out = []
+    for i, v in enumerate(vals):
+        p_ = sp[i % len(sp)]
+        # numpy: start None → where(step<0, imax, 0)；stop None → where(step<0, imin, imax)
+        s_ = st[i % len(st)] if st else (_imax if p_ < 0 else 0)
+        e_ = ep[i % len(ep)] if ep else (_imin if p_ < 0 else _imax)
+        out.append(v[s_:e_:p_])
+    if was_bytes:
+        out = [s.encode('utf-8', 'surrogateescape') for s in out]
+    if isinstance(a, (str, bytes)) or not shape:
+        return _char._wrap_str(out, (), was_bytes)
+    return _char._wrap_str(out, shape, was_bytes)
+
+
 def __getattr__(name):
     if name == 'identity':
         from rsnumpy._core import ufunc

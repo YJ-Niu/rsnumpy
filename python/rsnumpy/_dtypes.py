@@ -637,6 +637,11 @@ def _make_flexible(kind, width, bo):
         d._itemsize = width * 4
         d._alignment = 4
         d._byteorder = '>' if bo == '>' else '='
+    elif kind == 'T':
+        # numpy 2.x StringDType（变长字符串）：itemsize 恒 1，无宽度
+        d._itemsize = 1
+        d._alignment = 1
+        d._byteorder = '|'
     else:  # S / V
         d._itemsize = width
         d._alignment = 1
@@ -765,12 +770,20 @@ def _parse_scalar_token(s):
         rest = s[4:]
         if rest == '' or rest.isdigit():
             return _make_flexible('V', int(rest) if rest else 0, bo)
+    # numpy 2.x StringDType：'T'（变长字符串，无宽度；'T<N>' 非 numpy 记法）
+    if s == 'T':
+        return _make_flexible('T', 0, bo)
     # flexible with width: S3, U10, V3, a3, or bare S/U/V/a
     if s and s[0] in 'SUVa':
         rest = s[1:]
         if rest == '' or rest.isdigit():
             k = 'S' if s[0] == 'a' else s[0]
             width = int(rest) if rest else 0
+            # numpy 语义：S/U itemsize 不得超 intc max（超 → TypeError
+            # "data type ... not understood"；void 不受此限）
+            if k in ('S', 'U') and \
+                    width * (4 if k == 'U' else 1) > 2147483647:
+                raise TypeError("data type %r not understood" % s)
             return _make_flexible(k, width, bo)
     if len(s) == 1 and s in _CHARCODE:
         return _make_scalar(_CHARCODE[s], bo)
@@ -888,6 +901,16 @@ def _parse_tuple_dtype(obj, align):
     # 决定存储类型（numpy 语义），字符串不可当子数组 shape 拆字符。
     if isinstance(shp, str):
         return base
+    # numpy legacy 形式：S/U 柔性 dtype 的 (type, int) = (type, 字符数)
+    # （np.dtype(('S', 5)) → S5、('U', 4) → U4）；负数或 itemsize 超 intc
+    # max → ValueError "invalid itemsize in generic type tuple"。其余类型
+    # 的 int 第二项仍按子数组 shape 处理。
+    if isinstance(shp, int) and not isinstance(shp, bool) and \
+            getattr(base, '_kind', None) in ('S', 'U'):
+        _bk = base._kind
+        if shp < 0 or shp * (4 if _bk == 'U' else 1) > 2147483647:
+            raise ValueError("invalid itemsize in generic type tuple")
+        return _make_flexible(_bk, shp, getattr(base, '_byteorder', None))
     shape = (shp,) if isinstance(shp, int) else tuple(shp)
     return _make_subarray(base, shape)
 
@@ -1023,6 +1046,8 @@ def _typestr(dt):
         return p + 'S%d' % dt._itemsize
     if k == 'U':
         return p + 'U%d' % (dt._itemsize // 4)
+    if k == 'T':
+        return p + 'T'
     if k == 'V':
         return p + 'V%d' % dt._itemsize
     if k in ('M', 'm'):
@@ -1038,6 +1063,8 @@ def _scalar_typestr_short(dt):
         return '?'
     if k == 'O':
         return 'O'
+    if k == 'T':
+        return 'T'
     p = _byteorder_prefix(dt)
     if k == 'S':
         return 'S%d' % dt._itemsize
@@ -1055,7 +1082,7 @@ def _scalar_short_quoted(dt):
 def _scalar_str(dt):
     """str(dtype) 用于标量。"""
     k = dt._kind
-    if k in ('S', 'U', 'V') or not _is_native(dt):
+    if k in ('S', 'U', 'V', 'T') or not _is_native(dt):
         return _typestr(dt)
     return dt.name
 
@@ -1074,6 +1101,8 @@ def _scalar_repr_arg(dt):
         return "'%sU'" % p if dt._itemsize == 0 else "'%sU%d'" % (p, dt._itemsize // 4)
     if k == 'V':
         return "'V'" if dt._itemsize == 0 else "'V%d'" % dt._itemsize
+    if k == 'T':
+        return "'T'"
     if _is_native(dt):
         return "'%s'" % dt._typename
     return "'%s'" % _scalar_typestr_short(dt)
