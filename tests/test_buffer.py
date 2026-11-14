@@ -6,10 +6,24 @@ downstream Rust kernels (e.g. scicore ndimage) write results straight into an
 output array, instead of a ``Vec -> list -> asarray -> bulk setitem`` round
 trip.  Complex arrays expose no buffer (``BufferError``) — only the float64
 real payload has a buffer view.
+
+版本约束：CPython 纯 Python 类仅自 3.12 起可通过 PEP 633 ``__buffer__``
+导出缓冲（<3.12 没有等价特殊方法——``__getbuffer__`` 并非 CPython 特殊
+方法，那是 Cython cdef class 的特例处理）。<3.12 上 memoryview(a) 会失败，
+buffer 协议消费方自动回退到 ``__array_interface__`` bytes 路径（既定安全
+行为），故本文件仅对 3.12+ 生效。
 """
+import sys
+
 import pytest
 
 import rsnumpy as np
+
+pytestmark = pytest.mark.skipif(
+    sys.version_info < (3, 12),
+    reason="buffer 协议需 PEP 633 __buffer__（仅 Python 3.12+ 支持纯 Python 类）；"
+    "<3.12 消费方回退 __array_interface__ 路径",
+)
 
 
 def test_float64_buffer_is_writable():

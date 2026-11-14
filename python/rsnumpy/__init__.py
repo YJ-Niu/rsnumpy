@@ -936,19 +936,17 @@ class ndarray:
             raise AttributeError('__array_interface__')
         return np.array_interface(self._array, typestr)
 
-    def __buffer__(self, flags):
-        """PEP 3118 缓冲协议（PEP 688 / Python 3.12+）：转发到底层 Rust `_array`，
-        让 memoryview(a) 与下游（如 rsplotlib 的 PyBuffer::get）零拷贝读取底层连续
-        f64 内存，免去 __array_interface__ 的 bytes 副本开销。
+    def _export_buffer(self):
+        """PEP 3118 缓冲导出公共逻辑（__buffer__ / __getbuffer__ 共用）：
+        转发到底层 Rust `_array`，让 memoryview(a) 与下游（如 rsplotlib 的
+        PyBuffer::get）零拷贝读取底层连续 f64 内存，免去 __array_interface__
+        的 bytes 副本开销。
 
         仅对 float64 暴露缓冲：底层存储恒为 f64，其字节布局与 float64 dtype 完全一致，
         缓冲 format 'd' 语义正确。int/bool 等 dtype 的底层仍是 f64，若也暴露缓冲，
         rsnumpy 会优先按缓冲（f8）而非 __array_interface__（如 <i8）解读，导致 dtype 失真；
         故这些 dtype 不暴露缓冲，消费方自动回退到 dtype 精确的 __array_interface__ bytes。
         绘图坐标以 float64 为主，快路径覆盖热点场景。
-
-        注：__buffer__ 由 CPython 在 3.12+ 才识别；更早版本上 memoryview(a) 会失败，
-        消费方自动回退到 __array_interface__ bytes，行为安全。
 
         非 float64 dtype 同样暴露底层 f64 缓冲（值正确，format 为 'd'）：
         numpy 的测试/消费方需要 memoryview 协议可用；dtype 敏感的协议消费方
@@ -984,6 +982,14 @@ class ndarray:
                 _b0 = _st0.pack('<' + _fmt0, int(_v0))
             return memoryview(_b0)
         return memoryview(self._array)
+
+    def __buffer__(self, flags):
+        """PEP 633 缓冲协议（仅 Python 3.12+：CPython 纯 Python 类自 3.12 起
+        才可通过 __buffer__ 导出缓冲；<3.12 无等价特殊方法——__getbuffer__
+        并非 CPython 特殊方法，那是 Cython cdef class 的特例）。
+        <3.12 上 memoryview(a) 会失败，消费方自动回退到 __array_interface__
+        bytes 路径，行为安全。"""
+        return self._export_buffer()
 
     def __release_buffer__(self, view):
         view.release()
