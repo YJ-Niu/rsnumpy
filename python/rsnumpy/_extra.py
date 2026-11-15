@@ -3581,49 +3581,409 @@ class printoptions:
         return False
 
 
+# ========== Dragon4 浮点格式化（numpy dragon4.c 的纯 Python 移植） ==========
+# 语义对齐 numpy 2.x（numpy/_core/src/multiarray/dragon4.c）：
+# - unique 模式：margin 唯一性停机（f32max 等边界值的停机与 numpy 逐位一致，
+#   如 f32max -> '34028235...'，而非最短往返的 '340282347...'）
+# - fixed 模式：数字生成到 cutoff + 末位舍入
+# - trim: 'k'=保留, '.'=去零留点, '0'=留一个零, '-'=去零去点
+# - positional 永不切换科学记数；scientific 恒科学记数
+# - 输出缓冲 16384（numpy Dragon4_Scratch.repr），超出 RuntimeError
+import struct as _struct
+
+_D4_SPECS = {
+    # dt: (struct fmt, 总位数, 次正规最小指数, bias, 尾数位数)
+    # '> ' 前缀：显式大端——位提取用 int.from_bytes(..., 'big')，
+    # 不能依赖原生字节序（ARM64 为小端，会导致位序错乱）。
+    'float16': ('>e', 16, -24, 15, 10),
+    'float32': ('>f', 32, -149, 127, 23),
+    'float64': ('>d', 64, -1074, 1023, 52),
+}
+_D4_BUF = 16384
+
+
+def _d4_dtype_of(x):
+    """format_float_* 目标 dtype：rsnumpy float 标量/0-d 数组 -> 其 dtype；其余 float64。"""
+    dn = getattr(x, 'dtype', None)
+    if dn is not None:
+        try:
+            name = str(dn)
+        except Exception:
+            name = None
+        if name in _D4_SPECS:
+            return name
+    return 'float64'
+
+
+def _d4_norm(x, dt):
+    """把 x 舍入到 dt 的最近可表示值（IEEE 银行家舍入），返回 float；溢出为 inf。"""
+    fmt = _D4_SPECS[dt][0]
+    try:
+        return _struct.unpack(fmt, _struct.pack(fmt, x))[0]
+    except OverflowError:
+        return _math.inf
+
+
+def _d4_cmp_pow10(m, e, k):
+    """m*2^e（m>=1）与 10^k 的精确比较，返回 -1/0/1。"""
+    if k >= 0:
+        if e >= k:
+            a, b = m << (e - k), 5 ** k
+        else:
+            a, b = m, (5 ** k) << (k - e)
+    else:
+        kk = -k
+        if e + kk >= 0:
+            a, b = (m << (e + kk)) * (5 ** kk), 1
+        else:
+            a, b = m * (5 ** kk), 1 << (-(e + kk))
+    return (a > b) - (a < b)
+
+
+def _d4_digits(x, dt, unique, cutoff_max, cutoff_min, cutoff_frac_len):
+    """dragon4.c Dragon4() 核心移植：生成数字序列（纯大整数精确算术）。
+    x: 已舍入到 dt 可表示值的正数（非零）。
+    返回 (digit_str, out_exp)；out_exp 为首数字的十进制指数。"""
+    fmt, bits, emin, bias, mant_bits = _D4_SPECS[dt]
+    b = int.from_bytes(_struct.pack(fmt, x), 'big')
+    n_exp = bits - 1 - mant_bits
+    fexp = (b >> mant_bits) & ((1 << n_exp) - 1)
+    fman = b & ((1 << mant_bits) - 1)
+    if fexp == 0:
+        m, e = fman, emin
+        unequal = False
+    else:
+        m, e = (1 << mant_bits) | fman, fexp - bias - mant_bits
+        # C: hasUnequalMargins = (exp_field != 1) && (mant_field == 0)
+        unequal = (fexp != 1) and (fman == 0)
+    # 分母 D = 4*2^max(0,-e)；x = X/D；margin ml = mli/D, mh = mhi/D
+    D = 4 << max(0, -e)
+    X = (m << (e + 2)) if e >= 0 else (m << 2)
+    if unequal:
+        mli = (1 << (e - 1)) if e >= 0 else 1
+        mhi = (1 << (e + 1)) if e >= 0 else 2
+    else:
+        mli = mhi = (1 << (e + 1)) if e >= 0 else 2
+    is_even = (m % 2 == 0)
+    # de0 = floor(log10(x))，精确校正（log10 的浮点误差最多偏 1）
+    de0 = int(_math.floor(_math.log10(x)))
+    # 校正（log10 浮点误差最多偏 1）：10^de0 <= x < 10^(de0+1)
+    while _d4_cmp_pow10(m, e, de0 + 1) >= 0:
+        de0 += 1
+    while _d4_cmp_pow10(m, e, de0) < 0:
+        de0 -= 1
+    # C dragon4.c:1278-1281：分数 cutoff 下界钳制（p=0 时强制首位落在 10^0 位）
+    if cutoff_max >= 0 and cutoff_frac_len and de0 <= -cutoff_max:
+        de0 = -cutoff_max + 1
+    # C digitExponent 设置（dragon4.c:1284-1328）
+    if de0 > 0:
+        S = D * 10 ** de0
+    elif de0 < 0:
+        S = D
+        p = 10 ** (-de0)
+        X *= p
+        mli *= p
+        mhi *= p
+    else:
+        S = D
+    if X >= S:
+        de0 += 1
+    else:
+        X *= 10
+        mli *= 10
+        mhi *= 10
+    # C cutoff 指数（dragon4.c:1330-1371），基于设置后的 digitExponent
+    cutoff_max_exp = de0 - _D4_BUF
+    if cutoff_max >= 0:
+        cme = (-cutoff_max) if cutoff_frac_len else (de0 - cutoff_max)
+        if cme > cutoff_max_exp:
+            cutoff_max_exp = cme
+    cutoff_min_exp = de0
+    if cutoff_min >= 0:
+        cne = (-cutoff_min) if cutoff_frac_len else (de0 - cutoff_min)
+        if cne < cutoff_min_exp:
+            cutoff_min_exp = cne
+    digits = []
+    low = high = False
+    digit = R = 0
+    de = de0
+    while True:
+        de -= 1
+        digit = X // S
+        R = X % S
+        if unique:
+            # C: isEven ? (cmp <= 0 / cmp >= 0) : (cmp < 0 / cmp > 0)
+            low = (R <= mli) if is_even else (R < mli)
+            high = ((R + mhi) >= S) if is_even else ((R + mhi) > S)
+            if ((low or high) and (de <= cutoff_min_exp)) or (de == cutoff_max_exp):
+                break
+            digits.append(digit)
+        else:
+            # C: 检查的是除后余数（scaledValue 被 DivideWithRemainder 置为余数）
+            if R == 0 or de == cutoff_max_exp:
+                break
+            digits.append(digit)
+        X = R * 10
+        mli *= 10
+        mhi *= 10
+    # 舍入（dragon4.c:1489-1549）：low==high（含 fixed 模式双 False）-> 银行家舍入
+    if low == high:
+        t = 2 * R
+        if t < S:
+            round_down = True
+        elif t > S:
+            round_down = False
+        else:
+            round_down = (digit % 2 == 0)
+    else:
+        round_down = low
+    dlist = digits + [digit]
+    out_exp = de0 - 1
+    if not round_down:
+        i = len(dlist) - 1
+        while i >= 0 and dlist[i] == 9:
+            i -= 1
+        if i < 0:
+            dlist = [1]
+            out_exp += 1
+        else:
+            dlist[i] += 1
+            del dlist[i + 1:]
+    return ''.join(map(str, dlist)), out_exp
+
+
+def _d4_assemble_positional(signbit, digits, de0, trim, add_digits,
+                            cutoff_frac_len, pad_left, pad_right):
+    """dragon4.c FormatPositional 组装移植。"""
+    has_sign = 1 if signbit else 0
+    n = len(digits)
+    if de0 >= 0:
+        whole = de0 + 1
+        if n <= whole:
+            s = signbit + digits + '0' * (whole - n)
+            num_frac = 0
+        else:
+            s = signbit + digits[:whole] + '.' + digits[whole:]
+            num_frac = n - whole
+    else:
+        zeros = -(de0 + 1)
+        s = signbit + '0.' + '0' * zeros + digits
+        num_frac = zeros + n
+        whole = 1
+    if trim != 'DptZeros' and num_frac == 0:
+        s += '.'
+    desired = add_digits if add_digits is not None else -1
+    desired_frac = 0 if desired < 0 else desired
+    if not cutoff_frac_len:
+        desired_frac = desired - whole
+    if trim == 'LeaveOneZero' and num_frac == 0:
+        s += '0'
+        num_frac = 1
+    elif trim == 'None' and desired_frac > num_frac:
+        s += '0' * (desired_frac - num_frac)
+        num_frac += desired_frac - num_frac
+    if trim != 'None' and num_frac > 0:
+        idx = s.rfind('.')
+        fr = s[idx + 1:].rstrip('0')
+        s = s[:idx + 1] + fr
+        num_frac = len(fr)
+        if num_frac == 0:
+            if trim == 'LeaveOneZero':
+                s += '0'
+                num_frac = 1
+            elif trim == 'DptZeros':
+                s = s[:-1]
+    if pad_right is not None and pad_right >= num_frac:
+        if trim == 'DptZeros' and num_frac == 0:
+            s += ' '
+        s += ' ' * (pad_right - num_frac)
+    if pad_left is not None and pad_left > whole + has_sign:
+        s = ' ' * (pad_left - whole - has_sign) + s
+    return s
+
+
+def _d4_assemble_scientific(signbit, digits, de0, trim, add_digits,
+                            exp_digits, pad_left):
+    """dragon4.c FormatScientific 组装移植。"""
+    has_sign = 1 if signbit else 0
+    prefix = ''
+    if pad_left is not None and pad_left > 1 + has_sign:
+        prefix = ' ' * (pad_left - 1 - has_sign)
+    s = prefix + signbit + digits[0]
+    num_frac = len(digits) - 1
+    if num_frac > 0:
+        s += '.' + digits[1:]
+    if trim != 'DptZeros' and num_frac == 0:
+        s += '.'
+    desired = add_digits if add_digits is not None else -1
+    if desired < 0:
+        desired = 0
+    if trim == 'LeaveOneZero' and num_frac == 0:
+        s += '0'
+        num_frac = 1
+    elif trim == 'None' and desired > num_frac:
+        s += '0' * (desired - num_frac)
+        num_frac = desired
+    if trim != 'None' and num_frac > 0:
+        idx = s.rfind('.')
+        fr = s[idx + 1:].rstrip('0')
+        s = s[:idx + 1] + fr
+        num_frac = len(fr)
+        if num_frac == 0 and trim == 'LeaveOneZero':
+            s += '0'
+            num_frac = 1
+        # C: fsci 的 trim 只删尾随零，保留小数点（与 fpos 的 DptZeros 去点不同）
+    ed = 2 if exp_digits is None else exp_digits
+    if ed > 5:
+        ed = 5
+    if ed < 0:
+        ed = 2
+    ae = abs(de0)
+    if ae == 0 and ed == 0:
+        exp_str = ''
+    else:
+        exp_str = '%0*d' % (max(ed, 1), ae)
+    s += 'e' + ('+' if de0 >= 0 else '-') + exp_str
+    return s
+
+
+def _d4_trim(mode):
+    m = {'k': 'None', '.': 'Zeros', '0': 'LeaveOneZero', '-': 'DptZeros'}
+    if mode in m:
+        return m[mode]
+    raise TypeError("if supplied, trim must be 'k', '.', '0' or '-' found %r" % (mode,))
+
+
 def format_float_positional(x, precision=None, unique=True, fractional=True,
                             trim='k', sign=False, pad_left=None, pad_right=None,
                             min_digits=None):
-    """以定点记法格式化单个浮点数。"""
-    _ = unique, fractional, pad_left, pad_right, min_digits
-    x = float(x)
-    if precision is None:
-        s = repr(x)
-        if 'e' in s or 'E' in s:
-            s = f"{x:.16f}".rstrip('0')
-        if '.' not in s:
-            s += '.'
+    """以定点记数格式化单个浮点数（numpy dragon4 语义）。"""
+    tmode = _d4_trim(trim)
+    if not unique and precision is None:
+        raise TypeError("in non-unique mode `precision` must be supplied")
+    if precision is not None and precision < 0:
+        raise ValueError("precision must be >= 0")
+    if precision == 0 and not fractional:
+        raise ValueError("precision must be greater than 0 if fractional=False")
+    if min_digits is not None and min_digits < 0:
+        raise ValueError("min_digits must be >= 0")
+    if min_digits is not None and precision is not None and precision > 0 and min_digits > precision:
+        raise ValueError("min_digits must be less than or equal to precision")
+    if pad_left is not None and pad_left < 0:
+        raise ValueError("pad_left must be >= 0")
+    if pad_right is not None and pad_right < 0:
+        raise ValueError("pad_right must be >= 0")
+    dt = _d4_dtype_of(x)
+    v = float(x)
+    if v != v:
+        return 'nan'
+    if v == _math.inf:
+        return 'inf'
+    if v == -_math.inf:
+        return '-inf'
+    signbit = '-' if _math.copysign(1.0, v) < 0 else ('+' if sign else '')
+    ax = _d4_norm(abs(v), dt)
+    if ax == _math.inf:
+        return signbit + 'inf'
+    if ax == 0.0:
+        digits, de0 = '0', 0
     else:
-        s = f"{x:.{precision}f}"
-    if trim == '-':
-        if '.' in s:
-            s = s.rstrip('0').rstrip('.')
-    elif trim == '0':
-        if '.' in s:
-            s = s.rstrip('0')
-            if s.endswith('.'):
-                s += '0'
-    if sign and x >= 0:
-        s = '+' + s
+        digits, de0 = _d4_digits(ax, dt, bool(unique),
+                                 -1 if precision is None else precision,
+                                 -1 if min_digits is None else min_digits,
+                                 bool(fractional))
+    add_digits = min_digits if unique else precision
+    if add_digits is None:
+        add_digits = -1
+    s = _d4_assemble_positional(signbit, digits, de0, tmode, add_digits,
+                                bool(fractional), pad_left, pad_right)
+    if len(s) > _D4_BUF - 1:
+        raise RuntimeError('Float formatting result too large')
     return s
 
 
 def format_float_scientific(x, precision=None, unique=True, trim='k', sign=False,
                             pad_left=None, exp_digits=None, min_digits=None):
-    """以科学记法格式化单个浮点数。"""
-    _ = unique, pad_left, exp_digits, min_digits
-    x = float(x)
-    if precision is None:
-        s = f"{x:e}"
-        mant, exp = s.split('e')
-        if trim in ('-', '0'):
-            mant = mant.rstrip('0').rstrip('.') if trim == '-' else mant.rstrip('0')
-        s = mant + 'e' + exp
+    """以科学记数格式化单个浮点数（numpy dragon4 语义）。"""
+    tmode = _d4_trim(trim)
+    if not unique and precision is None:
+        raise TypeError("in non-unique mode `precision` must be supplied")
+    if precision is not None and precision < 0:
+        raise ValueError("precision must be >= 0")
+    if min_digits is not None and min_digits < 0:
+        raise ValueError("min_digits must be >= 0")
+    if min_digits is not None and precision is not None and precision > 0 and min_digits > precision:
+        raise ValueError("min_digits must be less than or equal to precision")
+    if pad_left is not None and pad_left < 0:
+        raise ValueError("pad_left must be >= 0")
+    if exp_digits is not None and exp_digits < 0:
+        raise ValueError("exp_digits must be >= 0")
+    dt = _d4_dtype_of(x)
+    v = float(x)
+    if v != v:
+        return 'nan'
+    if v == _math.inf:
+        return 'inf'
+    if v == -_math.inf:
+        return '-inf'
+    signbit = '-' if _math.copysign(1.0, v) < 0 else ('+' if sign else '')
+    ax = _d4_norm(abs(v), dt)
+    if ax == _math.inf:
+        return signbit + 'inf'
+    if ax == 0.0:
+        digits, de0 = '0', 0
     else:
-        s = f"{x:.{precision}e}"
-    if sign and x >= 0:
-        s = '+' + s
+        # C FormatScientific（dragon4.c:1914-1918）：cutoff = precision+1 / min_digits+1（TotalLength）
+        digits, de0 = _d4_digits(ax, dt, bool(unique),
+                                 (-1 if precision is None else precision + 1),
+                                 (-1 if min_digits is None else min_digits + 1),
+                                 False)
+    add_digits = min_digits if unique else precision
+    if add_digits is None:
+        add_digits = -1
+    s = _d4_assemble_scientific(signbit, digits, de0, tmode, add_digits,
+                                exp_digits, pad_left)
+    if len(s) > _D4_BUF - 1:
+        raise RuntimeError('Float formatting result too large')
     return s
+
+
+def _float_scalar_str(v, dt):
+    """rsnumpy float16/float32 标量的 numpy str() 语义（f64 直接用 Python str）。
+    legacy='2.2' 时切换旧 cutoff（f16 无大值 cutoff；f32 cutoff 1e16）。"""
+    x = float(v)
+    if x != x:
+        return 'nan'
+    if x == _math.inf:
+        return 'inf'
+    if x == -_math.inf:
+        return '-inf'
+    if dt == 'float64':
+        return str(x)
+    sign = '-' if _math.copysign(1.0, x) < 0 else ''
+    ax = abs(x)
+    if ax == 0.0:
+        return sign + '0.0'
+    ax = _d4_norm(ax, dt)
+    if ax == _math.inf:
+        return sign + 'inf'
+    digits, de0 = _d4_digits(ax, dt, True, -1, -1, True)
+    try:
+        legacy = _PRINTOPTS.get('legacy') == '2.2'
+    except Exception:
+        legacy = False
+    if dt == 'float16':
+        use_sci = ax < 1e-4 or (not legacy and ax >= 1e3)
+    else:
+        use_sci = ax < 1e-4 or ax >= (1e16 if legacy else 1e6)
+    if use_sci:
+        # 单位数字尾无小数点（numpy 标量科学记数：'-1e+06'、'1e+16'）
+        mant = digits[0] + ('.' + digits[1:] if len(digits) > 1 else '')
+        exp_str = '%0*d' % (2, abs(de0)) if de0 else '00'
+        return sign + mant + 'e' + ('+' if de0 >= 0 else '-') + exp_str
+    s = _d4_assemble_positional('', digits, de0, 'LeaveOneZero', -1, True,
+                                None, None)
+    return sign + s
 
 
 # ========== 浮点错误状态 ==========

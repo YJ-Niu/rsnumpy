@@ -5932,6 +5932,21 @@ def _make_scalar_type(name, base, pybase, itemsize, zero):
             'item': lambda self: pybase(self),
             'tolist': lambda self: pybase(self),
         })
+        if pybase is float:
+            # 浮点标量 str/repr：对齐 numpy dragon4 语义（f64 即 Python str；
+            # f16/f32 为 unique 数字 + dtype cutoff；legacy='2.2' 切旧 cutoff）。
+            # numpy 语义：内建标量类显示 np. 前缀；子类显示子类名（gh-27106）。
+            def _fscalar_str(self, _n=name):
+                from rsnumpy._extra import _float_scalar_str
+                return _float_scalar_str(self, _n)
+
+            ns['__str__'] = _fscalar_str
+            ns['__repr__'] = (
+                lambda self, _n=name: (
+                    'np.{}({})'.format(_n, _fscalar_str(self, _n))
+                    if self.__class__.__name__ == _n
+                    else '{}({})'.format(self.__class__.__name__,
+                                         _fscalar_str(self, _n))))
     ns.update(_scalar_dunder_ns(pybase, pybase is int))
     return type(name, (base,) if is_int_scalar else (base, pybase), ns)
 
