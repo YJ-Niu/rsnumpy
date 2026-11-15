@@ -2196,8 +2196,11 @@ class ndarray:
     def __pow__(self, other):
         _dt_p = str(getattr(self, '_dtype', ''))
         if _dt_p.startswith('complex') or getattr(self, '_complex_data', None) is not None:
-            # 复数 pow：Rust core 不支持复数幂 → Python 级复数运算
+            # 复数 pow：Rust core 不支持复数幂 → Python 级 C99 复数幂
+            # （不用内建 complex **：bpo-44698 下 inf/nan 输入偏离 C99，
+            # 与 np.power 的 _c_pow_c99 保持一致，test_umath_complex 依赖）。
             try:
+                from .math_functions import _c_pow_c99 as _cpow99
                 def _fc_p(x):
                     if isinstance(x, list):
                         out = []
@@ -2210,9 +2213,9 @@ class ndarray:
                 if _is_ndarray(other):
                     _to_p = other.tolist()
                     _oflat_p = _fc_p(_to_p) if isinstance(_to_p, list) else [_to_p]
-                    res = [complex(a) ** complex(b) for a, b in zip(_flat_p, _oflat_p)]
+                    res = [_cpow99(complex(a), complex(b)) for a, b in zip(_flat_p, _oflat_p)]
                 else:
-                    res = [complex(a) ** complex(other) for a in _flat_p]
+                    res = [_cpow99(complex(a), complex(other)) for a in _flat_p]
                 _r_p = ndarray(res)
                 if self.ndim == 0:
                     _r_p = _r_p.reshape(())
@@ -2232,8 +2235,9 @@ class ndarray:
     def __rpow__(self, other):
         _dt_p = str(getattr(self, '_dtype', ''))
         if _dt_p.startswith('complex') or getattr(self, '_complex_data', None) is not None:
-            # 复数 rpow：Python 级复数运算
+            # 复数 rpow：Python 级 C99 复数幂（同 __pow__，绕开 bpo-44698）
             try:
+                from .math_functions import _c_pow_c99 as _cpow99
                 def _fc_p(x):
                     if isinstance(x, list):
                         out = []
@@ -2246,9 +2250,9 @@ class ndarray:
                 if _is_ndarray(other):
                     _to_p = other.tolist()
                     _oflat_p = _fc_p(_to_p) if isinstance(_to_p, list) else [_to_p]
-                    res = [complex(b) ** complex(a) for a, b in zip(_flat_p, _oflat_p)]
+                    res = [_cpow99(complex(b), complex(a)) for a, b in zip(_flat_p, _oflat_p)]
                 else:
-                    res = [complex(other) ** complex(a) for a in _flat_p]
+                    res = [_cpow99(complex(other), complex(a)) for a in _flat_p]
                 _r_p = ndarray(res)
                 if self.ndim == 0:
                     _r_p = _r_p.reshape(())

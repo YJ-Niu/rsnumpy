@@ -2,6 +2,8 @@
 """数学函数模块 - 所有实现位于 Rust，这里仅保留薄包装。"""
 
 import builtins
+import cmath as _cmath
+import math as _math
 import operator as _pyop
 
 import rsnumpy.num_core as _core
@@ -28,6 +30,126 @@ def _ensure_raw(a):
     if hasattr(a, '__class__') and a.__class__.__name__ == 'ndarray':
         return a
     return _core.ndarray(a)
+
+
+# ========== 复数 ufunc 路径（Rust core 无复数循环，Python 层逐元素） ==========
+def _is_complex_arr(x):
+    return str(getattr(x, '_dtype', '')).startswith('complex')
+
+
+def _cflat(v):
+    out = []
+
+    def rec(x):
+        if isinstance(x, list):
+            for y in x:
+                rec(y)
+        else:
+            out.append(x)
+
+    rec(v)
+    return out
+
+
+# C99 复数特殊值语义（G.6.2 clog / G.6.1 cexp / G.6.5 cpow）。
+# CPython 内建 complex **（bpo-44698）及部分平台 libm cpow 不严格符合
+# C99（如 (inf+0j)**2 应为 inf+nanj），按 numpy 的 C99 规则实现。
+def _c_log_c99(z):
+    x, y = z.real, z.imag
+    if _math.isnan(x) or _math.isnan(y):
+        return complex(_math.nan, _math.nan)
+    if _math.isinf(x) or _math.isinf(y):
+        if _math.isinf(y):
+            return complex(_math.inf, _math.copysign(0.25 * _math.pi, y))
+        if y == 0.0:
+            if x > 0:
+                return complex(_math.inf, _math.copysign(0.0, y))
+            return complex(_math.inf, _math.pi)
+        if x > 0:
+            return complex(_math.inf, _math.copysign(0.0, y))
+        if x < 0:
+            return complex(_math.inf, _math.copysign(_math.pi, y))
+        return complex(_math.inf, _math.copysign(0.5 * _math.pi, y))
+    if x == 0.0 and y == 0.0:
+        return complex(-_math.inf, _math.copysign(0.0, y))
+    return complex(_math.log(_math.hypot(x, y)), _math.atan2(y, x))
+
+
+def _c_exp_c99(z):
+    x, y = z.real, z.imag
+    if _math.isinf(x):
+        if y == 0.0:
+            return complex(_math.copysign(_math.inf, x),
+                           _math.copysign(0.0, y))
+        if _math.isfinite(y):
+            return complex(_math.copysign(_math.inf, x), _math.nan)
+        return complex(_math.inf if x > 0 else _math.nan, _math.nan)
+    if _math.isinf(y) or _math.isnan(y):
+        return complex(_math.nan, _math.nan)
+    if _math.isnan(x):
+        return complex(_math.nan, _math.nan)
+    r = _math.exp(x)
+    return complex(r * _math.cos(y), r * _math.sin(y))
+
+
+def _c_pow_c99(a, b):
+    """C99 G.6.5 c_pow：z^w = exp(w log z)，含 z^±0=1、1^z=1 特殊值规则。"""
+    x, y = a.real, a.imag
+    u, v = b.real, b.imag
+    if u == 0.0 and v == 0.0:
+        return complex(1.0, 0.0)
+    if x == 1.0 and y == 0.0:
+        return complex(1.0, 0.0)
+    return _c_exp_c99(complex(b) * _c_log_c99(a))
+
+
+def _complex_unary(x, fn):
+    t = x.tolist()
+    f = _cflat(t) if isinstance(t, list) else [t]
+    res = [fn(complex(v)) for v in f]
+    sh = tuple(getattr(x, 'shape', ()))
+    out = _nd()(res, _dtype=getattr(x, '_dtype', 'complex128'))
+    if sh == ():
+        return out.reshape(())
+    if out.ndim < len(sh) and sh:
+        return out.reshape(sh)
+    return out
+
+
+def _sqrt_complex(x):
+    # libm csqrt 自带无溢出 rescaling 与 C99 特殊值
+    return _complex_unary(x, lambda z: _cmath.sqrt(z))
+
+
+def _square_complex(x):
+    # Python 复数乘法即 C99 IEEE 语义（0×inf→nan、inf−inf→nan）
+    return _complex_unary(x, lambda z: z * z)
+
+
+def _power_complex(x1, x2):
+    from . import char as _char
+    is1 = hasattr(x1, '_array')
+    is2 = hasattr(x2, '_array')
+    sh1 = tuple(getattr(x1, 'shape', ())) if is1 else ()
+    sh2 = tuple(getattr(x2, 'shape', ())) if is2 else ()
+    bshape = _char._bc_shapes([sh1, sh2])
+    f1 = _cflat(x1.tolist()) if is1 else [complex(x1)]
+    f2 = _cflat(x2.tolist()) if is2 else [complex(x2)]
+    if bshape == ():
+        res = [_c_pow_c99(complex(f1[0]), complex(f2[0]))]
+    else:
+        res = [_c_pow_c99(complex(_char._bc_get(f1, sh1, i)),
+                          complex(_char._bc_get(f2, sh2, i)))
+               for i in _char._iter_indices(bshape)]
+    dts = [str(getattr(a, '_dtype', '')) for a in (x1, x2)
+           if str(getattr(a, '_dtype', '')).startswith('complex')]
+    dt = 'complex128' if 'complex128' in dts else (dts[0] if dts else 'complex128')
+    out = _nd()(res, _dtype=dt)
+    if bshape == ():
+        return out.reshape(())
+    if out.ndim < len(bshape) and bshape:
+        return out.reshape(bshape)
+    return out
 
 
 # ========== 三角函数 ==========
@@ -237,6 +359,8 @@ def _sqrt_has_negative(x):
 
 def sqrt(x):
     """计算平方根（负数输入按 errstate 触发 invalid 浮点错误事件）。"""
+    if _is_complex_arr(x):
+        return _sqrt_complex(x)
     raw = _ensure_raw(x)
     res = _wrap(_core.sqrt(raw))
     if _sqrt_has_negative(x):
@@ -247,6 +371,8 @@ def sqrt(x):
 
 def square(x):
     """计算平方。"""
+    if _is_complex_arr(x):
+        return _square_complex(x)
     return _wrap(_core.square(_ensure_raw(x)))
 
 
@@ -424,6 +550,8 @@ def power(x1, x2, dtype=None):
             return _wrap_int(int(x1) ** int(x2), bits, signed)
         if name in _FLOAT_NAMES:
             return float(x1) ** float(x2)
+    if _is_complex_arr(x1) or _is_complex_arr(x2):
+        return _power_complex(x1, x2)
     raw_result = _core.power(_ensure_raw(x1), _ensure_raw(x2))
     dtype = getattr(x1, '_dtype', 'float64') if hasattr(x1, '_dtype') else 'float64'
     return _nd()(raw_result, _dtype=dtype)

@@ -1092,12 +1092,18 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
             assert infs_mask
 
         # 混合 complex/float:rs 的 __eq__ 走 f64 实部比较丢虚部差异,
-        # 逐元素 Python 判定(复杂标量的 inf+1j vs inf 须报差异)
+        # 逐元素 Python 判定(复杂标量的 inf+1j vs inf 须报差异)。
+        # nan 分量 nan-aware 比较:(inf+nanj) vs (inf+nanj) 裸 != 因 nan
+        # 传播恒 True,会假报 inf mismatch——nan/nan 与 inf/inf 视为相等。
         if (getattr(x, '_dtype', None) in ('complex64', 'complex128')
                 or getattr(y, '_dtype', None) in ('complex64', 'complex128')):
             try:
-                _diff = [a != b for a, b in zip(x.ravel().tolist(),
-                                                y.ravel().tolist())]
+                def _same_f(a, b):
+                    return a == b or (a != a and b != b)
+                _diff = [not (_same_f(complex(a).real, complex(b).real)
+                              and _same_f(complex(a).imag, complex(b).imag))
+                         for a, b in zip(x.ravel().tolist(),
+                                         y.ravel().tolist())]
             except Exception:
                 _diff = None
             if _diff is not None:
