@@ -1560,7 +1560,9 @@ class _TestNormGeneral(_TestNormBase):
 class _TestNorm2D(_TestNormBase):
     # Define the part for 2d arrays separately, so we can subclass this
     # and run the tests using np.matrix in matrixlib.tests.test_matrix_linalg.
-    array = np.array
+    # staticmethod：rsnumpy 的 array 是 Python 函数（描述符），裸赋值会让
+    # self.array 绑成方法并注入 self 首参；numpy 的 C 函数无此问题。
+    array = staticmethod(np.array)
 
     def test_matrix_empty(self):
         assert_equal(norm(self.array([[]], dtype=self.dt)), 0.0)
@@ -1793,7 +1795,9 @@ def test_reduced_rank():
 
 class TestQR:
     # Define the array class here, so run this on matrices elsewhere.
-    array = np.array
+    # staticmethod：rsnumpy 的 array 是 Python 函数（描述符），裸赋值会让
+    # self.array 绑成方法并注入 self 首参；numpy 的 C 函数无此问题。
+    array = staticmethod(np.array)
 
     def check_qr(self, a):
         # This test expects the argument `a` to be an ndarray or

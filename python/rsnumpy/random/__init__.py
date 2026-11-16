@@ -876,16 +876,18 @@ class _RandomStateWrapper:
         n = 1
         for d in shape:
             n *= d
-        if scale == 0.0:
-            vals = [loc] * n
+        if n == 0:
+            # 空尺寸：直接以目标形状建空数组（reshape 空 (0,) 到含 0
+            # 的高维形状可能失败，不能依赖它）
+            result = _np.zeros(shape, dtype='float64')
         else:
-            vals = [loc + scale * self._next_normal() for _ in range(n)]
-        result = _np.asarray(vals, dtype='float64')
-        if len(shape) > 1:
-            try:
+            if scale == 0.0:
+                vals = [loc] * n
+            else:
+                vals = [loc + scale * self._next_normal() for _ in range(n)]
+            result = _np.asarray(vals, dtype='float64')
+            if len(shape) > 1:
                 result = result.reshape(shape)
-            except Exception:
-                pass
         if dtype is not None and hasattr(result, 'astype'):
             result = result.astype(dtype)
         return result
@@ -2124,11 +2126,23 @@ class random_module:
             return self._rand_arr(self._random.rand(1))
         return self._rand_arr(self._random.rand(*args))
 
+    def _fix_rand_shape(self, arr, shape):
+        """Rust randn/normal 空尺寸会折叠成 (0,)，按请求形状还原。"""
+        if tuple(getattr(arr, 'shape', ())) != shape:
+            total = 1
+            for d in shape:
+                total *= d
+            if getattr(arr, 'size', None) == total:
+                arr = arr.reshape(shape)
+        return arr
+
     def randn(self, *args):
         """生成标准正态分布的随机数。"""
         if len(args) == 0:
             return self._rand_arr(self._random.randn(1))
-        return self._rand_arr(self._random.randn(*args))
+        shape = tuple(int(d) for d in args)
+        return self._fix_rand_shape(
+            self._rand_arr(self._random.randn(*args)), shape)
     
     def randint(self, low, high=None, size=None):
         """生成整数随机数。"""
@@ -2150,13 +2164,17 @@ class random_module:
         from ..__init__ import ndarray
         if size is None:
             size = 1
-        return ndarray(self._random.normal(loc, scale, size))
+        shape = size if isinstance(size, tuple) else tuple(size) \
+            if isinstance(size, list) else (size,)
+        return self._fix_rand_shape(
+            ndarray(self._random.normal(loc, scale, size)), tuple(shape))
     
     def randn_like(self, a):
         """生成与输入数组形状相同的标准正态分布随机数。"""
         from ..__init__ import ndarray
         arr = ndarray(a)
-        return ndarray(self._random.randn(*arr.shape))
+        return self._fix_rand_shape(
+            ndarray(self._random.randn(*arr.shape)), tuple(arr.shape))
     
     def rand_like(self, a):
         """生成与输入数组形状相同的均匀分布随机数。"""

@@ -739,6 +739,12 @@ def assert_almost_equal(actual, desired, decimal=7, err_msg='', verbose=True):
     if _masked_s is not None and (actual is _masked_s or desired is _masked_s):
         return
 
+    # 空数组：形状相同即通过（size-0 走广播/减法路径会报
+    # "Broadcasting failed"，numpy 对空数组按形状+值（无值）判定）
+    if isinstance(actual, ndarray) and isinstance(desired, ndarray) \
+            and actual.shape == desired.shape and 0 in actual.shape:
+        return
+
     # Handle complex numbers: separate into real/imag to handle
     # nan/inf/negative zero correctly
     # XXX: catch ValueError for subclasses of ndarray where iscomplex fail

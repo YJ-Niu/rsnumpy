@@ -269,6 +269,38 @@ def broadcast_to(a, shape, subok=None, device=None):
         if _shp:
             _out = _out.reshape(_shp)
         return _out
+    # Rust _core.broadcast_to 对复数丢虚部（与 _core.prod 复数 bug 同源）：
+    # 复数 dtype 走 Python 侧物化（tolist 保留复数）。
+    if isinstance(dtype, str) and dtype.startswith('complex') \
+            and getattr(arr, '_array', None) is not None:
+        _shp = ((int(shape),) if (isinstance(shape, int) or _scalar_idx(shape))
+                else tuple(int(s) for s in shape))
+        _src = arr.tolist()
+        _src_shape = tuple(arr.shape)
+        _off = len(_shp) - len(_src_shape)
+        _total = 1
+        for _s in _shp:
+            _total *= _s
+        _out = []
+        for _t in range(_total):
+            _idx = []
+            _rem = _t
+            for _s in reversed(_shp):
+                _idx.append(_rem % _s)
+                _rem //= _s
+            _idx = list(reversed(_idx))
+            _v = _src
+            for _j, _s in enumerate(_src_shape):
+                _v = _v[_idx[_off + _j] % _s]
+            _out.append(_v)
+        if not _shp:
+            _res = nd(_out[0])
+            _res._dtype = dtype
+            return _res
+        _res = nd(_out).reshape(_shp)
+        if getattr(_res, '_dtype', None) != dtype:
+            _res = _res.astype(dtype)
+        return _res
     # Handle broadcasting to scalar shape ()
     if shape == () or shape == []:
         result = arr._array  # 0-d array is already scalar-shaped
@@ -310,6 +342,12 @@ def swapaxes(a, axis1, axis2):
     dtype = getattr(arr, '_dtype', "float64")
     fields = getattr(arr, '_fields', None)
     raw_data = getattr(arr, '_raw_data', None)
+    # Rust 层只接受非负轴：负轴先归一化（numpy 语义）
+    ndim = len(arr.shape)
+    if axis1 < 0:
+        axis1 += ndim
+    if axis2 < 0:
+        axis2 += ndim
     result = _core.swapaxes(arr._array, axis1, axis2)
     return nd._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
 

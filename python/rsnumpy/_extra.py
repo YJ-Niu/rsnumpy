@@ -434,6 +434,49 @@ def _reduce_last_along(c, axis):
     return np.reshape(picked, newshape)
 
 
+def _prod_complex_py(arr, axis, keepdims):
+    """Python 复数乘积——Rust prod 只见复数存储的实部。
+
+    axis=None → 0-d 复数数组；axis 指定 → 沿该轴乘积（keepdims 保形）。
+    """
+    import itertools
+    nd = _np().ndarray
+    vals = arr.tolist()
+    shape = tuple(arr.shape)
+    if axis is None:
+        acc = 1.0 + 0j
+
+        def _walk(v):
+            nonlocal acc
+            if isinstance(v, list):
+                for x in v:
+                    _walk(x)
+            else:
+                acc *= v
+
+        _walk(vals)
+        return nd(acc)
+    ax = axis % len(shape)
+    out_shape = shape[:ax] + shape[ax + 1:]
+    comps = list(itertools.product(
+        *[range(s) for i, s in enumerate(shape) if i != ax]))
+    out = []
+    for comp in comps:
+        full = list(comp[:ax]) + [0] + list(comp[ax:])
+        acc = 1.0 + 0j
+        for k in range(shape[ax]):
+            full[ax] = k
+            v = vals
+            for i in full:
+                v = v[i]
+            acc *= v
+        out.append(acc)
+    res = nd(out).reshape(out_shape)
+    if keepdims:
+        res = res.reshape(shape[:ax] + (1,) + shape[ax + 1:])
+    return res
+
+
 def prod(a, axis=None, dtype=None, out=None, keepdims=False, initial=None, where=True):
     """计算元素乘积。"""
     _ = out, where
@@ -447,6 +490,13 @@ def prod(a, axis=None, dtype=None, out=None, keepdims=False, initial=None, where
             np = _np()
             res = np.multiply(res, initial)
         return res
+    # 复数输入：Rust prod 只遍历实部存储，走 Python 复数乘积
+    if iscomplexobj(arr):
+        result = _prod_complex_py(arr, axis, keepdims)
+        if initial is not None:
+            np = _np()
+            return np.multiply(result, initial)
+        return result
     result = _core.prod(arr._array, axis, keepdims)
     if initial is not None:
         np = _np()
@@ -2056,10 +2106,15 @@ def tri(N, M=None, k=0, dtype=None):
     np = _np()
     if M is None:
         M = N
-    rows = np.reshape(np.arange(0, N, 1), (N, 1))
-    cols = np.reshape(np.arange(0, M, 1), (1, M))
-    result = np.where(np.less_equal(cols, np.add(rows, float(k))),
-                      np.full((N, M), 1.0), np.full((N, M), 0.0))
+    if N == 0 or M == 0:
+        # 空 tri 恒为 0；(1,0)×(N,1) 这类 0 维广播 rs 核心不支持，
+        # 早退避免 broadcast 失败
+        result = np.zeros((N, M))
+    else:
+        rows = np.reshape(np.arange(0, N, 1), (N, 1))
+        cols = np.reshape(np.arange(0, M, 1), (1, M))
+        result = np.where(np.less_equal(cols, np.add(rows, float(k))),
+                          np.full((N, M), 1.0), np.full((N, M), 0.0))
     if dtype is None:
         return result
 

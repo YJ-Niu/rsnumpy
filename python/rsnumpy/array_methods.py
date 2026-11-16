@@ -198,6 +198,30 @@ class NdArrayMethods:
         # Rust astype 对整数目标转换不正确（int→int 回绕错误、float→int
         # 只重标注）：统一用 Python 语义计算——NaN→0、float 向零截断、
         # int 按目标位宽补码回绕（与 numpy same-kind cast 一致）
+        # bool 目标：numpy 语义——掩码成 0/1（存原值会使 astype 往返泄漏
+        # 原值，与 tolist 的 bool 掩码自相矛盾）
+        if name == 'bool':
+            try:
+                def _recb(x):
+                    out = []
+                    for v in x:
+                        if isinstance(v, list):
+                            out.extend(_recb(v))
+                        else:
+                            out.append(v)
+                    return out
+                _t = arr.tolist()
+                fv = _recb(_t) if isinstance(_t, list) else [_t]
+                out = [1 if v else 0 for v in fv]
+                if getattr(arr, 'ndim', 0) == 0:
+                    tmp = ndarray_cls(out[0])
+                else:
+                    tmp = ndarray_cls(out)
+                    if tmp.ndim < arr.ndim and arr.shape:
+                        tmp = tmp.reshape(arr.shape)
+                return _fin(ndarray_cls._wrap(tmp._array, _dtype=name))
+            except Exception:
+                pass
         _INT_BITS = {'int8': 8, 'int16': 16, 'int32': 32, 'int64': 64,
                      'uint8': 8, 'uint16': 16, 'uint32': 32, 'uint64': 64}
         if name in _INT_BITS:
@@ -526,6 +550,12 @@ class NdArrayMethods:
         dtype = getattr(arr, '_dtype', "float64")
         fields = getattr(arr, '_fields', None)
         raw_data = getattr(arr, '_raw_data', None)
+        # Rust 层只接受非负轴：负轴先归一化（numpy 语义）
+        ndim = len(arr.shape)
+        if axis1 < 0:
+            axis1 += ndim
+        if axis2 < 0:
+            axis2 += ndim
         result = _core.swapaxes(arr._array, axis1, axis2)
         out = ndarray._wrap(result, _dtype=dtype, _fields=fields, _raw_data=raw_data)
         if raw_data is None:
@@ -632,6 +662,7 @@ class NdArrayMethods:
             _dn = str(getattr(arr, '_dtype', ''))
             _k = _dn[0] if _dn else '?'
         if _k == 'c':
+            axis = NdArrayMethods._reduce_axis_check(arr, axis)
             _vals = arr.tolist()
 
             def _cs(x):
@@ -639,10 +670,102 @@ class NdArrayMethods:
                     return _cs(x[0]) + sum(_cs(y) for y in x[1:])
                 return x
 
-            _tot = _cs(_vals)
-            return _tot
+            if axis is None:
+                return _cs(_vals)
+            # axis 归约：展平为 (lead × size_ax × trail)，对每个 (lead, trail)
+            # 位置求和，结果形状为去掉 axis 维（keepdims 时置 1）
+            shape = arr.shape
+            size_ax = shape[axis]
+            lead = 1
+            for d in shape[:axis]:
+                lead *= d
+            trail = 1
+            for d in shape[axis + 1:]:
+                trail *= d
+
+            def _flat(x):
+                out = []
+                for w in (x if isinstance(x, (list, tuple)) else [x]):
+                    if isinstance(w, (list, tuple)):
+                        out.extend(_flat(w))
+                    else:
+                        out.append(w)
+                return out
+
+            _flatv = _flat(_vals)
+            res_flat = []
+            for li in range(lead):
+                for ti in range(trail):
+                    s = 0j
+                    for ai in range(size_ax):
+                        s += _flatv[(li * size_ax + ai) * trail + ti]
+                    res_flat.append(s)
+            out_shape = list(shape[:axis]) + list(shape[axis + 1:])
+            if keepdims:
+                out_shape = list(shape[:axis]) + [1] + list(shape[axis + 1:])
+            nd = _nd()
+            if not res_flat:
+                return nd([]).reshape(tuple(out_shape))
+            return nd(res_flat).reshape(tuple(out_shape)).astype(
+                getattr(arr, '_dtype', 'complex128'))
         axis = NdArrayMethods._reduce_axis_check(arr, axis)
-        result = arr._array.sum(axis, keepdims)
+        try:
+            result = arr._array.sum(axis, keepdims)
+        except ValueError as _e:
+            if 'ncompatible' not in str(_e) and 'ayout' not in str(_e):
+                raise
+            # 非连续/负步长布局：Rust 归约不支持 → 纯 Python 轴归约
+            # （与上方复数回退同构）
+            ndarray_cls, _ = _get_deps()
+            _vals = arr.tolist()
+            if axis is None:
+                s = 0.0
+
+                def _csr(x):
+                    if isinstance(x, (list, tuple)):
+                        return sum(_csr(y) for y in x)
+                    return x
+
+                return _csr(_vals)
+            shape = arr.shape
+            if axis < 0:
+                axis = axis + len(shape)
+            size_ax = shape[axis]
+            lead = 1
+            for d in shape[:axis]:
+                lead *= d
+            trail = 1
+            for d in shape[axis + 1:]:
+                trail *= d
+
+            def _flat(x):
+                out = []
+                for w in (x if isinstance(x, (list, tuple)) else [x]):
+                    if isinstance(w, (list, tuple)):
+                        out.extend(_flat(w))
+                    else:
+                        out.append(w)
+                return out
+
+            _flatv = _flat(_vals)
+            res_flat = []
+            for li in range(lead):
+                for ti in range(trail):
+                    s = 0
+                    for ai in range(size_ax):
+                        s += _flatv[(li * size_ax + ai) * trail + ti]
+                    res_flat.append(s)
+            out_shape = list(shape[:axis]) + list(shape[axis + 1:])
+            if keepdims:
+                out_shape = list(shape[:axis]) + [1] + \
+                    list(shape[axis + 1:])
+            if not res_flat:
+                return ndarray_cls([]).reshape(tuple(out_shape))
+            res = ndarray_cls(res_flat).reshape(tuple(out_shape))
+            _dt = getattr(arr, '_dtype', '')
+            if _dt in ('float32', 'float64'):
+                res = res.astype(_dt)
+            return res
         if axis is None and not keepdims and hasattr(result, 'tolist'):
             return result.tolist()
         return _wrap_result(result)
@@ -867,9 +990,26 @@ class NdArrayMethods:
             return i % size
 
         if isinstance(indices, int) and not isinstance(indices, bool):
-            # 标量索引：保持既有 Rust 行为
-            result = arr._array.take(_ensure(indices), axis)
-            return _wrap_result(result, dt)
+            # 标量索引：Python 混合索引实现（Rust take 只接 ndarray 索引，
+            # 裸 int 会 TypeError）；numpy 语义：axis 维被移除
+            ndim = arr.ndim
+            if axis is None:
+                if ndim == 1:
+                    ax = 0
+                else:
+                    size = 1
+                    for d in arr.shape:
+                        size *= d
+                    i = _norm(indices, size, 0)
+                    flat = arr.ravel().tolist()
+                    v = flat[i]
+                    return ndarray(v, _dtype=dt)
+            else:
+                ax = axis % ndim
+                i = _norm(indices, arr.shape[ax], axis)
+                idx = [slice(None)] * ndim
+                idx[ax] = i
+                return arr[tuple(idx)]
         idxs = indices.tolist() if hasattr(indices, 'tolist') else list(indices)
         if axis is None:
             n = 1

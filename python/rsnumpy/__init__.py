@@ -592,6 +592,24 @@ class ndarray:
                                         "could not broadcast input "
                                         f"array from shape {_s0} into "
                                         f"shape {(len(e),) + _s0}")
+                # 列表元素全为同形 ndarray 且含 0 维：tolist() 展平会丢 0 维
+                # （[(0,0)]×3 → (3,0) 而非 (3,0,0)），直接按形状构造。
+                if (isinstance(data, list) and data
+                        and isinstance(data[0], ndarray)
+                        and 0 in tuple(data[0].shape)
+                        and builtins.all(
+                            isinstance(e, ndarray)
+                            and tuple(e.shape) == tuple(data[0].shape)
+                            for e in data)):
+                    _stack = ndarray(None,
+                                     shape=(len(data),) + tuple(data[0].shape),
+                                     dtype=data[0]._dtype)
+                    self._array = _stack._array
+                    self._dtype = _stack._dtype
+                    self._fields = None
+                    self._raw_data = None
+                    self._complex_data = None
+                    return
                 if isinstance(data, list) and not _is_rectangular(data):
                     # 不规则列表（子列表长度不同），存储为原始数据
                     self._raw_data = data
@@ -955,6 +973,14 @@ class ndarray:
         # numpy 兼容句柄（此处返回自身，array() 会解包）
         return self
 
+    def __array_wrap__(self, obj, context=None, return_scalar=False):
+        """numpy 兼容：把 obj 包装成与 self 同 dtype 的数组（保留形状）。"""
+        data = obj.tolist() if hasattr(obj, 'tolist') else obj
+        out = array(data)
+        if getattr(out, '_dtype', None) != getattr(self, '_dtype', None):
+            out = out.astype(self._dtype)
+        return out
+
     @property
     def __array_interface__(self):
         """NumPy 数组接口协议：让真实 rsnumpy/matplotlib 能直接消费 rsnumpy 数组。
@@ -1189,7 +1215,10 @@ class ndarray:
                     "an index can only have a single ellipsis ('...')")
             _e_i = _py_index(key, lambda k: k is Ellipsis)
             if _e_i >= 0:
-                _e_n = self.ndim - (len(key) - 1)
+                # None (newaxis) 不消耗输入轴，须从计数中扣除
+                # 模块级 sum/any 被 rsnumpy ufunc 遮蔽，必须用 builtins
+                _none_c = builtins.sum(1 for _k2 in key if _k2 is None)
+                _e_n = self.ndim - (len(key) - 1 - _none_c)
                 key = key[:_e_i] + (slice(None),) * _e_n + key[_e_i + 1:]
         # 0-d 数组的布尔标量 / 0-d 布尔数组索引（numpy 语义）：
         # True → 1-d [value]，False → 空数组。不走掩码/花式路径（Rust 0-d panic）。
@@ -1440,7 +1469,8 @@ class ndarray:
             new_key = []
             ellipsis_count = np.isum([1 for k in key if k is Ellipsis])
             if ellipsis_count > 0:
-                non_ellipsis = [k for k in key if k is not Ellipsis]
+                non_ellipsis = [k for k in key
+                                if k is not Ellipsis and k is not None]
                 fill = self.ndim - len(non_ellipsis)
                 for k in key:
                     if k is Ellipsis:
@@ -1716,7 +1746,10 @@ class ndarray:
                         raise ValueError("maximum allowed size exceeded")
             _e_i = _py_index(key, lambda k: k is Ellipsis)
             if _e_i >= 0:
-                _e_n = self.ndim - (len(key) - 1)
+                # None (newaxis) 不消耗输入轴，须从计数中扣除
+                # 模块级 sum/any 被 rsnumpy ufunc 遮蔽，必须用 builtins
+                _none_c = builtins.sum(1 for _k2 in key if _k2 is None)
+                _e_n = self.ndim - (len(key) - 1 - _none_c)
                 key = key[:_e_i] + (slice(None),) * _e_n + key[_e_i + 1:]
         # 结构化数组赋值：字段 / 多字段 / 记录 / 切片
         # （_struct_dt_of：reshape 后仅保留 _fields 时仍可判定）
@@ -1778,7 +1811,8 @@ class ndarray:
             new_key = []
             ellipsis_count = np.isum([1 for k in key if k is Ellipsis])
             if ellipsis_count > 0:
-                non_ellipsis = [k for k in key if k is not Ellipsis]
+                non_ellipsis = [k for k in key
+                                if k is not Ellipsis and k is not None]
                 fill = self.ndim - len(non_ellipsis)
                 for k in key:
                     if k is Ellipsis:
@@ -1989,6 +2023,22 @@ class ndarray:
             return _char_m.multiply(self, other)
         dt = _promote_dtype(self._dtype, other)
         if self.size == 0:
+            # 空数组：无元素，结果形状按 numpy 广播规则（如 (1,0)*(0,0)
+            # → (0,0)）；other 为 ndarray/序列 → 广播形状，标量 → 自身
+            if _is_ndarray(other):
+                try:
+                    _shp = _broadcast_shape(tuple(self.shape),
+                                            tuple(other.shape))
+                except ValueError:
+                    raise
+                return ndarray([]).astype(dt).reshape(_shp)
+            if isinstance(other, (tuple, list)):
+                try:
+                    _shp = _broadcast_shape(tuple(self.shape),
+                                            tuple(ndarray(other).shape))
+                except ValueError:
+                    raise
+                return ndarray([]).astype(dt).reshape(_shp)
             return self.copy()
         if _is_ndarray(other):
             # Rust core handles NumPy broadcasting (e.g. (4,4)*(4,)).
@@ -2023,9 +2073,9 @@ class ndarray:
         return out
 
     def __rmul__(self, other):
-        dt = _promote_dtype(self._dtype, other)  # noqa: F841
         if self.size == 0:
-            return self.copy()
+            # 空数组：委托 __mul__ 走同一套广播形状逻辑
+            return self.__mul__(other)
         return self.__mul__(other)
 
     def __imul__(self, other):
@@ -2277,8 +2327,17 @@ class ndarray:
         return _wrap_result(self._array.copy(), self._dtype)
 
     def __abs__(self):
-        """逐元素绝对值（内建 abs() 函数）。"""
-        result = _wrap_result(np.abs(self._array), self._dtype)
+        """逐元素绝对值（内建 abs() 函数）。
+
+        NumPy 语义：复数输入返回对应实 dtype（complex64→float32、
+        complex128→float64），其余 dtype 保持不变。
+        """
+        dt = getattr(self, '_dtype', 'float64')
+        if dt == 'complex64':
+            dt = 'float32'
+        elif dt == 'complex128':
+            dt = 'float64'
+        result = _wrap_result(np.abs(self._array), dt)
         if result.ndim == 0:
             return result.item()
         return result
@@ -2770,19 +2829,38 @@ class ndarray:
 
     @property
     def real(self):
-        """数组的实部。"""
+        """数组的实部（numpy 语义：实数组返回自身 dtype；complex64 → float32）。"""
+        dt = self._dtype
+        if dt not in ('complex64', 'complex128'):
+            return self
         result = self._array.real
+        if dt == 'complex64':
+            return _wrap_result(result, "float64").astype('float32')
         return _wrap_result(result, "float64")
 
     @property
     def imag(self):
-        """数组的虚部（实数数组为全零）。"""
-        return _wrap_result(self._array.imag, "float64")
+        """数组的虚部（实数数组为同 dtype 全零；complex64 → float32）。"""
+        dt = self._dtype
+        if dt not in ('complex64', 'complex128'):
+            return self - self
+        result = self._array.imag
+        if dt == 'complex64':
+            return _wrap_result(result, "float64").astype('float32')
+        return _wrap_result(result, "float64")
 
     def conj(self):
         """返回数组的复共轭。"""
         if self._dtype == 'complex128':
             return _wrap_result(self._array.conj(), "complex128")
+        if self._dtype == 'complex64':
+            # Rust conj 只接了 c128；c64 用 Python 逐元素共轭并保位宽
+            # （旧实现 fall through 到 self.copy() 未取共轭）
+            flat = _flatten_vals(self.tolist())
+            vals = [builtins.complex(v).conjugate() for v in flat]
+            if self.shape:
+                return array(vals).reshape(self.shape).astype('complex64')
+            return array(vals[0]).astype('complex64')
         return self.copy()
 
     # ========== 对象方法 ==========
@@ -3240,7 +3318,17 @@ class ndarray:
             self._array = arr
             return self
         else:
-            return ndarray(swapped, _dtype=dtype)
+            res = ndarray(swapped, _dtype=dtype)
+            # numpy 语义：byteswap 保持形状（ndarray(扁平列表) 会拍平）
+            _sh = tuple(getattr(self, 'shape', ()))
+            if _sh and len(res.shape) < len(_sh):
+                res = res.reshape(_sh)
+            # byteorder 是元数据标记（rsnumpy 存储恒为 native 序）：
+            # 浮点数组 byteswap 不改值，保留原 dtype 标记
+            _d_o = getattr(self, '_dtype_obj', None)
+            if _d_o is not None:
+                res._dtype_obj = _d_o
+            return res
 
     def view(self, dtype=None, type=None):
         """创建一个新的数组对象，共享相同的数据但拥有不同的视图。"""
@@ -3763,6 +3851,12 @@ def _matmul_fallback(a, b):
     """Fallback for batch matrix multiplication when Rust matmul doesn't support the shapes."""
     a_shape = a.shape
     b_shape = b.shape
+
+    # 空维快捷路径：k/m/n 任一为 0 → 广播形状的全零结果
+    if (len(a_shape) >= 2 and len(b_shape) >= 2
+            and 0 in a_shape[-2:] + b_shape[-2:]):
+        bs = _broadcast_shape(a_shape[:-2], b_shape[:-2])
+        return zeros(bs + (a_shape[-2], b_shape[-1]), dtype=a._dtype)
 
     if len(a_shape) == 3 and len(b_shape) == 3:
         batch_size = a_shape[0]
@@ -5297,6 +5391,27 @@ def _view_dtype(arr, target):
     tdt = target if isinstance(target, DType) else dtype(target)
     src_dt = getattr(arr, '_dtype_obj', None)
     _src_sd = getattr(arr, '_str_dtype', None)
+    # byteorder-only view（同 kind/itemsize、非结构化/subarray、真实存储在
+    # _array）：NumPy 语义 = 保值元数据视图（仅字节序标记变化，物理数据
+    # 不变）；字节重解码会把 native 存储误读为 denormal 并拍平形状。
+    # 普通数值数组没有 _dtype_obj：仅在此处按需构造（不可写入 src_dt——
+    # 会让下方 elif 把数值数组误入结构化 _struct_to_bytes 路径）。
+    _src_dt_chk = src_dt
+    if (_src_dt_chk is None and _src_sd is None
+            and getattr(arr, '_raw_data', None) is None
+            and getattr(arr, '_complex_data', None) is None):
+        _src_dt_chk = dtype(getattr(arr, '_dtype', 'float64'))
+    if (_src_dt_chk is not None and _src_sd is None
+            and getattr(arr, '_raw_data', None) is None
+            and getattr(arr, '_complex_data', None) is None
+            and tdt._names is None and tdt._subdtype is None
+            and tdt._itemsize == _src_dt_chk._itemsize
+            and tdt._kind == _src_dt_chk._kind):
+        # 不设置 _dtype_obj：普通数值数组按项目约定从不带它（_struct_dt_of
+        # 会把非 S/U 的 _dtype_obj 误判为结构化，破坏索引分发）；存储恒为
+        # native 序，byteorder 标记无实际作用
+        return ndarray._wrap(arr._array, _dtype=getattr(arr, '_dtype',
+                                                        'float64'))
     if _src_sd is not None:
         # 字符串源：tobytes 已是字符布局字节（U→UCS4、S→原始字节），
         # 须先于结构化分支判定（字符串 view 结果带 _dtype_obj）
@@ -7499,6 +7614,20 @@ def array(data, dtype=None, copy=True, order='K', subok=False, ndmin=0):
             if _has_rscalar_leaf(data):
                 # 混合列表含 rsnumpy 标量叶子：同样先转 Python 原生值
                 data = _scalar_leaves_to_py(data)
+            # 元素全为同形空 ndarray（含 0 维）：build_array 展平会丢 0 维
+            # （[(0,0)]×3 → (3,0) 而非 (3,0,0)），直接按形状构造。
+            if (data and _is_ndarray(data[0])
+                    and 0 in tuple(data[0].shape)
+                    and builtins.all(
+                        _is_ndarray(e) and tuple(e.shape) == tuple(data[0].shape)
+                        for e in data)):
+                _stack = ndarray(None,
+                                 shape=(len(data),) + tuple(data[0].shape),
+                                 dtype=data[0]._dtype if dtype is None else dtype)
+                if ndmin > _stack.ndim:
+                    _stack = _stack.reshape(
+                        (1,) * (ndmin - _stack.ndim) + _stack.shape)
+                return _stack
             try:
                 raw, code = np.build_array(data)
             except (ValueError, TypeError):
