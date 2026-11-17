@@ -8188,11 +8188,25 @@ class matrix(ndarray):
             s = data.strip()
             if s.startswith('[') and s.endswith(']'):
                 s = s[1:-1]
+            def _parse_elem(e):
+                if e in ('True', 'true'):
+                    return True
+                if e in ('False', 'false'):
+                    return False
+                try:
+                    return int(e)
+                except ValueError:
+                    pass
+                try:
+                    return float(e)
+                except ValueError:
+                    return complex(e)
+
             rows = []
             for row in s.split(';'):
                 elems = [e for e in row.replace(',', ' ').split()]
                 if elems:
-                    rows.append([float(e) for e in elems])
+                    rows.append([_parse_elem(e) for e in elems])
             data = rows
         arr = asarray(data, dtype=dtype)
         if arr.ndim == 0:
@@ -8217,7 +8231,55 @@ class matrix(ndarray):
                     "matmul: Input operand 0 has a mismatch in its core "
                     "dimension 0, with gufunc signature (n?,k),(k,m?)->"
                     f"(n?,m), size must be {other.shape[0]} but is 1")
-        return super().__mul__(other)
+        return self._as_matrix(super().__mul__(other))
+
+    def _as_matrix(self, r):
+        """把 ndarray 运算结果包回 matrix（保留 dtype/元数据）；非数组原样返回。"""
+        if not _is_ndarray(r):
+            return r
+        m = matrix._wrap(r._array, _dtype=r._dtype,
+                         _fields=getattr(r, '_fields', None),
+                         _raw_data=getattr(r, '_raw_data', None))
+        m._complex_data = getattr(r, '_complex_data', None)
+        m._dtype_obj = getattr(r, '_dtype_obj', None)
+        m._str_dtype = getattr(r, '_str_dtype', None)
+        return m
+
+    def __rmul__(self, other):
+        # other * self：乘法交换律，复用 __mul__（含 1-d 检查与 matrix 包装）
+        return self.__mul__(other)
+
+    def __add__(self, other):
+        return self._as_matrix(super().__add__(other))
+
+    def __radd__(self, other):
+        # other + self：加法交换律，复用 __add__
+        return self.__add__(other)
+
+    def __neg__(self):
+        return self._as_matrix(super().__neg__())
+
+    def copy(self, order='K', thread_safe=False):
+        return self._as_matrix(super().copy(order=order, thread_safe=thread_safe))
+
+    def __getitem__(self, index):
+        """索引保持 matrix 的 2-D 形态（numpy matlib 语义）。"""
+        out = super().__getitem__(index)
+        if not _is_ndarray(out):
+            return out
+        if out.ndim == 0:
+            return out[()]
+        if out.ndim == 1:
+            sh = out.shape[0]
+            try:
+                n = len(index)
+            except Exception:
+                n = 0
+            if n > 1 and isscalar(index[1]):
+                out = out.reshape((sh, 1))
+            else:
+                out = out.reshape((1, sh))
+        return self._as_matrix(out)
 
     @property
     def real(self):
@@ -8242,10 +8304,125 @@ class matrix(ndarray):
         return ndarray(v)
 
     def argmax(self, axis=None):
-        v = super().argmax(axis=axis)
+        v = super().argmax(axis)
         if hasattr(v, 'shape'):
             return v if v.ndim == 0 else matrix(v.tolist())
         return ndarray(v)
+
+    # ---- numpy matlib 兼容 API（matrix 特有方法/属性）----
+    @property
+    def A(self):
+        """返回 self 作为普通 ndarray（等价 np.asarray(self)）。"""
+        a = ndarray._wrap(self._array, _dtype=self._dtype,
+                          _fields=getattr(self, '_fields', None),
+                          _raw_data=getattr(self, '_raw_data', None))
+        a._complex_data = getattr(self, '_complex_data', None)
+        a._dtype_obj = getattr(self, '_dtype_obj', None)
+        a._str_dtype = getattr(self, '_str_dtype', None)
+        return a
+
+    @property
+    def A1(self):
+        """返回 self 展平后的普通 ndarray。"""
+        return self.A.ravel()
+
+    @property
+    def I(self):
+        """返回可逆 self 的（乘法）逆矩阵；非方阵用伪逆。"""
+        m, n = self.shape
+        import rsnumpy.linalg as _la
+        func = _la.inv if m == n else _la.pinv
+        return asmatrix(func(self))
+
+    @property
+    def T(self):
+        """返回矩阵的转置（不共轭）。"""
+        return matrix(self.transpose().tolist())
+
+    @property
+    def H(self):
+        """返回矩阵的（复）共轭转置；实矩阵等价于转置。"""
+        if str(getattr(self, '_dtype', '')) in ('complex64', 'complex128'):
+            return matrix(self.transpose().conjugate().tolist())
+        return matrix(self.transpose().tolist())
+
+    getA = A.fget
+    getA1 = A1.fget
+    getT = T.fget
+    getH = H.fget
+    getI = I.fget
+
+    def transpose(self, *axes):
+        """转置，结果保持 matrix（numpy matlib 语义）。"""
+        return matrix(super().transpose(*axes).tolist())
+
+    def __pow__(self, other):
+        """matrix 幂：恒走矩阵乘方（numpy matrix 语义；非整数抛 TypeError）。"""
+        from rsnumpy.linalg import matrix_power
+        return matrix_power(self, other)
+
+    def __ipow__(self, other):
+        self[:] = self ** other
+        return self
+
+    def __rpow__(self, other):
+        # numpy matrix：标量 ** matrix 未定义
+        return NotImplemented
+
+    def _align(self, axis):
+        """按轴保持 matrix 结果方向（numpy matlib 内部约定）。"""
+        if axis is None:
+            return self[0, 0]
+        elif axis == 0:
+            return self
+        elif axis == 1:
+            return matrix(self.transpose().tolist())
+        else:
+            raise ValueError("unsupported axis")
+
+    def _collapse(self, axis):
+        if axis is None:
+            return self[0, 0]
+        return self
+
+    def ptp(self, axis=None, out=None):
+        import rsnumpy as _np
+        v = _np.ptp(self.A, axis, out)
+        return matrix(v.tolist())._align(axis)
+
+    def sum(self, axis=None, dtype=None, out=None):
+        import rsnumpy as _np
+        v = _np.sum(self.A, axis, dtype)
+        return matrix(v.tolist())._align(axis)
+
+    def prod(self, axis=None, dtype=None, out=None):
+        import rsnumpy as _np
+        v = _np.prod(self.A, axis, dtype)
+        return matrix(v.tolist())._align(axis)
+
+    def max(self, axis=None, out=None):
+        import rsnumpy as _np
+        v = _np.max(self.A, axis)
+        return matrix(v.tolist())._align(axis)
+
+    def min(self, axis=None, out=None):
+        import rsnumpy as _np
+        v = _np.min(self.A, axis)
+        return matrix(v.tolist())._align(axis)
+
+    def ravel(self, order='C'):
+        """展平为 (1, N) 行矩阵。"""
+        v = super().ravel(order)
+        return matrix(v.tolist())
+
+    def flatten(self, order='C'):
+        """展平副本，形状 (1, N)。"""
+        v = super().flatten(order)
+        return matrix(v.tolist())
+
+    def tolist(self):
+        """返回嵌套 list（与 ndarray.tolist 一致，不经 x[0] 降维）。"""
+        return self.A.tolist()
 
 
 def asmatrix(data, dtype=None):
@@ -8255,49 +8432,55 @@ def asmatrix(data, dtype=None):
     return matrix(data, dtype=dtype)
 
 
+def _bmat_from_string(s, gdict, ldict):
+    """numpy bmat 字符串块矩阵解析：';' 分块行，',' 分块，块名先查 ldict
+    再查 gdict（ldict 为 None 时按 numpy 语义触发 TypeError）。"""
+    import rsnumpy as _np
+    rows = s.split(';')
+    rowtup = []
+    for row in rows:
+        trow = row.split(',')
+        newrow = []
+        for x in trow:
+            newrow.extend(x.split())
+        trow = newrow
+        coltup = []
+        for col in trow:
+            col = col.strip()
+            try:
+                thismat = ldict[col]
+            except KeyError:
+                try:
+                    thismat = gdict[col]
+                except KeyError:
+                    raise NameError(f"name {col!r} is not defined") from None
+            coltup.append(_to_ndarray(thismat))
+        rowtup.append(_np.concatenate(coltup, axis=-1))
+    return _np.concatenate(rowtup, axis=0)
+
+
 def bmat(obj, ldict=None, gdict=None):
-    """从字符串、嵌套序列或数组构建矩阵。"""
+    """从字符串、嵌套序列或数组构建矩阵（numpy bmat 语义）。"""
     if isinstance(obj, str):
-        obj = obj.strip()
-        if obj.startswith('[') and obj.endswith(']'):
-            obj = obj[1:-1].strip()
-        rows = obj.split(';')
-        data = []
-        for row in rows:
-            elements = row.split(',')
-            row_data = []
-            for e in elements:
-                e = e.strip()
-                if e.startswith('[') and e.endswith(']'):
-                    inner = e[1:-1].split()
-                    row_data.extend([float(x) for x in inner])
-                else:
-                    row_data.append(float(e))
-            data.append(row_data)
-        return asarray(data)
-    if isinstance(obj, (list, tuple)):
-        if isinstance(obj[0], (list, tuple)):
-            if isinstance(obj[0][0], (list, tuple)):
-                rows = []
-                for row_block in obj:
-                    row_len = sum(len(block[0]) for block in row_block)
-                    # current_row = [0.0] * row_len
-                    col_start = 0
-                    for block in row_block:
-                        b_arr = _to_ndarray(block)
-                        b_rows, b_cols = b_arr.shape
-                        for i in range(b_rows):
-                            if i >= len(rows):
-                                rows.append([0.0] * row_len)
-                            for j in range(b_cols):
-                                rows[i][col_start + j] = b_arr[i, j]
-                        col_start += b_cols
-                return asarray(rows)
-            else:
-                return asarray(obj)
+        if gdict is None:
+            # 取调用方帧的 globals/locals 作名字解析作用域
+            import sys
+            frame = sys._getframe().f_back
+            glob_dict = frame.f_globals
+            loc_dict = frame.f_locals
         else:
-            return asarray(obj)
-    return _to_ndarray(obj)
+            glob_dict = gdict
+            loc_dict = ldict
+        return asmatrix(_bmat_from_string(obj, glob_dict, loc_dict))
+    if isinstance(obj, (tuple, list)):
+        import rsnumpy as _np
+        # 注意：模块级 all 被 rsnumpy 归约函数遮蔽，须用 builtins.all
+        if obj and builtins.all(_is_ndarray(row) for row in obj):
+            # [A, E]：一维的 2-d 数组列表 → 水平拼接
+            return asmatrix(_np.concatenate(list(obj), axis=-1))
+        arr_rows = [_np.concatenate(list(row), axis=-1) for row in obj]
+        return asmatrix(_np.concatenate(arr_rows, axis=0))
+    return asmatrix(obj)
 
 
 def repmat(a, m, n):

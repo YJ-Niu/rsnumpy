@@ -147,6 +147,9 @@ def reshape(a, shape=None, order='C', *, newshape=None, copy=None):
 
 def ravel(a, order='C'):
     """展平数组。"""
+    # numpy 语义：np.ravel(matrix) 返回 1-d ndarray（matrix.ravel() 才是 (1,N) 矩阵）
+    if type(a).__name__ == 'matrix':
+        return a.A.ravel(order=order)
     arr = a if hasattr(a, '_array') else _wrap(a)
     return arr.ravel(order=order)
 

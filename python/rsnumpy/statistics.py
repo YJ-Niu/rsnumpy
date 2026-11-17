@@ -256,6 +256,9 @@ def _check_reduce_axis(a, axis):
 
 def sum(a, axis=None, dtype=None, out=None, keepdims=False, initial=None, where=True):
     """计算数组元素之和。"""
+    # matrix：保持 2-D 方向（numpy 语义），委托 matrix.sum（在 .A 上计算，无递归）
+    if type(a).__name__ == 'matrix':
+        return a.sum(axis=axis, dtype=dtype)
     _ = out, initial, where
     # 0-d 短路：Rust 归约对 0-d 输入会 abort；numpy 返回保持原 dtype 的 0-d
     _a_raw = _ensure_raw(a)
@@ -493,6 +496,8 @@ def var(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False, where=True,
 
 def min(a, axis=None, out=None, keepdims=False, initial=None, where=True):
     """计算数组元素的最小值。"""
+    if type(a).__name__ == 'matrix':
+        return a.min(axis=axis)
     _ = out, initial, where
     axis = _check_reduce_axis(a, axis)
     raw_result = _core.min(_ensure_raw(a), axis, keepdims)
@@ -502,6 +507,8 @@ def min(a, axis=None, out=None, keepdims=False, initial=None, where=True):
 
 def max(a, axis=None, out=None, keepdims=False, initial=None, where=True):
     """计算数组元素的最大值。"""
+    if type(a).__name__ == 'matrix':
+        return a.max(axis=axis)
     _ = out, initial, where
     axis = _check_reduce_axis(a, axis)
     raw_result = _core.max(_ensure_raw(a), axis, keepdims)
@@ -515,6 +522,8 @@ amax = max  # max 的别名，计算数组中的最大值
 
 def ptp(a, axis=None, out=None, keepdims=False):
     """计算数组元素的峰-峰值（最大值-最小值）。"""
+    if type(a).__name__ == 'matrix':
+        return a.ptp(axis=axis)
     _ = out, keepdims
     axis = _check_reduce_axis(a, axis)
     raw_result = _core.ptp(_ensure_raw(a), axis)

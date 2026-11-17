@@ -1952,6 +1952,14 @@ class linalg_module:
             raise LinAlgError("Square matrix expected")
 
         dtype = getattr(a_arr, '_dtype', 'float64')
+        # subok：输入为 matrix 时结果保持 matrix（numpy matrix_power 语义）
+        _is_mat = type(a).__name__ == 'matrix'
+
+        def _fin(res):
+            if _is_mat:
+                from rsnumpy import matrix as _mx
+                return _mx(res)
+            return res
 
         if n < 0:
             try:
@@ -1962,7 +1970,7 @@ class linalg_module:
                 # 奇异：底层抛 ValueError("Singular matrix")，NumPy 的
                 # matrix_power 抛 LinAlgError
                 raise LinAlgError("Singular matrix")
-            return linalg_module.matrix_power(inv_a, -n)
+            return _fin(linalg_module.matrix_power(inv_a, -n))
 
         lead, subs = _stacked_2d(a_arr)
         if dtype == 'object':
@@ -1977,18 +1985,18 @@ class linalg_module:
                 return lst
 
             if len(shape) == 2:
-                return array(_matrix_power_mat(_unflat(subs.tolist()), n),
-                             dtype='object')
+                return _fin(array(_matrix_power_mat(_unflat(subs.tolist()), n),
+                                  dtype='object'))
             parts = [_matrix_power_mat(_unflat(sub.tolist()), n)
                      for sub in subs]
-            return array(parts, dtype='object')
+            return _fin(array(parts, dtype='object'))
 
         if len(shape) == 2:
-            return ndarray(_matrix_power_mat(subs.tolist(), n)).astype(dtype)
+            return _fin(ndarray(_matrix_power_mat(subs.tolist(), n)).astype(dtype))
         parts = [_matrix_power_mat(sub.tolist(), n) for sub in subs]
         total = len(parts)
-        return (ndarray(parts).reshape((total,) + shape[-2:])
-                .reshape(lead + shape[-2:]).astype(dtype))
+        return _fin(ndarray(parts).reshape((total,) + shape[-2:])
+                    .reshape(lead + shape[-2:]).astype(dtype))
 
     @staticmethod
     def pinv(a, rcond=None, hermitian=False, rtol=NoValue):

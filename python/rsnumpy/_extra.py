@@ -479,6 +479,8 @@ def _prod_complex_py(arr, axis, keepdims):
 
 def prod(a, axis=None, dtype=None, out=None, keepdims=False, initial=None, where=True):
     """计算元素乘积。"""
+    if type(a).__name__ == 'matrix':
+        return a.prod(axis=axis, dtype=dtype)
     _ = out, where
     arr = _asarray(a)
     dt = getattr(arr, '_dtype', 'float64')
