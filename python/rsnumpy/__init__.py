@@ -10015,7 +10015,13 @@ def ix_(*args):
     prepared = []
     for a in args:
         dtype = getattr(a, '_dtype', None)
+        ndim = getattr(a, 'ndim', None)
         seq = a.tolist() if hasattr(a, 'tolist') else list(a)
+        # numpy 语义：ix_ 只接受 1-D 输入，高维抛 ValueError
+        if (ndim is not None and ndim > 1) or builtins.any(
+                isinstance(v, (list, tuple)) for v in seq):
+            raise ValueError(
+                "ix_ requires 1-D arrays, got array with more than 1 dimension")
         if dtype == 'bool' or (len(seq) > 0 and _py_all(isinstance(v, bool) for v in seq)):
             seq = [i for i, v in enumerate(seq) if v]
         else:
@@ -10396,34 +10402,72 @@ nested_iters.__text_signature__ = (
     "(op, axes, flags, op_flags, op_dtypes, order, casting, buffersize)")
 
 
-class _RClass:
-    """行连接辅助类，模拟 np.r_。"""
+def _ie_fill_slice(r):
+    """r_/c_ 中的 slice → 1-D ndarray（复数步长走 linspace，与 mgrid 一致）。"""
+    start, stop, step = r.start, r.stop, r.step
+    if step is not None and getattr(step, 'imag', 0):
+        n = int(step.imag)
+        s = 0 if start is None else start
+        e = 0 if stop is None else stop
+        return ndarray(linspace(s, e, n))
+    s = 0 if start is None else start
+    e = 0 if stop is None else stop
+    st = 1 if step is None else step
+    return ndarray(arange(s, e, st))
+
+
+class _IndexExpression:
+    """模拟 np.r_ / np.c_ 的索引表达式（numpy IndexExpression 语义）。"""
+
+    def __init__(self, axis):
+        self._axis = axis  # r_ → 0（行堆叠），c_ → 1（列追加）
+
     def __getitem__(self, item):
         if not isinstance(item, tuple):
             item = (item,)
-        arrays = []
-        for it in item:
-            arrays.append(ndarray(it))
-        if len(arrays) == 0:
+        axis = self._axis
+        # 维度规范：首元素为 '0'/'1' 字符串时覆盖拼接轴
+        if isinstance(item[0], str) and item[0] in ('0', '1'):
+            axis = int(item[0])
+            item = item[1:]
+        arraylets = []
+        for k in item:
+            if isinstance(k, slice):
+                arraylets.append(_ie_fill_slice(k))
+            else:
+                arraylets.append(ndarray(k))
+        if not arraylets:
             return ndarray([])
-        return concatenate(arrays)
+        return self._concat(arraylets, axis)
+
+    def _concat(self, arraylets, axis):
+        max_ndim = builtins.max(a.ndim for a in arraylets)
+        if max_ndim >= 2:
+            # 2-D 拼接：0-d → (1,1)，1-d 按轴整形为列/行
+            norm = []
+            for a in arraylets:
+                if a.ndim == 0:
+                    norm.append(ndarray([[a.tolist()]]))
+                elif a.ndim == 1:
+                    if axis == 1:
+                        norm.append(a.reshape(1, a.shape[0]))
+                    else:
+                        norm.append(a.reshape(a.shape[0], 1))
+                else:
+                    norm.append(a)
+            return concatenate(norm, axis=axis)
+        # 全 0-d/1-d → 1-d 结果（标量补一位）
+        flat = []
+        for a in arraylets:
+            if a.ndim == 0:
+                flat.append(a.tolist())
+            else:
+                flat.extend(a.tolist())
+        return ndarray(flat)
 
 
-r_ = _RClass()
-
-
-class _CClass:
-    """列连接辅助类，模拟 np.c_。"""
-    def __getitem__(self, item):
-        if not isinstance(item, tuple):
-            item = (item,)
-        arrays = [ndarray(it) for it in item]
-        if _py_all(a.ndim <= 1 for a in arrays):
-            return column_stack(arrays)
-        return concatenate(arrays, axis=1)
-
-
-c_ = _CClass()
+r_ = _IndexExpression(0)
+c_ = _IndexExpression(1)
 
 
 class _SClass:
@@ -10435,33 +10479,76 @@ class _SClass:
 s_ = _SClass()
 
 
+def _grid_range_to_1d(r):
+    """mgrid/ogrid 的单个 range（slice/标量/数组）→ 1-D ndarray。
+
+    复数步长（如 10j）表示 N 点 linspace；实步长走 arange；None 取默认
+    （start→0、stop→0、step→1），与 numpy nd_grid 一致。
+    """
+    if isinstance(r, slice):
+        start, stop, step = r.start, r.stop, r.step
+        if step is not None and getattr(step, 'imag', 0):
+            n = int(step.imag)
+            s = 0 if start is None else start
+            e = 0 if stop is None else stop
+            return ndarray(linspace(s, e, n))
+        s = 0 if start is None else start
+        e = 0 if stop is None else stop
+        st = 1 if step is None else step
+        return ndarray(arange(s, e, st))
+    elif isinstance(r, (int, float)):
+        return ndarray([float(r)])
+    else:
+        return ndarray(r)
+
+
+def _reshape_flat(flat, shape):
+    """把 1-D 值列表按 C 序折成给定 shape 的嵌套列表。"""
+    if len(shape) == 1:
+        return flat
+    if len(shape) == 2:
+        rr, cc = shape
+        return [flat[rr * cc:(rr + 1) * cc] for rr in range(rr)]
+    first, rest = shape[0], shape[1:]
+    block = 1
+    for s in rest:
+        block *= s
+    return [_reshape_flat(flat[i * block:(i + 1) * block], rest)
+            for i in range(first)]
+
+
 def mgrid(*ranges):
-    """密集网格索引，返回密集网格数组。"""
-    arrays = []
-    for r in ranges:
-        if isinstance(r, slice):
-            arrays.append(ndarray(arange(r.start or 0, r.stop, r.step or 1)))
-        elif isinstance(r, (int, float)):
-            arrays.append(ndarray([float(r)]))
-        else:
-            arrays.append(ndarray(r))
-    grids = np.meshgrid(*arrays, indexing='ij')
-    if isinstance(grids, tuple) and len(grids) > 1:
-        return stack(grids, axis=0)
-    return grids
+    """密集网格索引，返回密集网格数组（numpy 语义：1 range→1-D，N range→堆叠）。"""
+    if len(ranges) == 0:
+        return ndarray([])
+    arrays = [_grid_range_to_1d(r) for r in ranges]
+    if len(arrays) == 1:
+        return arrays[0]
+    n = len(arrays)
+    vals = [a.tolist() for a in arrays]
+    lens = [len(v) for v in vals]
+    from itertools import product
+    idxs = list(product(*[range(l) for l in lens]))
+    grids = [ndarray(_reshape_flat([vals[i][idx[i]] for idx in idxs], lens))
+             for i in range(n)]
+    return stack(grids, axis=0)
 
 
 def ogrid(*ranges):
-    """开放网格索引，返回开放网格数组。"""
-    arrays = []
-    for r in ranges:
-        if isinstance(r, slice):
-            arrays.append(ndarray(arange(r.start or 0, r.stop, r.step or 1)))
-        elif isinstance(r, (int, float)):
-            arrays.append(ndarray([float(r)]))
-        else:
-            arrays.append(ndarray(r))
-    return np.meshgrid(*arrays, indexing='ij')
+    """开放网格索引，返回稀疏网格数组列表（numpy 语义）。"""
+    if len(ranges) == 0:
+        return []
+    arrays = [_grid_range_to_1d(r) for r in ranges]
+    if len(arrays) == 1:
+        return arrays[0]
+    n = len(arrays)
+    sparse = []
+    for i in range(n):
+        a = arrays[i]
+        shape = [1] * n
+        shape[i] = a.shape[0]
+        sparse.append(ndarray(_reshape_flat(a.tolist(), shape)))
+    return sparse
 
 
 def meshgrid(*xi, copy=True, sparse=False, indexing='xy'):

@@ -2222,12 +2222,21 @@ def diag_indices(n, ndim=2):
 def diag_indices_from(arr):
     """由数组形状返回主对角线索引。"""
     a = _asarray(arr)
-    return diag_indices(a.shape[0], a.ndim)
+    if a.ndim < 2:
+        raise ValueError(
+            "diag_indices_from requires an array with at least 2-d")
+    n = a.shape[0]
+    if not builtins.all(d == n for d in a.shape[1:]):
+        raise ValueError(
+            "all input array dimensions must be of equal length")
+    return diag_indices(n, a.ndim)
 
 
 def fill_diagonal(a, val, wrap=False):
     """就地填充主对角线。"""
     arr = _asarray(a)
+    if arr.ndim < 2:
+        raise ValueError("fill_diagonal requires an array with at least 2-d")
     _core.fill_diagonal(arr._array, _asarray(val)._array, wrap)
     return None
 
@@ -2772,6 +2781,10 @@ def ravel_multi_index(multi_index, dims, mode='raise', order='C'):
     _shps = [tuple(getattr(_m, 'shape', ())) for _m in idxs]
     _bshape = (tuple(broadcast_shapes(*_shps)) if builtins.len(_shps) > 1
                else _shps[0]) if _shps else ()
+    # 任一维索引为空 → 空结果（numpy 语义，避免对空数组取 [0] 越界）
+    if idxs and builtins.any(builtins.len(_flat(_m)) == 0 for _m in idxs):
+        nd = _np().ndarray
+        return nd(_reshape_list([], _bshape), _dtype='int64')
     # 零尺寸维度：空输入 → 空结果；非空索引 → 越界（任何 mode 下都成立）
     if builtins.any(_d0 == 0 for _d0 in dims_list):
         _n_elems = 1

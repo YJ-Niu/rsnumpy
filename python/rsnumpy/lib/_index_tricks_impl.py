@@ -45,15 +45,43 @@ class _MGrid:
         import rsnumpy
         return rsnumpy.mgrid(*ranges)
 
+    def __getitem__(self, item):
+        # numpy 语义：mgrid[start:stop:step, ...] 等价于 mgrid(start:stop:step, ...)
+        import rsnumpy
+        if not isinstance(item, tuple):
+            item = (item,)
+        return rsnumpy.mgrid(*item)
+
     def __repr__(self):
         return "mgrid"
 
 
 mgrid = _MGrid()
 
+
+class _OGGrid:
+    """``np.ogrid`` 的带文档包装（调用/下标转发到 rsnumpy 顶层实现）。"""
+
+    def __call__(self, *ranges):
+        import rsnumpy
+        return rsnumpy.ogrid(*ranges)
+
+    def __getitem__(self, item):
+        # numpy 语义：ogrid[start:stop:step, ...] 等价于 ogrid(start:stop:step, ...)
+        import rsnumpy
+        if not isinstance(item, tuple):
+            item = (item,)
+        return rsnumpy.ogrid(*item)
+
+    def __repr__(self):
+        return "ogrid"
+
+
+ogrid = _OGGrid()
+
 _REEXPORT_NAMES = (
     'c_', 'diag_indices', 'diag_indices_from', 'fill_diagonal',
-    'index_exp', 'ix_', 'ndenumerate', 'ndindex', 'ogrid', 'r_', 's_',
+    'index_exp', 'ix_', 'ndenumerate', 'ndindex', 'r_', 's_',
 )
 
 
