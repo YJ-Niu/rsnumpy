@@ -80,14 +80,33 @@ _ma_argsort_default = object()
 _ma_reduce_default = object()
 
 
+def _ma_mask_or(m1, m2, size):
+    """掩码按位或，双方各自广播到 size（numpy 广播语义：1 → 全部重复，
+    n < size → 平铺裁剪）。"""
+    def bc(m):
+        if len(m) == size:
+            return list(m)
+        if len(m) == 1:
+            return list(m) * size if size else []
+        if len(m) < size:
+            reps = (size + len(m) - 1) // len(m)
+            return (list(m) * reps)[:size]
+        return list(m)[:size]
+    a = bc(m1)
+    b = bc(m2)
+    return [x or y for x, y in zip(a, b)]
+
+
 class MaskedArray:
     """带掩码的数组：包装底层 ndarray 与逐元素布尔掩码。"""
 
     def __init__(self, data=None, mask=False, dtype=None, fill_value=None,
                  copy=False, **kwargs):
         _ = copy, kwargs
+        _src_ma = None
         if isinstance(data, MaskedArray):
             base_mask = list(data._mask)
+            _src_ma = data
             data = data._data
         else:
             base_mask = None
@@ -115,7 +134,23 @@ class MaskedArray:
         if len(m) < n:
             m = m + [False] * (n - len(m))
         self._mask = m
-        self.fill_value = fill_value
+        self.fill_value = self._as_fill(fill_value)
+
+    def _as_fill(self, fv):
+        """fill_value 规范化：按 data dtype 存为 0-d 数组（numpy.ma 语义：
+        x.fill_value.dtype == x.dtype；不可转换则存原值）。"""
+        if fv is None:
+            return None
+        try:
+            if hasattr(fv, 'astype'):
+                # np.array(0-d ndarray, dtype=...) 不改 dtype，须用 astype
+                return fv.astype(self._data.dtype)
+            return np.array(fv, dtype=self._data.dtype)
+        except Exception:
+            try:
+                return np.array(fv)
+            except Exception:
+                return fv
 
     # ------------------------------------------------------------------
     # 属性
@@ -183,6 +218,147 @@ class MaskedArray:
         """返回独立副本（data 与 mask 均拷贝）。"""
         return MaskedArray(self._data.copy(), list(self._mask))
 
+    def _as_fill(self, fv):
+        """fill_value 规范化：按 data dtype 存为 0-d 数组（numpy.ma 语义：
+        x.fill_value.dtype == x.dtype；不可转换则存原值）。"""
+        if fv is None:
+            return None
+        try:
+            if hasattr(fv, 'astype'):
+                # np.array(0-d ndarray, dtype=...) 不改 dtype，须用 astype
+                return fv.astype(self._data.dtype)
+            return np.array(fv, dtype=self._data.dtype)
+        except Exception:
+            try:
+                return np.array(fv)
+            except Exception:
+                return fv
+
+    def _fill_lossy(self, fv):
+        """fill 值向当前 dtype 的转换是否 lossy（浮点静默回绕视为 lossy）。"""
+        dt = str(self._data.dtype)
+        try:
+            if hasattr(fv, 'astype'):
+                cast = fv.astype(dt)
+            else:
+                cast = np.array(fv, dtype=dt)
+        except Exception:
+            return True
+        if isinstance(fv, float) and 'int' in dt and not (abs(fv) < 2 ** 63):
+            return True
+        try:
+            return bool(isinstance(fv, float) and 'int' in dt
+                        and float(cast) != fv)
+        except Exception:
+            return False
+
+    def _inherit_fill(self, src):
+        """从源 MaskedArray 继承 fill（exact 保留，lossy 忽略）。"""
+        if _is_ma(src) and getattr(src, '_fill_value', None) is not None \
+                and not self._fill_lossy(src._fill_value):
+            self._fill_value = src._fill_value
+
+    def astype(self, dtype, **kwargs):
+        """dtype 转换：data 走 ndarray.astype，掩码原样保留。"""
+        _ = kwargs
+        return MaskedArray(self._data.astype(dtype), mask=list(self._mask),
+                           fill_value=self.fill_value)
+
+    def _ma_extreme(self, which, axis=None):
+        """掩码感知 min/max：掩码位填 ±inf 后归约（numpy.ma 语义：忽略
+        masked 元素）。axis=None 返回 0-d MaskedArray；axis 返回轴归约。"""
+        import math as _math
+        d = self._data
+        shp = tuple(d.shape)
+        msk = np.array(self._mask, dtype='bool')
+        if len(msk) == int(self.size):
+            msk = msk.reshape(shp)
+        flat_v = d.reshape((-1,)).tolist() if d.ndim else [d.tolist()]
+        flat_m = msk.reshape((-1,)).tolist()
+        fillv = float('inf') if which == 'min' else float('-inf')
+        fv = [fillv if mv else v for v, mv in zip(flat_v, flat_m)]
+        if axis is None:
+            if not fv:
+                return MaskedArray(np.array(0.0), mask=[True])
+            r = builtins.min(fv) if which == 'min' else builtins.max(fv)
+            if r == fillv or (isinstance(r, float) and r != r):
+                # 全掩码（或 nan）：masked 标量
+                return MaskedArray(np.array(flat_v[0]), mask=[True])
+            return MaskedArray(np.array(r), mask=[False])
+        nd = len(shp)
+        ax = axis % nd
+        order = [i for i in range(nd) if i != ax] + [ax]
+
+        def build(flat, dims):
+            if not dims:
+                return flat[0]
+            step = 1
+            for s in dims[1:]:
+                step *= s
+            return [build(flat[i * step:(i + 1) * step], dims[1:])
+                    for i in range(dims[0])]
+
+        nest = build(fv, [shp[i] for i in order])
+
+        def reduce_last(lst):
+            if lst and isinstance(lst[0], list):
+                return [reduce_last(x) for x in lst]
+            return builtins.min(lst) if which == 'min' \
+                else builtins.max(lst)
+
+        red = reduce_last(nest)
+        out_shp = tuple(shp[i] for i in order[:-1])
+        res = np.array(red)
+        if out_shp:
+            res = res.reshape(out_shp)
+            # 全掩码行 → 掩码位为 True
+            _of = [1 if v == fillv else 0 for v in red] if not out_shp \
+                else None
+            # 逐行掩码：构造行掩码嵌套
+            def rowmask(flat, dims):
+                if not dims:
+                    return flat[0]
+                step = 1
+                for s in dims[1:]:
+                    step *= s
+                return [rowmask(flat[i * step:(i + 1) * step], dims[1:])
+                        for i in range(dims[0])]
+
+            fm = [1 if v == fillv else 0 for v in fv]
+            nm = build(fm, [shp[i] for i in order])
+
+            def mask_last(lst):
+                if lst and isinstance(lst[0], list):
+                    return [mask_last(x) for x in lst]
+                return 1 if builtins.all(lst) else 0
+
+            rm = mask_last(nm)
+            rm = np.array(rm, dtype='bool').reshape(out_shp)
+            out = MaskedArray(res, mask=False)
+            out._mask = [bool(x) for x
+                         in rm.reshape((-1,)).tolist()]
+            out.fill_value = self.fill_value
+            return out
+        if red == fillv:
+            return MaskedArray(np.array(flat_v[0]), mask=[True])
+        return MaskedArray(np.array(red), mask=[False])
+
+    def reshape(self, *args, **kwargs):
+        """reshape：data 变形，平坦掩码直接沿用（元素总数不变）。"""
+        return MaskedArray(self._data.reshape(*args, **kwargs),
+                           mask=list(self._mask),
+                           fill_value=self.fill_value)
+
+    def min(self, axis=None, out=None, keepdims=False):
+        """掩码感知最小值（numpy.ma 语义：忽略 masked 元素）。"""
+        _ = out, keepdims
+        return self._ma_extreme('min', axis)
+
+    def max(self, axis=None, out=None, keepdims=False):
+        """掩码感知最大值（numpy.ma 语义：忽略 masked 元素）。"""
+        _ = out, keepdims
+        return self._ma_extreme('max', axis)
+
     # ------------------------------------------------------------------
     # 转置族（numpy.ma 语义：结果保留掩码）
     # ------------------------------------------------------------------
@@ -222,13 +398,16 @@ class MaskedArray:
     # 算术/比较 dunder：掩码按位或传播（numpy.ma 语义的核心子集）
     # ------------------------------------------------------------------
     def _ma_binop(self, other, op, reflected=False):
+        if isinstance(other, _MaskedConstant):
+            other = other._as_ma()
         a = self._data
         b = other._data if _is_ma(other) else other
         res = op(b, a) if reflected else op(a, b)
         if not hasattr(res, '_array'):
             res = np.asarray(res)
         if _is_ma(other):
-            m = [x or y for x, y in zip(self._mask, other._mask)]
+            m = _ma_mask_or(self._mask, other._mask,
+                            int(getattr(res, 'size', len(self._mask))))
         else:
             m = list(self._mask)
         fill = self.fill_value if self.fill_value is not None else None
@@ -295,23 +474,77 @@ class MaskedArray:
         fill = self.fill_value if self.fill_value is not None else None
         return MaskedArray(res, mask=list(self._mask), fill_value=fill)
 
+    def _ma_cmp(self, other, op):
+        # numpy.ma _comparison 权威语义：
+        # - mask = self.mask OR other.mask
+        # - data = op(raw data)
+        # - 仅 ==/!=：掩码位的 data 改为 op(self_mask, other_mask)
+        #   （双掩码视为相等，单掩码视为不等）；其余比较 data 保持 raw
+        # - fill_value 转 bool（默认 True）
+        a = self._data
+        if isinstance(other, _MaskedConstant):
+            other = other._as_ma()
+        b = other._data if _is_ma(other) else other
+        res = op(a, b)
+        if not hasattr(res, '_array'):
+            res = np.asarray(res)
+        omask = list(other._mask) if _is_ma(other) else None
+        if omask is not None:
+            m = _ma_mask_or(self._mask, omask,
+                            int(getattr(res, 'size', len(self._mask))))
+        else:
+            m = list(self._mask)
+        is_eqne = op is np.equal or op is np.not_equal
+        if is_eqne:
+            try:
+                if res.ndim == 0:
+                    sm = bool(self._mask[0]) if self._mask else False
+                    om = bool(omask[0]) if omask else False
+                    v = (sm == om) if op is np.equal else (sm != om)
+                    res = np.array([v], dtype='bool').reshape(())
+                else:
+                    flat = res.reshape((-1,)).tolist()
+                    nf = []
+                    for i, mv in enumerate(m):
+                        if mv:
+                            sm = bool(self._mask[i]) \
+                                if i < len(self._mask) else False
+                            om = bool(omask[i]) \
+                                if omask is not None and i < len(omask) \
+                                else False
+                            nf.append((sm == om) if op is np.equal
+                                      else (sm != om))
+                        else:
+                            nf.append(flat[i])
+                    res = np.array(nf, dtype='bool').reshape(res.shape)
+            except Exception:
+                pass
+        if self.fill_value is None:
+            fv = True
+        else:
+            try:
+                fv = bool(self.fill_value)
+            except Exception:
+                fv = True
+        return MaskedArray(res, mask=m, fill_value=fv)
+
     def __eq__(self, other):
-        return self._ma_binop(other, np.equal)
+        return self._ma_cmp(other, np.equal)
 
     def __ne__(self, other):
-        return self._ma_binop(other, np.not_equal)
+        return self._ma_cmp(other, np.not_equal)
 
     def __lt__(self, other):
-        return self._ma_binop(other, np.less)
+        return self._ma_cmp(other, np.less)
 
     def __le__(self, other):
-        return self._ma_binop(other, np.less_equal)
+        return self._ma_cmp(other, np.less_equal)
 
     def __gt__(self, other):
-        return self._ma_binop(other, np.greater)
+        return self._ma_cmp(other, np.greater)
 
     def __ge__(self, other):
-        return self._ma_binop(other, np.greater_equal)
+        return self._ma_cmp(other, np.greater_equal)
 
     def __and__(self, other):
         return self._ma_binop(other, np.logical_and)
@@ -371,7 +604,14 @@ class MaskedArray:
                 m_flat = [False] * (int(res.size)
                                     if hasattr(res, 'size') else 0)
             return MaskedArray(res, m_flat)
-        return res
+        # 标量索引返回 0-d MaskedArray（numpy.ma 语义：掩码信息不能丢，
+        # 否则后续比较走 ndarray 标量分支抛 Unsupported operand type）
+        try:
+            mv = bool(self._mask[int(key)]) if int(key) < len(self._mask) \
+                else False
+        except Exception:
+            mv = False
+        return MaskedArray(res, [mv])
 
     def __setitem__(self, key, value):
         self._data[key] = value
@@ -441,12 +681,70 @@ def masked_invalid(data, copy=True):
 
 
 class _MaskedConstant:
+    """np.ma.masked 单例：按 numpy 语义表现为 0-d float64 MaskedArray
+    （值 0.0、全掩码）。委托给惰性创建的 MaskedArray 实例。"""
+
+    # 哨兵：np.add 等核心 ufunc 据此短路返回常量自身（避免循环导入）
+    _ma_masked_self = True
+
     def __repr__(self):
         return 'masked'
+
     def __str__(self):
         return 'masked'
+
     def __bool__(self):
         return False
+
+    def _as_ma(self):
+        if '_ma' not in self.__dict__:
+            self._ma = MaskedArray(np.array(0.0), mask=[True])
+        return self._ma
+
+    def __getattr__(self, name):
+        # 常规查找失败后委托给 0-d MaskedArray（dtype/_data/_mask/算术等）
+        return getattr(self._as_ma(), name)
+
+    def __int__(self):
+        # numpy 语义：int(masked) 对整型目标抛 MaskError（不可静默取值）
+        raise MaskError("Cannot convert masked constant to int")
+
+    def __float__(self):
+        return float(self._as_ma()._data)
+
+    def __index__(self):
+        return 0
+
+    # numpy 语义：与 masked 常量的任何二元运算都返回 masked 单例自身
+    def _masked_ret(self, *args, **kwargs):
+        return self
+
+    __add__ = _masked_ret
+    __radd__ = _masked_ret
+    __sub__ = _masked_ret
+    __rsub__ = _masked_ret
+    __mul__ = _masked_ret
+    __rmul__ = _masked_ret
+    __truediv__ = _masked_ret
+    __rtruediv__ = _masked_ret
+    __floordiv__ = _masked_ret
+    __rfloordiv__ = _masked_ret
+    __mod__ = _masked_ret
+    __rmod__ = _masked_ret
+    __pow__ = _masked_ret
+    __rpow__ = _masked_ret
+    __and__ = _masked_ret
+    __rand__ = _masked_ret
+    __or__ = _masked_ret
+    __ror__ = _masked_ret
+    __xor__ = _masked_ret
+    __rxor__ = _masked_ret
+    __eq__ = _masked_ret
+    __ne__ = _masked_ret
+    __lt__ = _masked_ret
+    __le__ = _masked_ret
+    __gt__ = _masked_ret
+    __ge__ = _masked_ret
 
 
 masked = _MaskedConstant()
@@ -851,6 +1149,30 @@ def _copy_names():
 for _n, _v in _copy_names().items():
     globals()[_n] = _v
 del _copy_names, _n, _v
+
+# 二元 ufunc 对 masked 常量短路（numpy 语义：add(masked, x) → masked）
+_MA_BIN_UFUNCS = (
+    'add', 'subtract', 'divide', 'equal', 'not_equal',
+    'greater', 'greater_equal', 'less', 'less_equal',
+    'logical_and', 'logical_or', 'logical_xor',
+    'arctan2', 'hypot', 'logaddexp', 'maximum', 'minimum',
+    'mod', 'power', 'outer', 'inner',
+)
+
+
+def _ma_ufunc_shortcircuit(f):
+    def _w(*args, **kwargs):
+        for _a in args:
+            if isinstance(a := _a, _MaskedConstant):
+                return a
+        return f(*args, **kwargs)
+    return _w
+
+
+for _n in _MA_BIN_UFUNCS:
+    if _n in globals():
+        globals()[_n] = _ma_ufunc_shortcircuit(globals()[_n])
+del _MA_BIN_UFUNCS, _ma_ufunc_shortcircuit, _n
 
 
 # ---- 掩码感知 argsort / minmax（numpy.ma 语义；覆盖上面从 np 拷贝的同名函数）----

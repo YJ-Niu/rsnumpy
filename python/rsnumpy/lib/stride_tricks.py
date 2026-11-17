@@ -23,7 +23,8 @@ import rsnumpy as np
 __all__ = ['as_strided']
 
 
-def as_strided(x, shape=None, strides=None, subok=False, writeable=True):
+def as_strided(x, shape=None, strides=None, subok=False, writeable=True,
+               check_bounds=True):
     """Create a strided array from an existing one.
 
     Parameters
@@ -40,6 +41,9 @@ def as_strided(x, shape=None, strides=None, subok=False, writeable=True):
     writeable : bool, optional
         Accepted for NumPy compatibility.  The result owns its memory, so it is
         always writeable and writes never reach `x`.
+    check_bounds : bool, optional
+        Accepted for NumPy compatibility.  Bounds are always checked
+        (out-of-range strides raise ValueError below).
 
     Returns
     -------
@@ -52,6 +56,7 @@ def as_strided(x, shape=None, strides=None, subok=False, writeable=True):
         If the strides reach outside `x`, which for negative strides means they
         reach before its start.  See the module docstring.
     """
+    _ = check_bounds
     shape = tuple(int(s) for s in (x.shape if shape is None else shape))
     strides = tuple(int(s) for s in (x.strides if strides is None else strides))
     if len(shape) != len(strides):

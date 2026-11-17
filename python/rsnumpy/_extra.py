@@ -1308,8 +1308,9 @@ def broadcast_shapes(*shapes):
     return result
 
 
-def broadcast_arrays(*args):
-    """将多个数组广播到公共形状。"""
+def broadcast_arrays(*args, subok=False):
+    """将多个数组广播到公共形状（subok 接受以兼容 numpy；rsnumpy 无子类体系）。"""
+    _ = subok
     np = _np()
     arrs = [_asarray(a) for a in args]
     target = broadcast_shapes(*[a.shape for a in arrs])
@@ -2990,16 +2991,104 @@ def bitwise_count(x):
 
 
 def packbits(a, axis=None, bitorder='big'):
-    """将布尔/整数数组按比特打包为 uint8。"""
-    _ = axis
-    return _wrap(_core.packbits(_asarray(a)._array, bitorder), "uint8")
+    """将布尔/整数数组按比特打包为 uint8。
+
+    axis（numpy 语义）：沿该轴每 8 个元素打包为 1 字节，该轴长度变为
+    ceil(n/8)，其他维不变；None → flatten 打包为 1-d。
+    """
+    np = _np()
+    arr = _asarray(a)
+    packed_flat = _wrap(_core.packbits(arr._array, bitorder), "uint8")
+    if axis is None or arr.ndim <= 1:
+        if axis is None:
+            return packed_flat
+        # 1-d 沿 axis=0/-1 打包：结果仍是 1-d
+        return packed_flat
+    ax = axis % arr.ndim
+    order = [i for i in range(arr.ndim) if i != ax] + [ax]
+    moved = arr.transpose(order)
+    other_shape = tuple(int(d) for d in moved.shape[:-1])
+    ax_n = int(moved.shape[-1])
+    n_other = 1
+    for s in other_shape:
+        n_other *= s
+    pad = (-ax_n) % 8
+    rows = moved.reshape((n_other, ax_n)).tolist()
+    out = []
+    for row in rows:
+        row = row + [0] * pad
+        ba = np.array(row, dtype='uint8').reshape((-1,))
+        # 每行一次 Rust 调用（组内 bitorder 语义与 flat 一致）
+        packed = _core.packbits(ba._array, bitorder).reshape((-1,)).tolist()
+        out.extend(packed[: (ax_n + pad) // 8])
+    res = np.array(out, dtype='uint8').reshape(
+        tuple(other_shape) + ((ax_n + pad) // 8,))
+    # ceil 轴（末尾）移回原 ax 位置
+    perm = list(range(len(other_shape) + 1))
+    last = perm.pop()
+    perm.insert(ax, last)
+    res = res.transpose(*perm)
+    return res
 
 
 def unpackbits(a, axis=None, count=None, bitorder='big'):
-    """将 uint8 数组展开为比特。"""
-    _ = axis
-    c = count if count is not None else 0
-    return _wrap(_core.unpackbits(_asarray(a)._array, c if c > 0 else None, bitorder), "uint8")
+    """将 uint8 数组展开为比特。
+
+    count（numpy 语义）：正数 → 沿位轴截断/零填充到该长度；负数 → 在
+    全展开长度（该轴 n*8）上收缩；结果长度为负 → ValueError；0 → 空轴。
+    axis 沿给定轴展开（每字节 8 位替换该轴，其他维不变）；None → flatten。
+    """
+    np = _np()
+    arr = _asarray(a)
+    nd = arr.ndim
+    if axis is None or nd <= 1:
+        moved = arr.reshape((-1,))
+        k = int(moved.size)
+        total = 8 * k
+        n = total if count is None else (
+            count if count >= 0 else total + count)
+        if n < 0:
+            raise ValueError(
+                f"Invalid count {count} for unpacking {total} bits")
+        bits = []
+        if k:
+            ba = np.array(moved.tolist(), dtype='uint8').reshape((-1,))
+            bits = _core.unpackbits(ba._array, None, bitorder) \
+                .reshape((-1,)).tolist()
+        bits = bits[:n] + [0] * (n - len(bits))
+        return np.array(bits, dtype='uint8')
+    # axis 版本：位轴（每字节 8 位）替换原 ax 轴，其他维不变
+    ax = axis % nd
+    order = [i for i in range(nd) if i != ax] + [ax]
+    moved = arr.transpose(*order)
+    other_shape = tuple(int(d) for d in moved.shape[:-1])
+    k = int(moved.shape[-1])
+    total = 8 * k
+    n = total if count is None else (
+        count if count >= 0 else total + count)
+    if n < 0:
+        raise ValueError(
+            f"Invalid count {count} for unpacking {total} bits")
+    bits = []
+    if k:
+        ba = np.array(moved.reshape((-1,)).tolist(), dtype='uint8') \
+            .reshape((-1,))
+        bits = _core.unpackbits(ba._array, None, bitorder) \
+            .reshape((-1,)).tolist()
+    bits = bits[:8 * k] + [0] * (8 * k - len(bits))
+    # target[i][j...] = 字节 j 的位 i（位轴全局序；i>=8 为零填充）
+    tf = []
+    for i in range(n):
+        for j in range(k):
+            tf.append(bits[j * 8 + i] if i < 8 else 0)
+    res = np.array(tf, dtype='uint8').reshape((n,) + other_shape)
+    if nd > 1:
+        # 位轴从位置 0 移回原 ax 位置
+        perm = list(range(nd))
+        p0 = perm.pop(0)
+        perm.insert(ax, p0)
+        res = res.transpose(*perm)
+    return res
 
 
 # ========== 向量 / 矩阵乘积（gufunc）==========

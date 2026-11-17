@@ -1378,12 +1378,13 @@ class linalg_module:
             eps = _finfo_eps(s_dt)
             m, n = shape[-2], shape[-1]
 
-            def _count(vec):
+            def _count(vec, rtol_i=None):
                 if tol is not None:
                     t = tol
                 elif rtol is not None:
-                    # NumPy 语义：tol = S.max() * rtol
-                    t = (max(vec) if vec else 0.0) * rtol
+                    # NumPy 语义：tol = S.max() * rtol（rtol 可逐批次）
+                    _ri = rtol_i if rtol_i is not None else float(rtol)
+                    t = (max(vec) if vec else 0.0) * _ri
                 else:
                     t = (max(vec) * max(m, n) * eps if vec else 0.0)
                 return sum(1 for v in vec if v > t)
@@ -1394,7 +1395,25 @@ class linalg_module:
             for d in shape[:-2]:
                 total *= d
             s2 = s.reshape((total, min(m, n)))
-            parts = [_count(v) for v in s2.tolist()]
+            # rtol 支持标量或数组（NumPy 2.0+：广播到批次形状，逐批次
+            # tol = S.max() * rtol[i]）
+            rtols = None
+            if rtol is not None:
+                try:
+                    rtols = [float(rtol)] * total
+                except (TypeError, ValueError):
+                    _rv = ndarray(rtol)
+                    _flat = _rv.reshape(total).tolist() \
+                        if _rv.size == total else \
+                        list(_rv.reshape((-1,)).tolist()) * (total // max(_rv.size, 1))
+                    if len(_flat) < total:
+                        _flat = (_flat * (total // len(_flat) + 1))[:total]
+                    rtols = [float(v) for v in _flat]
+            if rtols is None:
+                parts = [_count(v) for v in s2.tolist()]
+            else:
+                parts = [_count(v, r) for v, r in
+                         zip(s2.tolist(), rtols)]
             return ndarray(parts).reshape(shape[:-2]).astype('int64')
         rows = a_arr.tolist()
         if not isinstance(rows, list):

@@ -27,6 +27,9 @@ def _wrap_bool(result):
 def _ensure_raw(a):
     if hasattr(a, '_array'):
         return a._array
+    if hasattr(a, '_data'):
+        # ma MaskedArray / masked 常量：递归取底层 ndarray
+        return _ensure_raw(a._data)
     if hasattr(a, '__class__') and a.__class__.__name__ == 'ndarray':
         return a
     return _core.ndarray(a)
@@ -430,6 +433,11 @@ def add(x1, x2, out=None, **kwargs):
     """逐元素加法。NEP50：Python 弱标量不提升结果 dtype（uint8+3→uint8）；
     str 标量按 np.copyto 同款宽松转换（无法解析按 0），使 ufunc 与
     copyto 的 casting 行为一致（casting 关键字接受但不参与弱标量判定）。"""
+    # ma.masked 常量短路（numpy 语义：add(masked, x) → masked 单例）
+    if getattr(x1, '_ma_masked_self', False):
+        return x1
+    if getattr(x2, '_ma_masked_self', False):
+        return x2
     kwargs.pop('casting', None)
     # 字符串数组 + 字符串数组/标量 = 逐元素连接（numpy 语义）；结果超
     # intc max → TypeError（large_string_addition 回归）

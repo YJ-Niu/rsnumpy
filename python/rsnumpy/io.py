@@ -54,24 +54,84 @@ def savetxt(fname, X, fmt='%.18e', delimiter=' ', newline='\n', header='',
     _core.save_text(fname, _ensure_raw(X), fmt, delimiter)
 
 
+def _strip_comments(line, comments):
+    """剥离行内注释：comments 可为单个字符串或多个注释字符的集合。"""
+    if not comments:
+        return line
+    for c in ([comments] if isinstance(comments, str) else comments):
+        if c:
+            idx = line.find(c)
+            if idx >= 0:
+                line = line[:idx]
+    return line
+
+
+def _parse_loadtxt_text(text, comments, delimiter, skiprows, keep_str=False):
+    rows = []
+    for line in text.splitlines()[skiprows:]:
+        line = _strip_comments(line, comments).strip()
+        if not line:
+            continue
+        parts = line.split(delimiter) if delimiter else line.split()
+        if not keep_str:
+            parts = [float(p) for p in parts]
+        rows.append(parts)
+    return rows
+
+
+def _convert_field(token, dt):
+    """按字段 dtype 转换 token（structured loadtxt 用）。"""
+    s = str(dt).lstrip('|<>=')
+    if s.startswith('S'):
+        return token.encode()
+    if s.startswith('U'):
+        return token
+    if s[0] in 'iu':
+        return int(token)
+    return float(token)
+
+
 def loadtxt(fname, dtype=float, comments='#', delimiter=None, converters=None,
             skiprows=0, usecols=None, unpack=False, ndmin=0, encoding='bytes',
-            max_rows=None, *, like=None):
-    """从文本文件加载数据。"""
+            max_rows=None, *, quotechar=None, like=None):
+    """从文本文件加载数据（路径、类文件对象或字符串列表均可）。"""
     if delimiter is None:
         delimiter = ""
-    if hasattr(fname, 'read'):
+    keep_str = dtype is str or dtype is bytes
+    try:
+        if hasattr(dtype, 'names') and dtype.names:
+            keep_str = True  # 结构化 dtype：字段按声明转换，不强制 float
+    except Exception:
+        pass
+    if isinstance(fname, (list, tuple)) and all(
+            isinstance(s, str) for s in fname):
+        text = "\n".join(fname)
+        rows = _parse_loadtxt_text(text, comments, delimiter, skiprows,
+                                   keep_str)
+        if keep_str and getattr(dtype, 'names', None):
+            names = dtype.names
+            converted = [
+                tuple(_convert_field(t, dtype[nm]) for nm, t in zip(names, row))
+                for row in rows]
+            import rsnumpy as _npmod
+            result = _npmod.array(converted, dtype=dtype)
+            return result[0] if len(result) == 1 else result
+        result = _get_ndarray()(rows)
+    elif hasattr(fname, 'read'):
         # File-like object: parse in Python (Rust core only accepts paths).
         text = fname.read()
         if isinstance(text, bytes):
             text = text.decode('utf-8', errors='replace')
-        rows = []
-        for line in text.splitlines()[skiprows:]:
-            line = line.strip()
-            if not line or (comments and line.startswith(comments)):
-                continue
-            parts = line.split(delimiter) if delimiter else line.split()
-            rows.append([float(p) for p in parts])
+        rows = _parse_loadtxt_text(text, comments, delimiter, skiprows,
+                                   keep_str)
+        if keep_str and getattr(dtype, 'names', None):
+            names = dtype.names
+            converted = [
+                tuple(_convert_field(t, dtype[nm]) for nm, t in zip(names, row))
+                for row in rows]
+            import rsnumpy as _npmod
+            result = _npmod.array(converted, dtype=dtype)
+            return result[0] if len(result) == 1 else result
         result = _get_ndarray()(rows)
     else:
         result = _wrap(_core.load_text(fname, delimiter, skiprows))

@@ -421,30 +421,16 @@ def _qr_double_step(H, i, m):
     _qr_shift_step(H, i, m, (tr - disc) / 2.0)
 
 
-def _eigvals_qr(mat):
-    """通用特征值（纯 Python），返回 complex 列表（顺序任意，同 LAPACK 语义）。
+def _eigvals_fl_dk(mat):
+    """特征多项式法（f64 FL + DK 多起点 + c0 校正 + Newton 抛光）。
 
-    n≤2 解析式；n≥3 Householder Hessenberg 约化 + 单位移 QR 迭代
-    （1x1/2x2 块逐步剥离）。测试规模（n≤8）精度满足 decimal=12。
+    f64 FL 系数累积 ~1e-11 相对误差，常数项 c[0] 直接决定根乘积
+    （=det），故把 c[0] 校正为 f64 LU 行列式（相对 ~1e-15）得校正
+    多项式 p̃'，再对每个 DK 候选根做 3 步 Newton 抛光。n≤8 可靠；
+    n≥9 系数量级（~‖A‖^n）超出 f64 有效位，根不可靠。
     """
     import cmath
     n = len(mat)
-    if n == 0:
-        return []
-    if n == 1:
-        return [complex(mat[0][0])]
-    if n == 2:
-        a, b = mat[0][0], mat[0][1]
-        c, d = mat[1][0], mat[1][1]
-        tr = a + d
-        det = a * d - b * c
-        disc = cmath.sqrt(tr * tr - 4.0 * det)
-        return [(tr + disc) / 2.0, (tr - disc) / 2.0]
-    # n≥3：特征多项式法（f64 FL + DK 多起点）。f64 FL 系数累积 ~1e-11
-    # 相对误差，常数项 c[0] 直接决定根乘积（=det），故把 c[0] 校正为
-    # f64 LU 行列式（相对 ~1e-15）得校正多项式 p̃'，再对每个 DK 候选
-    # 根做 3 步 Newton 抛光——第一步消去 c0 移位，后两步以二次收敛把
-    # DK 的 ~1e-13 候选误差压到 f64 极限，根乘积达 ~1e-15 相对精度。
     c = _fl_coefficients(mat)
     roots = _dk_roots(c)
     target = ((-1.0) ** n) * _py_det(mat)
@@ -461,6 +447,188 @@ def _eigvals_qr(mat):
                 break
         roots[i] = z
     return roots
+
+
+def _cgivens(a, b):
+    """复 Givens：返回 (c, s, r)，G = [[c, s], [-conj(s), conj(c)]]，
+    G^H [a, b]^T = [r, 0]^T（r ≥ 0 实）。c = a/t, s = -conj(b)/t。"""
+    import math
+    t = math.sqrt(abs(a) ** 2 + abs(b) ** 2)
+    if t == 0:
+        return 1.0 + 0j, 0j, 0.0
+    return a / t, -complex(b).conjugate() / t, t
+
+
+def _rot_rows(H, r1, r2, jlo, jhi, c, s):
+    """左乘 G^H 于行 r1, r2（列 jlo..jhi）：new1 = conj(c)·x - s·y，
+    new2 = conj(s)·x + c·y。"""
+    ca = c.conjugate()
+    cs = s.conjugate()
+    for j in range(jlo, jhi + 1):
+        x = H[r1][j]
+        y = H[r2][j]
+        H[r1][j] = ca * x - s * y
+        H[r2][j] = cs * x + c * y
+
+
+def _rot_cols(H, c1, c2, rlo, rhi, c, s):
+    """右乘 G 于列 c1, c2（行 rlo..rhi）：new1 = c·x - conj(s)·y，
+    new2 = s·x + conj(c)·y。"""
+    cs = s.conjugate()
+    cc = c.conjugate()
+    for r in range(rlo, rhi + 1):
+        x = H[r][c1]
+        y = H[r][c2]
+        H[r][c1] = c * x - cs * y
+        H[r][c2] = s * x + cc * y
+
+
+def _francis_step(H, lo, hi, exc=False):
+    """窗口 [lo, hi]（含端点）上的隐式 Francis 双移位 QR 步
+    （bulge chasing，复 Givens；数值稳定，不显式构造奇异因子分解）。
+    exc=True 用异常移位（dlahqr 对策：每 10 步无收缩扰动一次，
+    打破移位与特征值重合导致的停滞）。"""
+    import cmath
+    if exc:
+        # LAPACK 式异常移位：0.75×次对角范数 + 尾对角
+        w1 = w2 = H[hi][hi] + 0.75 * (abs(H[hi][hi - 1])
+                                      + abs(H[hi - 1][hi - 2]))
+    else:
+        a, b = H[hi - 1][hi - 1], H[hi - 1][hi]
+        c, d = H[hi][hi - 1], H[hi][hi]
+        tr = a + d
+        disc = cmath.sqrt(tr * tr - 4.0 * (a * d - b * c))
+        w1 = (tr + disc) / 2.0
+        w2 = (tr - disc) / 2.0
+    # 初始 chase 向量 u = (H-w1·I)(H-w2·I) e_lo 的前两个非零分量
+    u0 = (H[lo][lo] - w1) * (H[lo][lo] - w2) \
+        + H[lo][lo + 1] * H[lo + 1][lo]
+    u1 = H[lo + 1][lo] * ((H[lo][lo] - w2) + (H[lo + 1][lo + 1] - w1))
+    c0, s0, _ = _cgivens(u0, u1)
+    _rot_rows(H, lo, lo + 1, lo, hi, c0, s0)
+    _rot_cols(H, lo, lo + 1, lo, min(lo + 2, hi), c0, s0)
+    # 追逐 bulge：第 t 步 bulge 在 (lo+2+t, lo+t)
+    for t in range(hi - lo - 1):
+        r1 = lo + 1 + t
+        r2 = lo + 2 + t
+        x = H[r1][lo + t]
+        y = H[r2][lo + t]
+        ck, sk, _ = _cgivens(x, y)
+        # 左旋须含 bulge 列 lo+t：x→r、y→0（漏掉该列会破坏相似性）
+        _rot_rows(H, r1, r2, lo + t, hi, ck, sk)
+        H[r2][lo + t] = 0j  # 数值保险
+        _rot_cols(H, r1, r2, lo, min(r2 + 1, hi), ck, sk)
+
+
+def _qr_iter_eigvals(H):
+    """Hessenberg 矩阵特征值（dlahqr 式驱动）：窗口递归 + 尾块 1x1/2x2
+    正确提取 + 隐式 Francis 双移位。H[i+1][i]≈0 时矩阵分裂为两个独立
+    块（尾块递归，前导块继续），绝不可把未三角化的尾块当对角读取。"""
+    import cmath
+    n = len(H)
+    eps = 2.220446049250313e-16
+    evals = []
+    state = {'it': 0}
+
+    def _2x2(lo):
+        a, b = H[lo][lo], H[lo][lo + 1]
+        c, d = H[lo + 1][lo], H[lo + 1][lo + 1]
+        tr = a + d
+        disc = cmath.sqrt(tr * tr - 4.0 * (a * d - b * c))
+        return (tr + disc) / 2.0, (tr - disc) / 2.0
+
+    def _window(lo, hi):
+        # stall：本窗口连续无收缩的步数（每 10 步触发一次异常移位）
+        stall = 0
+        while hi - lo + 1 > 0:
+            size = hi - lo + 1
+            if size == 1:
+                evals.append(complex(H[lo][lo]))
+                return
+            if size == 2:
+                e1, e2 = _2x2(lo)
+                evals.append(e1)
+                evals.append(e2)
+                return
+            # 从底部向上找第一个可收缩次对角元 H[j+1][j]
+            split = None
+            for j in range(hi - 1, lo - 1, -1):
+                if H[j + 1][j] == 0:
+                    split = j
+                    break
+                if abs(H[j + 1][j]) <= eps * (abs(H[j][j])
+                                              + abs(H[j + 1][j + 1])):
+                    H[j + 1][j] = 0j
+                    split = j
+                    break
+            if split is not None:
+                stall = 0
+                tsize = hi - split  # 尾块 [split+1, hi] 大小
+                if tsize == 1:
+                    evals.append(complex(H[hi][hi]))
+                    hi = split
+                    continue
+                if tsize == 2:
+                    e1, e2 = _2x2(split + 1)
+                    evals.append(e1)
+                    evals.append(e2)
+                    hi = split
+                    continue
+                # 尾块 ≥3：仍是独立 Hessenberg 块，递归处理后再回头
+                _window(split + 1, hi)
+                hi = split
+                continue
+            # 显式双移位 QR 步（两次单位移 QR，移位取尾部 2x2 特征值）；
+            # 每 10 步无收缩改用异常移位（dlahqr 对策）
+            if stall % 10 == 9:
+                _qr_shift_step(H, lo, hi + 1,
+                               H[hi][hi] + 0.75 * (abs(H[hi][hi - 1])
+                                                   + abs(H[hi - 1][hi - 2])))
+            else:
+                _qr_double_step(H, lo, hi + 1)
+            stall += 1
+            state['it'] += 1
+            if state['it'] > 60 * n:
+                raise RuntimeError(
+                    'QR eigenvalue iteration did not converge')
+
+    _window(0, n - 1)
+    # 实输入的实特征值：复算术残留的微小虚部归零
+    out = []
+    for z in evals:
+        if abs(z.imag) < 1e-11 * max(1.0, abs(z.real)):
+            z = complex(z.real, 0.0)
+        out.append(z)
+    return out
+
+
+def _eigvals_qr(mat):
+    """通用特征值（纯 Python），返回 complex 列表（顺序任意，同 LAPACK 语义）。
+
+    n≤2 解析式；n≤8 特征多项式法（FL+DK+c0 校正，精度 ~1e-15 相对）；
+    n≥9 FL 系数量级超出 f64 有效位 → Hessenberg + Francis 双移位 QR
+    迭代（不收敛回退 FL+DK，保持旧行为下界）。
+    """
+    import cmath
+    n = len(mat)
+    if n == 0:
+        return []
+    if n == 1:
+        return [complex(mat[0][0])]
+    if n == 2:
+        a, b = mat[0][0], mat[0][1]
+        c, d = mat[1][0], mat[1][1]
+        tr = a + d
+        det = a * d - b * c
+        disc = cmath.sqrt(tr * tr - 4.0 * det)
+        return [(tr + disc) / 2.0, (tr - disc) / 2.0]
+    if n >= 9:
+        H = _hessenberg_reduce(mat)
+        try:
+            return _qr_iter_eigvals(H)
+        except Exception:
+            pass  # 不收敛：回退 FL+DK（旧路径）
+    return _eigvals_fl_dk(mat)
 
 
 def _eigvals_highprec(mat):

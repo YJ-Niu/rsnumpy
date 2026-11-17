@@ -888,9 +888,106 @@ def histogram2d(x, y, bins=10, range=None, density=False, weights=None):
 
 
 def histogramdd(sample, bins=10, range=None, density=False, weights=None):
-    """计算多维直方图（回退到 2D）。"""
-    _ = range, density, weights
-    return histogram2d(sample[:, 0], sample[:, 1], bins)
+    """计算多维直方图（纯 Python：支持标量/序列/显式边界 bins）。"""
+    import bisect
+    _range = _builtins.range  # range 参数遮蔽内置函数
+    # 规范化 sample：2-d 矩阵 (N, d) 或序列 of arrays（每维一个）
+    if hasattr(sample, 'shape'):
+        rows = sample.tolist()
+        if len(sample.shape) <= 1:
+            cols = [list(rows)]
+        else:
+            d = len(rows[0])
+            cols = [[r[i] for r in rows] for i in _range(d)]
+    else:
+        first = sample[0] if len(sample) else None
+        if hasattr(first, 'tolist') or isinstance(first, (list, tuple)):
+            cols = [list(v) for v in sample]
+        else:
+            cols = [list(sample)]
+    d = len(cols)
+    if d == 0:
+        raise ValueError("sample must contain at least one dimension")
+    # bins 规范化：标量 → 每维同数；序列 → 每维 bin 数或显式边界
+    if isinstance(bins, (int, float)) and not isinstance(bins, bool):
+        bins_spec = [bins] * d
+    else:
+        bins_spec = list(bins)
+        if len(bins_spec) != d:
+            raise ValueError(
+                f"bins must have length {d}, got {len(bins_spec)}")
+    if weights is not None:
+        w = weights.tolist() if hasattr(weights, 'tolist') else list(weights)
+    else:
+        w = None
+    edges = []
+    nbins = []
+    for i in _range(d):
+        spec = bins_spec[i]
+        if hasattr(spec, 'tolist'):
+            e = list(spec.tolist())
+        elif isinstance(spec, (list, tuple)):
+            e = list(spec)
+        else:
+            n = int(spec)
+            if n <= 0:
+                raise ValueError("each bins dimension must be positive")
+            if range is not None:
+                lo, hi = range[i][0], range[i][1]
+            else:
+                lo, hi = min(cols[i]), max(cols[i])
+            if lo == hi:
+                lo -= 0.5
+                hi += 0.5
+            step = (hi - lo) / n
+            e = [lo + step * t for t in _range(n + 1)]
+            e[-1] = hi
+        edges.append(e)
+        nbins.append(len(e) - 1)
+    # 计数（C 序扁平；范围外的样本不计）
+    size = 1
+    for n in nbins:
+        size *= n
+    H = [0.0] * size
+    strides = [1] * d
+    for i in _range(d - 2, -1, -1):
+        strides[i] = strides[i + 1] * nbins[i + 1]
+    n_samples = len(cols[0])
+    for s in _range(n_samples):
+        idx = []
+        ok = True
+        for i in _range(d):
+            v = cols[i][s]
+            e = edges[i]
+            bi = bisect.bisect_right(e, v) - 1
+            if bi == len(e) - 1 and v == e[-1]:
+                bi -= 1  # 末 bin 闭区间
+            if bi < 0 or v < e[0] or v > e[-1]:
+                ok = False
+                break
+            idx.append(bi)
+        if not ok:
+            continue
+        flat = 0
+        for i in _range(d):
+            flat += idx[i] * strides[i]
+        H[flat] += w[s] if w is not None else 1.0
+    if density:
+        total = sum(H)
+        widths = [[edges[i][j + 1] - edges[i][j]
+                   for j in _range(nbins[i])] for i in _range(d)]
+        flat_w = []
+        for fi in _range(size):
+            vol = 1.0
+            rem = fi
+            for i in _range(d - 1, -1, -1):
+                vol *= widths[i][rem % nbins[i]]
+                rem //= nbins[i]
+            flat_w.append(vol)
+        H = [h / (total * v) if v else h for h, v in zip(H, flat_w)]
+    import rsnumpy as _npmod
+    H_arr = _npmod.array(H).reshape(tuple(nbins))
+    return H_arr, [_wrap(e) for e in edges]
 
 
 def digitize(x, bins, right=False):
