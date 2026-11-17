@@ -1176,8 +1176,28 @@ def assert_array_compare(comparison, x, y, err_msg='', verbose=True, header='',
             dt = x.dtype
             if equal_nan and dt == y.dtype and dt._has_nan_na:
                 # Let the dtype determine which values are NaN-like.
+                # rs 的 isnan 对 vstring 恒为 False，故按 na_object 识别 NA 位：
+                # 单例 NA（如 pd.NA）用对象同一性，float nan 用 v != v。
+                def _na_mask(arr, _na=dt.na_object):
+                    # 注意：rs 的 vstring .ravel() 会损坏数据（返回 0.0），
+                    # 故直接 tolist() 并递归展平（N-D 安全）。
+                    def _flat(lst):
+                        out = []
+                        for v in lst:
+                            if isinstance(v, (list, tuple)):
+                                out.extend(_flat(v))
+                            else:
+                                out.append(v)
+                        return out
+                    try:
+                        flat = _flat(arr.tolist())
+                    except Exception:
+                        return np.zeros(getattr(arr, 'shape', ()), dtype=bool)
+                    m = [v is _na or (isinstance(v, float) and v != v)
+                         for v in flat]
+                    return np.array(m).reshape(arr.shape)
                 flagged = func_assert_same_pos(
-                    x, y, func=isnan, hasval=dt.na_object)
+                    x, y, func=_na_mask, hasval=dt.na_object)
 
         if flagged.ndim > 0:
             # Only do the comparison if actual values are left

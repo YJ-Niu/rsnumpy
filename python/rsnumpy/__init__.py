@@ -10927,6 +10927,13 @@ class _DTypeNamespace:
     Float64DType = type('Float64DType', (), {'_dt_name': 'float64'})
     Complex64DType = type('Complex64DType', (), {'_dt_name': 'complex64'})
     Complex128DType = type('Complex128DType', (), {'_dt_name': 'complex128'})
+    def _str_dtype_init(self, *a, **k):
+        # numpy StringDType(na_object)：保存 NA 对象（None/nan/str/任意对象）
+        _na = k.get('na_object', a[0] if a else None)
+        self.__dict__['na_object'] = _na
+        # _has_nan_na：dtype 是否带非 None 的 NA 对象（供 assert 的 vstring NA 分支判定）
+        self.__dict__['_has_nan_na'] = _na is not None
+
     StrDType = type('StrDType', (), {
         '_dt_name': 'str0',
         # 与 DType 接口对齐（非结构化语义）：_coerce_field_value 等按
@@ -10934,9 +10941,7 @@ class _DTypeNamespace:
         '_names': None, '_fields': {}, '_subdtype': None,
         '_is_numeric': False, '_kind': 'T', 'char': 'T',
         '_has_nan_na': False,
-        # numpy StringDType(na_object)：保存 NA 对象（None/nan/str/任意对象）
-        '__init__': lambda self, *a, **k: self.__dict__.__setitem__(
-            'na_object', k.get('na_object', a[0] if a else None)),
+        '__init__': _str_dtype_init,
     })
     StringDType = StrDType  # numpy 2.x 变长字符串 dtype 别名
     BytesDType = type('BytesDType', (), {'_dt_name': 'bytes0',
