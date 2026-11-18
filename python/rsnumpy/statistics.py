@@ -957,7 +957,11 @@ def histogramdd(sample, bins=10, range=None, density=False, weights=None):
     size = 1
     for n in nbins:
         size *= n
-    H = [0.0] * size
+    # bin 总数过大（如 10 维 bins=2**10 → 2**100）→ numpy 语义抛 ValueError
+    try:
+        H = [0.0] * size
+    except OverflowError:
+        raise ValueError("too many bins")
     strides = [1] * d
     for i in _range(d - 2, -1, -1):
         strides[i] = strides[i + 1] * nbins[i + 1]

@@ -10517,7 +10517,7 @@ def _reshape_flat(flat, shape):
             for i in range(first)]
 
 
-def mgrid(*ranges):
+def _mgrid_impl(*ranges):
     """密集网格索引，返回密集网格数组（numpy 语义：1 range→1-D，N range→堆叠）。"""
     if len(ranges) == 0:
         return ndarray([])
@@ -10534,7 +10534,22 @@ def mgrid(*ranges):
     return stack(grids, axis=0)
 
 
-def ogrid(*ranges):
+class _MGridTop:
+    """np.mgrid：可调用且可下标（numpy 语义 mgrid[a:b, c:d] == mgrid(a:b, c:d)）。"""
+    def __call__(self, *ranges):
+        return _mgrid_impl(*ranges)
+    def __getitem__(self, item):
+        if not isinstance(item, tuple):
+            item = (item,)
+        return self(*item)
+    def __repr__(self):
+        return "mgrid"
+
+
+mgrid = _MGridTop()
+
+
+def _ogrid_impl(*ranges):
     """开放网格索引，返回稀疏网格数组列表（numpy 语义）。"""
     if len(ranges) == 0:
         return []
@@ -10549,6 +10564,21 @@ def ogrid(*ranges):
         shape[i] = a.shape[0]
         sparse.append(ndarray(_reshape_flat(a.tolist(), shape)))
     return sparse
+
+
+class _OGGridTop:
+    """np.ogrid：可调用且可下标（numpy 语义）。"""
+    def __call__(self, *ranges):
+        return _ogrid_impl(*ranges)
+    def __getitem__(self, item):
+        if not isinstance(item, tuple):
+            item = (item,)
+        return self(*item)
+    def __repr__(self):
+        return "ogrid"
+
+
+ogrid = _OGGridTop()
 
 
 def meshgrid(*xi, copy=True, sparse=False, indexing='xy'):

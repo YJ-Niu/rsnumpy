@@ -455,7 +455,7 @@ def _prod_complex_py(arr, axis, keepdims):
                 acc *= v
 
         _walk(vals)
-        return nd(acc)
+        return nd(acc).astype(arr.dtype)
     ax = axis % len(shape)
     out_shape = shape[:ax] + shape[ax + 1:]
     comps = list(itertools.product(
@@ -471,7 +471,7 @@ def _prod_complex_py(arr, axis, keepdims):
                 v = v[i]
             acc *= v
         out.append(acc)
-    res = nd(out).reshape(out_shape)
+    res = nd(out).reshape(out_shape).astype(arr.dtype)
     if keepdims:
         res = res.reshape(shape[:ax] + (1,) + shape[ax + 1:])
     return res

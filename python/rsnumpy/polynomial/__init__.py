@@ -123,6 +123,21 @@ def polyint(p, m=1, k=0):
 
 def polyroots(p):
     """计算多项式的根。"""
+    # 系数含 NaN：伴矩阵特征值未定义，与 numpy 一致抛 LinAlgError
+    import math
+    _c = (p.coef if isinstance(p, Poly)
+          else (p.tolist() if hasattr(p, 'tolist') else list(p)))
+    def _has_nan(v):
+        if isinstance(v, (list, tuple)):
+            return any(_has_nan(x) for x in v)
+        try:
+            return math.isnan(float(v))
+        except (TypeError, ValueError, OverflowError):
+            return False
+    if any(_has_nan(v) for v in _c):
+        import rsnumpy as _np
+        raise _np.linalg.LinAlgError(
+            "Eigenvalues did not converge: coefficients contain NaN")
     if isinstance(p, Poly):
         return p.roots()
     return Poly(p).roots()

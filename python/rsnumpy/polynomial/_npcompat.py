@@ -120,6 +120,17 @@ def roots(p):
     p_list = p.tolist()
     while len(p_list) > 1 and p_list[0] == 0:
         p_list = p_list[1:]
+    # 系数含 NaN：伴矩阵特征值未定义，与 numpy 一致抛 LinAlgError
+    import math
+    def _has_nan(v):
+        try:
+            return math.isnan(float(v))
+        except (TypeError, ValueError, OverflowError):
+            return False
+    if any(_has_nan(v) for v in p_list):
+        import rsnumpy as _np
+        raise _np.linalg.LinAlgError(
+            "Eigenvalues did not converge: coefficients contain NaN")
     deg = len(p_list) - 1
     if deg == 0:
         r_list = []
