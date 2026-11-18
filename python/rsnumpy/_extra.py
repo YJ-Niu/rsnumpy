@@ -3013,6 +3013,14 @@ def packbits(a, axis=None, bitorder='big'):
     """
     np = _np()
     arr = _asarray(a)
+    if bitorder not in ('big', 'little'):
+        if isinstance(bitorder, str):
+            raise ValueError("bitorder must be 'big' or 'little'")
+        raise TypeError("bitorder must be 'big' or 'little'")
+    # numpy 语义：仅接受整数/布尔类型，float 抛 TypeError
+    if getattr(arr.dtype, 'kind', 'f') not in 'iub':
+        raise TypeError(
+            "Expected an input array of integer or boolean type")
     packed_flat = _wrap(_core.packbits(arr._array, bitorder), "uint8")
     if axis is None or arr.ndim <= 1:
         if axis is None:
@@ -3021,23 +3029,24 @@ def packbits(a, axis=None, bitorder='big'):
         return packed_flat
     ax = axis % arr.ndim
     order = [i for i in range(arr.ndim) if i != ax] + [ax]
-    moved = arr.transpose(order)
+    # 末轴补 8 的倍数后一次性 flat pack（替代逐行 Rust 调用）：
+    # 每行长度是 8 的倍数，flat pack 与逐行 pack 等价（两种 bitorder 均成立）
+    moved = arr.transpose(order).astype('uint8')
     other_shape = tuple(int(d) for d in moved.shape[:-1])
     ax_n = int(moved.shape[-1])
-    n_other = 1
-    for s in other_shape:
-        n_other *= s
     pad = (-ax_n) % 8
-    rows = moved.reshape((n_other, ax_n)).tolist()
-    out = []
-    for row in rows:
-        row = row + [0] * pad
-        ba = np.array(row, dtype='uint8').reshape((-1,))
-        # 每行一次 Rust 调用（组内 bitorder 语义与 flat 一致）
-        packed = _core.packbits(ba._array, bitorder).reshape((-1,)).tolist()
-        out.extend(packed[: (ax_n + pad) // 8])
-    res = np.array(out, dtype='uint8').reshape(
-        tuple(other_shape) + ((ax_n + pad) // 8,))
+    if pad:
+        shape_pad = list(moved.shape)
+        shape_pad[-1] = ax_n + pad
+        padded = np.zeros(shape_pad, dtype='uint8')
+        sl = (slice(None),) * (arr.ndim - 1) + (slice(0, ax_n),)
+        padded[sl] = moved
+        moved = padded
+        ax_n += pad
+    flat = moved.reshape((-1,))
+    packed = _core.packbits(flat._array, bitorder).reshape((-1,))
+    res = np.array(packed, dtype='uint8').reshape(
+        tuple(other_shape) + (ax_n // 8,))
     # ceil 轴（末尾）移回原 ax 位置
     perm = list(range(len(other_shape) + 1))
     last = perm.pop()
@@ -3056,6 +3065,10 @@ def unpackbits(a, axis=None, count=None, bitorder='big'):
     np = _np()
     arr = _asarray(a)
     nd = arr.ndim
+    if bitorder not in ('big', 'little'):
+        if isinstance(bitorder, str):
+            raise ValueError("bitorder must be 'big' or 'little'")
+        raise TypeError("bitorder must be 'big' or 'little'")
     if axis is None or nd <= 1:
         moved = arr.reshape((-1,))
         k = int(moved.size)
@@ -3077,6 +3090,9 @@ def unpackbits(a, axis=None, count=None, bitorder='big'):
     order = [i for i in range(nd) if i != ax] + [ax]
     moved = arr.transpose(*order)
     other_shape = tuple(int(d) for d in moved.shape[:-1])
+    n_other = 1
+    for s in other_shape:
+        n_other *= s
     k = int(moved.shape[-1])
     total = 8 * k
     n = total if count is None else (
@@ -3085,17 +3101,16 @@ def unpackbits(a, axis=None, count=None, bitorder='big'):
         raise ValueError(
             f"Invalid count {count} for unpacking {total} bits")
     bits = []
-    if k:
+    if k and n_other:
         ba = np.array(moved.reshape((-1,)).tolist(), dtype='uint8') \
             .reshape((-1,))
         bits = _core.unpackbits(ba._array, None, bitorder) \
             .reshape((-1,)).tolist()
-    bits = bits[:8 * k] + [0] * (8 * k - len(bits))
-    # target[i][j...] = 字节 j 的位 i（位轴全局序；i>=8 为零填充）
+    # res[bit, r] = 第 r 行（k 字节）展开后的第 bit 位；bit>=total 零填充
     tf = []
     for i in range(n):
-        for j in range(k):
-            tf.append(bits[j * 8 + i] if i < 8 else 0)
+        for r in range(n_other):
+            tf.append(bits[r * total + i] if i < total else 0)
     res = np.array(tf, dtype='uint8').reshape((n,) + other_shape)
     if nd > 1:
         # 位轴从位置 0 移回原 ax 位置
