@@ -366,7 +366,7 @@ def _values_equal(a, b):
         lb = _flat_vals(b.tolist()) if hasattr(b, 'tolist') else _flat_vals([b])
         if len(la) != len(lb):
             return False
-        return builtins.all(x == y for x, y in zip(la, lb))
+        return _builtins.all(x == y for x, y in zip(la, lb))
     except Exception:
         return False
 
@@ -887,13 +887,134 @@ def histogram(a, bins=10, range=None, weights=None, density=False):
     return _wrap(result[0]), _wrap(result[1])
 
 
-def histogram2d(x, y, bins=10, range=None, density=False, weights=None):
-    """计算二维直方图。"""
-    _ = range, density, weights
-    x_arr = x if hasattr(x, '_array') else _wrap(x)
-    y_arr = y if hasattr(y, '_array') else _wrap(y)
-    counts, (edges_x, edges_y) = _core.histogram2d_rs(_ensure_raw(x_arr), _ensure_raw(y_arr), bins)
-    return _wrap(counts), [_wrap(edges_x), _wrap(edges_y)]
+_H2D_DEFAULT = object()
+
+
+def _hist2d_1d(a):
+    """把输入展平为 float 列表。"""
+    import rsnumpy as _rs
+    if hasattr(a, '_array'):
+        return [_builtins.float(v) for v in a.reshape((-1,)).tolist()]
+    return [_builtins.float(v) for v in _rs.array(a).reshape((-1,)).tolist()]
+
+
+def _hist2d_edges(spec, vals, rng):
+    """bin 规格(int 数 或 显式边界序列)+ range → 边界 float 列表。"""
+    import rsnumpy as _rs
+    if isinstance(spec, (int, float)) and not isinstance(spec, bool):
+        nb = _builtins.int(spec)
+        if nb <= 0:
+            raise ValueError("bins must be positive")
+        if rng is not None:
+            lo, hi = _builtins.float(rng[0]), _builtins.float(rng[1])
+        elif len(vals) == 0:
+            lo, hi = 0.0, 1.0
+        else:
+            lo, hi = _builtins.min(vals), _builtins.max(vals)
+            if lo == hi:
+                lo, hi = lo - 0.5, hi + 0.5
+        step = (hi - lo) / nb
+        return [lo + step * i for i in _builtins.range(nb + 1)]
+    if hasattr(spec, '_array'):
+        return [_builtins.float(e) for e in spec.reshape((-1,)).tolist()]
+    return [_builtins.float(e) for e in _rs.array(spec).reshape((-1,)).tolist()]
+
+
+def _hist2d_dispatch(x, y, bins, weights, kw):
+    """__array_function__ dispatch：x/y/weights/bins 中非 ndarray 的 dispatchable 触发。"""
+    import rsnumpy as _rs
+    cands = [x, y, weights]
+    if isinstance(bins, (list, tuple)):
+        cands.extend(bins)
+    else:
+        cands.append(bins)
+    types = []
+    func = None
+    for o in cands:
+        if o is None or isinstance(o, (list, tuple, int, float, bool)):
+            continue
+        if isinstance(o, _rs.ndarray):
+            continue
+        f = getattr(o, '__array_function__', None)
+        if f is not None:
+            types.append(type(o))
+            func = f
+    if func is None:
+        return None
+    return func(_rs.histogram2d, tuple(types), (x, y), kw)
+
+
+def histogram2d(x, y, bins=_H2D_DEFAULT, range=_H2D_DEFAULT,
+                density=_H2D_DEFAULT, weights=_H2D_DEFAULT):
+    """计算二维直方图（纯 Python：标量/显式边界/非对称 bins、range、density、weights）。
+
+    H 形状 (nbins_x, nbins_y)，H[i, j] = x 落在第 i 个 x-bin、y 落在第 j 个 y-bin 的计数。
+    """
+    import bisect
+    import rsnumpy as _rs
+    kw = {}
+    if bins is not _H2D_DEFAULT:
+        kw['bins'] = bins
+    if range is not _H2D_DEFAULT:
+        kw['range'] = range
+    if density is not _H2D_DEFAULT:
+        kw['density'] = density
+    if weights is not _H2D_DEFAULT:
+        kw['weights'] = weights
+    if bins is _H2D_DEFAULT:
+        bins = 10
+    if range is _H2D_DEFAULT:
+        range = None
+    if density is _H2D_DEFAULT:
+        density = False
+    if weights is _H2D_DEFAULT:
+        weights = None
+    if isinstance(bins, (list, tuple)) and len(bins) != 2:
+        raise ValueError("bins must be a scalar or a sequence of length 2")
+    d = _hist2d_dispatch(x, y, bins, weights, kw)
+    if d is not None:
+        return d
+    xa = _hist2d_1d(x)
+    ya = _hist2d_1d(y)
+    N = len(xa)
+    if len(ya) != N:
+        raise ValueError("x and y must have the same length.")
+    w = [1.0] * N
+    if weights is not None:
+        w_raw = weights if hasattr(weights, '_array') else _rs.array(weights)
+        if w_raw.ndim != 1 or w_raw.size != N:
+            raise ValueError("weights must have the same shape as x")
+        w = [_builtins.float(v) for v in w_raw.reshape((-1,)).tolist()]
+    if isinstance(bins, (list, tuple)):
+        bx_spec, by_spec = bins[0], bins[1]
+    else:
+        bx_spec = by_spec = bins
+    rng_x = range[0] if range is not None else None
+    rng_y = range[1] if range is not None else None
+    xed = _hist2d_edges(bx_spec, xa, rng_x)
+    yed = _hist2d_edges(by_spec, ya, rng_y)
+    nbx = len(xed) - 1
+    nby = len(yed) - 1
+    count = [[0.0] * nby for _ in _builtins.range(nbx)]
+    for i in _builtins.range(N):
+        bx = bisect.bisect_right(xed, xa[i]) - 1
+        if bx == nbx and xa[i] == xed[-1]:
+            bx = nbx - 1
+        by = bisect.bisect_right(yed, ya[i]) - 1
+        if by == nby and ya[i] == yed[-1]:
+            by = nby - 1
+        if 0 <= bx < nbx and 0 <= by < nby:
+            count[bx][by] += w[i]
+    if density:
+        total = _builtins.sum(w)
+        if total > 0:
+            for i in _builtins.range(nbx):
+                dx = xed[i + 1] - xed[i]
+                for j in _builtins.range(nby):
+                    dy = yed[j + 1] - yed[j]
+                    count[i][j] = count[i][j] / (total * dx * dy)
+    H = _rs.array(count, dtype='float64')
+    return H, _rs.array(xed), _rs.array(yed)
 
 
 def histogramdd(sample, bins=10, range=None, density=False, weights=None):
