@@ -102,4 +102,5 @@ def as_strided(x, shape=None, strides=None, subok=False, writeable=True,
                 f'array holding {size} elements.')
         values.append(flat[offset])
 
-    return np.asarray(values).reshape(shape)
+    # 保留输入 dtype（asarray 从 Python 值推断会得 float64，须显式回投到 x.dtype）
+    return np.asarray(values).reshape(shape).astype(x.dtype)
