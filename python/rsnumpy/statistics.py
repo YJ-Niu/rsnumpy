@@ -877,14 +877,244 @@ def corrcoef(x, y=None, rowvar=True, bias=False, ddof=None, *, dtype=None):
     return _wrap(_core.corrcoef_rs(_ensure_raw(arr)))
 
 
-def histogram(a, bins=10, range=None, weights=None, density=False):
-    """计算直方图。"""
-    _ = weights, density
-    if range is not None:
-        result = _core.histogram(_ensure_raw(a), bins, tuple(range))
+def _hist_is_int_dtype(dt):
+    s = _builtins.str(dt)
+    return 'int' in s or 'bool' in s
+
+
+def _hist_bin_sqrt(vals, first, last):
+    return (last - first) / (len(vals) ** 0.5)
+
+
+def _hist_bin_sturges(vals, first, last):
+    import math
+    return (last - first) / (math.log2(len(vals)) + 1.0)
+
+
+def _hist_bin_rice(vals, first, last):
+    return (last - first) / (2.0 * len(vals) ** (1.0 / 3))
+
+
+def _hist_bin_scott(vals, first, last):
+    m = _builtins.sum(vals) / len(vals)
+    var = _builtins.sum((v - m) ** 2 for v in vals) / len(vals)
+    return (24.0 * 3.141592653589793 ** 0.5 / len(vals)) ** (1.0 / 3.0) * var ** 0.5
+
+
+def _hist_bin_stone(vals, first, last):
+    n = len(vals)
+    ptp = last - first
+    if n <= 1 or ptp == 0:
+        return 0.0
+    ub = _builtins.max(100, _builtins.int(len(vals) ** 0.5))
+
+    def jhat(nb):
+        step = ptp / nb
+        cnt = [0] * nb
+        for v in vals:
+            i = _builtins.int((v - first) / step)
+            if i < 0:
+                i = 0
+            if i >= nb:
+                i = nb - 1
+            cnt[i] += 1
+        p2 = _builtins.sum((c / n) ** 2 for c in cnt)
+        return (2 - (n + 1) * p2) / step
+
+    best = 1
+    bestj = None
+    for nb in _builtins.range(1, ub + 1):
+        j = jhat(nb)
+        if bestj is None or j < bestj:
+            bestj, best = j, nb
+    return ptp / best
+
+
+def _hist_bin_doane(vals, first, last):
+    import math
+    n = len(vals)
+    if n > 2:
+        sg1 = (6.0 * (n - 2) / ((n + 1.0) * (n + 3))) ** 0.5
+        m = _builtins.sum(vals) / n
+        var = _builtins.sum((v - m) ** 2 for v in vals) / n
+        sigma = var ** 0.5
+        if sigma > 0.0:
+            g1 = _builtins.sum(((v - m) / sigma) ** 3 for v in vals) / n
+            return (last - first) / (1.0 + math.log2(n) +
+                                     math.log2(1.0 + _builtins.abs(g1) / sg1))
+    return 0.0
+
+
+def _hist_bin_fd(vals, first, last):
+    s = sorted(vals)
+    n = len(s)
+
+    def q(p):
+        idx = p * (n - 1)
+        lo = _builtins.int(idx)
+        hi = _builtins.min(lo + 1, n - 1)
+        frac = idx - lo
+        return s[lo] * (1 - frac) + s[hi] * frac
+
+    iqr = q(0.75) - q(0.25)
+    return 2.0 * iqr * n ** (-1.0 / 3.0)
+
+
+def _hist_bin_auto(vals, first, last):
+    fd = _hist_bin_fd(vals, first, last)
+    st = _hist_bin_sturges(vals, first, last)
+    sq = _hist_bin_sqrt(vals, first, last)
+    return _builtins.min(_builtins.max(fd, sq / 2), st)
+
+
+_hist_bin_selectors = {'stone': _hist_bin_stone, 'auto': _hist_bin_auto,
+                       'doane': _hist_bin_doane, 'fd': _hist_bin_fd,
+                       'rice': _hist_bin_rice, 'scott': _hist_bin_scott,
+                       'sqrt': _hist_bin_sqrt, 'sturges': _hist_bin_sturges}
+
+
+def _hist_outer_edges(vals, rng):
+    import math
+    if rng is not None:
+        fe, le = _builtins.float(rng[0]), _builtins.float(rng[1])
+        if fe > le:
+            raise ValueError('max must be larger than min in range parameter.')
+        if not (math.isfinite(fe) and math.isfinite(le)):
+            raise ValueError(
+                f"supplied range of [{fe}, {le}] is not finite")
+    elif len(vals) == 0:
+        fe, le = 0.0, 1.0
     else:
-        result = _core.histogram(_ensure_raw(a), bins, None)
-    return _wrap(result[0]), _wrap(result[1])
+        fe, le = _builtins.min(vals), _builtins.max(vals)
+        if not (math.isfinite(fe) and math.isfinite(le)):
+            raise ValueError(
+                f"autodetected range of [{fe}, {le}] is not finite")
+    if fe == le:
+        fe, le = fe - 0.5, le + 0.5
+    return fe, le
+
+
+def _hist_get_bin_edges(vals, bins, rng, weights):
+    n_equal = None
+    edges = None
+    if isinstance(bins, _builtins.str):
+        if bins not in _hist_bin_selectors:
+            raise ValueError(f"{bins!r} is not a valid estimator for `bins`")
+        if weights is not None:
+            raise TypeError("Automated estimation of the number of "
+                            "bins is not supported for weighted data")
+        fe, le = _hist_outer_edges(vals, rng)
+        if rng is not None:
+            keep = [v for v in vals if fe <= v <= le]
+            if len(keep) != len(vals):
+                vals = keep
+        if len(vals) == 0:
+            n_equal = 1
+        else:
+            width = _hist_bin_selectors[bins](vals, fe, le)
+            if width:
+                if _hist_is_int_dtype(_rs_dtype_of(vals)) and width < 1:
+                    width = 1
+                n_equal = _builtins.int(-_builtins.int(-(le - fe) / width))
+            else:
+                n_equal = 1
+    elif isinstance(bins, (int, float)) and not isinstance(bins, bool):
+        if isinstance(bins, float):
+            raise TypeError('`bins` must be an integer, a string, or an array')
+        n_equal = bins
+        if n_equal < 1:
+            raise ValueError('`bins` must be positive, when an integer')
+        fe, le = _hist_outer_edges(vals, rng)
+    else:
+        import rsnumpy as _rs
+        b_arr = bins if hasattr(bins, '_array') else _rs.array(bins)
+        if b_arr.ndim > 1:
+            raise ValueError('`bins` must be 1d, when an array')
+        edges = [_builtins.float(e) for e in _rs_flat(bins)]
+        for i in _builtins.range(len(edges) - 1):
+            if edges[i] > edges[i + 1]:
+                raise ValueError(
+                    '`bins` must increase monotonically, when an array')
+    if n_equal is not None:
+        if _builtins.all(_builtins.isinstance(v, int) for v in vals) and \
+                rng is None:
+            fe, le = _builtins.float(fe), _builtins.float(le)
+        edges = [fe + (le - fe) * i / n_equal for i in _builtins.range(n_equal + 1)]
+        edges[-1] = le
+        for i in _builtins.range(len(edges) - 1):
+            if edges[i] >= edges[i + 1]:
+                raise ValueError(
+                    f'Too many bins for data range. Cannot create '
+                    f'{n_equal} finite-sized bins.')
+        return edges, (fe, le, n_equal)
+    return edges, None
+
+
+def _rs_flat(a):
+    import rsnumpy as _rs
+    if hasattr(a, '_array'):
+        return a.reshape((-1,)).tolist()
+    return _rs.array(a).reshape((-1,)).tolist()
+
+
+def _rs_dtype_of(a):
+    import rsnumpy as _rs
+    return (a if hasattr(a, '_array') else _rs.array(a)).dtype
+
+
+def histogram(a, bins=10, range=None, weights=None, density=None):
+    """计算直方图（纯 Python：int/边界数组/字符串 bins、range、density、weights）。"""
+    import bisect
+    import math
+    import warnings
+    import rsnumpy as _rs
+    _ = density is None  # density 默认 None，等价 False
+    if density is None:
+        density = False
+    a_arr = a if hasattr(a, '_array') else _rs.array(a)
+    if _builtins.str(a_arr.dtype) == 'bool':
+        warnings.warn(
+            f"Converting input from {a_arr.dtype} to bool for compatibility.",
+            RuntimeWarning)
+    vals = [_builtins.float(v) for v in a_arr.reshape((-1,)).tolist()]
+    n = len(vals)
+    if weights is not None:
+        w_arr = weights if hasattr(weights, '_array') else _rs.array(weights)
+        if tuple(w_arr.shape) != tuple(a_arr.shape):
+            raise ValueError('weights should have the same shape as a.')
+        w = w_arr.reshape((-1,)).tolist()
+    else:
+        w = None
+    if range is not None and len(range) != 2:
+        raise ValueError('range must be a sequence of two numbers')
+    edges, _uniform = _hist_get_bin_edges(vals, bins, range, w)
+    nb = len(edges) - 1
+    w_float = w is not None and not _hist_is_int_dtype(
+        (weights if hasattr(weights, '_array') else _rs.array(weights)).dtype)
+    counts = [0.0] * nb if w_float else [0] * nb
+    for i in _builtins.range(n):
+        v = vals[i]
+        b = bisect.bisect_right(edges, v) - 1
+        if b == nb and v == edges[-1]:
+            b = nb - 1
+        if 0 <= b < nb:
+            counts[b] += (w[i] if w is not None else 1)
+    if density:
+        # numpy: n / db / n.sum()，n 是入界计数(含 outlier 会失真)
+        total = _builtins.sum(_builtins.float(c) for c in counts)
+        if total > 0:
+            counts = [_builtins.float(counts[i]) / (total * (edges[i + 1] - edges[i]))
+                      for i in _builtins.range(nb)]
+        else:
+            counts = [0.0] * nb
+        return _rs.array(counts, dtype='float64'), _rs.array(edges, dtype='float64')
+    if w_float:
+        counts_arr = _rs.array([_builtins.float(c) for c in counts],
+                               dtype='float64')
+    else:
+        counts_arr = _rs.array([_builtins.int(c) for c in counts],
+                               dtype='int64')
+    return counts_arr, _rs.array(edges, dtype='float64')
 
 
 _H2D_DEFAULT = object()

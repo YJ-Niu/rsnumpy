@@ -3175,29 +3175,10 @@ def vecmat(x1, x2):
 
 # ========== 直方图分箱边界 ==========
 def histogram_bin_edges(a, bins=10, range=None, weights=None):
-    """仅返回直方图的分箱边界。"""
-    _ = weights
-    np = _np()
-    data = _flat(a)
-    if isinstance(bins, str):
-        bins = 10
-    if isinstance(bins, (list, tuple)) or hasattr(bins, "_array"):
-        return np.array(_flat(bins))
-    if range is None:
-        lo = builtin_min(data) if data else 0.0
-        hi = builtin_max(data) if data else 1.0
-    else:
-        lo, hi = range
-    lo = float(lo)
-    hi = float(hi)
-    if lo == hi:
-        lo -= 0.5
-        hi += 0.5
-    nb = int(bins)
-    step = (hi - lo) / nb
-    edges = [lo + i * step for i in builtin_range(nb + 1)]
-    edges[-1] = hi
-    return np.array(edges)
+    """仅返回直方图的分箱边界（委托给 histogram，保证边界一致）。"""
+    from rsnumpy.statistics import histogram as _histogram
+    _h, edges = _histogram(a, bins=bins, range=range, weights=weights)
+    return edges
 
 
 builtin_range = range
