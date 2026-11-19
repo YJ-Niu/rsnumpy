@@ -2140,15 +2140,11 @@ def _tril_triu_masked(arr, mask, invert=False):
     2-D 时掩码与 arr 同形，直接使用。
     """
     np = _np()
-    n = arr.shape[-2]; mm = arr.shape[-1]
     base = (~mask) if invert else mask          # (n,mm)
-    if arr.ndim == 2:
-        full = base                              # 与 arr 同形 (n,mm)
-    else:
-        n_other = 1
-        for s in arr.shape[:-2]:
-            n_other *= s
-        full = base.reshape((1, n, mm)).repeat(n_other, axis=0)
+    # 广播到 arr 全形（2-D 时即为 (n,mm) 本身），避免 where 在 N>2 时
+    # 不广播小 leading 维；旧实现 repeat 会把 leading 维压平成单一维，
+    # 导致 stacked (...,N,M) 输出形状错误。
+    full = np.broadcast_to(base, arr.shape)
     return np.where(full, arr, np.zeros_like(arr))
 
 

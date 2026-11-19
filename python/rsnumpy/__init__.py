@@ -10035,6 +10035,14 @@ def where(condition, x=None, y=None):
     """根据条件返回元素或索引。"""
     if x is not None and y is not None:
         dtype = getattr(x, '_dtype', 'float64')
+        # complex 路径：Rust 核 where 丢弃虚部（1+2j → 1.0），拆成实/虚两次
+        # where 再组合（纯 Python），避免触碰 Rust 核心。
+        if isinstance(dtype, str) and dtype.startswith('complex'):
+            xa = asarray(x)
+            ya = asarray(y)
+            cr = where(condition, asarray(xa.real), asarray(ya.real))
+            ci = where(condition, asarray(xa.imag), asarray(ya.imag))
+            return (cr + 1j * ci).astype(dtype)
         fields = getattr(x, '_fields', None)
         raw_data = getattr(x, '_raw_data', None)
         result = np.where(_ensure(condition), _ensure(x), _ensure(y))
