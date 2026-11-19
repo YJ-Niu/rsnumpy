@@ -483,6 +483,17 @@ def add(x1, x2, out=None, **kwargs):
     return res
 
 
+def _add_outer(x1, x2):
+    """ufunc.outer 语义：输入先 flatten 为一维，外积 a[i]+b[j]。"""
+    import rsnumpy as _rn
+    a = _rn.asarray(x1).reshape((-1,))
+    b = _rn.asarray(x2).reshape((-1,))
+    return a.reshape((-1, 1)) + b.reshape((1, -1))
+
+
+add.outer = _add_outer
+
+
 def subtract(x1, x2, out=None, **kwargs):
     """逐元素减法。"""
     res = _wrap(_core.subtract(_ensure_raw(x1), _ensure_raw(x2)))

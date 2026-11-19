@@ -1069,7 +1069,10 @@ def flip(m, axis=None):
 
 
 def fliplr(m):
-    """左右翻转数组。"""
+    """左右翻转数组（axis=1，需 ndim>=2；否则对齐 numpy AxisError 抛 ValueError）。"""
+    if hasattr(m, 'ndim') and m.ndim < 2:
+        raise ValueError(
+            f"axis 1 is out of bounds for array of dimension {m.ndim}")
     return flip(m, axis=1)
 
 

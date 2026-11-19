@@ -2133,12 +2133,31 @@ def tri(N, M=None, k=0, dtype=None):
     return result.astype(name)
 
 
+def _tril_triu_masked(arr, mask, invert=False):
+    """按 (N,M) 布尔掩码取 arr 最后两维的三角（where，避免 inf*0=nan，保留 dtype）。
+
+    rsnumpy where 不会把小的 leading 维广播到大的，N>2 时先把掩码 repeat 到全形；
+    2-D 时掩码与 arr 同形，直接使用。
+    """
+    np = _np()
+    n = arr.shape[-2]; mm = arr.shape[-1]
+    base = (~mask) if invert else mask          # (n,mm)
+    if arr.ndim == 2:
+        full = base                              # 与 arr 同形 (n,mm)
+    else:
+        n_other = 1
+        for s in arr.shape[:-2]:
+            n_other *= s
+        full = base.reshape((1, n, mm)).repeat(n_other, axis=0)
+    return np.where(full, arr, np.zeros_like(arr))
+
+
 def tril(m, k=0):
     """取下三角部分。"""
     np = _np()
     arr = _asarray(m)
     n, mm = arr.shape[-2], arr.shape[-1]
-    return np.multiply(arr, tri(n, mm, k))
+    return _tril_triu_masked(arr, tri(n, mm, k, dtype=bool), invert=False)
 
 
 def triu(m, k=0):
@@ -2146,7 +2165,7 @@ def triu(m, k=0):
     np = _np()
     arr = _asarray(m)
     n, mm = arr.shape[-2], arr.shape[-1]
-    return np.subtract(arr, np.multiply(arr, tri(n, mm, k - 1)))
+    return _tril_triu_masked(arr, tri(n, mm, k - 1, dtype=bool), invert=True)
 
 
 def diagonal(a, offset=0, axis1=0, axis2=1):
@@ -2155,8 +2174,11 @@ def diagonal(a, offset=0, axis1=0, axis2=1):
 
 
 def diag(v, k=0):
-    """一维->对角矩阵，二维->提取对角线。"""
-    return _wrap(_core.diag(_asarray(v)._array, k))
+    """一维->对角矩阵，二维->提取对角线（其他维数抛 ValueError）。"""
+    arr = _asarray(v)
+    if arr.ndim not in (1, 2):
+        raise ValueError("diag() input must be 1-D or 2-D")
+    return _wrap(_core.diag(arr._array, k))
 
 
 def diagflat(v, k=0):
@@ -2201,14 +2223,18 @@ def triu_indices(n, k=0, m=None):
 
 
 def tril_indices_from(arr, k=0):
-    """由数组形状返回下三角索引。"""
+    """由数组形状返回下三角索引（要求 2-D，否则 ValueError）。"""
     a = _asarray(arr)
+    if a.ndim != 2:
+        raise ValueError("tril_indices_from requires an array with 2-d")
     return tril_indices(a.shape[0], k, a.shape[1])
 
 
 def triu_indices_from(arr, k=0):
-    """由数组形状返回上三角索引。"""
+    """由数组形状返回上三角索引（要求 2-D，否则 ValueError）。"""
     a = _asarray(arr)
+    if a.ndim != 2:
+        raise ValueError("triu_indices_from requires an array with 2-d")
     return triu_indices(a.shape[0], k, a.shape[1])
 
 
@@ -2381,17 +2407,19 @@ def bincount(x, weights=None, minlength=0):
 
 
 def vander(x, N=None, increasing=False):
-    """生成范德蒙矩阵。"""
+    """生成范德蒙矩阵（整数幂保留输入 dtype；N=0 返回 (n,0) 空数组）。"""
     np = _np()
     xv = _asarray(x).ravel()
     n = xv.size
     if N is None:
         N = n
+    if N == 0:
+        return np.zeros((n, 0), dtype=xv.dtype)
     xr = np.reshape(xv, (n, 1))
     if increasing:
         powers = np.arange(0, N, 1)
     else:
-        powers = np.subtract(np.full((N,), float(N - 1)), np.arange(0, N, 1))
+        powers = np.subtract(np.full((N,), N - 1), np.arange(0, N, 1))
     powers = np.reshape(powers, (1, N))
     return np.power(xr, powers)
 
