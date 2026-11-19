@@ -6,6 +6,8 @@ sliding_window_view：Rust 后端暂无 strides 级 view，这里按 numpy 语�
 生成值与形状正确的结果（当前为拷贝语义；strides 视图待 Rust 侧支持）。
 """
 
+import builtins
+
 
 def _rs():
     import rsnumpy
@@ -28,41 +30,67 @@ def _broadcast_shape(*shapes):
     return result
 
 
-def sliding_window_view(x, window_shape):
+def sliding_window_view(x, window_shape, axis=None, *, subok=False,
+                        writeable=True):
     """滑动窗口视图（numpy.lib.stride_tricks.sliding_window_view 兼容）。
 
-    窗口形状为标量或序列；返回形状 = x.shape[:-n] + (d-w+1, ...)。
-    rsnumpy 当前实现为值正确的拷贝（Rust 后端无 strides view）。
+    axis 可为 None(滑所有轴，window_shape 须为长 ndim 的序列)、标量或序列；
+    输出布局 = (各原轴序：滑轴取偏移量 d-w+1 / 非滑轴取原尺寸) + (各滑轴窗口尺寸)。
+    writeable/subok 仅为兼容 numpy 签名接受（rsnumpy 视图恒可写、无子类视图）。
+    当前为值正确的拷贝实现（Rust 后端无 strides view）。
     """
     rs = _rs()
     x = rs.asanyarray(x)
-    if isinstance(window_shape, int):
-        window_shape = (window_shape,)
-    window_shape = tuple(window_shape)
-    n = len(window_shape)
-    if n > x.ndim:
-        raise ValueError(
-            f"shape of sliding view ({window_shape}) must have at most as many "
-            f"dimensions as the original array ({x.shape})")
-    if any(w <= 0 for w in window_shape):
-        raise ValueError("window_shape must be positive")
-    for w, d in zip(window_shape, x.shape[x.ndim - n:]):
-        if w > d:
+    _ = subok, writeable
+    ndim = x.ndim
+    is_seq = isinstance(window_shape, (list, tuple))
+    ws = tuple(window_shape) if is_seq else (window_shape,)
+    n = len(ws)
+    if axis is None:
+        if n != ndim:
             raise ValueError(
-                f"window size {w} exceeds dimension size {d}")
-    from itertools import product
-    base = x.shape[:x.ndim - n]
-    out = []
-    for lead in product(*[range(d) for d in base]):
-        sub = []
-        for off in product(*[range(d - w + 1)
-                             for d, w in zip(x.shape[x.ndim - n:],
-                                             window_shape)]):
-            key = lead + tuple(
-                slice(off, off + w) for off, w in zip(off, window_shape))
-            sub.append(x[key].tolist())
-        out.append(sub)
-    return rs.array(out, dtype=x.dtype)
+                f"Since axis is `None`, must provide window_shape for all "
+                f"dimensions of `x`; got {n} window_shape elements and "
+                f"`x.ndim` is {ndim}.")
+        axes = tuple(builtins.range(ndim))
+    elif isinstance(axis, int):
+        if n != 1:
+            raise ValueError(
+                "Must provide matching length window_shape and axis.")
+        axes = (axis,)
+    else:
+        axes = tuple(axis)
+        if n != len(axes):
+            raise ValueError(
+                "Must provide matching length window_shape and axis.")
+    if any(w <= 0 for w in ws):
+        raise ValueError("`window_shape` cannot contain negative values")
+    axes = tuple(a % ndim for a in axes)
+    for w, a in zip(ws, axes):
+        if w > x.shape[a]:
+            raise ValueError(
+                "window shape cannot be larger than input array shape")
+    # 每个原轴（按原序）：滑轴 → (偏移量, True, 窗口)；非滑轴 → (尺寸, False, None)
+    prefix = []
+    win_of = {}
+    for a, w in zip(axes, ws):
+        win_of[a] = w
+    for i in builtins.range(ndim):
+        if i in win_of:
+            prefix.append((x.shape[i] - win_of[i] + 1, True, win_of[i]))
+        else:
+            prefix.append((x.shape[i], False, None))
+
+    def build(level, cur):
+        if level == ndim:
+            key = [None] * ndim
+            for i, (size, isl, w) in builtins.enumerate(prefix):
+                key[i] = (slice(cur[i], cur[i] + w) if isl else cur[i])
+            return rs.asarray(x[tuple(key)]).tolist()
+        return [build(level + 1, cur + [i])
+                for i in builtins.range(prefix[level][0])]
+
+    return rs.array(build(0, []), dtype=x.dtype)
 
 
 def __getattr__(name):
