@@ -29,6 +29,7 @@ user_rules.md
 *~
 # OS
 .DS_Store
+.codebuddy/
 Thumbs.db
 
 # Data / plots
