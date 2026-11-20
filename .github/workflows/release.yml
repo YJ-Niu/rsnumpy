@@ -154,4 +154,6 @@ jobs:
           TWINE_PASSWORD: ${{ secrets.YJ_NIU }}
         run: |
           python -m pip install twine
-          python -m twine upload --non-interactive dist/*
+          # --verbose：失败时打印 PyPI 返回的完整错误页（具体字段/原因），
+          # 否则 twine 只给裸 "400 Bad Request"，无法定位。
+          python -m twine upload --non-interactive --verbose dist/*

@@ -317,7 +317,21 @@ PYEOF
         printf '%s 0 0/0/0\n' "$_cf"
       done
     } > "$CONFIG_FILE"
-    TARGETS=("${RUN_CANDIDATES[@]}")
+    # bash 3.2 (macOS 默认) + set -u：空数组的 "${arr[@]}" 值展开会报
+    # unbound variable，须先按长度判空再展开。
+    TARGETS=()
+    if [[ ${#RUN_CANDIDATES[@]} -gt 0 ]]; then
+      TARGETS=("${RUN_CANDIDATES[@]}")
+    fi
+    # all 模式：核心 7 文件不进本轮运行，但门禁已确认通过，配置里直接置 1
+    # （否则 debug 模式会重复跑它们）。须无条件执行：候选排空时运行循环
+    # 不会到达，若置 1 留在循环内 core 标志会永远卡在 0。
+    if [[ -f "$CONFIG_FILE" ]]; then
+      for _f in "${CORE_TEST_FILES[@]}"; do
+        sed -i.bak -E "s|^$_f 0 |$_f 1 |" "$CONFIG_FILE"
+        rm -f "$CONFIG_FILE.bak"
+      done
+    fi
     echo "  -> ${#TARGETS[@]} candidate file(s); full run."
   else
     # debug 模式：从配置里挑出标志为 0 的文件
@@ -409,14 +423,6 @@ PYEOF
     echo "  -> full log: $COMPAT_LOG"
     echo "  -> full test report above (failed/error = rsarray bugs/gaps; non-gating, rc=$COMPAT_RC)."
 
-    # all 模式：核心 7 文件不进本轮运行，但门禁已确认通过，配置里直接置 1
-    # （否则 debug 模式会重复跑它们）。
-    if [[ "$TEST_MODE" == "all" && -f "$CONFIG_FILE" ]]; then
-      for _f in "${CORE_TEST_FILES[@]}"; do
-        sed -i.bak -E "s|^$_f 0 |$_f 1 |" "$CONFIG_FILE"
-        rm -f "$CONFIG_FILE.bak"
-      done
-    fi
     if [[ -f "$CONFIG_FILE" ]]; then
       _n1=$(awk '$1 !~ /^#/ && $2 == "1" {n++} END {print n+0}' "$CONFIG_FILE")
       _n0=$(awk '$1 !~ /^#/ && $2 == "0" {n++} END {print n+0}' "$CONFIG_FILE")

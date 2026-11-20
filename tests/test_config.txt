@@ -3,10 +3,10 @@
 # 由 build_wheel.sh 的测试阶段自动维护：每个文件一个 pytest 子进程，跑完立即
 # 写回结果（边测边更新；崩溃只影响该文件，计数列标 crash）。
 # --test debug 只跑标志为 0 的文件；--test all 全量重建。
-tests/test_arithmetic.py 0 0/0/0
-tests/test_buffer.py 0 0/0/0
-tests/test_comparison.py 0 0/0/0
-tests/test_creation.py 0 0/0/0
-tests/test_indexing.py 0 0/0/0
-tests/test_known_gaps.py 0 0/0/0
-tests/test_reduction.py 0 0/0/0
+tests/test_arithmetic.py 1 0/0/0
+tests/test_buffer.py 1 0/0/0
+tests/test_comparison.py 1 0/0/0
+tests/test_creation.py 1 0/0/0
+tests/test_indexing.py 1 0/0/0
+tests/test_known_gaps.py 1 0/0/0
+tests/test_reduction.py 1 0/0/0
