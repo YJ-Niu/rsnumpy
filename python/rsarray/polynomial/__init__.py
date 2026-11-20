@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 """多项式模块 - 所有实现位于 Rust，这里仅保留薄包装。"""
 
-import rsnumpy.num_core as _core
+import rsarray.num_core as _core
 
 
 def _nd():
@@ -20,7 +20,7 @@ def _ensure_raw(a):
 
 
 class Poly:
-    """多项式类（系数为 NumPy 兼容的高到低排列）。"""
+    """多项式类（系数为 标准兼容的高到低排列）。"""
 
     def __init__(self, coef):
         nd = _nd()
@@ -123,7 +123,7 @@ def polyint(p, m=1, k=0):
 
 def polyroots(p):
     """计算多项式的根。"""
-    # 系数含 NaN：伴矩阵特征值未定义，与 numpy 一致抛 LinAlgError
+    # 系数含 NaN：伴矩阵特征值未定义，与标准语义一致抛 LinAlgError
     import math
     _c = (p.coef if isinstance(p, Poly)
           else (p.tolist() if hasattr(p, 'tolist') else list(p)))
@@ -135,7 +135,7 @@ def polyroots(p):
         except (TypeError, ValueError, OverflowError):
             return False
     if any(_has_nan(v) for v in _c):
-        import rsnumpy as _np
+        import rsarray as _np
         raise _np.linalg.LinAlgError(
             "Eigenvalues did not converge: coefficients contain NaN")
     if isinstance(p, Poly):
@@ -143,6 +143,6 @@ def polyroots(p):
     return Poly(p).roots()
 
 
-# numpy 2.x：np.polynomial.Polynomial 为新 API 类（升序系数）；
+# 2.x：np.polynomial.Polynomial 为新 API 类（升序系数）；
 # 旧 Poly（降序）保留供顶层旧 API 使用
 from .polynomial import Polynomial  # noqa: E402,F401

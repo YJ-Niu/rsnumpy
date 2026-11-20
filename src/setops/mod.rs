@@ -299,7 +299,7 @@ fn isin(element: &NdArray, test: &NdArray, invert: bool) -> NdArray {
         .collect();
     keys.sort_by(|a, b| a.total_cmp(b));
     keys.dedup();
-    // 小 test 集：线性 `==` 扫描（缓存友好，避免 total_cmp 位运算），与 numpy 暴力路径一致；
+    // 小 test 集：线性 `==` 扫描（缓存友好，避免 total_cmp 位运算），与参考实现暴力路径一致；
     // 大集用排序 + 二分查找 O(n log m)。
     let small = keys.len() <= 16;
     let data = element.data.mapv(|v| {

@@ -6,17 +6,17 @@
 数组参数广播 / size 前缀 / 结果封装由 ``random.__init__`` 的
 ``_sample_dist`` 完成，本文件只负责单点采样的数学。
 
-边界语义以 numpy 2.5.4 为 oracle（逐条探测对齐）：
+边界语义以 2.5.4 为 oracle（逐条探测对齐）：
   * 参数为 ``-0.``（负零符号位）或负数 → ValueError；
   * 参数为 ``+0`` → 返回 0（lognormal 为 exp(mean)=1），不报错。
-数值算法对齐 numpy 语义（逆变换 / Marsaglia-Tsang gamma /
-拒绝采样等），统计性质正确；但不追求与 numpy 逐位一致
+数值算法对齐 数组语义（逆变换 / Marsaglia-Tsang gamma /
+拒绝采样等），统计性质正确；但不追求与 逐位一致
 （那需要 MT19937/PCG64 的 legacy 精确流，见 linalg 同级的独立任务）。
 """
 
 import math
 
-# numpy 2.5.4 RandomState()._poisson_lam_max 的 oracle 值
+# 2.5.4 RandomState()._poisson_lam_max 的 oracle 值
 _POISSON_LAM_MAX = 9.223372006484771e+18
 
 _ZETA_CACHE = {}
@@ -47,7 +47,7 @@ def _zeta(a):
 
 
 def _loggam(x):
-    """numpy random_loggam（SPECFUN 级数）。用于 poisson PTRS / 超几何 HRUA。"""
+    """random_loggam（SPECFUN 级数）。用于 poisson PTRS / 超几何 HRUA。"""
     a = (8.333333333333333e-02, -2.777777777777778e-03,
          7.936507936507937e-04, -5.952380952380952e-04,
          8.417508417508418e-04, -1.917526917526918e-03,
@@ -95,7 +95,7 @@ class Samplers:
     def __init__(self, next_u, next_normal):
         self._u = next_u
         self._n = next_normal
-        # binomial 缓存（numpy binomial_t，跨调用持久）
+        # binomial 缓存（binomial_t，跨调用持久）
         self._bin_has = 0
         self._bin_nsave = None
         self._bin_psave = None
@@ -135,7 +135,7 @@ class Samplers:
         return low + (high - low) * self._u()
 
     def standard_exponential(self):
-        # numpy legacy: -log(1-U)，U in [0,1)
+        # legacy: -log(1-U)，U in [0,1)
         u = self._u()
         return -math.log(1.0 - u)
 
@@ -170,7 +170,7 @@ class Samplers:
         return 2.0 * self._gamma_mt(df / 2.0)
 
     def _gamma_mt(self, alpha):
-        """numpy legacy standard_gamma：shape==1 走指数；shape<1 Ahrens-Dieter；
+        """legacy standard_gamma：shape==1 走指数；shape<1 Ahrens-Dieter；
         shape>=1 Marsaglia-Tsang（含 gauss 缓存）。"""
         if alpha == 1.0:
             return self.standard_exponential()
@@ -205,7 +205,7 @@ class Samplers:
                 return b * v
 
     def standard_cauchy(self):
-        # numpy legacy: gauss / gauss（比值，不是 tan 逆 CDF）
+        # legacy: gauss / gauss（比值，不是 tan 逆 CDF）
         return self._n() / self._n()
 
     def cauchy(self, loc=0.0, scale=1.0):
@@ -246,13 +246,13 @@ class Samplers:
             raise ValueError("a < 0")
         if a == 0.0:
             return 0.0
-        # numpy legacy: pow(standard_exponential, 1/a)
+        # legacy: pow(standard_exponential, 1/a)
         return self.standard_exponential() ** (1.0 / a)
 
     def power(self, a):
         if not (a > 0.0):
             raise ValueError("a <= 0")
-        # numpy legacy: pow(1 - exp(-standard_exponential), 1/a)
+        # legacy: pow(1 - exp(-standard_exponential), 1/a)
         return (1.0 - math.exp(-self.standard_exponential())) ** (1.0 / a)
 
     def rayleigh(self, scale=1.0):
@@ -266,7 +266,7 @@ class Samplers:
     def pareto(self, a):
         if not (a > 0.0):
             raise ValueError("a <= 0")
-        # numpy legacy: exp(standard_exponential / a) - 1
+        # legacy: exp(standard_exponential / a) - 1
         return math.exp(self.standard_exponential() / a) - 1.0
 
     # ------------------------------------------------------------------
@@ -275,14 +275,14 @@ class Samplers:
     def f(self, dfnum, dfden):
         if not (dfnum > 0.0) or not (dfden > 0.0):
             raise ValueError("dfnum/dfden must be > 0")
-        # numpy legacy: (chi2(dfnum)*dfden) / (chi2(dfden)*dfnum)
+        # legacy: (chi2(dfnum)*dfden) / (chi2(dfden)*dfnum)
         return ((self.chisquare(dfnum) * dfden)
                 / (self.chisquare(dfden) * dfnum))
 
     def standard_t(self, df):
         if not (df > 0.0):
             raise ValueError("df must be > 0")
-        # numpy legacy: sqrt(df/2) * gauss / sqrt(gamma(df/2))
+        # legacy: sqrt(df/2) * gauss / sqrt(gamma(df/2))
         num = self._n()
         denom = self._gamma_mt(df / 2.0)
         return math.sqrt(df / 2.0) * num / math.sqrt(denom)
@@ -296,7 +296,7 @@ class Samplers:
         if nc == 0:
             return self.chisquare(df)
         if 1 < df:
-            # numpy legacy: chisquare 先生成，再 gauss
+            # legacy: chisquare 先生成，再 gauss
             chi2 = self.chisquare(df - 1.0)
             n = self._n() + math.sqrt(nc)
             return chi2 + n * n
@@ -306,7 +306,7 @@ class Samplers:
     def noncentral_f(self, dfnum, dfden, nc):
         if not (dfnum > 0.0) or not (dfden > 0.0):
             raise ValueError("dfnum/dfden must be > 0")
-        # numpy legacy: t / (chisquare(dfden)*dfnum)
+        # legacy: t / (chisquare(dfden)*dfnum)
         t = self.noncentral_chisquare(dfnum, nc) * dfden
         return t / (self.chisquare(dfden) * dfnum)
 
@@ -314,7 +314,7 @@ class Samplers:
         if not (a > 0.0) or not (b > 0.0):
             raise ValueError("a/b must be > 0")
         if (a <= 1.0) and (b <= 1.0):
-            # numpy legacy: Johnk's algorithm (a,b <= 1)
+            # legacy: Johnk's algorithm (a,b <= 1)
             while True:
                 u = self._u()
                 v = self._u()
@@ -361,12 +361,12 @@ class Samplers:
         return self.triangular(left, mode, right)
 
     def vonmises(self, mu, kappa):
-        # numpy legacy_vonmises（legacy-distributions.c L646-702）逐位对齐。
+        # legacy_vonmises（legacy-distributions.c L646-702）逐位对齐。
         # mu 在采样内部加入，随后 wrap 到 [-pi, pi]（保号 fmod）。
         if math.isnan(kappa):
             return math.nan
         if kappa < 1e-8:
-            # numpy 特例：近均匀，不应用 mu/wrap
+            # 特例：近均匀，不应用 mu/wrap
             return math.pi * (2.0 * self._u() - 1.0)
         if kappa < 1e-5:
             # kappa=0 的二阶泰勒展开（double 精度下 rho 在 1.4e-8 前恒为 0）
@@ -398,7 +398,7 @@ class Samplers:
         return mod
 
     def wald(self, mean, scale):
-        """inverse Gaussian（numpy legacy，Wichura 1977）。"""
+        """inverse Gaussian（legacy，Wichura 1977）。"""
         if not (mean > 0.0) or not (scale > 0.0):
             raise ValueError("mean/scale must be > 0")
         mu_2l = mean / (2.0 * scale)
@@ -418,7 +418,7 @@ class Samplers:
         if not (0.0 < p <= 1.0):
             raise ValueError("p must be in (0, 1]")
         if p >= 0.333333333333333333333333:
-            # numpy random_geometric_search
+            # random_geometric_search
             x = 1
             s = p
             prod = p
@@ -429,7 +429,7 @@ class Samplers:
                 s += prod
                 x += 1
             return x
-        # numpy legacy_geometric_inversion
+        # legacy_geometric_inversion
         return int(math.ceil(math.log1p(-self._u()) / math.log(1.0 - p)))
 
     def binomial(self, n, p):
@@ -439,13 +439,13 @@ class Samplers:
         if not (0.0 <= p <= 1.0) or _is_neg_zero(p):
             raise ValueError("p must be in [0, 1]")
         if n == 0 or p == 0.0:
-            # numpy legacy 流语义：退化参数也消耗 1 个 double（gh-14522 回归测试固定）
+            # legacy 流语义：退化参数也消耗 1 个 double（gh-14522 回归测试固定）
             self._u()
             return 0
         if p == 1.0:
             self._u()
             return n
-        # numpy legacy: p<=0.5 用 p，否则对称用 q=1-p
+        # legacy: p<=0.5 用 p，否则对称用 q=1-p
         if p <= 0.5:
             if p * n <= 30.0:
                 return self._bin_inversion(n, p)
@@ -456,7 +456,7 @@ class Samplers:
         return n - self._bin_btpe(n, q)
 
     def _bin_inversion(self, n, p):
-        # numpy legacy_random_binomial_inversion（有状态缓存）
+        # legacy_random_binomial_inversion（有状态缓存）
         if (not self._bin_has) or (self._bin_nsave != n) \
                 or (self._bin_psave != p):
             self._bin_nsave = n
@@ -486,7 +486,7 @@ class Samplers:
         return x
 
     def _bin_btpe(self, n, p):
-        # numpy legacy_random_binomial_btpe（有状态缓存；legacy 用 13680. 且末两项加号）
+        # legacy_random_binomial_btpe（有状态缓存；legacy 用 13680. 且末两项加号）
         if (not self._bin_has) or (self._bin_nsave != n) \
                 or (self._bin_psave != p):
             self._bin_nsave = n
@@ -612,7 +612,7 @@ class Samplers:
             raise ValueError("n must be >= 0")
         if not (0.0 < p <= 1.0):
             raise ValueError("p must be in (0, 1]")
-        # numpy legacy: poisson(gamma(n, (1-p)/p))
+        # legacy: poisson(gamma(n, (1-p)/p))
         y = self.gamma(n, (1.0 - p) / p)
         return self.poisson(y)
 
@@ -621,7 +621,7 @@ class Samplers:
             raise ValueError("lam out of range")
         if lam == 0:
             return 0
-        # numpy legacy: lam>=10 用 PTRS，否则 Knuth 乘法
+        # legacy: lam>=10 用 PTRS，否则 Knuth 乘法
         if lam >= 10:
             return self._poisson_ptrs(lam)
         enlam = math.exp(-lam)
@@ -636,7 +636,7 @@ class Samplers:
                 return x
 
     def _poisson_ptrs(self, lam):
-        # numpy random_poisson_ptrs（Hoermann transformed rejection）
+        # random_poisson_ptrs（Hoermann transformed rejection）
         slam = math.sqrt(lam)
         loglam = math.log(lam)
         b = 0.931 + 2.53 * slam
@@ -660,12 +660,12 @@ class Samplers:
         ngood = int(ngood)
         nbad = int(nbad)
         nsample = int(nsample)
-        # numpy legacy 验证
+        # legacy 验证
         if ngood + nbad < nsample:
             raise ValueError("ngood + nbad < nsample")
         if nsample < 1:
             raise ValueError("nsample < 1 or nsample is NaN")
-        # numpy legacy: sample>10 → HRUA, sample>0 → HYP, else 0
+        # legacy: sample>10 → HRUA, sample>0 → HYP, else 0
         if nsample > 10:
             return self._hgeo_hrua(ngood, nbad, nsample)
         elif nsample > 0:
@@ -674,7 +674,7 @@ class Samplers:
             return 0
 
     def _hgeo_hyp(self, good, bad, sample):
-        # numpy random_hypergeometric_hyp
+        # random_hypergeometric_hyp
         d1 = bad + good - sample
         d2 = min(bad, good)
         y = float(d2)
@@ -691,7 +691,7 @@ class Samplers:
         return z
 
     def _hgeo_hrua(self, good, bad, sample):
-        # numpy random_hypergeometric_hrua
+        # random_hypergeometric_hrua
         mingoodbad = min(good, bad)
         popsize = good + bad
         maxgoodbad = max(good, bad)
@@ -729,7 +729,7 @@ class Samplers:
     def zipf(self, a, zeta=None):
         if not (a > 1.0):
             raise ValueError("a must be > 1")
-        # numpy legacy: rejection (deville)
+        # legacy: rejection (deville)
         am1 = a - 1.0
         b = 2.0 ** am1
         while True:
@@ -745,7 +745,7 @@ class Samplers:
     def logseries(self, p):
         if not (0.0 < p < 1.0):
             raise ValueError("p must be in (0, 1)")
-        # numpy legacy
+        # legacy
         r = math.log(1.0 - p)
         while True:
             v = self._u()

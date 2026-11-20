@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: MIT
-"""numpy.strings 风格字符串 API（np.strings.*）。
+"""strings 风格字符串 API（np.strings.*）。
 
-与 numpy 2.x 的 ``np.strings`` 命名空间对齐：逐元素作用于
-定宽字符串数组（U/S dtype），多数实现复用 ``rsnumpy.char`` 的
+与 2.x 的 ``np.strings`` 命名空间对齐：逐元素作用于
+定宽字符串数组（U/S dtype），多数实现复用 ``rsarray.char`` 的
 底层算子，其余为等价的 Python 实现。
 """
 
@@ -27,7 +27,7 @@ def _py_str(fn, a, *args):
 
 
 def _py_int(fn, a):
-    """逐元素整数值（numpy 语义：标量输入 → 0-d int 数组）。"""
+    """逐元素整数值（数组语义：标量输入 → 0-d int 数组）。"""
     vals = _char._decode(_char._get_strings(a))
     out = []
     for v in vals:
@@ -44,7 +44,7 @@ def _py_int(fn, a):
 
 
 def _py_bool(fn, a):
-    """逐元素布尔（numpy 语义：标量输入 → 0-d bool 数组）。"""
+    """逐元素布尔（数组语义：标量输入 → 0-d bool 数组）。"""
     vals = _char._decode(_char._get_strings(a))
     out = []
     for v in vals:
@@ -99,12 +99,12 @@ less_equal = _char.less_equal
 # ==================== Python 实现 ====================
 
 def str_len(a):
-    """逐元素字符串长度（numpy.strings.str_len 兼容）。"""
+    """逐元素字符串长度（strings.str_len 兼容）。"""
     return _py_int(len, a)
 
 
 def decode(a, encoding='utf-8', errors='strict'):
-    """bytes 数组 → unicode 数组（numpy.strings.decode 兼容）。"""
+    """bytes 数组 → unicode 数组（strings.decode 兼容）。"""
     vals = _char._get_strings(a)
     was_bytes = _char._a_was_bytes(a)
     if was_bytes:
@@ -124,7 +124,7 @@ def decode(a, encoding='utf-8', errors='strict'):
 
 
 def encode(a, encoding='utf-8', errors='strict'):
-    """unicode 数组 → bytes 数组（numpy.strings.encode 兼容）。"""
+    """unicode 数组 → bytes 数组（strings.encode 兼容）。"""
     vals = _char._decode(_char._get_strings(a))
     out = [v.encode(encoding, errors) for v in vals]
     shape = _char._shape_of(a)
@@ -136,9 +136,9 @@ def encode(a, encoding='utf-8', errors='strict'):
 def _partition_impl(a, sep, right=False):
     """partition/rpartition 共用实现。
 
-    numpy 语义：sep 支持标量/数组（逐元素广播）；ArrayLike 输入经
+    数组语义：sep 支持标量/数组（逐元素广播）；ArrayLike 输入经
     __array__ 转换（恰好一次）；S dtype 按 bytes 语义往返。"""
-    from rsnumpy import asarray as _asarray
+    from rsarray import asarray as _asarray
     _a = _asarray(a) if not hasattr(a, '_raw_data') else a
     _s = _asarray(sep) if not hasattr(sep, '_raw_data') else sep
     vals = _char._decode(_char._get_strings(_a))
@@ -156,7 +156,7 @@ def _partition_impl(a, sep, right=False):
         seps.append(m)
         tails.append(t)
     if isinstance(a, (str, bytes)):
-        # 仅裸标量输入返回裸字符串；0-d 数组输入返回数组（numpy 语义）
+        # 仅裸标量输入返回裸字符串；0-d 数组输入返回数组（数组语义）
         return (heads[0] if heads else '', seps[0] if seps else '',
                 tails[0] if tails else '')
     _r1 = _char._wrap_str(heads, bshape, wb)
@@ -177,12 +177,12 @@ def partition(a, sep=' '):
 
 
 def rpartition(a, sep=' '):
-    """从右侧按 sep 拆三段（numpy.strings.rpartition 兼容）。"""
+    """从右侧按 sep 拆三段（strings.rpartition 兼容）。"""
     return _partition_impl(a, sep, right=True)
 
 
 class _NoValue:
-    """numpy._NoValue 等价哨兵：区分 stop 缺省与 None。"""
+    """_NoValue 等价哨兵：区分 stop 缺省与 None。"""
     def __repr__(self):
         return '_NoValue'
 
@@ -191,7 +191,7 @@ _NoValue = _NoValue()
 
 
 def _slice_kind_of(a):
-    """字符串输入种类（'S'/'U'）；非字符串输入返回 None（numpy: no-loop）。"""
+    """字符串输入种类（'S'/'U'）；非字符串输入返回 None（—no-loop）。"""
     if isinstance(a, bytes):
         return 'S'
     if isinstance(a, str):
@@ -211,7 +211,7 @@ def _slice_kind_of(a):
 
 
 def slice(a, start=None, stop=_NoValue, step=None, /):  # noqa: A001
-    """逐元素切片（numpy.strings.slice 语义）：
+    """逐元素切片（strings.slice 语义）：
 
     - 仅给一个参数时该参解释为 stop（同 slice 对象构造规则）；
     - start/stop/step 支持整型标量/数组（广播到 a），字符串输入 →
@@ -220,19 +220,19 @@ def slice(a, start=None, stop=_NoValue, step=None, /):  # noqa: A001
     - 非字符串输入 → no-loop 错误（TypeError）。
     """
     if _slice_kind_of(a) is None:
-        from rsnumpy._core._exceptions import _UFuncNoLoopError
+        from rsarray._core._exceptions import _UFuncNoLoopError
         raise _UFuncNoLoopError(
             "'_slice' ufunc did not contain a loop with signature matching "
             "types")
     if stop is _NoValue:
         stop = start
         start = None
-    from rsnumpy._core import umath as _um
+    from rsarray._core import umath as _um
     return _um._slice(a, start, stop, step)
 
 
 def translate(a, table):
-    """逐元素字符映射（numpy.strings.translate 兼容）。"""
+    """逐元素字符映射（strings.translate 兼容）。"""
     def _t(v):
         try:
             return v.translate(table)
@@ -242,7 +242,7 @@ def translate(a, table):
 
 
 def mod(a, values):
-    """逐元素 printf 风格格式化（numpy.strings.mod 兼容）。"""
+    """逐元素 printf 风格格式化（strings.mod 兼容）。"""
     vals = _char._decode(_char._get_strings(a))
     if isinstance(values, (tuple, list)):
         vlist = list(values)
@@ -275,13 +275,13 @@ def _is(a, method):
 isalnum = lambda a: _is(a, 'isalnum')        # noqa: E731
 isalpha = lambda a: _is(a, 'isalpha')        # noqa: E731
 def isdecimal(a):
-    # numpy unicode-only：S（bytes）输入无 loop → no-loop 错误
+    # unicode-only：S（bytes）输入无 loop → no-loop 错误
     _char._unicode_only_guard(a, 'isdecimal')
     return _is(a, 'isdecimal')
 isdigit = lambda a: _is(a, 'isdigit')        # noqa: E731
 islower = lambda a: _is(a, 'islower')        # noqa: E731
 def isnumeric(a):
-    # numpy unicode-only：S（bytes）输入无 loop → no-loop 错误
+    # unicode-only：S（bytes）输入无 loop → no-loop 错误
     _char._unicode_only_guard(a, 'isnumeric')
     return _is(a, 'isnumeric')
 isspace = lambda a: _is(a, 'isspace')        # noqa: E731
@@ -302,8 +302,8 @@ __all__ = [
 ]
 
 
-# ==================== numpy 协议分派（TestOverride） ====================
-# numpy strings 函数对实现 __array_function__ / __array_ufunc__ 的对象
+# ==================== 协议分派（TestOverride） ====================
+# strings 函数对实现 __array_function__ / __array_ufunc__ 的对象
 # 直接分派：function 组查 __array_function__，ufunc 组查 __array_ufunc__，
 # 返回协议提供的值。ndarray 自带 __array_ufunc__（数值 ufunc 协议），
 # 必须排除在分派之外，否则常规输入会被劫持。

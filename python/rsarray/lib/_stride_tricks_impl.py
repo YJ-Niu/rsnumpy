@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: MIT
-"""numpy.lib._stride_tricks_impl 兼容实现。
+"""lib._stride_tricks_impl 兼容实现。
 
-公共名从 rsnumpy 顶层 / rsnumpy.lib.stride_tricks 再导出。
-sliding_window_view：Rust 后端暂无 strides 级 view，这里按 numpy 语义
+公共名从 rsarray 顶层 / rsarray.lib.stride_tricks 再导出。
+sliding_window_view：Rust 后端暂无 strides 级 view，这里按 数组语义
 生成值与形状正确的结果（当前为拷贝语义；strides 视图待 Rust 侧支持）。
 """
 
@@ -10,12 +10,12 @@ import builtins
 
 
 def _rs():
-    import rsnumpy
-    return rsnumpy
+    import rsarray
+    return rsarray
 
 
 def _broadcast_shape(*shapes):
-    """计算广播结果形状（numpy._broadcast_shape 兼容）。"""
+    """计算广播结果形状（_broadcast_shape 兼容）。"""
     rs = _rs()
     result = (0,)
     for shape in shapes:
@@ -32,11 +32,11 @@ def _broadcast_shape(*shapes):
 
 def sliding_window_view(x, window_shape, axis=None, *, subok=False,
                         writeable=True):
-    """滑动窗口视图（numpy.lib.stride_tricks.sliding_window_view 兼容）。
+    """滑动窗口视图（lib.stride_tricks.sliding_window_view 兼容）。
 
     axis 可为 None(滑所有轴，window_shape 须为长 ndim 的序列)、标量或序列；
     输出布局 = (各原轴序：滑轴取偏移量 d-w+1 / 非滑轴取原尺寸) + (各滑轴窗口尺寸)。
-    writeable/subok 仅为兼容 numpy 签名接受（rsnumpy 视图恒可写、无子类视图）。
+    writeable/subok 仅为兼容 签名接受（rsarray 视图恒可写、无子类视图）。
     当前为值正确的拷贝实现（Rust 后端无 strides view）。
     """
     rs = _rs()
@@ -94,15 +94,15 @@ def sliding_window_view(x, window_shape, axis=None, *, subok=False,
 
 
 def __getattr__(name):
-    # 惰性从 rsnumpy 顶层 / lib.stride_tricks 取回（lib 在 rsnumpy
+    # 惰性从 rsarray 顶层 / lib.stride_tricks 取回（lib 在 rsarray
     # 初始化期间导入，模块级取属性会撞上部分初始化的命名空间）。
     if name == 'as_strided':
-        from rsnumpy.lib.stride_tricks import as_strided
+        from rsarray.lib.stride_tricks import as_strided
         return as_strided
     if name in ('broadcast_arrays', 'broadcast_shapes', 'broadcast_to'):
-        import rsnumpy
-        return getattr(rsnumpy, name)
-    raise AttributeError(f"module 'rsnumpy.lib._stride_tricks_impl' has no "
+        import rsarray
+        return getattr(rsarray, name)
+    raise AttributeError(f"module 'rsarray.lib._stride_tricks_impl' has no "
                          f"attribute {name!r}")
 
 

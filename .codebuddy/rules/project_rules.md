@@ -1,11 +1,11 @@
-# rsnumpy 项目开发规则
+# rsarray 项目开发规则
 
 ## 项目概述
 
-rsnumpy 是一个使用 **Rust + PyO3** 开发的高性能 Python 数值计算库，提供与 **NumPy** 兼容的 API 接口。
+rsarray 是一个使用 **Rust + PyO3** 开发的高性能 Python 数值计算库，提供高维数组 API 接口。
 
 - **Rust 层** (`src/`): 负责底层核心实现，包括数组操作、算术运算、线性代数、FFT、排序统计等，底层数据恒为 `Array<f64, IxDyn>`（ndarray 0.17.2）
-- **Python 层** (`python/rsnumpy/`): 负责公开 API 接口，方法参数默认值要全面，代理调用 Rust 底层实现，包含 dtype 追踪、结构化数组、掩码数组等扩展功能
+- **Python 层** (`python/rsarray/`): 负责公开 API 接口，方法参数默认值要全面，代理调用 Rust 底层实现，包含 dtype 追踪、结构化数组、掩码数组等扩展功能
 - **构建工具**: 使用 `maturin` 构建 wheel，通过 `build_wheel.sh` 脚本构建并安装到 `.venv`
 
 ## 开发环境
@@ -18,27 +18,27 @@ rsnumpy 是一个使用 **Rust + PyO3** 开发的高性能 Python 数值计算�
 
 ### 1. Debug 目录
 
-- 所有调试、分析、验证、测试代码及生成的结果必须放在 `/Users/user/Desktop/rust_project/rsnumpy/debug/` 目录中
+- 所有调试、分析、验证、测试代码及生成的结果必须放在 `/Users/user/Desktop/rust_project/rsarray/debug/` 目录中
 - 禁止在项目根目录或其他位置创建零散的测试文件
 - 调试时，添加一些debug信息，如打印数组形状、dtype、内存布局等，也要判断数据是否正确加载
 
 ### 2. 代码修改范围
 
-- **可以修改**: `rsnumpy` 项目内的代码 (`src/`, `python/rsnumpy/`, `pyproject.toml`, `Cargo.toml`, `test/test_rf/networkx`, `test/test_rf/scipy` 等)
+- **可以修改**: `rsarray` 项目内的代码 (`src/`, `python/rsarray/`, `pyproject.toml`, `Cargo.toml`, `test/test_rf/networkx`, `test/test_rf/scipy` 等)
 - **禁止修改**: 用户测试代码、`.venv` 环境中的任何代码
 - 修改后使用 `build_wheel.sh` 构建并安装到 `.venv` 进行测试
 
 ### 3. 修复优先级
 
 - 优先在 **Rust 层** (`src/`) 实现底层修复
-- 然后在 **Python 层** (`python/rsnumpy/`) 补全和优化方法接口
-- 确保 Python 接口的默认参数全面，与 NumPy 行为一致
+- 然后在 **Python 层** (`python/rsarray/`) 补全和优化方法接口
+- 确保 Python 接口的默认参数全面，与标准数组语义一致
 
 ### 4. 依赖库处理
 
-- **禁止**安装 `numpy` 或其他第三方 Python 数值库（如 `scipy` 的核心功能）
-- 项目自身即为 numpy 兼容库，应完善自身实现而非引入 numpy
-- 如何需要使用numpy来测试或验证功能与rsnumpy进行对比，验证完后，及时删除或注释掉相关代码，确保rsnumpy里没有引用的numpy代码
+- **禁止**安装任何第三方 Python 数值库（如 `scipy`）
+- 项目自身即为独立数值库，应完善自身实现而非引入第三方数值库
+- 如需要使用第三方数值库来测试或验证功能与 rsarray 进行对比，验证完后，及时删除或注释掉相关代码，确保 rsarray 里没有引用第三方数值库的代码
 - `test/test_rf/` 目录下的 networkx/scipy 用于测试兼容层，可按需更新
 
 ### 5. 代码风格
@@ -60,11 +60,11 @@ rsnumpy 是一个使用 **Rust + PyO3** 开发的高性能 Python 数值计算�
 
 ## 8. 缓冲协议架构
 
-rsnumpy 通过双层缓冲协议实现零拷贝数据共享，同时保证 dtype 精度：
+rsarray 通过双层缓冲协议实现零拷贝数据共享，同时保证 dtype 精度：
 
 - **内层 Rust 层** (`_core.ndarray`)：实现 PEP 3118 的 `__getbuffer__`/`__releasebuffer__`，直接暴露底层 `Array<f64, IxDyn>` 的连续内存，支持 shape/strides/format='d'/readonly。
 
-- **外层 Python 层** (`rsnumpy.ndarray`)：实现 PEP 688 的 `__buffer__`/`__release_buffer__`（Python 3.12+），转发到内层 `_array` 的缓冲协议。**仅对 float64 dtype 暴露缓冲**——因为底层存储恒为 f64，若对 int/bool 等 dtype 也暴露 f64 缓冲，numpy 会优先按缓冲解读导致 dtype 失真。
+- **外层 Python 层** (`rsarray.ndarray`)：实现 PEP 688 的 `__buffer__`/`__release_buffer__`（Python 3.12+），转发到内层 `_array` 的缓冲协议。**仅对 float64 dtype 暴露缓冲**——因为底层存储恒为 f64，若对 int/bool 等 dtype 也暴露 f64 缓冲，消费方会优先按缓冲解读导致 dtype 失真。
 
 - **回退路径**：int/bool/datetime64 等 dtype 不暴露缓冲，消费方自动回退到 `__array_interface__`（含 bytes 副本的 dtype 精确表示）。
 
@@ -79,7 +79,7 @@ rsnumpy 通过双层缓冲协议实现零拷贝数据共享，同时保证 dtype
 ## 项目结构
 
 ```
-rsnumpy/
+rsarray/
 ├── src/                    # Rust 源码
 │   ├── lib.rs              # 库入口，PyO3 模块注册，NdArray 定义及缓冲协议
 │   ├── arithmetic/         # 算术运算（加减乘除、幂、取模等）
@@ -101,7 +101,7 @@ rsnumpy/
 │   ├── sorting/            # 排序操作
 │   └── statistics/         # 统计函数（mean、std、sum、min、max 等）
 ├── python/                 # Python 源码
-│   └── rsnumpy/            # Python 包
+│   └── rsarray/            # Python 包
 │       ├── __init__.py     # 包入口，导出核心 API，公开 ndarray 类
 │       ├── _core/          # 内部模块
 │       ├── _dtypes.py      # dtype 定义

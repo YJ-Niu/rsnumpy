@@ -1,6 +1,6 @@
-# rsnumpy
+# rsarray
 
-A high-performance, NumPy-compatible array library where every compute-heavy
+A high-performance array library where every compute-heavy
 operator is implemented in Rust and dispatched through PyO3 with the GIL
 released. The Python layer is a thin parameter-forwarding shell, so
 multi-threaded Python code actually runs in parallel.
@@ -9,24 +9,24 @@ multi-threaded Python code actually runs in parallel.
 
 ## Highlights
 
-- **NumPy-compatible API.** Drop-in for typical NumPy use cases. Covers array
+- **Familiar array API.** Drop-in for typical array workloads. Covers array
   creation, math, statistics, `linalg`, `fft`, `random`, polynomial, file I/O
   (`.npy` / `.npz` / text), `datetime64` / `timedelta64`, masked and
-  structured arrays. Aligned with the NumPy 2.5 behavior.
+  structured arrays. Aligned with the 2.5 semantic baseline.
 - **Rust-powered performance.** On macOS (Apple Silicon) for `n = 1,000,000`
-  `float64`:
-  - `sin` / `exp` — **5.2×–5.4×** faster than NumPy
+  `float64`, versus a typical C/Python array stack:
+  - `sin` / `exp` — **5.2×–5.4×** faster
   - `sort` — **~32×** faster
   - `cumsum` — **~1.9×** faster
   - `add` / `mul` / `div` / `sqrt` — **~1.6×–1.7×** faster
-  - `matmul` 1024×1024 — on par with NumPy via system Accelerate BLAS
+  - `matmul` 1024×1024 — system Accelerate BLAS level via Rust dispatch
 - **GIL-free parallelism.** All heavy operators (`sort`, `cumsum`, `matmul`,
   `inv`, element-wise, reductions) release the GIL via `py.detach` and are
   parallelized in Rust with rayon, behind cost-tiered thresholds so small
   arrays don't pay a thread-scheduling tax.
 - **Zero-copy buffer protocol.** Implements PEP 3118 (`__getbuffer__` /
   `__releasebuffer__` in Rust) plus PEP 688 (`__buffer__` for Python 3.12+).
-  Downstream libraries like NumPy or `rsplotlib` can read `float64` data
+  Downstream libraries like `matplotlib` or `rsplotlib` can read `float64` data
   without copying. Non-`float64` dtypes fall back to `__array_interface__`
   with dtype-precise `bytes`.
 - **Variable-length elements.** `VarStringArray` is a faster drop-in for
@@ -48,7 +48,7 @@ multi-threaded Python code actually runs in parallel.
   `codegen-units=1`, `panic="abort"`, and `strip="symbols"`, plus a
   `num_cpus`-free dependency tree — `num_core.cpython-*.so` is about **5.1 MB**.
   Circular imports are broken with lazy `_get_deps()`, so the first
-  `import rsnumpy` finishes in roughly **7 ms**.
+  `import rsarray` finishes in roughly **7 ms**.
 - **Thread-pool control.** `set_num_threads()`, `get_num_threads()`,
   `parallel_context()`, and `set_parallel_thresholds()` /
   `get_parallel_thresholds()` let callers steer the underlying rayon pool
@@ -59,9 +59,9 @@ multi-threaded Python code actually runs in parallel.
 ## Installation
 
 ```bash
-pip install rsnumpy
+pip install rsarray
 # or
-uv pip install rsnumpy
+uv pip install rsarray
 ```
 
 Prebuilt wheels are published for **Python 3.10–3.14** on:
@@ -75,7 +75,7 @@ Prebuilt wheels are published for **Python 3.10–3.14** on:
 ## Quick Start
 
 ```python
-import rsnumpy as np
+import rsarray as np
 
 # Basics
 a = np.array([1.0, 2.0, 3.0, 4.0])
@@ -111,9 +111,8 @@ np.chunked_apply(np.sum, large, chunk_size=1_000_000)
 lazy = np.LazyArray(np.arange(1000.0))
 result = lazy.sqrt().multiply(2).add(1).compute()
 
-# Zero-copy interop with NumPy
-import numpy as real_numpy
-arr = real_numpy.asarray(a)  # no copy, dtype=float64
+# Zero-copy interop with third-party libraries:
+# e.g. matplotlib consumes the float64 buffer directly, no copy
 ```
 
 ---
@@ -121,7 +120,7 @@ arr = real_numpy.asarray(a)  # no copy, dtype=float64
 ## Project Layout
 
 ```
-rsnumpy/
+rsarray/
 ├── src/                       # Rust source (22,000+ lines)
 │   ├── lib.rs                 # core ndarray + PyO3 module
 │   ├── indexing.rs            # multi-dim indexing & slicing
@@ -143,11 +142,11 @@ rsnumpy/
 │   ├── setops/                # unique, intersect1d, ...
 │   ├── sorting/               # sort, argsort, partition, ...
 │   └── statistics/            # sum, mean, std, var, ...
-├── python/rsnumpy/            # thin Python wrappers (26,000+ lines)
+├── python/rsarray/            # thin Python wrappers (26,000+ lines)
 │   ├── __init__.py
 │   ├── array_methods.py
 │   ├── array_ops.py
-│   ├── _extra.py              # ~140 NumPy-compatible helpers
+│   ├── _extra.py              # ~140 array-library helpers
 │   ├── _dtypes.py
 │   ├── char.py, io.py, ma.py, rec.py
 │   ├── math_functions.py, statistics.py
@@ -167,8 +166,8 @@ rsnumpy/
 ## Building from Source
 
 ```bash
-git clone https://github.com/YJ-Niu/rsnumpy.git
-cd rsnumpy
+git clone https://github.com/YJ-Niu/rsarray.git
+cd rsarray
 
 # Create a virtualenv (uv recommended)
 uv venv .venv --python 3.11
@@ -193,9 +192,8 @@ maturin develop --release
 
 ## Dependencies
 
-`rsnumpy` is **self-contained** at the Python level — there are no runtime
-Python dependencies (it does not depend on NumPy). All computation lives in
-the Rust extension.
+`rsarray` is **self-contained** at the Python level — there are no runtime
+Python dependencies at all. All computation lives in the Rust extension.
 
 Build-time only:
 
@@ -235,7 +233,7 @@ and several `sort` / `indexing` / `statistics` bug fixes).
 - **v1.1.6** — GIL release for compute-heavy operators; cost-tiered parallel
   thresholds; in-place parallel `cumsum` / `cumprod`; macOS Accelerate BLAS
   backend.
-- **v1.1.0** — ~140 NumPy-compatible functions added; aligned with NumPy 2.5.
+- **v1.1.0** — ~140 array API functions added; aligned with the 2.5 baseline.
 - **v1.0.7** — `__array__` interface for direct matplotlib consumption.
 - **v1.0.0** — Initial release with arrays, math, statistics, linalg, FFT,
   random, polynomial, and file I/O.
@@ -244,13 +242,12 @@ and several `sort` / `indexing` / `statistics` bug fixes).
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Portions of the test suite and the
-`testing` support module are derived from the NumPy project
-(BSD-3-Clause); see [NOTICE](https://github.com/YJ-Niu/rsnumpy/blob/main/NOTICE).
+MIT — see [LICENSE](LICENSE). Original code throughout; no third-party
+attribution required (see [NOTICE](https://github.com/YJ-Niu/rsarray/blob/main/NOTICE)).
 
 ## Links
 
-- [GitHub repository](https://github.com/YJ-Niu/rsnumpy)
-- [README](https://github.com/YJ-Niu/rsnumpy/blob/main/README.md)
-- [Release notes](https://github.com/YJ-Niu/rsnumpy/blob/main/RELEASE_NOTES.md)
-- [Issue tracker](https://github.com/YJ-Niu/rsnumpy/issues)
+- [GitHub repository](https://github.com/YJ-Niu/rsarray)
+- [README](https://github.com/YJ-Niu/rsarray/blob/main/README.md)
+- [Release notes](https://github.com/YJ-Niu/rsarray/blob/main/RELEASE_NOTES.md)
+- [Issue tracker](https://github.com/YJ-Niu/rsarray/issues)

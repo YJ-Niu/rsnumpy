@@ -6,7 +6,7 @@ import cmath as _cmath
 import math as _math
 import operator as _pyop
 
-import rsnumpy.num_core as _core
+import rsarray.num_core as _core
 
 
 def _nd():
@@ -20,7 +20,7 @@ def _wrap(result):
 
 
 def _wrap_bool(result):
-    """比较/逻辑运算结果按布尔数组返回（与 numpy 一致，可直接用作掩码索引）。"""
+    """比较/逻辑运算结果按布尔数组返回（与标准语义一致，可直接用作掩码索引）。"""
     return _nd()._wrap(result, _dtype="bool")
 
 
@@ -56,7 +56,7 @@ def _cflat(v):
 
 # C99 复数特殊值语义（G.6.2 clog / G.6.1 cexp / G.6.5 cpow）。
 # CPython 内建 complex **（bpo-44698）及部分平台 libm cpow 不严格符合
-# C99（如 (inf+0j)**2 应为 inf+nanj），按 numpy 的 C99 规则实现。
+# C99（如 (inf+0j)**2 应为 inf+nanj），按 数组的 C99 规则实现。
 def _c_log_c99(z):
     x, y = z.real, z.imag
     if _math.isnan(x) or _math.isnan(y):
@@ -265,17 +265,17 @@ def log1p(x):
 
 # ========== 舍入函数 ==========
 def around(a, decimals=0):
-    """四舍六入五成双（numpy 语义：rint(x*10^d)/10^d 的 half-even）。
+    """四舍六入五成双（数组语义：rint(x*10^d)/10^d 的 half-even）。
 
     与 Python round 的十进制正确舍入算法不同：6.35*10 恰好二进制舍入到
-    63.5 → rint half-even → 64 → 6.4（numpy 行为）。
+    63.5 → rint half-even → 64 → 6.4（行为）。
     """
     import builtins as _b
     arr = a if hasattr(a, '_array') else _nd()(a)
     _dt = str(getattr(arr, '_dtype', 'float64'))
     if _dt in ('int8', 'int16', 'int32', 'int64', 'uint8', 'uint16',
                'uint32', 'uint64', 'bool') and decimals >= 0:
-        # numpy 语义：整数数组 decimals>=0 时 around 为无操作
+        # 数组语义：整数数组 decimals>=0 时 around 为无操作
         return arr.copy()
 
     def _rnd(v):
@@ -323,16 +323,16 @@ def trunc(x):
 
 
 def fix(x, out=None, **kwargs):
-    """向零取整（与 numpy 一致：已弃用，等价于 trunc/ceil）。"""
+    """向零取整（与标准语义一致：已弃用，等价于 trunc/ceil）。"""
     import warnings as _warnings
     _warnings.warn(
-        "rsnumpy.fix is deprecated: use rsnumpy.trunc/ceil instead",
+        "rsarray.fix is deprecated: use rsarray.trunc/ceil instead",
         DeprecationWarning, stacklevel=2)
     np = _nd()
     raw = _core.fix(_ensure_raw(x))
     if hasattr(x, '_array'):
         res = _wrap(raw)
-        # ufunc 子类保持：经输入对象的 __array_wrap__ 包装（numpy 语义）。
+        # ufunc 子类保持：经输入对象的 __array_wrap__ 包装（数组语义）。
         # 注意 _nd() 返回的就是 ndarray 类本身。
         if type(x) is not np and hasattr(type(x), '__array_wrap__'):
             res = x.__array_wrap__(res, context=None, return_scalar=False)
@@ -340,7 +340,7 @@ def fix(x, out=None, **kwargs):
             out[...] = res
             return out
         return res
-    # 标量输入返回 float64 标量（numpy 语义），不衰减为 ndarray。
+    # 标量输入返回 float64 标量（数组语义），不衰减为 ndarray。
     from .__init__ import float64 as _float64
     val = float(raw.tolist())
     if out is not None:
@@ -390,7 +390,7 @@ def absolute(x, out=None):
     if isinstance(x, complex):
         from .__init__ import ndarray
         res = ndarray([builtins.abs(x)])
-    # numpy 语义:bool 数组的 abs 保持 bool(恒等映射);float 化后
+    # 数组语义:bool 数组的 abs 保持 bool(恒等映射);float 化后
     # 位运算会失真(~0.0f 按位翻转 = -1.0)。
     elif getattr(x, '_dtype', None) == 'bool':
         res = x.copy()
@@ -433,16 +433,16 @@ def add(x1, x2, out=None, **kwargs):
     """逐元素加法。NEP50：Python 弱标量不提升结果 dtype（uint8+3→uint8）；
     str 标量按 np.copyto 同款宽松转换（无法解析按 0），使 ufunc 与
     copyto 的 casting 行为一致（casting 关键字接受但不参与弱标量判定）。"""
-    # ma.masked 常量短路（numpy 语义：add(masked, x) → masked 单例）
+    # ma.masked 常量短路（数组语义：add(masked, x) → masked 单例）
     if getattr(x1, '_ma_masked_self', False):
         return x1
     if getattr(x2, '_ma_masked_self', False):
         return x2
     kwargs.pop('casting', None)
-    # 字符串数组 + 字符串数组/标量 = 逐元素连接（numpy 语义）；结果超
+    # 字符串数组 + 字符串数组/标量 = 逐元素连接（数组语义）；结果超
     # intc max → TypeError（large_string_addition 回归）
     if getattr(x1, '_str_dtype', None) is not None:
-        from rsnumpy import char as _char_add
+        from rsarray import char as _char_add
         res = _char_add.add(x1, x2)
         if out is not None:
             try:
@@ -485,7 +485,7 @@ def add(x1, x2, out=None, **kwargs):
 
 def _add_outer(x1, x2):
     """ufunc.outer 语义：输入先 flatten 为一维，外积 a[i]+b[j]。"""
-    import rsnumpy as _rn
+    import rsarray as _rn
     a = _rn.asarray(x1).reshape((-1,))
     b = _rn.asarray(x2).reshape((-1,))
     return a.reshape((-1, 1)) + b.reshape((1, -1))
@@ -560,7 +560,7 @@ def power(x1, x2, dtype=None):
     """逐元素幂运算。
 
     指定 dtype 且 x1/x2 均为标量时，按目标类型语义计算：整数类型精确幂后
-    按位宽二补数回绕（与 numpy 定宽整数溢出一致），浮点类型返回浮点标量。
+    按位宽二补数回绕（与 定宽整数溢出一致），浮点类型返回浮点标量。
     """
     if dtype is not None and not _is_arr(x1) and not _is_arr(x2):
         name = _dtype_name(dtype)
@@ -598,19 +598,19 @@ def _str_kind_of(x):
 
 
 def _string_cmp(opname, py_op, core_fn, x1, x2, signature=None, casting=None):
-    """字符串数组比较的 numpy ufunc 语义：
+    """字符串数组比较的 ufunc 语义：
 
     - 同种类（S/S 或 U/U）：底层是 f64 占位，须按原始 Python 值逐元素比较；
     - 混合 S/U：无匹配 loop → _UFuncNoLoopError（TypeError，消息含
       "did not contain a loop"）；显式 signature + casting='unsafe' 时
-      先把双方 cast 到目标种类再比较（numpy 语义）。
+      先把双方 cast 到目标种类再比较（数组语义）。
     """
     k1 = _str_kind_of(x1)
     k2 = _str_kind_of(x2)
     if not (k1 in ('S', 'U') and k2 in ('S', 'U')):
         return _wrap_bool(core_fn(_ensure_raw(x1), _ensure_raw(x2)))
     if k1 != k2:
-        from rsnumpy._core._exceptions import _UFuncNoLoopError
+        from rsarray._core._exceptions import _UFuncNoLoopError
         if signature is None or casting != 'unsafe':
             raise _UFuncNoLoopError(
                 f"'{opname}' ufunc did not contain a loop with signature "
@@ -618,8 +618,8 @@ def _string_cmp(opname, py_op, core_fn, x1, x2, signature=None, casting=None):
         _tgt = str(signature).lstrip('<>=|')[:1]
         x1 = x1.astype(_tgt)
         x2 = x2.astype(_tgt)
-    from rsnumpy import _flatten_vals
-    from rsnumpy import char as _char
+    from rsarray import _flatten_vals
+    from rsarray import char as _char
     a = (x1._raw_data if getattr(x1, '_raw_data', None) is not None
          else x1.tolist())
     b = (x2._raw_data if getattr(x2, '_raw_data', None) is not None
@@ -657,7 +657,7 @@ def equal(x1, x2, signature=None, casting=None):
     # object dtype：Rust 层对 object 占位失真，逐元素 Python ==
     _a1 = x1 if hasattr(x1, '_array') else None
     if _a1 is not None and getattr(_a1, '_dtype', None) == 'object':
-        from rsnumpy import _flatten_vals
+        from rsarray import _flatten_vals
         flat = (_a1.flatten().tolist() if getattr(_a1, '_raw_data', None) is None
                 else _flatten_vals(_a1._raw_data))
         if hasattr(x2, '_array') and getattr(x2, 'ndim', 0) == 0:
@@ -727,13 +727,13 @@ def logical_xor(x1, x2, out=None, **kwargs):
 
 
 def _isclose_arrays(arr_a, arr_b, rtol, atol, equal_nan):
-    """isclose 的数值核心（numpy 语义，Python 逐元素实现）。
+    """isclose 的数值核心（数组语义，Python 逐元素实现）。
 
     底层 Rust 数组比较对非有限值有缺口（inf==inf → False、
     nan != nan → False），故展平后用 Python 原生浮点语义逐元素判断：
     两者皆有限 → |a-b| <= atol + rtol*|b|；非有限 → 仅 a == b 时 True；
     双 NaN → equal_nan。atol/rtol 支持 list/tuple 数组。
-    形状不可广播 → ValueError（numpy 语义，避免直达 Rust panic）。
+    形状不可广播 → ValueError（数组语义，避免直达 Rust panic）。
     """
     import math as _m
     nd = _nd()
@@ -863,7 +863,7 @@ def _isclose_arrays(arr_a, arr_b, rtol, atol, equal_nan):
 
 
 def isclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False):
-    """逐元素判断是否接近（numpy 语义，Python 层实现）。
+    """逐元素判断是否接近（数组语义，Python 层实现）。
 
     |a-b| <= atol + rtol*|b|；相等值（含 inf==inf）恒 close；
     NaN 默认 False，equal_nan=True 时同位 NaN 为 True。
@@ -886,7 +886,7 @@ def isclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False):
             not isinstance(a, (list, tuple)) and \
             not isinstance(b, (list, tuple)):
         # 标量 × 标量：纯 Python 计算（绕开 0-d 数组 item/bool 缺口），
-        # 返回 np.bool 标量单例（numpy 语义）
+        # 返回 np.bool 标量单例（数组语义）
         try:
             _va, _vb = a, b
             if isinstance(_va, builtins.bool) or isinstance(_vb, builtins.bool):
@@ -899,7 +899,7 @@ def isclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False):
                 # 相等值（含 inf==inf / -inf==-inf）恒 close
                 _val = True
             else:
-                # numpy 语义：非有限对（含 inf/-inf）仅在相等时 close
+                # 数组语义：非有限对（含 inf/-inf）仅在相等时 close
                 _va_f = builtins.bool(_va == _va and
                                       abs(_va) != builtins.float('inf'))
                 _vb_f = builtins.bool(_vb == _vb and
@@ -938,9 +938,9 @@ def isclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False):
 
 
 def allclose(a, b, rtol=1e-05, atol=1e-08, equal_nan=False, *args, **kwargs):
-    """判断两个数组是否全部元素级接近（numpy 语义）。
+    """判断两个数组是否全部元素级接近（数组语义）。
 
-    与 NumPy 对齐：``equal_nan=True`` 时同位置的 NaN 视为相等。
+    与 对齐：``equal_nan=True`` 时同位置的 NaN 视为相等。
     标量输入返回 Python bool。
     """
     _ = args, kwargs

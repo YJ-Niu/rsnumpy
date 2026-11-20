@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
-"""numpy._core.records 兼容层：从 rsnumpy.rec 再导出。"""
+"""rsarray._core.records 兼容层：从 rsarray.rec 再导出。"""
 
-import rsnumpy as _rs
+import rsarray as _rs
 
 recarray = _rs.rec.recarray
 fromarrays = _rs.rec.fromarrays

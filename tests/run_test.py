@@ -1,10 +1,10 @@
-import rsnumpy as np
+import rsarray as np
 import time
 import math
 from io import StringIO
-from rsnumpy import array, argmin, sqrt, sum
-from rsnumpy.lib.recfunctions import repack_fields
-from rsnumpy.lib import recfunctions as rfn
+from rsarray import array, argmin, sqrt, sum
+from rsarray.lib.recfunctions import repack_fields
+from rsarray.lib import recfunctions as rfn
 
 start_time = time.time()
 
@@ -620,7 +620,7 @@ c.flat = [u + v for (u, v) in b]
 print('调用 flat 函数：')
 print(132, c)
 print('\n')
-# 获得了和 NumPy 内建的广播支持相同的结果
+# 获得了和标准广播语义相同的结果
 
 print('x 与 y 的和：')
 print(133, x + y)
@@ -1541,7 +1541,7 @@ print(a.T)
 
 mark_print()
 
-# import rsnumpy.matlib
+# import rsarray.matlib
 print(np.matlib.empty((2, 2)))
 print()
 print(np.matlib.zeros((2, 2)))

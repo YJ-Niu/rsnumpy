@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: MIT
-"""numpy._core.fromnumeric 兼容层：从 rsnumpy 顶层再导出。
+"""rsarray._core.fromnumeric 兼容层：从 rsarray 顶层再导出。
 
-rsnumpy 的逐元素/构造公共 API 直接挂在顶层命名空间；本模块提供
-NumPy 2.x 的 ``numpy._core.fromnumeric`` 导入路径。
+rsarray 的逐元素/构造公共 API 直接挂在顶层命名空间；本模块提供
+2.x 的 ``rsarray._core.fromnumeric`` 导入路径。
 """
 
 _NAMES = (
@@ -22,9 +22,9 @@ _NAMES = (
 
 def __getattr__(name):
     if name in _NAMES:
-        import rsnumpy
-        return getattr(rsnumpy, name)
-    raise AttributeError(f"module 'rsnumpy._core.fromnumeric' has no "
+        import rsarray
+        return getattr(rsarray, name)
+    raise AttributeError(f"module 'rsarray._core.fromnumeric' has no "
                          f"attribute {name!r}")
 
 

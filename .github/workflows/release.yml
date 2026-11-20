@@ -74,7 +74,7 @@ jobs:
         with:
           # -i python 指向 setup-python 激活的解释器，确保为当前矩阵版本构建。
           args: --release --out dist -i python
-          # sccache 编译缓存跨矩阵 job、跨 run 共享，后续 release 只重编 rsnumpy 本身。
+          # sccache 编译缓存跨矩阵 job、跨 run 共享，后续 release 只重编 rsarray 本身。
           sccache: "true"
 
       - uses: actions/upload-artifact@v7

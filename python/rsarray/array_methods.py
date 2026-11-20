@@ -2,18 +2,18 @@
 """
 ndarray 对象方法模块
 
-此模块包含 rsnumpy.ndarray 类的所有对象方法和属性。
+此模块包含 rsarray.ndarray 类的所有对象方法和属性。
 """
 
 import builtins
 
-import rsnumpy.num_core as _core
+import rsarray.num_core as _core
 
 
 def _get_deps():
     """延迟获取 ndarray 和 _ensure，避免循环导入导致的 import 缓慢。"""
-    import rsnumpy
-    return rsnumpy.ndarray, rsnumpy._ensure
+    import rsarray
+    return rsarray.ndarray, rsarray._ensure
 
 
 def _wrap_result(result, dtype="float64"):
@@ -31,7 +31,7 @@ class NdArrayMethods:
     def astype(arr, dtype, copy=True):
         """将数组转换为指定的数据类型。"""
         # 结构化目标含 object 字段：底层 float 存储无法表示，显式拒绝
-        # （静默降级会损坏数据；numpy 对 object 字段的 axis 运算同样抛
+        # （静默降级会损坏数据；对 object 字段的 axis 运算同样抛
         # TypeError）。
         if isinstance(dtype, (list, tuple)) and dtype and builtins.all(
                 isinstance(f, (list, tuple)) and len(f) >= 2 for f in dtype):
@@ -39,11 +39,11 @@ class NdArrayMethods:
                             for f in dtype):
                 raise TypeError(
                     "cannot astype to a structured dtype containing object "
-                    "fields (rsnumpy cannot represent object fields)")
-        # 非结构化 → 结构化：逐元素逐字段 cast（numpy astype 语义：
+                    "fields (rsarray cannot represent object fields)")
+        # 非结构化 → 结构化：逐元素逐字段 cast（astype 语义：
         # 每个标量按各字段 dtype 转换成一个记录）
         try:
-            import rsnumpy as _rn_ast
+            import rsarray as _rn_ast
             _dst_dt = _rn_ast.dtype(dtype)
             _dst_names = getattr(_dst_dt, 'names', None)
             if _dst_names is not None:
@@ -65,12 +65,12 @@ class NdArrayMethods:
         except Exception:
             pass
         # 字符串目标（S/U）：_resolve_dtype 会把 S/U 降解成 float64，须单独
-        # 处理（numpy 语义：S 源解码并在 null 截断、U 源编码、宽度变更截断/
+        # 处理（数组语义：S 源解码并在 null 截断、U 源编码、宽度变更截断/
         # 补零；裸 S/U（无宽度）= 自动宽度）
         _str_tgt = None
         try:
-            import rsnumpy as _rn_st
-            import rsnumpy._dtypes as _dts_st2
+            import rsarray as _rn_st
+            import rsarray._dtypes as _dts_st2
             _DType_st = _dts_st2.DType
             if isinstance(dtype, str):
                 _core_st = dtype[1:] if dtype and dtype[0] in '<>|=' else dtype
@@ -97,7 +97,7 @@ class NdArrayMethods:
                         bytes(_v).decode('latin-1').split('\x00')[0])
                 else:
                     _st_norm.append(str(_v).split('\x00')[0])
-            # 裸目标（无显式宽度）：numpy 宽度保持语义——源有显式宽度时
+            # 裸目标（无显式宽度）：宽度保持语义——源有显式宽度时
             # 目标宽度 = 源宽度（否则按内容推断最小宽度）
             _src_sd = getattr(arr, '_str_dtype', None)
             _src_w = _src_sd[1] if _src_sd is not None else 0
@@ -113,7 +113,7 @@ class NdArrayMethods:
                     (_src_w if _src_w > 0 else
                      max([len(_s) for _s in _st_norm] + [1]))
                 _st_out = [_s.encode('latin-1')[:_st_w] for _s in _st_norm]
-            # numpy 语义：目标 itemsize 不得超 intc max（超 → TypeError，
+            # 数组语义：目标 itemsize 不得超 intc max（超 → TypeError，
             # large_string_cast 回归）；T 按 U 存储计 4 字节/字符
             if _st_w * (4 if _tk in ('U', 'T') else 1) > 2147483647:
                 raise TypeError(
@@ -129,7 +129,7 @@ class NdArrayMethods:
                 _st_res = _rn_st.array(_st_out, dtype=f'{_tk}{max(_st_w, 1)}')
             if _st_bo in ('<', '>'):
                 try:
-                    import rsnumpy._dtypes as _dts_st
+                    import rsarray._dtypes as _dts_st
                     _st_res._dtype_obj = _dts_st._clone_with_byteorder(
                         _dts_st.DType(f'{_tk}{max(_st_w, 1)}'), _st_bo)
                 except Exception:
@@ -139,7 +139,7 @@ class NdArrayMethods:
             return _st_res
         if isinstance(dtype, str):
             try:
-                import rsnumpy as _rn_asm
+                import rsarray as _rn_asm
                 name = str(_rn_asm._resolve_dtype(dtype))
             except Exception:
                 name = dtype
@@ -149,7 +149,7 @@ class NdArrayMethods:
             # DType 类本身（type(np.dtype(...))）：按裸 S 处理
             if isinstance(dtype, type):
                 try:
-                    import rsnumpy._dtypes as _dts_asm
+                    import rsarray._dtypes as _dts_asm
                     if issubclass(dtype, _dts_asm.DType):
                         name = "bytes_"
                 except Exception:
@@ -172,13 +172,13 @@ class NdArrayMethods:
         def _fin(res):
             if _bo is not None and res is not None:
                 try:
-                    import rsnumpy._dtypes as _dts_bo
+                    import rsarray._dtypes as _dts_bo
                     _d = _dts_bo.DType(name)
                     res._dtype_obj = _dts_bo._clone_with_byteorder(_d, _bo)
                 except Exception:
                     pass
             return res
-        # numpy 语义：目标 dtype 相同且 copy=False → 返回自身（视图）
+        # 数组语义：目标 dtype 相同且 copy=False → 返回自身（视图）
         if copy is False and name == str(getattr(arr, '_dtype', '')):
             return _fin(arr)
         # raw-data 数组（object/complex 标量/字符串）的底层存储是占位存储而非
@@ -197,8 +197,8 @@ class NdArrayMethods:
                 pass
         # Rust astype 对整数目标转换不正确（int→int 回绕错误、float→int
         # 只重标注）：统一用 Python 语义计算——NaN→0、float 向零截断、
-        # int 按目标位宽补码回绕（与 numpy same-kind cast 一致）
-        # bool 目标：numpy 语义——掩码成 0/1（存原值会使 astype 往返泄漏
+        # int 按目标位宽补码回绕（与 same-kind cast 一致）
+        # bool 目标：数组语义——掩码成 0/1（存原值会使 astype 往返泄漏
         # 原值，与 tolist 的 bool 掩码自相矛盾）
         if name == 'bool':
             try:
@@ -246,7 +246,7 @@ class NdArrayMethods:
                     out = []
                     for v in fv:
                         if isinstance(v, float) and v != v:
-                            out.append(0)  # NaN→0（numpy 未定义行为，与 array() 路径一致）
+                            out.append(0)  # NaN→0（未定义行为，与 array() 路径一致）
                         elif _signed:
                             iv = int(v) & mask
                             if iv >= half:
@@ -329,7 +329,7 @@ class NdArrayMethods:
                 return ndarray_cls._wrap(tmp._array, _dtype=name)
             except Exception:
                 pass
-        # S/U 字符串目标：Rust astype 不支持字符串存储。numpy 语义：
+        # S/U 字符串目标：Rust astype 不支持字符串存储。数组语义：
         # 值转字符串后取最小宽度；裸 'S'/'U' 按数据推断（astype('S')→'S3'），
         # 显式宽度（'S4'）直接用（np.array 自带截断）。
         _su_kind = None
@@ -344,7 +344,7 @@ class NdArrayMethods:
             _su_kind = 'S' if name == 'bytes_' else 'U'
         if _su_kind is not None:
             try:
-                import rsnumpy as _rn_su
+                import rsarray as _rn_su
 
                 def _flats(x):
                     if isinstance(x, list):
@@ -372,7 +372,7 @@ class NdArrayMethods:
                 return _fin(_res)
             except Exception:
                 pass
-        # object 目标：Rust 无 object 存储，按 Python 值重建（numpy 语义：
+        # object 目标：Rust 无 object 存储，按 Python 值重建（数组语义：
         # 对象原样保留）。0-d object 源（_raw_data 单元素）与数值源都覆盖。
         if name in ('object', 'O'):
             try:
@@ -407,14 +407,14 @@ class NdArrayMethods:
             shape = builtins.tuple(shape[0])
         else:
             shape = builtins.tuple(shape)
-        # 0 尺寸数组：Rust 不接受 0 维——占位 + shape override（numpy 语义）。
+        # 0 尺寸数组：Rust 不接受 0 维——占位 + shape override（数组语义）。
         _sz = 1
         for _d in shape:
             _sz *= _d
         if _sz == 0:
-            # numpy 语义：零尺寸 reshape 保留目标形状（如 (1,0,1)）；
+            # 数组语义：零尺寸 reshape 保留目标形状（如 (1,0,1)）；
             # Rust 拒绝零尺寸 → 经 zeros 按目标形状构造（继承元数据）。
-            import rsnumpy as _rn
+            import rsarray as _rn
             _dt = getattr(arr, '_dtype', "float64")
             try:
                 _z = _rn.zeros(shape, dtype=_dt)
@@ -453,12 +453,12 @@ class NdArrayMethods:
             out._rs_parent = arr
         except Exception:
             pass
-        # 子类保持（numpy 语义：recarray.reshape → recarray；其余子类
+        # 子类保持（数组语义：recarray.reshape → recarray；其余子类
         # 如 matrix/chararray 有各自语义，不在此统一保持）
         _src_cls = builtins.type(arr)
         if _src_cls is not ndarray:
             try:
-                import rsnumpy as _rn_rs
+                import rsarray as _rn_rs
                 _rec_cls = _rn_rs.recarray
                 if issubclass(_src_cls, _rec_cls):
                     out.__class__ = _src_cls
@@ -480,7 +480,7 @@ class NdArrayMethods:
         elif isinstance(new_shape, list):
             new_shape = tuple(new_shape)
         # 逻辑空数组：Rust 层对空数据 resize 会死循环（copy_len 恒 0）；
-        # numpy 语义：扩大时新元素以 0 填充 → Python 层直接重建。
+        # 数组语义：扩大时新元素以 0 填充 → Python 层直接重建。
         if arr.size == 0:
             try:
                 arr._array = _core.zeros(list(new_shape))
@@ -518,7 +518,7 @@ class NdArrayMethods:
             if isinstance(a0, (tuple, list)):
                 axes = a0
             elif hasattr(a0, 'ndim') and getattr(a0, 'ndim', 1) == 1:
-                # numpy 接受一维数组作为轴置换
+                # 接受一维数组作为轴置换
                 axes = [int(x) for x in a0.reshape((-1,)).tolist()]
         if len(axes) == 0:
             result = arr._array.T
@@ -526,11 +526,11 @@ class NdArrayMethods:
             _ax = [int(x) for x in axes]
             _nd = arr.ndim
             if len(_ax) != _nd:
-                # numpy 语义：轴数必须与数组维度一致
+                # 数组语义：轴数必须与数组维度一致
                 raise ValueError("axes don't match array")
             _norm = [x + _nd if x < 0 else x for x in _ax]
             if len(set(_norm)) != len(_norm):
-                # numpy 语义：轴不可重复
+                # 数组语义：轴不可重复
                 raise ValueError("repeated axis in transpose")
             for x in _norm:
                 if x < 0 or x >= _nd:
@@ -550,7 +550,7 @@ class NdArrayMethods:
         dtype = getattr(arr, '_dtype', "float64")
         fields = getattr(arr, '_fields', None)
         raw_data = getattr(arr, '_raw_data', None)
-        # Rust 层只接受非负轴：负轴先归一化（numpy 语义）
+        # Rust 层只接受非负轴：负轴先归一化（数组语义）
         ndim = len(arr.shape)
         if axis1 < 0:
             axis1 += ndim
@@ -575,7 +575,7 @@ class NdArrayMethods:
     
     @staticmethod
     def _reduce_axis_check(arr, axis):
-        """归约 axis 校验（numpy 语义：越界 → AxisError；0-d 允许 axis=0）。
+        """归约 axis 校验（数组语义：越界 → AxisError；0-d 允许 axis=0）。
 
         越界 axis 直达 Rust 会 panic abort 整个进程；0-d + axis=0
         归一化为 None（全归约）——Rust 对 0-d 的 axis=0 也会 panic。
@@ -586,13 +586,13 @@ class NdArrayMethods:
         _ax = axis + _dim if axis < 0 else axis
         if _dim == 0:
             if _ax != 0:
-                from rsnumpy.exceptions import AxisError
+                from rsarray.exceptions import AxisError
                 raise AxisError(
                     f"axis {axis} is out of bounds for array of "
                     f"dimension {_dim}")
             return None
         if _ax < 0 or _ax >= _dim:
-            from rsnumpy.exceptions import AxisError
+            from rsarray.exceptions import AxisError
             raise AxisError(
                 f"axis {axis} is out of bounds for array of "
                 f"dimension {_dim}")
@@ -652,7 +652,7 @@ class NdArrayMethods:
     def sum(arr, axis=None, dtype=None, out=None, keepdims=False):
         """计算数组元素的和。"""
         _ = dtype, out
-        # 0-d 短路：Rust 归约对 0-d 输入会 abort；numpy 返回保持原 dtype 的 0-d
+        # 0-d 短路：Rust 归约对 0-d 输入会 abort；返回保持原 dtype 的 0-d
         if not tuple(getattr(arr._array, 'shape', ())):
             nd = _nd()
             return nd(arr._array, _dtype=getattr(arr, '_dtype', 'float64'))
@@ -774,7 +774,7 @@ class NdArrayMethods:
     def prod(arr, axis=None, dtype=None, out=None, keepdims=False):
         """计算数组元素的乘积。"""
         _ = dtype, out
-        # 0-d 短路：Rust 归约对 0-d 输入会 abort；numpy 返回保持原 dtype 的 0-d
+        # 0-d 短路：Rust 归约对 0-d 输入会 abort；返回保持原 dtype 的 0-d
         if not tuple(getattr(arr._array, 'shape', ())):
             nd = _nd()
             return nd(arr._array, _dtype=getattr(arr, '_dtype', 'float64'))
@@ -800,11 +800,11 @@ class NdArrayMethods:
     
     @staticmethod
     def argmax(arr, axis=None):
-        """返回最大值的索引（全归约返回 intp 标量，numpy 语义）。"""
+        """返回最大值的索引（全归约返回 intp 标量，数组语义）。"""
         axis = NdArrayMethods._reduce_axis_check(arr, axis)
         result = _wrap_result(_core.argmax_axis(arr._array, axis))
         if result.ndim == 0:
-            import rsnumpy as _rsn
+            import rsarray as _rsn
             return _rsn.int64(result.item())
         return result
     
@@ -865,9 +865,9 @@ class NdArrayMethods:
         _cpx_i = getattr(arr, '_complex_data', None)
         if _cpx_i is not None:
             return _cpx_i[0] if _cpx_i else 0j
-        # numpy item 语义：item(0, 0) 与 item((0, 0)) 等价；越界索引抛
+        # item 语义：item(0, 0) 与 item((0, 0)) 等价；越界索引抛
         # IndexError（Python 层预检——Rust item 只收扁平 int，传 tuple 会
-        # TypeError 而非 numpy 的 IndexError）。
+        # TypeError 而非 数组的 IndexError）。
         if len(args) == 1 and isinstance(args[0], (tuple, list)):
             idx = tuple(int(i) for i in args[0])
         else:
@@ -881,7 +881,7 @@ class NdArrayMethods:
             if _d == 0 or _i < -_d or _i >= _d:
                 raise IndexError(
                     f"index {_i} is out of bounds for axis {_ai} with size {_d}")
-        # object 数组：返回 _raw_data 存储的 Python 引用（numpy 保持对象身份；
+        # object 数组：返回 _raw_data 存储的 Python 引用（保持对象身份；
         # Rust 侧 f64 占位值对 object 无意义）
         if str(getattr(arr, '_dtype', '')) == 'object':
             _raw_i = getattr(arr, '_raw_data', None)
@@ -929,7 +929,7 @@ class NdArrayMethods:
                 _n_t *= int(_v_t)
                 if _n_t > 2**40:
                     raise MemoryError(
-                        "rsnumpy: cannot materialize huge broadcast array via tolist()")
+                        "rsarray: cannot materialize huge broadcast array via tolist()")
         # _complex_data（Python 级复数）优先：_array 只有实部
         _cpx_t = getattr(arr, '_complex_data', None)
         if _cpx_t is not None:
@@ -964,7 +964,7 @@ class NdArrayMethods:
     
     @staticmethod
     def take(arr, indices, axis=None, mode='raise', out=None):
-        """根据索引获取元素（保留输入数组 dtype；numpy 兼容 mode 语义）。
+        """根据索引获取元素（保留输入数组 dtype；兼容 mode 语义）。
 
         越界索引抛 IndexError（直达 Rust 会 panic abort 整个进程）。
         全部索引合法时走 Rust 快路径，否则 Python 回退（含 clip/wrap）。
@@ -991,7 +991,7 @@ class NdArrayMethods:
 
         if isinstance(indices, int) and not isinstance(indices, bool):
             # 标量索引：Python 混合索引实现（Rust take 只接 ndarray 索引，
-            # 裸 int 会 TypeError）；numpy 语义：axis 维被移除
+            # 裸 int 会 TypeError）；数组语义：axis 维被移除
             ndim = arr.ndim
             if axis is None:
                 if ndim == 1:
@@ -1015,7 +1015,7 @@ class NdArrayMethods:
             n = 1
             for d in arr.shape:
                 n *= d
-            # indices 可以是多维：结果与 indices 同形状（numpy 语义：沿展平取）。
+            # indices 可以是多维：结果与 indices 同形状（数组语义：沿展平取）。
             _idx_shape = getattr(indices, 'shape', None)
             _is_nd_idx = _idx_shape is not None and len(tuple(_idx_shape)) > 1
             _flat_idxs = []
@@ -1062,7 +1062,7 @@ class NdArrayMethods:
     
     @staticmethod
     def put(arr, indices, values, mode='raise'):
-        """将值放入数组的指定位置（numpy 兼容 mode 语义）。
+        """将值放入数组的指定位置（兼容 mode 语义）。
 
         空 values 为 no-op；越界索引抛 IndexError（避免 Rust panic abort）。
         """
@@ -1070,7 +1070,7 @@ class NdArrayMethods:
         n = 1
         for d in arr.shape:
             n *= d
-        # indices 可为标量 int / ndarray 标量 / 数组 / list（numpy put 语义）
+        # indices 可为标量 int / ndarray 标量 / 数组 / list（put 语义）
         if hasattr(indices, 'tolist'):
             _t = indices.tolist()
             if isinstance(_t, (bool, int, float)):
@@ -1081,7 +1081,7 @@ class NdArrayMethods:
             idxs = [int(indices)]
         else:
             idxs = [int(v) for v in list(indices)]
-        # values 可为标量（填到全部索引，numpy put 语义）——先展开，避免
+        # values 可为标量（填到全部索引，put 语义）——先展开，避免
         # list(scalar) 报 'int' object is not iterable
         if hasattr(values, 'tolist'):
             _vt = values.tolist()
@@ -1091,7 +1091,7 @@ class NdArrayMethods:
             values = [_vt] * len(idxs)
         vals = values.tolist() if hasattr(values, 'tolist') else list(values)
         if not vals:
-            # numpy 语义：空 values 不修改数组
+            # 数组语义：空 values 不修改数组
             return
 
         def _norm(i):
@@ -1131,7 +1131,7 @@ class NdArrayMethods:
         if (isinstance(repeats, (list, tuple))
                 or (hasattr(repeats, 'ndim')
                     and getattr(repeats, 'ndim', 0) > 0)):
-            from rsnumpy import ndarray as _ND
+            from rsarray import ndarray as _ND
             shp = tuple(arr.shape)
             cnts = repeats.tolist() if hasattr(repeats, 'tolist') \
                 else list(repeats)
@@ -1164,7 +1164,7 @@ class NdArrayMethods:
         #（数组 repeats 已在上方分支 Python 展开）
         _sd_r = getattr(arr, '_str_dtype', None)
         if _sd_r is not None and getattr(arr, '_raw_data', None) is not None:
-            import rsnumpy as _rn_r
+            import rsarray as _rn_r
             _rdt = f'{_sd_r[0]}{max(int(_sd_r[1]), 1)}'
             _r = int(repeats)
             shp = [int(s) for s in arr.shape]

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
-"""rsnumpy._core — NumPy 2.x ``numpy._core`` 兼容层。
+"""rsarray._core — 2.x ``rsarray._core`` 兼容层。
 
-Rust 核心（rsnumpy.num_core）提供计算；本包提供命名空间与 C-helper
+Rust 核心（rsarray.num_core）提供计算；本包提供命名空间与 C-helper
 兼容 API：
 
 - ``numerictypes``：标量类型表（sctypes/sctypeDict 等）
@@ -13,7 +13,7 @@ Rust 核心（rsnumpy.num_core）提供计算；本包提供命名空间与 C-he
 - ``shape_base``：_block_* 内部辅助（skip 语义）
 - ``umath``：ufunc 集合门面
 - ``flatiter`` / ``ufunc``：类型占位（docstring 契约）
-- ``records`` → ``rsnumpy.rec``
+- ``records`` → ``rsarray.rec``
 """
 
 from .numeric import normalize_axis_index, normalize_axis_tuple
@@ -26,7 +26,7 @@ _FLATITER_INDEX_DOC = (
     "\n"
     "Examples\n"
     "--------\n"
-    ">>> import numpy as np\n"
+    ">>> import rsarray as np\n"
     ">>> x = np.arange(6).reshape(2, 3)\n"
     ">>> fl = x.flat\n"
     ">>> fl.index\n"
@@ -79,9 +79,9 @@ def _flatiter_index_get(self):
 
 
 class flatiter:
-    """数组的扁平迭代器（numpy._core.flatiter 兼容）。
+    """数组的扁平迭代器（rsarray._core.flatiter 兼容）。
 
-    支持索引、切片、迭代与 ``index`` 属性（docstring 契约与 NumPy
+    支持索引、切片、迭代与 ``index`` 属性（docstring 契约与 
     一致，且不可被 add_newdoc 改写——模拟 C 层 getset 行为）。
     """
 
@@ -131,45 +131,45 @@ class flatiter:
 
 
 class _UFuncMeta(type):
-    """ufunc 元类：isinstance(x, ufunc) 识别 rsnumpy 标记过的 ufunc 函数。
+    """ufunc 元类：isinstance(x, ufunc) 识别 rsarray 标记过的 ufunc 函数。
 
-    rsnumpy 的 ufunc 是 Python 层函数对象（带 ``_rs_ufunc`` 标记与
-    ``.types`` 循环签名），NumPy 中则是 C 层 ufunc 类的实例。
+    rsarray 的 ufunc 是 Python 层函数对象（带 ``_rs_ufunc`` 标记与
+    ``.types`` 循环签名），参考实现中则是 C 层 ufunc 类的实例。
     """
 
     def __instancecheck__(cls, inst):
         # 真正的类实例（含子类，如 scicore 兼容层的 _gufunc(np.ufunc) 桩）
-        # 按标准 MRO 判定；rsnumpy 标记函数（_rs_ufunc）再兜底识别。
+        # 按标准 MRO 判定；rsarray 标记函数（_rs_ufunc）再兜底识别。
         if type.__instancecheck__(cls, inst):
             return True
         return bool(getattr(inst, '_rs_ufunc', False))
 
 
 class ufunc(metaclass=_UFuncMeta):
-    """ufunc 类型兼容占位（numpy._core.ufunc）。
+    """ufunc 类型兼容占位（rsarray._core.ufunc）。
 
-    rsnumpy 的 ufunc 是 Python 层可调用对象；本类提供与 NumPy 兼容的
+    rsarray 的 ufunc 是 Python 层可调用对象；本类提供与 标准兼容的
     类型占位（identity 常量与文档契约）。
     """
 
     class identity:
         """ufunc 恒等元（identity）说明。
 
-        NumPy ufunc 通过 ``identity`` 属性暴露其代数恒等元 e（满足
+        ufunc 通过 ``identity`` 属性暴露其代数恒等元 e（满足
         ``f(e, x) == f(x, e) == x``）：
 
         - ``identity == -1``（NO_IDENTITY）：ufunc 没有恒等元；此时对
           空序列做 reduce 会抛错，除非显式给出 ``initial``/``start``
           值；``accumulate`` 要求数组非空。
-        - ``identity == 0``（ADD）：恒等元为 0，如 ``numpy.add``——
+        - ``identity == 0``（ADD）：恒等元为 0，如 ``add``——
           空 reduce 得到 0。
         - ``identity == 1``（MULTIPLY）：恒等元为 1，如
-          ``numpy.multiply``——空 reduce 得到 1。
+          ``multiply``——空 reduce 得到 1。
         - ``identity == 2``（REDUCE）：恒等元仅对 reduce 有意义
-          （如 ``numpy.maximum`` 使用可表示的最小值）。
+          （如 ``maximum`` 使用可表示的最小值）。
 
-        rsnumpy 的 Python 层 ufunc 镜像这些常量，使按
-        ``numpy._core.ufunc.identity`` 编写的代码可解析。
+        rsarray 的 Python 层 ufunc 镜像这些常量，使按
+        ``rsarray._core.ufunc.identity`` 编写的代码可解析。
         """
 
         NO_IDENTITY = -1
@@ -187,10 +187,10 @@ def __getattr__(name):
         from . import numerictypes
         return getattr(numerictypes, name)
     if name == 'records':
-        import rsnumpy
-        return rsnumpy.rec
-    # 顶层常用名的 _core 级暴露（numpy._core 同样导出这些公共名，
-    # 移植测试按 numpy 路径从 _core 导入）
+        import rsarray
+        return rsarray.rec
+    # 顶层常用名的 _core 级暴露（rsarray._core 同样导出这些公共名，
+    # 移植测试按 路径从 _core 导入）
     if name in ('arange', 'array', 'asarray', 'atleast_1d', 'atleast_2d',
                 'atleast_3d', 'take', 'all', 'array2string', 'errstate',
                 'inf', 'isnan', 'max', 'object_', 'number', 'result_type',
@@ -198,10 +198,10 @@ def __getattr__(name):
                 'block', 'concatenate', 'hstack', 'newaxis', 'stack',
                 'vstack', 'finfo', 'iinfo', 'swapaxes',
                 'isscalar', 'ndarray', 'signbit'):
-        # testing/_private/utils.py 按 numpy 路径从 _core 导入这三个公共名
-        import rsnumpy
-        return getattr(rsnumpy, name)
-    # 子模块：惰性导入（`import rsnumpy._core.X` 由导入机制直接解析，
+        # testing/_private/utils.py 按 路径从 _core 导入这三个公共名
+        import rsarray
+        return getattr(rsarray, name)
+    # 子模块：惰性导入（`import rsarray._core.X` 由导入机制直接解析，
     # 属性访问走这里）
     if name in ('numerictypes', 'function_base', 'multiarray',
                 'shape_base', '_multiarray_umath', '_multiarray_tests',
@@ -210,4 +210,4 @@ def __getattr__(name):
                 'strings'):
         from importlib import import_module
         return import_module(f'.{name}', __name__)
-    raise AttributeError(f"module 'rsnumpy._core' has no attribute {name!r}")
+    raise AttributeError(f"module 'rsarray._core' has no attribute {name!r}")

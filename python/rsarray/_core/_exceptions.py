@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: MIT
-"""numpy._core._exceptions 兼容实现。
+"""rsarray._core._exceptions 兼容实现。
 
 ufunc 无适用 loop 时的错误类型（移植测试直接从此路径导入）；
-公共异常与 ``rsnumpy.exceptions`` 同源。
+公共异常与 ``rsarray.exceptions`` 同源。
 """
 
-from rsnumpy.exceptions import (  # noqa: F401
+from rsarray.exceptions import (  # noqa: F401
     AxisError,
     ComplexWarning,
     DTypePromotionError,
@@ -15,14 +15,14 @@ from rsnumpy.exceptions import (  # noqa: F401
 
 
 class _UFuncNoLoopError(TypeError, ValueError):
-    """ufunc 找不到适用 loop 时抛出（numpy._core._exceptions 同名）。
+    """ufunc 找不到适用 loop 时抛出（rsarray._core._exceptions 同名）。
 
-    numpy 中 UFuncNoLoopError 是 TypeError 子类；同时保留 ValueError
+    中 UFuncNoLoopError 是 TypeError 子类；同时保留 ValueError
     基类以兼容既有按 ValueError 捕获的代码。"""
 
 
 class _ArrayMemoryError(MemoryError):
-    """数组内存错误（numpy._core._exceptions 同名）。
+    """数组内存错误（rsarray._core._exceptions 同名）。
 
     ``_ArrayMemoryError(shape, dtype)``；``_total_size = prod(shape) * itemsize``；
     ``_size_to_string`` 按 3 有效数字格式化（≥1023.5 进位到下一单位）。
@@ -43,7 +43,7 @@ class _ArrayMemoryError(MemoryError):
 
     @staticmethod
     def _size_to_string(size):
-        """numpy 语义：bytes 整数；其余单位 3 有效数字，≥1023.5 进位。"""
+        """数组语义：bytes 整数；其余单位 3 有效数字，≥1023.5 进位。"""
         Ki = 1024
         units = ('bytes', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB')
         v = float(size)

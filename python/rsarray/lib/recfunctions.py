@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: MIT
-"""结构化数组辅助函数（numpy.lib.recfunctions 的兼容子集）。
+"""结构化数组辅助函数（lib.recfunctions 的兼容子集）。
 
-实现直接操作 rsnumpy 结构化数组的纯 Python 记录模型（_dtype_obj / _raw_data），
+实现直接操作 rsarray 结构化数组的纯 Python 记录模型（_dtype_obj / _raw_data），
 复用顶层模块暴露的内部辅助函数。
 """
 
 import math as _math
 
-import rsnumpy as np
+import rsarray as np
 
 
 # ========== 内部辅助 ==========
@@ -295,7 +295,7 @@ def drop_fields(base, drop_names, usemask=True, asrecarray=False):
     dt = _rich_dtype(base)
     newdt = _drop_descr(dt, drop_names)
     if newdt is None:
-        # 顶层字段全部删除：无字段的空结构化数组（numpy 语义）
+        # 顶层字段全部删除：无字段的空结构化数组（数组语义）
         newdt = np._build_struct([], [], None, None, None, False)
     recs = _records(base)
     newrecs = [_project_record(r, dt, newdt) for r in recs]
@@ -347,12 +347,12 @@ def structured_to_unstructured(arr, dtype=None, copy=False, casting='unsafe'):
     recs = _records(arr)
     rows = [_record_leaves(r, dt) for r in recs]
     if not tuple(arr.shape):
-        # 0-d 结构化：输出形状 = (叶子数,)，无行包装（numpy 语义）
+        # 0-d 结构化：输出形状 = (叶子数,)，无行包装（数组语义）
         nested = rows[0] if rows else []
     else:
         nested = np._reshape_flat(rows, arr.shape)
     # 叶子字段 dtype 收集（uniform 判定 + 视图血缘）。
-    # 注意：rsnumpy 把嵌套子数组解析为递归子数组（(i4,(2,2)) → (i4,(2,)) 套
+    # 注意：rsarray 把嵌套子数组解析为递归子数组（(i4,(2,2)) → (i4,(2,)) 套
     # (2,)），必须递归展开到真正的标量叶子
     leaf_dts = []
 
@@ -381,17 +381,17 @@ def structured_to_unstructured(arr, dtype=None, copy=False, casting='unsafe'):
     if dtype is not None:
         out = np.array(nested).astype(dtype)
     elif _uniform:
-        # numpy 语义：uniform 字段返回原字段 dtype 的视图
+        # 数组语义：uniform 字段返回原字段 dtype 的视图
         out = np.array(nested, dtype=np._scalar_name_of(leaf_dts[0]))
     else:
         out = np.array(nested)
     if not copy and _uniform:
-        # 共享内存的血缘标记（rsnumpy 记录模型无字节缓冲，用逻辑血缘表达）
+        # 共享内存的血缘标记（rsarray 记录模型无字节缓冲，用逻辑血缘表达）
         try:
             out._rs_parent = arr
         except Exception:
             pass
-    # 子类保持（numpy 语义：子类输入 → 子类输出，含 copy=True）
+    # 子类保持（数组语义：子类输入 → 子类输出，含 copy=True）
     _tp = type(arr)
     if _tp is not np.ndarray and isinstance(arr, np.ndarray):
         if isinstance(arr, np.recarray):
@@ -419,7 +419,7 @@ def unstructured_to_structured(arr, dtype=None, names=None, **kwargs):
     if a2.ndim == 0:
         raise ValueError(
             "unstructured_to_structured: input must have at least 1 dimension")
-    # numpy 语义：末轴按叶子数拆为字段，前导形状为记录形状
+    # 数组语义：末轴按叶子数拆为字段，前导形状为记录形状
     nleaves = _count_leaves(dt)
     if nleaves == 0 or a2.shape[-1] == 0:
         raise NotImplementedError(
@@ -444,7 +444,7 @@ def unstructured_to_structured(arr, dtype=None, names=None, **kwargs):
     recs = [build(r) for r in rows]
     out = np._wrap_structured(dt, np._reshape_flat(recs, outer_shape))
     # 视图血缘传递：输入本身带逻辑血缘（如 structured_to_unstructured
-    # 的视图）时，输出沿链共享（numpy 的 shares_memory 语义）
+    # 的视图）时，输出沿链共享（数组的 shares_memory 语义）
     try:
         if getattr(arr, '_rs_parent', None) is not None:
             out._rs_parent = arr
@@ -490,7 +490,7 @@ def merge_arrays(seqarrays, fill_value=-1, flatten=False, usemask=False,
                  asrecarray=False):
     """将多个数组合并为一个结构化数组。"""
     _ = flatten
-    # 单数组输入：视为一个元素的序列（numpy 语义，merge_arrays(x) →
+    # 单数组输入：视为一个元素的序列（数组语义，merge_arrays(x) →
     # 每元素一条单字段记录）
     if hasattr(seqarrays, 'dtype'):
         seqarrays = [seqarrays]
@@ -538,8 +538,8 @@ def merge_arrays(seqarrays, fill_value=-1, flatten=False, usemask=False,
     ]
     output = np._wrap_structured(newdt, recs)
     if usemask:
-        # 字段级掩码：输入掩码叶子 + 值不足 maxlen 的行置 True（numpy 语义）
-        import rsnumpy.ma as _ma
+        # 字段级掩码：输入掩码叶子 + 值不足 maxlen 的行置 True（数组语义）
+        import rsarray.ma as _ma
         flat = []
         for k in range(maxlen):
             for (_, _, vals), mf in zip(field_specs, mask_specs):
@@ -551,7 +551,7 @@ def merge_arrays(seqarrays, fill_value=-1, flatten=False, usemask=False,
                     flat.append(False)
         out = _ma.MaskedArray(output, mask=flat)
         if asrecarray:
-            from rsnumpy.ma.mrecords import MaskedRecords
+            from rsarray.ma.mrecords import MaskedRecords
             try:
                 out.__class__ = MaskedRecords
             except Exception:
@@ -573,11 +573,11 @@ def stack_arrays(arrays, defaults=None, usemask=True, asrecarray=False,
         return np.array([])
     field_order = []
     field_dts = {}
-    # 全为无名数组：直接拼接（numpy 语义，不做字段包装）
+    # 全为无名数组：直接拼接（数组语义，不做字段包装）
     if not any(_rich_dtype(arr).names is not None for arr in arrays):
         return np.concatenate([np.array(a) for a in arrays])
     # 非结构化数组包装成单字段记录：字段名按其在字段并集中的插入
-    # 位置命名（numpy 语义：stack (x, z)→'f0'，stack (z, x)→'f2'）
+    # 位置命名（数组语义：stack (x, z)→'f0'，stack (z, x)→'f2'）
     for ai, arr in enumerate(arrays):
         dt = _rich_dtype(arr)
         if dt.names is not None:
@@ -648,7 +648,7 @@ def stack_arrays(arrays, defaults=None, usemask=True, asrecarray=False,
             out_mask.append(mrow)
     output = np._wrap_structured(newdt, out_recs)
     if usemask:
-        import rsnumpy.ma as _ma
+        import rsarray.ma as _ma
         # 传每记录掩码列表（与 ma.array 结构化掩码构造路径一致）
         return _ma.MaskedArray(output, mask=out_mask)
     return _fix_output(output, usemask=usemask, asrecarray=asrecarray)
@@ -682,7 +682,7 @@ def find_duplicates(a, key=None, ignoremask=True, return_index=False):
         per = 0
     else:
         # 字段级掩码（长度 = 记录数 × 叶子数）：按 key 字段的叶子偏移
-        # 判定记录掩码（numpy 语义：key='A' 时只看 A 字段掩码，key=None
+        # 判定记录掩码（数组语义：key='A' 时只看 A 字段掩码，key=None
         # 看整条记录任一字段）
         per = len(mask) // nrec if nrec else 0
     _offs = {}
@@ -718,7 +718,7 @@ def find_duplicates(a, key=None, ignoremask=True, return_index=False):
     # 逐记录构造比较键：key 范围内的叶子值 + 对应掩码（叶子顺序 =
     # dtype 字段序 = 掩码序）。ignoremask=True 时相关叶子任一被掩码
     # 即跳过；ignoremask=False 时掩码叶子互相相等、掩码叶子与值
-    # 不相等（numpy 语义——掩码叶子替换为哨兵即可实现）。
+    # 不相等（数组语义——掩码叶子替换为哨兵即可实现）。
     positions = {}
     for i, r in enumerate(recs):
         leaves = []
@@ -749,11 +749,11 @@ def find_duplicates(a, key=None, ignoremask=True, return_index=False):
 
 
 # ---------------------------------------------------------------------------
-# append_fields / assign_fields_by_name / join_by（numpy.lib.recfunctions 兼容）
+# append_fields / assign_fields_by_name / join_by（lib.recfunctions 兼容）
 # ---------------------------------------------------------------------------
 
 def _get_fieldspec(adtype):
-    """dtype → [(name, dtype, title), ...]（numpy.lib.recfunctions._get_fieldspec 兼容）。"""
+    """dtype → [(name, dtype, title), ...]（lib.recfunctions._get_fieldspec 兼容）。"""
     dt = adtype if hasattr(adtype, 'names') else np.dtype(adtype)
     if dt.names:
         return [(n, dt.fields[n][0],
@@ -763,7 +763,7 @@ def _get_fieldspec(adtype):
 
 
 def _flatten_descr(ndtype):
-    """平铺结构化 dtype 的字段（嵌套子字段直接展开，numpy 语义）。"""
+    """平铺结构化 dtype 的字段（嵌套子字段直接展开，数组语义）。"""
     if ndtype.names is None:
         return [('', ndtype)]
     descr = []
@@ -777,7 +777,7 @@ def _flatten_descr(ndtype):
 
 
 def _zip_descr(seqarrays, flatten=False):
-    """由一维数组列表构造记录字段描述（numpy.lib.recfunctions._zip_descr 兼容）。
+    """由一维数组列表构造记录字段描述（lib.recfunctions._zip_descr 兼容）。
 
     flatten=True：各数组 dtype 平铺到字段级（嵌套子字段展开）；
     flatten=False：每数组整体作为一个 '' 命名的字段。
@@ -798,25 +798,25 @@ def _zip_descr(seqarrays, flatten=False):
 
 
 def _zip_dtype(seqarrays, flatten=False):
-    """由一维数组列表构造记录 dtype（numpy.lib.recfunctions._zip_dtype 兼容）。"""
+    """由一维数组列表构造记录 dtype（lib.recfunctions._zip_dtype 兼容）。"""
     return np.dtype(_zip_descr(seqarrays, flatten=flatten))
 
 def _rec_info(a):
     """返回 (底层数据, 平坦掩码列表或 None)。"""
-    import rsnumpy.ma as _ma
+    import rsarray.ma as _ma
     if _ma.isMaskedArray(a):
         return a.data, list(a._mask)
     return a, None
 
 
 def _append_fields_values(base, names, data, usemask=True, fill_value=-1):
-    """numpy 语义的 append_fields：按字段名 + 值序列追加新字段。
+    """数组语义的 append_fields：按字段名 + 值序列追加新字段。
 
     输出行数为 max(len(base), len(data))；不足的行以 fill_value 填充
-    并置掩码。base 为普通数组时字段名取 'f0'（numpy 兼容）。
+    并置掩码。base 为普通数组时字段名取 'f0'（兼容）。
     """
-    import rsnumpy
-    import rsnumpy.ma as ma
+    import rsarray
+    import rsarray.ma as ma
     if isinstance(names, str):
         names = [names]
         fields_vals = [data]
@@ -921,7 +921,7 @@ def _append_fields_values(base, names, data, usemask=True, fill_value=-1):
         out_rows.append(row)
         out_mask.append(mrow)
     out_dtype = list(b_specs) + list(_new_specs)
-    arr = rsnumpy.array(out_rows, dtype=out_dtype)
+    arr = rsarray.array(out_rows, dtype=out_dtype)
     if usemask:
         flat = [m for rowm in out_mask for m in rowm]
         return ma.MaskedArray(arr, mask=flat)
@@ -931,18 +931,18 @@ def _append_fields_values(base, names, data, usemask=True, fill_value=-1):
 def append_fields(rec1, rec2=None, dk1=None, dk2=None, usemask=True,
                   fill_value=-1, names=None, dtype=None, tobegin=False,
                   data=None, as_recarray=False):
-    """按关键字段把 rec2 的字段追加到 rec1（numpy.append_fields 兼容）。
+    """按关键字段把 rec2 的字段追加到 rec1（append_fields 兼容）。
 
-    numpy 2.x 语义：append_fields(base, names, data=None, fill_value=-1,
+    2.x 语义：append_fields(base, names, data=None, fill_value=-1,
     usemask=True, as_recarray=False)——第二位置参数是字段名，data 是
     各字段的值序列；输出行数为 max(len(base), len(data))，不足的行以
     fill_value 填充并掩码。
     旧签名（按关键字段合并记录数组，dk1/dk2）保持兼容。
     """
-    import rsnumpy
-    import rsnumpy.ma as ma
+    import rsarray
+    import rsarray.ma as ma
     if data is not None:
-        # numpy 形式：第二位置参数是字段名，data 是字段值序列
+        # 形式：第二位置参数是字段名，data 是字段值序列
         if names is None:
             names = rec2
         rec2 = data
@@ -986,7 +986,7 @@ def append_fields(rec1, rec2=None, dk1=None, dk2=None, usemask=True,
 
     out_dtype = [(n, (data1.dtype.fields[n][0] if n in n1
                       else data2.dtype.fields[n][0])) for n in out_names]
-    arr = rsnumpy.array(out_rows, dtype=out_dtype)
+    arr = rsarray.array(out_rows, dtype=out_dtype)
     if usemask:
         flat = [m for row in out_mask for m in row]
         return ma.MaskedArray(arr, mask=flat)
@@ -995,17 +995,17 @@ def append_fields(rec1, rec2=None, dk1=None, dk2=None, usemask=True,
 
 def assign_fields_by_name(rec1, rec2, usemask=True, overwrite=False,
                           extra_fields='drop', zero_unassigned=True):
-    """按字段名把 rec2 的值赋给 rec1（第 i 行 ↔ 第 i 行，numpy 兼容）。
+    """按字段名把 rec2 的值赋给 rec1（第 i 行 ↔ 第 i 行，兼容）。
 
     原地写回 rec1 中与 rec2 同名的字段（嵌套结构按字段名递归）；
-    rec1 独有字段：zero_unassigned=True（numpy 默认）清零，False 保留原值。
+    rec1 独有字段：zero_unassigned=True（默认）清零，False 保留原值。
     rec2 独有字段按 extra_fields 丢弃（'drop'）。
     """
-    import rsnumpy
+    import rsarray
     n1 = getattr(getattr(rec1, 'dtype', None), 'names', None)
     n2 = getattr(getattr(rec2, 'dtype', None), 'names', None)
     if n1 is None:
-        # 非结构化数组（含 0-d）：整体赋值（numpy 测试的 unstructured 路径）
+        # 非结构化数组（含 0-d）：整体赋值（测试的 unstructured 路径）
         try:
             rec1[...] = rec2
         except Exception:
@@ -1043,14 +1043,14 @@ def join_by(left, right, keys, jointype='inner', fill_value=None,
             r1postfix='1', r2postfix='2', defaults=None, usemask=True,
             as_recarray=False, lsuffix=None, rsuffix=None,
             join_type=None):
-    """按键字段联接两个记录数组（SQL 风格，numpy.join_by 兼容）。
+    """按键字段联接两个记录数组（SQL 风格，join_by 兼容）。
 
     jointype: 'inner' / 'left' / 'right' / 'outer'（同 'full'）。
     重叠的非键字段：左表字段加 r1postfix、右表字段加 r2postfix
-    （numpy 默认 '1'/'2'）。
+    （默认 '1'/'2'）。
     """
-    import rsnumpy
-    # numpy 顺序：join_by(key, r1, r2, ...)——第一参数是键，后两个是数组；
+    import rsarray
+    # 顺序：join_by(key, r1, r2, ...)——第一参数是键，后两个是数组；
     # 旧顺序 (left, right, keys) 以"首参是数组"识别并保持兼容。
     if (not hasattr(left, 'dtype') and hasattr(right, 'dtype')
             and hasattr(keys, 'dtype')):
@@ -1089,7 +1089,7 @@ def join_by(left, right, keys, jointype='inner', fill_value=None,
         else:
             right_out[n] = n
     # spec 项: (输出名, 'l'|'r', 源字段名, fdt)。
-    # numpy 语义：键字段排最前（按左表字段顺序，不后缀，只出一次）；
+    # 数组语义：键字段排最前（按左表字段顺序，不后缀，只出一次）；
     # 同名非键字段左/右相邻输出（b1,b2,c1,c2）；两表同名字段 dtype
     # 不同时取宽者（如 S5/S10 → S10）。
     def _wider_dt(dt_l, dt_r):
@@ -1132,7 +1132,7 @@ def join_by(left, right, keys, jointype='inner', fill_value=None,
     out_rows, out_mask = [], []
 
     # 缺省值：fill_value=None 时按字段 dtype 取类型默认值（值被掩码，
-    # numpy 语义：defaults 未给时数值取 0、字符串取 ''）
+    # 数组语义：defaults 未给时数值取 0、字符串取 ''）
     def _default_for(fdt):
         if fill_value is not None:
             return fill_value
@@ -1145,7 +1145,7 @@ def join_by(left, right, keys, jointype='inner', fill_value=None,
             return 0
         return None
 
-    # 字段名重复（如空后缀导致重命名失效）→ ValueError（numpy 语义）
+    # 字段名重复（如空后缀导致重命名失效）→ ValueError（数组语义）
     if len(set(out_names)) != len(out_names):
         dupes = sorted({n for n in out_names if out_names.count(n) > 1})
         raise ValueError(f'field name(s) duplicated in join result: {dupes}')
@@ -1156,7 +1156,7 @@ def join_by(left, right, keys, jointype='inner', fill_value=None,
             if side == 'l':
                 if i is None:
                     if j is not None and src_n in keys and src_n in nr:
-                        # 右未匹配行：键字段值取自右表（numpy 语义：
+                        # 右未匹配行：键字段值取自右表（数组语义：
                         # 键值来自存在的一侧、未掩码）
                         row.append(dr[j][src_n])
                         mrow.append(mr[j * len(nr) + nr.index(src_n)]
@@ -1205,17 +1205,17 @@ def join_by(left, right, keys, jointype='inner', fill_value=None,
                 _emit(None, j)
 
     out_dtype = [(n, fdt) for n, _side, _src, fdt in spec]
-    # numpy 语义：join_by 输出按键字段排序（键字段在 spec 最前）
+    # 数组语义：join_by 输出按键字段排序（键字段在 spec 最前）
     _nk = len(keys)
     if _nk and len(out_rows) > 1:
         order = sorted(range(len(out_rows)),
                        key=lambda r: tuple(out_rows[r][:_nk]))
         out_rows = [out_rows[r] for r in order]
         out_mask = [out_mask[r] for r in order]
-    arr = rsnumpy.array(out_rows, dtype=out_dtype)
-    import rsnumpy.ma as ma
-    if usemask and (rsnumpy.ma.isMaskedArray(left)
-                    or rsnumpy.ma.isMaskedArray(right)
+    arr = rsarray.array(out_rows, dtype=out_dtype)
+    import rsarray.ma as ma
+    if usemask and (rsarray.ma.isMaskedArray(left)
+                    or rsarray.ma.isMaskedArray(right)
                     or any(any(row) for row in out_mask)):
         flat = [m for row in out_mask for m in row]
         return ma.MaskedArray(arr, mask=flat)

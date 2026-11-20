@@ -168,7 +168,7 @@ define_math_func!(log2, |v| v.log2());
 
 define_math_func!(log1p, |v| v.ln_1p());
 
-// abs 复数感知：含虚部时返回模 hypot(re,im)（与 numpy npy_cabs 一致），否则走实数快速路径。
+// abs 复数感知：含虚部时返回模 hypot(re,im)（与 npy_cabs 一致），否则走实数快速路径。
 #[pyfunction]
 fn abs(py: Python<'_>, x: &NdArray) -> PyResult<NdArray> {
     if x.has_imag() {
@@ -424,7 +424,7 @@ fn heaviside(x: &NdArray, h0: f64) -> NdArray {
 }
 
 /// 拆分为尾数与二进制指数：v = mantissa * 2^exp，且 0.5 <= |mantissa| < 1（或 v 为 0）。
-/// 语义与 C 库 frexp / numpy.frexp 一致。
+/// 语义与 C 库 frexp 一致。
 fn frexp_f64(v: f64) -> (f64, i64) {
     if v == 0.0 || v.is_nan() || v.is_infinite() {
         return (v, 0);
@@ -472,7 +472,7 @@ fn frexp(py: Python<'_>, x: &NdArray) -> (NdArray, NdArray) {
     )
 }
 
-/// 第一类零阶修正贝塞尔函数 I0，级数展开（与 numpy.i0 精度一致）。
+/// 第一类零阶修正贝塞尔函数 I0，级数展开（与 i0 精度一致）。
 fn bessel_i0(v: f64) -> f64 {
     let mut total = 1.0_f64;
     let mut term = 1.0_f64;
@@ -556,7 +556,7 @@ fn interp(
     })
 }
 
-/// 一维离散卷积（full），再按 mode 截取，语义与 numpy.convolve 一致。
+/// 一维离散卷积（full），再按 mode 截取，语义与 convolve 一致。
 fn convolve_modes(x: &[f64], h: &[f64], mode: &str) -> Result<Vec<f64>, String> {
     let (n, m) = (x.len(), h.len());
     if n == 0 || m == 0 {
@@ -660,7 +660,7 @@ fn correlate(py: Python<'_>, a: &NdArray, v: &NdArray, mode: &str) -> PyResult<N
             data: arr,
         })
     } else {
-        // 复数互相关（numpy 语义）：numpy.correlate(a, v) = conv(a, reverse(conj(v)))
+        // 复数互相关（数组语义）：correlate(a, v) = conv(a, reverse(conj(v)))
         // ——对 v 取共轭（实部保留、虚部取反）后反转，再按复数乘法
         // 四路实数卷积合成：
         //   real = conv(x_re, h_re) - conv(x_im, h_im)
@@ -783,7 +783,7 @@ fn unwrap(p: &NdArray, discont: Option<f64>, axis: isize, period: f64) -> NdArra
     let outer_strides = inner_size * ax_len;
     let inner_strides = inner_size;
 
-    // NumPy 算法：基于原始值计算 delta，用 cumsum 累加修正
+    // 算法：基于原始值计算 delta，用 cumsum 累加修正
     for outer in 0..outer_size {
         for inner in 0..inner_size {
             let start = outer * outer_strides + inner;
@@ -838,7 +838,7 @@ fn base_repr(number: i64, base: u32, padding: usize) -> String {
     s
 }
 
-/// fmax: 逐元素取较大值，NaN 视作缺失（与 NumPy 一致：仅当两者皆 NaN 才返回 NaN）。
+/// fmax: 逐元素取较大值，NaN 视作缺失（与参考实现一致：仅当两者皆 NaN 才返回 NaN）。
 #[pyfunction]
 fn fmax(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
     let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| {
@@ -856,7 +856,7 @@ fn fmax(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
     })
 }
 
-/// fmin: 逐元素取较小值，NaN 视作缺失（与 NumPy 一致：仅当两者皆 NaN 才返回 NaN）。
+/// fmin: 逐元素取较小值，NaN 视作缺失（与参考实现一致：仅当两者皆 NaN 才返回 NaN）。
 #[pyfunction]
 fn fmin(x1: &NdArray, x2: &NdArray) -> PyResult<NdArray> {
     let result = broadcast_binary_op(&x1.data, &x2.data, |a, b| {

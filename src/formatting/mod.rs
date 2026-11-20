@@ -3,7 +3,7 @@ use crate::*;
 
 pub(crate) const LINE_WIDTH: usize = 75;
 
-/// numpy `_extendLine`：将 word 追加到 line，若超出 line_width 则先把 line 换行写入 s。
+/// `_extendLine`：将 word 追加到 line，若超出 line_width 则先把 line 换行写入 s。
 pub(crate) fn extend_line(
     s: &mut String,
     line: &mut String,
@@ -25,7 +25,7 @@ pub(crate) fn extend_line(
     line.push_str(word);
 }
 
-/// numpy `_formatArray` 递归器：在 LINE_WIDTH 处折行，元素间用 separator，
+/// `_formatArray` 递归器：在 LINE_WIDTH 处折行，元素间用 separator，
 /// 嵌套维度间插入换行 + 悬挂缩进（外层维度间空行更多）。`fmt` 须产出等宽字符串。
 pub(crate) fn wrap_recurse(
     arr: &Array<f64, IxDyn>,
@@ -117,7 +117,7 @@ fn format_complex_array(arr: &Array<f64, IxDyn>) -> String {
 #[pyfunction]
 fn _format_complex_repr(arr: &NdArray) -> String {
     let inner = format_complex_array(&arr.data);
-    format!("rsnumpy.ndarray({}) dtype=complex128", inner)
+    format!("rsarray.ndarray({}) dtype=complex128", inner)
 }
 
 #[pyfunction]
@@ -127,7 +127,7 @@ fn _format_complex_str(arr: &NdArray) -> String {
 
 fn format_int_scalar(val: f64) -> String {
     // 位重解释：将 f64 的位模式当作 i64 显示。
-    // 对于 empty 未初始化内存，匹配 numpy 的垃圾值显示。
+    // 对于 empty 未初始化内存，匹配 参考实现的垃圾值显示。
     let int_val = val.to_bits() as i64;
     format!("{}", int_val)
 }
@@ -151,7 +151,7 @@ fn format_int_array(arr: &Array<f64, IxDyn>) -> String {
 #[pyfunction]
 fn _format_int_repr(arr: &NdArray) -> String {
     let inner = format_int_array(&arr.data);
-    format!("rsnumpy.ndarray({inner}) dtype=int64")
+    format!("rsarray.ndarray({inner}) dtype=int64")
 }
 
 #[pyfunction]
@@ -167,7 +167,7 @@ fn split_pos_float(s: &str) -> (usize, usize) {
     }
 }
 
-/// numpy 浮点数组的显示格式：位置记数法或科学计数法（整组统一）。
+/// 浮点数组的显示格式：位置记数法或科学计数法（整组统一）。
 enum FloatFormat {
     /// 整数部分右对齐到 pad_left，小数部分右补空格到 pad_right。
     Positional { pad_left: usize, pad_right: usize },
@@ -180,7 +180,7 @@ enum FloatFormat {
     },
 }
 
-/// 指数的十进制位数（numpy 至少 2 位）。
+/// 指数的十进制位数（至少 2 位）。
 fn exp_digit_count(exp: i32) -> usize {
     let mut a = exp.unsigned_abs();
     let mut d = 0usize;
@@ -203,7 +203,7 @@ fn parse_sci(v: f64) -> (String, String, i32) {
     (int_part, frac_part, exp)
 }
 
-/// 复刻 numpy `FloatingFormat.fillFormat`：根据全体有限值决定位置/科学计数法
+/// 复刻 `FloatingFormat.fillFormat`：根据全体有限值决定位置/科学计数法
 /// 以及对齐参数，并在存在非有限值（nan/inf）时按需增大 pad_left。
 fn compute_float_format(arr: &Array<f64, IxDyn>) -> FloatFormat {
     let mut finite: Vec<f64> = Vec::new();
@@ -378,7 +378,7 @@ fn format_float_array(arr: &Array<f64, IxDyn>) -> String {
 #[pyfunction]
 fn _format_float_repr(arr: &NdArray) -> String {
     let inner = format_float_array(&arr.data);
-    format!("rsnumpy.ndarray({inner}) dtype=float64")
+    format!("rsarray.ndarray({inner}) dtype=float64")
 }
 
 #[pyfunction]
@@ -389,7 +389,7 @@ fn _format_float_str(arr: &NdArray) -> String {
 #[pyfunction]
 fn _format_int_val_repr(arr: &NdArray) -> String {
     let inner = format_array_repr(&arr.data, "");
-    format!("rsnumpy.ndarray({inner}) dtype=int64")
+    format!("rsarray.ndarray({inner}) dtype=int64")
 }
 
 #[pyfunction]

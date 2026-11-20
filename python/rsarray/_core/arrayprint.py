@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: MIT
-"""numpy._core.arrayprint 兼容实现。
+"""rsarray._core.arrayprint 兼容实现。
 
 _typelessdata：把数组值转成与 dtype 无关的字符串表示（repr 测试用）。
 """
 
 
 def _typelessdata(a, typestr):
-    """递归地把数组元素转成 typestr 风格的字符串（numpy 同名函数兼容）。"""
-    import rsnumpy as rs
+    """递归地把数组元素转成 typestr 风格的字符串（同名函数兼容）。"""
+    import rsarray as rs
     if getattr(a, 'ndim', 0) > 0:
         return typestr + '[' + ', '.join(_typelessdata(v, typestr) for v in a) + ']'
     try:
@@ -22,7 +22,7 @@ def _typelessdata(a, typestr):
 
 
 def _reexports():
-    import rsnumpy as rs
+    import rsarray as rs
     d = {}
     if hasattr(rs, 'set_printoptions'):
         d['set_printoptions'] = rs.set_printoptions

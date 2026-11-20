@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: MIT
-"""rsnumpy.random - 随机数生成模块"""
+"""rsarray.random - 随机数生成模块"""
 
-import rsnumpy.num_core as _core
+import rsarray.num_core as _core
 import random as _py_random
-import rsnumpy as np
+import rsarray as np
 
 from ._distributions import Samplers, _POISSON_LAM_MAX, _broadcast_shapes, _zeta
 
@@ -25,19 +25,19 @@ if not hasattr(_core.random.Generator, 'integers'):
             return np.asarray([self._rng.randint(low, high) for _ in range(size)])
 
         def uniform(self, low=0.0, high=1.0, size=None):
-            import rsnumpy as np
+            import rsarray as np
             if size is None:
                 return self._rng.uniform(low, high)
             return np.asarray([self._rng.uniform(low, high) for _ in range(size)])
 
         def normal(self, loc=0.0, scale=1.0, size=None):
-            import rsnumpy as np
+            import rsarray as np
             if size is None:
                 return self._rng.gauss(loc, scale)
             return np.asarray([self._rng.gauss(loc, scale) for _ in range(size)])
 
         def random(self, size=None):
-            import rsnumpy as np
+            import rsarray as np
             if size is None:
                 return self._rng.random()
             return np.asarray([self._rng.random() for _ in range(size)])
@@ -46,7 +46,7 @@ if not hasattr(_core.random.Generator, 'integers'):
             return self.normal(0.0, 1.0, size)
 
         def vonmises(self, kappa, size=None):
-            import rsnumpy as np
+            import rsarray as np
             import math
             if size is None:
                 size = ()
@@ -66,7 +66,7 @@ if not hasattr(_core.random.Generator, 'integers'):
             return np.asarray(result).reshape(size)
 
         def multinomial(self, n, pvals, size=None):
-            import rsnumpy as np
+            import rsarray as np
             # Simple categorical sampling
             pvals = np.asarray(pvals)
             pvals = pvals / pvals.sum()
@@ -84,7 +84,7 @@ if not hasattr(_core.random.Generator, 'integers'):
 
 
 class _MT19937:
-    """Minimal stand-in for NumPy's MT19937 bit generator.
+    """Minimal stand-in for 's MT19937 bit generator.
 
     Only the attributes that downstream code (e.g. rsscipy's ``_util``)
     inspects are provided: ``_seed_seq`` and ``state``.
@@ -119,7 +119,7 @@ def _norm_size(size):
 
 
 def _sample_dist(sampler, name, params, size, int_dist=False):
-    """按 numpy 语义：数组参数广播 → 前置 size → 逐点采样 → 封装
+    """按 数组语义：数组参数广播 → 前置 size → 逐点采样 → 封装
     （标量 or ndarray）。params 为采样器位置参数序列（标量或数组）。"""
     param_vals = []
     arrs = []
@@ -127,7 +127,7 @@ def _sample_dist(sampler, name, params, size, int_dist=False):
         if _is_arraylike(p):
             pa = np.asarray(p)
             if pa.ndim == 0:
-                # 0-d：numpy 以 __float__/__int__ 提取标量，子类覆盖须被尊重
+                # 0-d：以 __float__/__int__ 提取标量，子类覆盖须被尊重
                 # （test_scalar_exception_propagation）；整数分布的整数 dtype
                 # 参数走 __int__（尊重 __index__ 覆盖），浮点参数保持 float
                 _dt = str(pa.dtype)
@@ -146,9 +146,9 @@ def _sample_dist(sampler, name, params, size, int_dist=False):
     if arrs:
         bcast = np.broadcast_arrays(*arrs)
         bshape = tuple(bcast[0].shape)
-        # numpy 语义：size 与参数广播形一起（右对齐）广播，结果须等于 size
+        # 数组语义：size 与参数广播形一起（右对齐）广播，结果须等于 size
         # （test_n_zero_stream：binomial([[0],[10]], .25, size=(2,10)) → (2,10)）；
-        # 不兼容时 _broadcast_shapes 抛 ValueError（与 numpy 一致）。
+        # 不兼容时 _broadcast_shapes 抛 ValueError（与标准语义一致）。
         bshape = _broadcast_shapes(ssize, bshape)
         # 每个参数数组扩到最终形状（如 (2,1) → (2,10)），否则扁平索引错位。
         bcast = [np.broadcast_to(b, bshape) for b in bcast]
@@ -182,7 +182,7 @@ def _sample_dist(sampler, name, params, size, int_dist=False):
 
 
 def _multinomial_impl(sampler, n, pvals, size):
-    """numpy legacy multinomial：d-1 次 legacy_random_binomial 循环 + 余数
+    """legacy multinomial：d-1 次 legacy_random_binomial 循环 + 余数
     （legacy-distributions.c L621-644），与 binomial() 共享同一 binomial 缓存。"""
     if isinstance(pvals, (str, bytes)):
         raise TypeError("pvals must be a 1-d sequence")
@@ -301,7 +301,7 @@ _RS_DIST_PARAMS = {
     'zipf': ('a',),
 }
 
-# numpy legacy 分布缺省参数（与 mtrand 签名一致，参数缺失时填充）
+# legacy 分布缺省参数（与 mtrand 签名一致，参数缺失时填充）
 _RS_DIST_DEFAULTS = {
     ('exponential', 'scale'): 1.0,
     ('gamma', 'shape'): 1.0, ('gamma', 'scale'): 1.0,
@@ -343,11 +343,11 @@ def _fold_seed(seed):
 
 
 def _legacy_validate_seed(seed):
-    """numpy legacy RandomState 种子校验（严格）。
+    """legacy RandomState 种子校验（严格）。
 
     合法：None、单个 [0, 2**32) 整数、1-d 非空整数数组（元素同范围）。
-    越界/非整数 → ValueError/TypeError，与 numpy 对齐。
-    返回：None / int（标量种子）/ list[int]（array 种子——numpy 对其走
+    越界/非整数 → ValueError/TypeError，与 对齐。
+    返回：None / int（标量种子）/ list[int]（array 种子——对其走
     mt19937_init_by_array，不折叠为标量；0-d 整数数组按标量处理）。
     """
     if seed is None:
@@ -373,7 +373,7 @@ def _legacy_validate_seed(seed):
     except Exception:
         raise TypeError("Seed must be a non-negative integer or array of integers")
     if arr.ndim == 0:
-        # numpy 语义：squeeze 后 0-d 整数数组按标量种子处理（operator.index 路径）
+        # 数组语义：squeeze 后 0-d 整数数组按标量种子处理（operator.index 路径）
         v = arr.ravel().tolist()[0]
         if isinstance(v, float):
             raise TypeError("Seed must be a non-negative integer")
@@ -425,8 +425,8 @@ def _parse_int_dtype(name):
 def _python_shuffle(next_j, x, axis=0, warn_1d_object=False):
     """Fisher-Yates 洗牌：list / ndarray（含 object/结构化/memoryview）。
 
-    next_j(i) 用 numpy legacy rk_interval（掩码拒绝）抽 j ∈ [0, i]，与
-    numpy random_interval 流逐位一致（int(next_u()*(i+1)) 缩放不匹配）。
+    next_j(i) 用 legacy rk_interval（掩码拒绝）抽 j ∈ [0, i]，与
+    random_interval 流逐位一致（int(next_u()*(i+1)) 缩放不匹配）。
     object 数组逐元素搬运 Python 对象引用（不复制，保持对象身份）；
     数值数组按行搬运（行 view 需 copy 后再写回）。
     """
@@ -439,7 +439,7 @@ def _python_shuffle(next_j, x, axis=0, warn_1d_object=False):
     # MaskedArray（纯 Python 对象，非 ndarray 子类）：data/mask 行同步交换
     # （gh-3263）。MA.__setitem__ 走数值 cast 无法写入 MA 行；mask getter 每次
     # 重建临时数组（_mask 是扁平 list），须交换后经 mask setter 写回。
-    import rsnumpy.ma.core as _macore
+    import rsarray.ma.core as _macore
     if isinstance(x, _macore.MaskedArray):
         d, m = x.data, x.mask
         n = d.shape[0]
@@ -480,7 +480,7 @@ def _python_shuffle(next_j, x, axis=0, warn_1d_object=False):
     import warnings
     warnings.warn(
         f"you are shuffling a '{type(x).__name__}' object, which is "
-        "treated as a sequence by rsnumpy.random.shuffle", UserWarning,
+        "treated as a sequence by rsarray.random.shuffle", UserWarning,
         stacklevel=3)
     n = len(x)
     for i in range(n - 1, 0, -1):
@@ -489,11 +489,11 @@ def _python_shuffle(next_j, x, axis=0, warn_1d_object=False):
 
 
 class _MT19937Legacy:
-    """numpy legacy ``RandomState`` 的 MT19937 位级一致流。
+    """legacy ``RandomState`` 的 MT19937 位级一致流。
 
     种子算法 = 标准 MT19937：标量种子走 ``init_genrand``；array 种子走
-    ``mt19937_init_by_array``（numpy ``_legacy_seeding`` 语义，已与
-    numpy 2.5.4 逐位对照：RandomState(range(10)) / [0] / [4294967295]
+    ``mt19937_init_by_array``（``_legacy_seeding`` 语义，已与
+    2.5.4 逐位对照：RandomState(range(10)) / [0] / [4294967295]
     的 randint(1000) = 468/973/265）。
     uniform = ``res53``（两个 32 位输出合成 53 位 double）；
     randint = ``rk_interval``（掩码拒绝采样，无偏）。
@@ -517,9 +517,9 @@ class _MT19937Legacy:
         self._gauss_cache = None
 
     def _init_by_array(self, key):
-        """numpy ``mt19937_init_by_array``（legacy array 种子）。
+        """``mt19937_init_by_array``（legacy array 种子）。
 
-        常量与 numpy ``numpy/random/src/mt19937/mt19937.c`` 一致：
+        常量与 MT19937 参考实现一致：
         init_genrand(19650218) + 1664525 / 1566083941 两轮非线性扰动。
         """
         key = [int(k) & 0xffffffff for k in key]
@@ -585,7 +585,7 @@ class _MT19937Legacy:
         return (a * 67108864.0 + b) * (1.0 / 9007199254740992.0)
 
     def interval(self, maxv):
-        """numpy ``rk_interval(maxv)``：返回 [0, maxv] 的无偏整数。"""
+        """``rk_interval(maxv)``：返回 [0, maxv] 的无偏整数。"""
         if maxv == 0:
             return 0
         mask = (1 << maxv.bit_length()) - 1
@@ -595,7 +595,7 @@ class _MT19937Legacy:
                 return v
 
     def _gen_mask(self, maxv):
-        """numpy ``gen_mask``：最小位掩码 ≥ maxv（顶位以下全置 1）。"""
+        """``gen_mask``：最小位掩码 ≥ maxv（顶位以下全置 1）。"""
         mask = maxv
         mask |= mask >> 1
         mask |= mask >> 2
@@ -606,10 +606,10 @@ class _MT19937Legacy:
         return mask
 
     def intervals_u8(self, rngs):
-        """numpy legacy _rand_uint8 掩码路径（distributions.c
+        """legacy _rand_uint8 掩码路径（distributions.c
         random_buffered_bounded_uint8）：每 32-bit 字出 4 个 8-bit 值（LSB
         起）、掩码拒绝；单次 randint 调用内 buf 跨元素共享，跨调用全新
-        （numpy 中为函数局部变量）。rngs: 逐元素闭包上界（hi-1-lo）。"""
+        （中为函数局部变量）。rngs: 逐元素闭包上界（hi-1-lo）。"""
         buf = 0
         bcnt = 0
         out = []
@@ -632,7 +632,7 @@ class _MT19937Legacy:
         return out
 
     def intervals_u16(self, rngs):
-        """numpy legacy _rand_uint16 掩码路径：每 32-bit 字出 2 个 16-bit
+        """legacy _rand_uint16 掩码路径：每 32-bit 字出 2 个 16-bit
         值（低半字先）、掩码拒绝；buf 语义同 intervals_u8。"""
         buf = 0
         bcnt = 0
@@ -656,7 +656,7 @@ class _MT19937Legacy:
         return out
 
     def intervals_bool(self, rngs):
-        """numpy legacy _rand_bool（buffered_bounded_bool）：每 32-bit 字出
+        """legacy _rand_bool（buffered_bounded_bool）：每 32-bit 字出
         32 个 bit（LSB 起）、无拒绝；rng==0 元素不消耗随机数。"""
         buf = 0
         bcnt = 0
@@ -675,10 +675,10 @@ class _MT19937Legacy:
         return out
 
     def standard_normal(self):
-        """numpy legacy ``rk_gauss``（极坐标 Box-Muller，带缓存）。
+        """legacy ``rk_gauss``（极坐标 Box-Muller，带缓存）。
 
-        numpy 先返回 v2*r（第二个 res53 对应值），缓存 v1*r（第一个），
-        与 numpy 逐位一致（小 size 与标量已验证；大 size 有 C/Python 位级差）。
+        先返回 v2*r（第二个 res53 对应值），缓存 v1*r（第一个），
+        与 逐位一致（小 size 与标量已验证；大 size 有 C/Python 位级差）。
         """
         if self._gauss_cache is not None:
             x = self._gauss_cache
@@ -701,8 +701,8 @@ class _PCG64LegacyStream(_MT19937Legacy):
 
     复用 _MT19937Legacy 全部消费模式（res53 double、rk_interval、
     buffered randint、polar normal），仅把 uint32 源换成 PCG64 next32
-    （含 uinteger 缓存）——与 numpy ``RandomState(PCG64())`` 的位级
-    流消费一致（numpy legacy 分布一律经 next32 的 res53 double 取流）。
+    （含 uinteger 缓存）——与 ``RandomState(PCG64())`` 的位级
+    流消费一致（legacy 分布一律经 next32 的 res53 double 取流）。
     """
     __slots__ = ('_bg',)
 
@@ -718,12 +718,12 @@ class _PCG64LegacyStream(_MT19937Legacy):
         return self._bg.next32()
 
     def random_sample(self):
-        # numpy generic 位生成器：uint64_to_double(n) = (n >> 11) / 2^53
+        # generic 位生成器：uint64_to_double(n) = (n >> 11) / 2^53
         # （取高 53 位，非 MT 的 res53 移位法）
         return (self._bg.next64() >> 11) * (1.0 / 9007199254740992.0)
 
     def reseed(self, seed):
-        # numpy：非 MT 位生成器上 RandomState.seed 委托 bit_generator.seed
+        # —非 MT 位生成器上 RandomState.seed 委托 bit_generator.seed
         self._bg.seed(seed)
 
 
@@ -738,7 +738,7 @@ class _RandomStateWrapper:
     def __init__(self, seed=None):
         if isinstance(seed, PCG64):
             # 新 API 位生成器：legacy 分布走 PCG64 流（位级兼容
-            # numpy RandomState(bg)）
+            # RandomState(bg)）
             self._bg = seed
             self._seed = None
             self._mt = _PCG64LegacyStream(seed)
@@ -757,7 +757,7 @@ class _RandomStateWrapper:
     def __deepcopy__(self, memo):
         # The Rust core object is not picklable.  Re-seed from the original
         # seed so the copy is independent of (and initially identical to)
-        # this wrapper, matching numpy's deepcopy semantics for unused
+        # this wrapper, matching standard deepcopy semantics for unused
         # generators.
         return _RandomStateWrapper(self._seed)
 
@@ -765,8 +765,8 @@ class _RandomStateWrapper:
         return _RandomStateWrapper(self._seed)
 
     def _rs_f64(self, vals):
-        """确保输出是带 _dtype 的正规 rsnumpy ndarray（Rust 原生对象转换）。"""
-        import rsnumpy as _np
+        """确保输出是带 _dtype 的正规 rsarray ndarray（Rust 原生对象转换）。"""
+        import rsarray as _np
         if hasattr(vals, 'tolist') and not hasattr(vals, '_dtype'):
             vals = vals.tolist()
         return _np.asarray(vals, dtype='float64')
@@ -784,7 +784,7 @@ class _RandomStateWrapper:
         return self._rs_f64(vals).reshape(shape)
 
     def random(self, *args, **kwargs):
-        """numpy legacy random_sample：[0,1) 均匀（MT19937 res53）。"""
+        """legacy random_sample：[0,1) 均匀（MT19937 res53）。"""
         if not args and 'size' in kwargs:
             size = kwargs['size']
         elif len(args) == 1:
@@ -800,7 +800,7 @@ class _RandomStateWrapper:
         return self.rand(int(size))
 
     def random_sample(self, size=None):
-        """numpy legacy random_sample：[0,1) 均匀（MT19937 res53）。"""
+        """legacy random_sample：[0,1) 均匀（MT19937 res53）。"""
         return self.random(size)
 
     def randn(self, *args):
@@ -812,12 +812,12 @@ class _RandomStateWrapper:
         return self._mt.random_sample()
 
     def _next_normal(self):
-        # MT19937 Box-Muller（numpy legacy rk_gauss，带缓存）
+        # MT19937 Box-Muller（legacy rk_gauss，带缓存）
         return self._mt.standard_normal()
 
     def normal(self, *args, **kwargs):
-        """正态分布（MT19937 Box-Muller，numpy legacy rk_gauss 流）。"""
-        import rsnumpy as _np
+        """正态分布（MT19937 Box-Muller，legacy rk_gauss 流）。"""
+        import rsarray as _np
         dtype = kwargs.pop('dtype', None)
         size = kwargs.pop('size', None)
         loc = kwargs.pop('loc', None)
@@ -839,7 +839,7 @@ class _RandomStateWrapper:
             return not isinstance(x, (str, bytes))
 
         if _is_seq(loc) or _is_seq(scale):
-            # 广播路径：loc/scale 为序列，按 numpy 1 维广播规则
+            # 广播路径：loc/scale 为序列，按 1 维广播规则
             def _flat(x):
                 if hasattr(x, 'tolist'):
                     x = x.tolist()
@@ -902,7 +902,7 @@ class _RandomStateWrapper:
         return self.normal(0.0, 1.0, size=(args if args else None))
 
     def uniform(self, low=0.0, high=1.0, size=None, dtype=None):
-        """均匀分布（MT19937 res53，numpy legacy；low/high 支持广播）。"""
+        """均匀分布（MT19937 res53，legacy；low/high 支持广播）。"""
         result = self._sample_dist('uniform', (low, high), size)
         if dtype is not None and hasattr(result, 'astype'):
             result = result.astype(dtype)
@@ -916,13 +916,13 @@ class _RandomStateWrapper:
             return mvn
         if name == 'choice':
             def choice(a, size=None, replace=True, p=None):
-                # numpy legacy mtrand.choice：uniform replace 用 randint
+                # legacy mtrand.choice：uniform replace 用 randint
                 # （掩码拒绝）；uniform noreplace 用 permutation；weighted
                 # replace 用 cdf.searchsorted(right)；weighted noreplace 是
                 # “批量抽取 + 置零 + 首次出现去重”循环（mtrand.pyx L1030-1049）。
                 a_arr = np.asarray(a)
                 if a_arr.ndim == 0:
-                    # rsnumpy 0-d item() 恒为 float（f64 存储），用 dtype 判定整数性
+                    # rsarray 0-d item() 恒为 float（f64 存储），用 dtype 判定整数性
                     dt = str(a_arr.dtype)
                     if dt not in ('bool', 'int64', 'int32', 'int16', 'int8',
                                   'uint64', 'uint32', 'uint16', 'uint8'):
@@ -963,7 +963,7 @@ class _RandomStateWrapper:
                     pl = parr.ravel().tolist()
                     if str(parr.dtype) != 'float64' or any(
                             not isinstance(v, (int, float)) for v in pl):
-                        # numpy 把 None 等无法转 float 的项按 NaN 处理
+                        # 把 None 等无法转 float 的项按 NaN 处理
                         raise ValueError("probabilities contain NaN")
                     for v in pl:
                         if v != v:
@@ -1066,8 +1066,8 @@ class _RandomStateWrapper:
             return choice
         if name == 'permutation':
             def permutation(x):
-                # numpy legacy：int → 洗乱 arange(n)；array → 洗乱副本
-                # （仅第一轴）。Fisher-Yates + interval，与 numpy 逐位一致。
+                # legacy：int → 洗乱 arange(n)；array → 洗乱副本
+                # （仅第一轴）。Fisher-Yates + interval，与 逐位一致。
                 if isinstance(x, int):
                     n = x
                     idx = list(range(n))
@@ -1092,10 +1092,10 @@ class _RandomStateWrapper:
             return permutation
         if name == 'get_state':
             def get_state():
-                # numpy：非 MT 位生成器返回 bg 的 state dict
+                # —非 MT 位生成器返回 bg 的 state dict
                 if '_bg' in self.__dict__:
                     return self._bg.state
-                # numpy legacy 布局: ('MT19937', keys[624], pos, has_gauss, cached)
+                # legacy 布局: ('MT19937', keys[624], pos, has_gauss, cached)
                 mt = self._mt
                 keys = list(mt._mt)
                 pos = mt._mti
@@ -1105,11 +1105,11 @@ class _RandomStateWrapper:
             return get_state
         if name == 'set_state':
             def set_state(state):
-                # numpy：非 MT 位生成器设 bg 的 state dict
+                # —非 MT 位生成器设 bg 的 state dict
                 if '_bg' in self.__dict__:
                     self._bg.state = state
                     return
-                # 恢复完整 MT19937 缓冲 + 位置 + 高斯缓存（numpy legacy，逐位精确）。
+                # 恢复完整 MT19937 缓冲 + 位置 + 高斯缓存（legacy，逐位精确）。
                 # 兼容 3 元素旧格式（无 has_gauss/cached）。
                 keys = [int(k) & 0xffffffff for k in state[1]]
                 pos = int(state[2])
@@ -1207,7 +1207,7 @@ class _RandomStateWrapper:
         return np.asarray(res, dtype='float64').reshape(out_shape)
 
     def _vonmises_impl(self, *args, **kwargs):
-        """numpy legacy API：vonmises(mu=0.0, kappa=1.0, size=None)；
+        """legacy API：vonmises(mu=0.0, kappa=1.0, size=None)；
         位置参数按 (mu, kappa, [size]) 顺序，mu/kappa 支持数组广播。"""
         size = kwargs.pop('size', None)
         mu = kwargs.pop('mu', None)
@@ -1226,14 +1226,14 @@ class _RandomStateWrapper:
                 f"unexpected keyword argument {next(iter(kwargs))!r}")
         mu_a = np.asarray(0.0 if mu is None else mu, dtype='float64')
         k_a = np.asarray(kappa, dtype='float64')
-        # numpy CONS_NON_NEGATIVE：负 kappa → ValueError（NaN 放行到采样器）
+        # CONS_NON_NEGATIVE：负 kappa → ValueError（NaN 放行到采样器）
         if any(k < 0.0 for k in k_a.ravel().tolist()):
             raise ValueError("kappa must be non-negative")
         mu_b, k_b = np.broadcast_arrays(mu_a, k_a)
         bshape = tuple(mu_b.shape)
         ssize = _norm_size(size)
         if bshape:
-            # numpy 语义：size 与参数广播形一起（右对齐）广播；不兼容时
+            # 数组语义：size 与参数广播形一起（右对齐）广播；不兼容时
             # ValueError（与 _sample_dist 同一规则，已实测对齐）
             bshape = _broadcast_shapes(ssize, bshape)
             mu_b = np.broadcast_to(mu_b, bshape)
@@ -1257,7 +1257,7 @@ class _RandomStateWrapper:
         if high is None:
             low, high = 0, int(low)
         # dtype 解析：兼容 'int32'/'i4'/'uint64'/'u8'/Python 类型；
-        # 非原生字节序（'>i4' 等）按 numpy 语义发 DeprecationWarning。
+        # 非原生字节序（'>i4' 等）按 数组语义发 DeprecationWarning。
         raw = str(dtype)
         if any(ch in raw for ch in '<>=|'):
             import warnings
@@ -1278,8 +1278,8 @@ class _RandomStateWrapper:
         else:
             dmin = 0 if not signed else -(1 << (bits - 1))
             dmax = (1 << (bits - 1)) - 1 if signed else (1 << bits) - 1
-        # low/high 可为标量或数组（按 numpy 语义广播）。
-        # 0-d 标量（rsnumpy 标量 / 0-d 数组）走 int() 取精确值：asarray 路径
+        # low/high 可为标量或数组（按 数组语义广播）。
+        # 0-d 标量（rsarray 标量 / 0-d 数组）走 int() 取精确值：asarray 路径
         # 在 f64 2^63 边界丢精度（int64.max → 2^63 → tolist 环绕成 -2^63），
         # 而 int() 对标量返回精确值。无 ndim 属性的 list 等仍走 asarray 路径。
         def _is_scalar0(x):
@@ -1302,11 +1302,11 @@ class _RandomStateWrapper:
         total = 1
         for d in out_shape:
             total *= d
-        # numpy 语义：零长度 size 直接短路（不做 low/high 校验，
+        # 数组语义：零长度 size 直接短路（不做 low/high 校验，
         # randint(0, -10, size=0) → shape (0,)）
         if total == 0:
             return np.zeros(out_shape, dtype=name)
-        # 检查结果值域宽度是否放得进 dtype（numpy 语义：high 本身可越 dtype
+        # 检查结果值域宽度是否放得进 dtype（数组语义：high 本身可越 dtype
         # 上界，如 randint(2**63-1, 2**63, dtype='int64')——int64/uint64 无
         # 公共整数超集，按值域宽度判，不按 high 判）
         maxwidth = dmax - dmin + 1 if dmax >= dmin else 0
@@ -1318,7 +1318,7 @@ class _RandomStateWrapper:
         bn = 1
         for d in bshape:
             bn *= d
-        # numpy legacy randint 按宽度采样（_bounded_integers 掩码路径，
+        # legacy randint 按宽度采样（_bounded_integers 掩码路径，
         # distributions.c）：u8=4 值/字、u16=2 值/字、bool=32 bit/字
         # （均 LSB 起 + 掩码拒绝），u32/u64=1 字/值（interval，无偏拒绝）。
         # 同宽度 signed 与 unsigned 流相同（仅二补体重解释）；单次调用内
@@ -1373,7 +1373,7 @@ class _RandomStateWrapper:
         return self.randint(low, high + 1, size=size)
 
     def bytes(self, length=4):
-        # numpy legacy：randint(0, 2**32, size=n_uint32, dtype='uint32')
+        # legacy：randint(0, 2**32, size=n_uint32, dtype='uint32')
         # 的原生（小端）字节串截断——直接取 u32 流，非 res53 缩放。
         n = int(length)
         n_uint32 = (n - 1) // 4 + 1
@@ -1411,21 +1411,21 @@ class _RandomStateWrapper:
 def _mvn_sample(next_standard_normal, mean, cov, size,
                 check_valid='warn', tol=1e-8):
     """Draw multivariate normal samples via the SVD factor of ``cov``."""
-    import rsnumpy as np
+    import rsarray as np
     mean = np.asarray(mean, dtype='float64').reshape(-1).tolist()
     cov = np.asarray(cov, dtype='float64')
     d = len(mean)
     _, s, vt = np.linalg.svd(cov, full_matrices=False)
     s_arr = np.asarray(s, dtype='float64')
     if s_arr.ndim == 2:
-        # rsnumpy svd 对 2x2 返回 2D 对角矩阵（非常规）→ 取对角线奇异值
+        # rsarray svd 对 2x2 返回 2D 对角矩阵（非常规）→ 取对角线奇异值
         s_vals = [s_arr[i, i] for i in range(min(s_arr.shape))]
     else:
         s_vals = s_arr.ravel().tolist()
     sl = [max(float(x), 0.0) ** 0.5 for x in s_vals]
     vtl = [[float(x) for x in row] for row in vt.tolist()]
     if check_valid != 'ignore':
-        # numpy 语义（mtrand.pyx）：psd = allclose(V·diag(s)·Vt, cov,
+        # 数组语义（mtrand.pyx）：psd = allclose(V·diag(s)·Vt, cov,
         # rtol=tol, atol=tol)；非对称/非半正定时 V≠U，重构与 cov 偏离。
         if check_valid not in ('warn', 'raise'):
             raise ValueError(
@@ -1468,7 +1468,7 @@ def _mvn_sample(next_standard_normal, mean, cov, size,
 
 
 def _coerce_size_arg(args, kwargs):
-    """size 参数数组化 → int/tuple（numpy 接受 array-like size，Rust 后端不接受）。"""
+    """size 参数数组化 → int/tuple（接受 array-like size，Rust 后端不接受）。"""
 
     def _conv(v):
         if isinstance(v, bool) or isinstance(v, int):
@@ -1492,31 +1492,31 @@ def _coerce_size_arg(args, kwargs):
 
 
 class _WrappedGenerator:
-    """Generator 的薄包装，把核心返回的数组提升为 rsnumpy 数组。
+    """Generator 的薄包装，把核心返回的数组提升为 rsarray 数组。
 
     核心生成器（`_core.random.Generator`）返回的是 Rust 侧的 `ndarray`，它和
-    `rsnumpy.ndarray` 不是同一个类：后者才有那些补齐了 NumPy 语义的 Python 层
-    方法。差别最明显的是 `astype` —— 核心版只接受字符串，而 NumPy 语义要求也能
+    `rsarray.ndarray` 不是同一个类：后者才有那些补齐了 数组语义的 Python 层
+    方法。差别最明显的是 `astype` —— 核心版只接受字符串，而 数组语义要求也能
     吃 `dtype` 实例，因此诸如
 
         a = rng.random(shape).astype(np.dtype('float64'))
 
-    的写法（numpy 约定 scipy 测试里到处在用）在裸核心对象上会直接报错。
+    的写法（约定 scipy 测试里到处在用）在裸核心对象上会直接报错。
 
-    这里只做一件事：转发所有属性，并把方法返回值里的核心数组换成 `rsnumpy.ndarray`。
+    这里只做一件事：转发所有属性，并把方法返回值里的核心数组换成 `rsarray.ndarray`。
     """
 
     __slots__ = ('_inner', '_seed', '_pcg')
 
     def __init__(self, inner=None):
-        # Accept NumPy-style construction: Generator(seed) or Generator()
+        # Accept -style construction: Generator(seed) or Generator()
         self._seed = inner
         self._pcg = None
         if isinstance(inner, _WrappedGenerator):
             self._seed = inner._seed
             inner = inner._inner
             if isinstance(inner, PCG64):
-                # copy 保留位生成器（numpy：Generator 拷贝共享 BitGenerator）
+                # copy 保留位生成器（—Generator 拷贝共享 BitGenerator）
                 self._pcg = inner
                 inner = 0
         elif isinstance(inner, PCG64):
@@ -1529,13 +1529,13 @@ class _WrappedGenerator:
             try:
                 inner = _core.random.Generator(inner)
             except OverflowError:
-                # NumPy accepts arbitrarily large seeds (SeedSequence);
+                # accepts arbitrarily large seeds (SeedSequence);
                 # fold them into the range the core understands.
                 inner = _core.random.Generator(int(inner) % (2**63))
         self._inner = inner
         if self._pcg is None and self._seed is not None and \
                 isinstance(self._seed, (int, list, tuple, range)):
-            # default_rng(seed)：洗牌需位级兼容 numpy 的 PCG64 流
+            # default_rng(seed)：洗牌需位级兼容 数组的 PCG64 流
             # （SeedSequence → pcg64_srandom_r）
             self._pcg = PCG64(self._seed)
 
@@ -1555,9 +1555,9 @@ class _WrappedGenerator:
     def shuffle(self, x, axis=0):
         """新 API 洗牌：object 数组不告警、保持对象身份。
 
-        有 PCG64 流时按 numpy Generator.random_interval（64 位流拒绝
+        有 PCG64 流时按 Generator.random_interval（64 位流拒绝
         抽样，j ∈ [0, i]）逐位精确；否则回退 Rust 核 integers（StdRng
-        流，与 numpy 不位级兼容，见类 docstring）。
+        流，与 不位级兼容，见类 docstring）。
         """
         if axis != 0 and hasattr(x, 'shape'):
             x = np.moveaxis(x, axis, 0)
@@ -1565,7 +1565,7 @@ class _WrappedGenerator:
             bg = self._pcg
 
             def next_j(i):
-                # numpy random_interval（distributions.c）：掩码拒绝 + uint32 流
+                # random_interval（distributions.c）：掩码拒绝 + uint32 流
                 if i == 0:
                     return 0
                 mask = i
@@ -1594,10 +1594,10 @@ class _WrappedGenerator:
         _python_shuffle(next_j, x, 0)
 
     def _make_choice(self):
-        """NumPy-compatible ``choice`` (the Rust core only takes array `a`
+        """-compatible ``choice`` (the Rust core only takes array `a`
         and no ``p``; int populations and weights are handled here)."""
         def choice(a, size=None, replace=True, p=None):
-            import rsnumpy as np
+            import rsarray as np
             if hasattr(a, 'shape') or isinstance(a, (list, tuple)):
                 values = np.asarray(a)
                 pop = values.shape[0] if values.ndim > 0 else values.size
@@ -1658,10 +1658,10 @@ class _WrappedGenerator:
         return choice
 
     def _make_shuffle(self):
-        """NumPy-compatible in-place ``shuffle`` (the Rust core only accepts
+        """-compatible in-place ``shuffle`` (the Rust core only accepts
         its own ndarray type, so shuffle at the Python layer)."""
         def shuffle(x, axis=0):
-            import rsnumpy as np
+            import rsarray as np
             arr = x if axis == 0 else np.moveaxis(x, axis, 0)
             n = arr.shape[0]
             for i in range(n - 1, 0, -1):
@@ -1683,7 +1683,7 @@ class _WrappedGenerator:
             # Fallback for methods not available on the inner generator
             if name == 'vonmises':
                 def vonmises_wrapper(kappa, size=None, mu=0.0, dtype=None):
-                    import rsnumpy as np
+                    import rsarray as np
                     import math
                     # Broadcast mu/kappa to a common shape, then optionally to
                     # ``size``.  This lets callers pass array parameters (as
@@ -1730,14 +1730,14 @@ class _WrappedGenerator:
                 return mvn_wrapper
             if name == 'permutation':
                 def permutation_wrapper(x, axis=0):
-                    import rsnumpy as np
+                    import rsarray as np
                     arr = np.asarray(x)
                     idx = self._inner.permutation(arr.shape[axis])
                     return np.take(arr, idx, axis=axis)
                 return permutation_wrapper
             if name == 'permutated':
                 def permutated_wrapper(x, axis=0, *args, **kwargs):
-                    import rsnumpy as np
+                    import rsarray as np
                     arr = np.asarray(x)
                     idx = self._inner.permutation(arr.shape[axis])
                     return np.take(arr, idx, axis=axis)
@@ -1745,11 +1745,11 @@ class _WrappedGenerator:
             raise AttributeError(f"'{type(self._inner).__name__}' object has no attribute '{name}'")
         if callable(attr):
             def wrapper(*args, **kwargs):
-                # Strip dtype from kwargs - rsnumpy core doesn't support it
+                # Strip dtype from kwargs - rsarray core doesn't support it
                 dtype = kwargs.pop('dtype', None)
                 result = attr(*args, **kwargs)
-                import rsnumpy as np
-                # Wrap builtins.ndarray results into rsnumpy ndarray
+                import rsarray as np
+                # Wrap builtins.ndarray results into rsarray ndarray
                 if type(result).__module__ == 'builtins' and type(result).__name__ == 'ndarray':
                     result = np.asarray(result)
                 # Convert dtype if specified
@@ -1763,7 +1763,7 @@ class _WrappedGenerator:
         if type(value).__module__ == 'builtins' and \
                 type(value).__name__ == 'ndarray':
             # `_core.ndarray`：Rust 侧类型，包一层即可获得 Python 层 API。
-            import rsnumpy as np
+            import rsarray as np
             return np.asarray(value)
         return value
 
@@ -1808,7 +1808,7 @@ class _WrappedGenerator:
         return result
 
     def multinomial(self, n, pvals, size=None):
-        import rsnumpy as np
+        import rsarray as np
         pvals = np.asarray(pvals, dtype=float)
         pvals = pvals / pvals.sum()
         cdf = np.cumsum(pvals)
@@ -1827,7 +1827,7 @@ class _WrappedGenerator:
         return np.asarray(result)
 
     def permuted(self, x, axis=0, *args, **kwargs):
-        import rsnumpy as np
+        import rsarray as np
         arr = np.asarray(x)
         idx = self._inner.permutation(arr.shape[axis])
         return np.take(arr, idx, axis=axis)
@@ -1844,12 +1844,12 @@ class mtrand_module:
 
 
 class _SeedSequence:
-    """numpy.random.SeedSequence 纯 Python 位级兼容移植。
+    """random.SeedSequence 纯 Python 位级兼容移植。
 
-    算法 = O'Neill seed_seq 的 numpy 修订版（numpy/random/
-    bit_generator.pyx）：4×uint32 池，hashmix（INIT_A/MULT_A）填充 +
+    算法 = O'Neill seed_seq 的修订版：4×uint32 池，hashmix（INIT_A/MULT_A）
+    填充 +
     全混合，generate_state 走 INIT_B/MULT_B 流。常量与调用顺序与
-    numpy 2.5.4 逐位一致（SeedSequence(42).generate_state(4) =
+    2.5.4 逐位一致（SeedSequence(42).generate_state(4) =
     [3444837047, 2669555309, 2046530742, 3581440988]，10 组官方
     参考向量全部吻合）。
     """
@@ -1869,7 +1869,7 @@ class _SeedSequence:
             raise ValueError("The size of the entropy pool should be at least "
                              f"{self.DEFAULT_POOL_SIZE}")
         if entropy is None:
-            # numpy：secrets.randbits(pool_size * 32)（OS 熵）
+            # —secrets.randbits(pool_size * 32)（OS 熵）
             entropy = _py_random.SystemRandom().getrandbits(pool_size * 32)
         elif not isinstance(entropy, (int, list, tuple, range)):
             raise TypeError('SeedSequence expects int or sequence of ints for '
@@ -1891,14 +1891,14 @@ class _SeedSequence:
         run = self._coerce(self.entropy)
         spawn = self._coerce(self.spawn_key) if len(self.spawn_key) else []
         if spawn and len(run) < self.pool_size:
-            # numpy 1.19+（gh-16539）：带 spawn_key 时先把 entropy
+            # 1.19+（gh-16539）：带 spawn_key 时先把 entropy
             # 补零到 pool_size，避免与 spawn key 冲突
             run = run + [0] * (self.pool_size - len(run))
         return run + spawn
 
     @classmethod
     def _coerce(cls, x):
-        """numpy ``_coerce_to_uint32_array``：int/str/序列 → uint32 字。"""
+        """``_coerce_to_uint32_array``：int/str/序列 → uint32 字。"""
         if isinstance(x, str):
             if x.startswith('0x'):
                 x = int(x, base=16)
@@ -1928,10 +1928,10 @@ class _SeedSequence:
         return out
 
     def _mix_entropy(self, mixer, entropy_array):
-        """numpy ``SeedSequence.mix_entropy``：hashmix 填充 + 全混合。
+        """``SeedSequence.mix_entropy``：hashmix 填充 + 全混合。
 
         hash_const 是跨全部 hashmix 调用共享推进的可变值，调用顺序
-        与 numpy 完全一致（位级兼容的关键）。
+        与 完全一致（位级兼容的关键）。
         """
         hc = self._INIT_A
 
@@ -1962,7 +1962,7 @@ class _SeedSequence:
                 mixer[i_dst] = mx(mixer[i_dst], hm(entropy_array[i_src]))
 
     def generate_state(self, n_words, dtype='uint32'):
-        """numpy ``SeedSequence.generate_state``：INIT_B/MULT_B 流输出。
+        """``SeedSequence.generate_state``：INIT_B/MULT_B 流输出。
 
         dtype 为 uint64 时按对打包（小端：前字为低 32 位）。
         """
@@ -1983,18 +1983,18 @@ class _SeedSequence:
 
 
 class PCG64:
-    """numpy.random.PCG64 纯 Python 位级兼容移植（PCG XSL-RR-128-64）。
+    """random.PCG64 纯 Python 位级兼容移植（PCG XSL-RR-128-64）。
 
     状态 = (128-bit state, 128-bit inc) + uint32 缓存（has_uint32/
     uinteger，legacy RandomState 的 res53 double 流消费）。种子链与
-    numpy 一致：SeedSequence(seed).generate_state(4, uint64) →
+    一致：SeedSequence(seed).generate_state(4, uint64) →
     initstate/inc → pcg_setseq_128_srandom_r
     （state=0; inc=(seq<<1)|1; step; state+=initstate; step）。
     """
 
     _MASK128 = (1 << 128) - 1
     _MASK64 = (1 << 64) - 1
-    # numpy pcg64.h: PCG_DEFAULT_MULTIPLIER_128
+    # pcg64.h: PCG_DEFAULT_MULTIPLIER_128
     _MULT128 = (2549297995355413924 << 64) | 4865540595714422341
 
     def __init__(self, seed=None):
@@ -2006,7 +2006,7 @@ class PCG64:
         self.seed(seed)
 
     def seed(self, seed=None):
-        """重新播种（numpy ``PCG64.seed``）。"""
+        """重新播种（``PCG64.seed``）。"""
         ss = _SeedSequence(seed)
         self._seed_seq = ss
         val = ss.generate_state(4, 'uint64')
@@ -2045,7 +2045,7 @@ class PCG64:
 
     @property
     def state(self):
-        """numpy ``PCG64.state`` get：dict（state/inc 为 128-bit 整数）。"""
+        """``PCG64.state`` get：dict（state/inc 为 128-bit 整数）。"""
         return {'bit_generator': 'PCG64',
                 'state': {'state': self._state, 'inc': self._inc},
                 'has_uint32': self._has_uint32,
@@ -2114,7 +2114,7 @@ class random_module:
         return self._random.seed(s)
     
     def _rand_arr(self, vals):
-        """确保输出是带 _dtype 的正规 rsnumpy ndarray（Rust 原生对象转换）。"""
+        """确保输出是带 _dtype 的正规 rsarray ndarray（Rust 原生对象转换）。"""
         from ..__init__ import ndarray
         if hasattr(vals, 'tolist') and not hasattr(vals, '_dtype'):
             vals = vals.tolist()
@@ -2184,9 +2184,9 @@ class random_module:
 
 
 # ---------------------------------------------------------------------------
-# numpy 兼容的模块级 API：numpy 里 ``np.random`` 是模块，``from numpy.random
+# 兼容的模块级 API：里 ``np.random`` 是模块，``from random
 # import rand`` 是合法用法。以下模块级函数绑定同一个默认实例，且
-# ``rsnumpy.random``（见 python/rsnumpy/__init__.py）指向本模块本身，
+# ``rsarray.random``（见 python/rsarray/__init__.py）指向本模块本身，
 # 两种访问形式共享同一份全局状态。
 # ---------------------------------------------------------------------------
 _default_rng = random_module()
@@ -2198,13 +2198,13 @@ mtrand = _default_rng.mtrand
 default_rng = _default_rng.default_rng
 
 def rand(*args):
-    # MT19937 全局流（与 randint/uniform 共用 _get_legacy_state，匹配 numpy）
+    # MT19937 全局流（与 randint/uniform 共用 _get_legacy_state）
     return _get_legacy_state().rand(*args)
 
 randn = _default_rng.randn
 
 def random(*args, **kwargs):
-    # numpy legacy random_sample：MT19937 全局流
+    # legacy random_sample：MT19937 全局流
     return _get_legacy_state().random(*args, **kwargs)
 
 random_sample = random
@@ -2263,4 +2263,4 @@ def __getattr__(name):
             f = getattr(_get_legacy_state(), name)
             _legacy_func_cache[name] = f
         return f
-    raise AttributeError(f"module 'rsnumpy.random' has no attribute {name!r}")
+    raise AttributeError(f"module 'rsarray.random' has no attribute {name!r}")

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
-"""rsnumpy.matlib - 矩阵库模块"""
+"""rsarray.matlib - 矩阵库模块"""
 
-import rsnumpy.num_core as _core
+import rsarray.num_core as _core
 
 
 def empty(shape, dtype=None, order='C'):

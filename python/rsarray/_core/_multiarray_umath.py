@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: MIT
-"""numpy._core._multiarray_umath 兼容实现（Python 版）。
+"""rsarray._core._multiarray_umath 兼容实现（Python 版）。
 
-MAXDIMS 与 rsnumpy 嵌套序列发现路径的实际维度上限一致（64）。
+MAXDIMS 与 rsarray 嵌套序列发现路径的实际维度上限一致（64）。
 """
 
 MAXDIMS = 64
 
-# rsnumpy 无 SIMD 特性检测：空 dict 使按 CPU 特性分支的测试走通用路径。
+# rsarray 无 SIMD 特性检测：空 dict 使按 CPU 特性分支的测试走通用路径。
 __cpu_features__ = {}
 
 __all__ = ['MAXDIMS', '_discover_array_parameters', '__cpu_features__',
@@ -14,12 +14,12 @@ __all__ = ['MAXDIMS', '_discover_array_parameters', '__cpu_features__',
 
 
 def _rs():
-    import rsnumpy
-    return rsnumpy
+    import rsarray
+    return rsarray
 
 
 def _discover_shape(sequence):
-    """按 numpy 公共前缀规则推断嵌套序列形状。"""
+    """按 公共前缀规则推断嵌套序列形状。"""
     rs = _rs()
     if isinstance(sequence, rs.ndarray):
         return tuple(sequence.shape)
@@ -53,11 +53,11 @@ def _type_matches(dt, hint):
 
 
 def _discover_array_parameters(sequence, dtype=None, *args, **kwargs):
-    """推断 (dtype, shape)（numpy C-helper 兼容）。
+    """推断 (dtype, shape)（C-helper 兼容）。
 
     空序列时 dtype 由 hint 类型决定：
-    - bytes_/unicode_ 按 numpy 惯例映射为 S1/U1；
-    - datetime64/timedelta64 类型类优先匹配 M8/m8 spec（rsnumpy 的
+    - bytes_/unicode_ 按 惯例映射为 S1/U1；
+    - datetime64/timedelta64 类型类优先匹配 M8/m8 spec（rsarray 的
       M/m dtype 类型类为 unicode_，与 U 同形，无法直接反解析）；
     - 其余类型先直接反解析，失败后按 .type 逐一匹配候选 spec。
     """
@@ -87,8 +87,8 @@ def _discover_array_parameters(sequence, dtype=None, *args, **kwargs):
         if dt is None and isinstance(dtype, type):
             try:
                 if issubclass(dtype, rs.dtype):
-                    # dtype 类本身（rsnumpy 扁平 dtype 类，NumPy 2 中为各具体
-                    # DType 类）：空序列时按 numpy 传统默认 float64
+                    # dtype 类本身（rsarray 扁平 dtype 类，2 中为各具体
+                    # DType 类）：空序列时按 传统默认 float64
                     dt = rs.dtype('float64')
             except TypeError:
                 pass
@@ -110,12 +110,12 @@ def _discover_array_parameters(sequence, dtype=None, *args, **kwargs):
 
 
 def _array_converter(*args, **kwargs):
-    """C 层数组转换器桩：rsnumpy 无对应实现（相关测试经 conftest skip）。"""
+    """C 层数组转换器桩：rsarray 无对应实现（相关测试经 conftest skip）。"""
     raise NotImplementedError(
-        "rsnumpy has no C _array_converter; test is expected to be skipped")
+        "rsarray has no C _array_converter; test is expected to be skipped")
 
 
 def _get_sfloat_dtype():
-    """C 层 small-float dtype 桩：rsnumpy 无对应实现（相关测试经 conftest skip）。"""
+    """C 层 small-float dtype 桩：rsarray 无对应实现（相关测试经 conftest skip）。"""
     raise NotImplementedError(
-        "rsnumpy has no C _get_sfloat_dtype; test is expected to be skipped")
+        "rsarray has no C _get_sfloat_dtype; test is expected to be skipped")

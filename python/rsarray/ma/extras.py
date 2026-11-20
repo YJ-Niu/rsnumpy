@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: MIT
-"""掩码数组扩展函数（numpy.ma.extras 兼容实现）。
+"""掩码数组扩展函数（ma.extras 兼容实现）。
 
-在 rsnumpy.ma.core 基础上实现 numpy.ma.extras 的公共 API：
+在 rsarray.ma.core 基础上实现 ma.extras 的公共 API：
 统计（cov/corrcoef/median/average）、集合（isin/intersect1d/...）、
 掩码工具（clump/compress_rowcols/notmasked_*）、形状变换等。
 """
 
-import rsnumpy as np
+import rsarray as np
 from .core import (MAError, MaskedArray, asarray, array, count, filled,
                    getdata, getmaskarray, isMaskedArray, masked, mask_or,
                    nomask)
@@ -75,12 +75,12 @@ def dot(a, b):
 
 
 def ediff1d(to_edge=False):
-    raise NotImplementedError("rsnumpy.ma.extras.ediff1d requires two args; "
-                              "see numpy.ma.extras.ediff1d(a1, a2)")
+    raise NotImplementedError("rsarray.ma.extras.ediff1d requires two args; "
+                              "see ma.extras.ediff1d(a1, a2)")
 
 
 def ediff1d_impl(a1, a2=None):
-    """相邻元素差（numpy.ma.ediff1d 兼容）。"""
+    """相邻元素差（ma.ediff1d 兼容）。"""
     if a2 is None:
         a = asarray(a1)
         data = a.compressed()
@@ -100,7 +100,7 @@ def ediff1d_impl(a1, a2=None):
 
 
 def apply_along_axis(func1d, axis, arr, *args, **kwargs):
-    """沿轴应用 1-d 函数（numpy.ma.apply_along_axis 兼容）。"""
+    """沿轴应用 1-d 函数（ma.apply_along_axis 兼容）。"""
     arr = asarray(arr)
     n = arr.ndim
     if axis < 0:
@@ -133,7 +133,7 @@ def apply_along_axis(func1d, axis, arr, *args, **kwargs):
 
 
 def apply_over_axes(func, a, axes):
-    """依次在给定轴上应用 func（numpy.ma.apply_over_axes 兼容）。"""
+    """依次在给定轴上应用 func（ma.apply_over_axes 兼容）。"""
     a = asarray(a)
     ndim = a.ndim
     current_axis = 0
@@ -147,7 +147,7 @@ def apply_over_axes(func, a, axes):
 
 
 def average(a, axis=None, weights=None, returned=False, **kwargs):
-    """掩码感知的加权均值（numpy.ma.average 兼容）。"""
+    """掩码感知的加权均值（ma.average 兼容）。"""
     a = asarray(a)
     data = a.data
     m = getmaskarray(a)
@@ -174,7 +174,7 @@ def average(a, axis=None, weights=None, returned=False, **kwargs):
 
 
 def _covhelper(x, y=None, rowvar=True, fweights=None, aweights=None):
-    """numpy.ma.extras._covhelper 移植（掩码感知）。"""
+    """ma.extras._covhelper 移植（掩码感知）。"""
     if x is None:
         raise TypeError("x must be an array-like")
     x = asarray(x)
@@ -201,7 +201,7 @@ def _covhelper(x, y=None, rowvar=True, fweights=None, aweights=None):
             wm = None
             sum_ = float(nobs)
     else:
-        raise NotImplementedError("rsnumpy.ma.cov with y is not implemented")
+        raise NotImplementedError("rsarray.ma.cov with y is not implemented")
 
     if fweights is not None:
         fw = np.asarray(fweights, dtype=float)
@@ -244,7 +244,7 @@ def _covhelper(x, y=None, rowvar=True, fweights=None, aweights=None):
 
 def cov(x, y=None, rowvar=True, bias=False, ddof=None, fweights=None,
         aweights=None, **kwargs):
-    """掩码感知的协方差（numpy.ma.cov 兼容子集：x-only 路径）。"""
+    """掩码感知的协方差（ma.cov 兼容子集：x-only 路径）。"""
     c = _covhelper(x, y, rowvar, fweights, aweights)
     x = asarray(x)
     if rowvar:
@@ -265,7 +265,7 @@ def cov(x, y=None, rowvar=True, bias=False, ddof=None, fweights=None,
 
 
 def corrcoef(m, rowvar=True, **kwargs):
-    """掩码感知的相关系数（numpy.ma.corrcoef 兼容子集）。"""
+    """掩码感知的相关系数（ma.corrcoef 兼容子集）。"""
     m = asarray(m)
     if rowvar:
         n = m.shape[1]
@@ -282,7 +282,7 @@ def corrcoef(m, rowvar=True, **kwargs):
 
 
 def compress_rowcols(a):
-    """含掩码的行/列整体掩掉（numpy.ma.compress_rowcols 兼容）。"""
+    """含掩码的行/列整体掩掉（ma.compress_rowcols 兼容）。"""
     a = asarray(a)
     m = getmaskarray(a)
     if m is nomask or a.ndim != 2:
@@ -292,12 +292,12 @@ def compress_rowcols(a):
 
 
 def mask_rowcols(a):
-    """含掩码的行/列整体掩掉（numpy.ma.mask_rowcols 兼容）。"""
+    """含掩码的行/列整体掩掉（ma.mask_rowcols 兼容）。"""
     return compress_rowcols(a)
 
 
 def notmasked_contiguous(a):
-    """最长连续未掩码区间的切片/索引（numpy.ma.notmasked_contiguous 兼容）。"""
+    """最长连续未掩码区间的切片/索引（ma.notmasked_contiguous 兼容）。"""
     a = asarray(a)
     m = getmaskarray(a)
     if m is nomask:
@@ -326,7 +326,7 @@ def flatnotmasked_contiguous(a):
 
 
 def notmasked_edges(a):
-    """每行/列首尾未掩码元素索引（numpy.ma.notmasked_edges 兼容）。"""
+    """每行/列首尾未掩码元素索引（ma.notmasked_edges 兼容）。"""
     a = asarray(a)
     m = getmaskarray(a)
     if m is nomask:
@@ -367,7 +367,7 @@ def notmasked_edges(a):
 
 
 def masked_all(a, axis=None, **kwargs):
-    """全部元素是否被掩掉（numpy.ma.masked_all 兼容）。"""
+    """全部元素是否被掩掉（ma.masked_all 兼容）。"""
     a = asarray(a)
     m = getmaskarray(a)
     if m is nomask:
@@ -378,7 +378,7 @@ def masked_all(a, axis=None, **kwargs):
 
 
 def masked_all_like(a):
-    """与 a 同形全掩码的掩码数组（numpy.ma.masked_all_like 兼容）。"""
+    """与 a 同形全掩码的掩码数组（ma.masked_all_like 兼容）。"""
     a = asarray(a)
     return MaskedArray(a.data, mask=True, fill_value=a.fill_value)
 
@@ -405,12 +405,12 @@ def clump(a, n):
     return a
 
 
-# numpy 新版命名：clump_masked（与 clump 同义）
+# 新版命名：clump_masked（与 clump 同义）
 clump_masked = clump
 
 
 def clump_unmasked(a):
-    """把孤立 True 掩码扩展到相邻未掩码段（numpy.ma.clump_unmasked 兼容）。"""
+    """把孤立 True 掩码扩展到相邻未掩码段（ma.clump_unmasked 兼容）。"""
     a = asarray(a)
     m = list(getmaskarray(a).reshape((-1,)).tolist())
     n = len(m)
@@ -431,7 +431,7 @@ def clump_unmasked(a):
 
 
 def compress_nd(a, **kwargs):
-    """压缩掉掩码元素，返回未掩码值（numpy.ma.compress_nd 兼容）。"""
+    """压缩掉掩码元素，返回未掩码值（ma.compress_nd 兼容）。"""
     a = asarray(a)
     return asarray(a.compressed())
 
@@ -528,7 +528,7 @@ def unique(ar, return_index=False, return_inverse=False, return_counts=False,
 
 
 def median(a, axis=None, overwrite_input=False, keepdims=False, **kwargs):
-    """未掩码元素的中位数（numpy.ma.median 兼容）。"""
+    """未掩码元素的中位数（ma.median 兼容）。"""
     a = asarray(a)
     c = a.compressed()
     if c.size == 0:
@@ -541,7 +541,7 @@ def median(a, axis=None, overwrite_input=False, keepdims=False, **kwargs):
 
 
 def diagflat(v, k=0):
-    """展平后取对角（numpy.ma.diagflat 兼容）。"""
+    """展平后取对角（ma.diagflat 兼容）。"""
     v = asarray(v)
     d = np.diagflat(v.compressed(), k=k) if hasattr(np, 'diagflat') else \
         np.diagonal(v.compressed().reshape((v.size,) + (v.size,)), offset=k)
@@ -622,20 +622,20 @@ def _mask_rowcols(a, axis):
 
 
 def mask_rows(a):
-    """掩码整行（含掩码元素的行全部掩码，numpy.ma.mask_rows 兼容）。"""
+    """掩码整行（含掩码元素的行全部掩码，ma.mask_rows 兼容）。"""
     return _mask_rowcols(a, 1)
 
 
 def mask_cols(a):
-    """掩码整列（含掩码元素的列全部掩码，numpy.ma.mask_cols 兼容）。"""
+    """掩码整列（含掩码元素的列全部掩码，ma.mask_cols 兼容）。"""
     return _mask_rowcols(a, 0)
 
 
 class _RowMaskedIndexer:
-    """掩码版行索引器（numpy.ma.mr_ 兼容简化版：ogrid 语义 + 掩码包装）。"""
+    """掩码版行索引器（ma.mr_ 兼容简化版：ogrid 语义 + 掩码包装）。"""
 
     def __getitem__(self, key):
-        import rsnumpy as np
+        import rsarray as np
         from .core import MaskedArray
         if not isinstance(key, tuple):
             key = (key,)
@@ -666,8 +666,8 @@ mr_ = _RowMaskedIndexer()
 
 
 def polyfit(x, y, deg, rcond=None, full=False, w=None, cov=False):
-    """多项式拟合（掩码感知：只用双方都未掩码的点，numpy.ma.polyfit 兼容）。"""
-    import rsnumpy as np
+    """多项式拟合（掩码感知：只用双方都未掩码的点，ma.polyfit 兼容）。"""
+    import rsarray as np
     x = asarray(x)
     y = asarray(y)
     mx = getmaskarray(x)
@@ -696,7 +696,7 @@ for _n, _v in _reexports().items():
     globals()[_n] = _v
 del _reexports, _n, _v
 
-# 修正 ediff1d 的公共入口（保持 numpy 签名 ediff1d(a1, a2=None)）
+# 修正 ediff1d 的公共入口（保持 签名 ediff1d(a1, a2=None)）
 def ediff1d(a1, a2=None):  # noqa: F811
     return ediff1d_impl(a1, a2)
 

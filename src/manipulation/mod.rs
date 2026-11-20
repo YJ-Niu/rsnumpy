@@ -416,7 +416,7 @@ fn insert_rs_internal(
     let pre_size: usize = shape.iter().take(ax).product();
     let post_size: usize = shape.iter().skip(ax + 1).product();
 
-    // NumPy 不去重：`np.insert(a, [1, 1, 1], u, 0)` 要在同一处插入三次。
+    // 不去重：`np.insert(a, [1, 1, 1], u, 0)` 要在同一处插入三次。
     // 早先把下标收进 BTreeSet 会吃掉重复项，于是只插了一次，形状少 K-1。
     let mut pairs: Vec<(usize, usize)> = indices
         .iter()
@@ -1362,7 +1362,7 @@ fn ravel_multi_index(
         }
         out.push(s as f64);
     }
-    // 全部 0-d 输入返回 0-d 输出（与 numpy 一致）
+    // 全部 0-d 输入返回 0-d 输出（与参考实现一致）
     let all_scalar = multi_index.iter().all(|a| a.data.ndim() == 0);
     if all_scalar {
         return Ok(NdArray {
@@ -1414,7 +1414,7 @@ fn unravel_index(indices: &NdArray, shape: Vec<usize>, order: &str) -> PyResult<
             f /= shape[i] as i64;
         }
     }
-    // 0-d 输入返回 0-d 输出（与 numpy 一致）
+    // 0-d 输入返回 0-d 输出（与参考实现一致）
     let is_scalar = indices.data.ndim() == 0;
     let result: Vec<NdArray> = cols
         .into_iter()
@@ -1430,7 +1430,7 @@ fn unravel_index(indices: &NdArray, shape: Vec<usize>, order: &str) -> PyResult<
     Ok(result)
 }
 
-/// 按布尔掩码循环写入 vals 到 arr（就地，与 numpy.place 一致）。
+/// 按布尔掩码循环写入 vals 到 arr（就地，与 place 一致）。
 #[pyfunction]
 fn place(arr: &mut NdArray, mask: &NdArray, vals: &NdArray) -> PyResult<()> {
     let v: Vec<f64> = vals.data.iter().copied().collect();
@@ -1461,9 +1461,9 @@ fn place(arr: &mut NdArray, mask: &NdArray, vals: &NdArray) -> PyResult<()> {
     Ok(())
 }
 
-/// 就地填充主对角线（支持 wrap 参数，与 numpy.fill_diagonal 一致）。
+/// 就地填充主对角线（支持 wrap 参数，与 fill_diagonal 一致）。
 ///
-/// numpy 算法：
+/// 算法：
 /// - 2D：step = shape[1] + 1；不 wrap 时 end = shape[1]^2；wrap 时 end = None。
 ///   沿 flat 视图按 step 步长写入，越界自动停止。
 /// - N-D (n>2)：要求所有维度等长；step = 1 + cumprod(shape[:-1]).sum()。
@@ -1525,9 +1525,9 @@ fn fill_diagonal(arr: &mut NdArray, vals: &NdArray, wrap: bool) -> PyResult<()> 
     Ok(())
 }
 
-/// 按布尔掩码逐元素写入值（就地，与 numpy.putmask 一致：a[i]=v[i] where mask[i]）。
+/// 按布尔掩码逐元素写入值（就地，与 putmask 一致：a[i]=v[i] where mask[i]）。
 ///
-/// 与 numpy.place 不同：putmask 按位置元素级赋值，vals 不循环而是按对应索引取值。
+/// 与 place 不同：putmask 按位置元素级赋值，vals 不循环而是按对应索引取值。
 #[pyfunction]
 fn putmask(arr: &mut NdArray, mask: &NdArray, vals: &NdArray) -> PyResult<()> {
     let total: usize = arr.data.len();
@@ -1573,7 +1573,7 @@ fn putmask(arr: &mut NdArray, mask: &NdArray, vals: &NdArray) -> PyResult<()> {
     Ok(())
 }
 
-/// 沿轴按索引数组取值（与 numpy.take_along_axis 一致）。
+/// 沿轴按索引数组取值（与 take_along_axis 一致）。
 #[pyfunction]
 #[pyo3(signature = (arr, indices, axis))]
 fn take_along_axis(arr: &NdArray, indices: &NdArray, axis: isize) -> PyResult<NdArray> {
@@ -1702,9 +1702,9 @@ fn take_along_axis(arr: &NdArray, indices: &NdArray, axis: isize) -> PyResult<Nd
     })
 }
 
-/// 沿轴按索引数组写入值（就地，与 numpy.put_along_axis 一致）。
+/// 沿轴按索引数组写入值（就地，与 put_along_axis 一致）。
 ///
-/// numpy 语义：indices 与 values 同形（或可广播），按对应位置元素级取值。
+/// 数组语义：indices 与 values 同形（或可广播），按对应位置元素级取值。
 /// 即对每个 (其它维度坐标, k)，写入 arr[..., idx[..., k], ...] = values[..., k, ...]。
 #[pyfunction]
 #[pyo3(signature = (arr, indices, values, axis))]
@@ -1837,7 +1837,7 @@ fn put_along_axis(
     Ok(())
 }
 
-/// 提取对角线（支持 axis1/axis2，与 numpy.diagonal 一致）。
+/// 提取对角线（支持 axis1/axis2，与 diagonal 一致）。
 #[pyfunction]
 #[pyo3(signature = (a, offset=0, axis1=0, axis2=1))]
 fn diagonal_ext(a: &NdArray, offset: isize, axis1: isize, axis2: isize) -> PyResult<NdArray> {
@@ -1974,7 +1974,7 @@ fn diagonal_ext(a: &NdArray, offset: isize, axis1: isize, axis2: isize) -> PyRes
     })
 }
 
-/// 按索引数组从 choices 中选值（与 numpy.choose 一致）。
+/// 按索引数组从 choices 中选值（与 choose 一致）。
 /// a 为索引数组（0..n-1），choices 为候选值数组列表。
 /// 每个 choice 可以是标量（广播）或与 a 同形的数组（逐元素取值）。
 /// choice 会沿 a 的形状广播。
@@ -2086,7 +2086,7 @@ fn flat_to_multi(flat_idx: usize, shape: &[usize]) -> Vec<usize> {
     multi
 }
 
-/// 按布尔条件沿轴筛选元素（与 numpy.compress 一致）。
+/// 按布尔条件沿轴筛选元素（与 compress 一致）。
 #[pyfunction]
 #[pyo3(signature = (condition, a, axis=None))]
 fn compress(condition: &NdArray, a: &NdArray, axis: Option<isize>) -> PyResult<NdArray> {
@@ -2173,7 +2173,7 @@ fn compress(condition: &NdArray, a: &NdArray, axis: Option<isize>) -> PyResult<N
     }
 }
 
-/// 将 src 的值复制到 dst（就地，与 numpy.copyto 一致）。
+/// 将 src 的值复制到 dst（就地，与 copyto 一致）。
 #[pyfunction]
 fn copyto(dst: &mut NdArray, src: &NdArray) -> PyResult<()> {
     let src_shape = src.data.shape().to_vec();

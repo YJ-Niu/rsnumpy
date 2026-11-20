@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: MIT
-"""numpy.polynomial.polynomial 兼容模块（新 API：升序系数，低次在前）。
+"""polynomial.polynomial 兼容模块（新 API：升序系数，低次在前）。
 
 数值内核复用 Rust _core（polyadd/polysub/polymul/polydiv/polyroots，
-均为降序系数约定，边界处反转）；求值/积分/导数/拟合走 rsnumpy 数组
+均为降序系数约定，边界处反转）；求值/积分/导数/拟合走 rsarray 数组
 运算或 lstsq（保持 dtype 与 object 语义）；校验、lbnd/k/scl、axis、
-deg 幂列表、__array_function__ 派发按 numpy 2.x 语义实现。
+deg 幂列表、__array_function__ 派发按 2.x 语义实现。
 """
 
 import builtins
@@ -24,17 +24,17 @@ __all__ = [
 
 
 def _NX():
-    import rsnumpy
-    return rsnumpy
+    import rsarray
+    return rsarray
 
 
 def _core():
-    import rsnumpy.num_core as _c
+    import rsarray.num_core as _c
     return _c
 
 
 def _nd():
-    from rsnumpy import ndarray
+    from rsarray import ndarray
     return ndarray
 
 
@@ -128,7 +128,7 @@ def _mk_array(vals):
 
 
 def _dispatch(args, func, kwargs=None):
-    """__array_function__ 派发（numpy 2.x：第一个实现该协议的参数类型，
+    """__array_function__ 派发（2.x：第一个实现该协议的参数类型，
     在实例上调用 type(a).__array_function__(a, func, (t,), args, kwargs)）。"""
     if kwargs is None:
         kwargs = {}
@@ -141,7 +141,7 @@ def _dispatch(args, func, kwargs=None):
 
 
 def __getattr__(name):
-    """常量惰性构造：包在 rsnumpy 部分初始化期被 import 时（rsnumpy/__init__
+    """常量惰性构造：包在 rsarray 部分初始化期被 import 时（rsarray/__init__
     早期 from .polynomial import ...）ndarray 尚不可用，推迟到运行时。"""
     if name == 'polyzero':
         return _nd()([0.])
@@ -151,7 +151,7 @@ def __getattr__(name):
         return _nd()([0., 1.])
     if name == 'polydomain':
         return _nd()([-1., 1.])
-    raise AttributeError("module 'rsnumpy.polynomial.polynomial' has no "
+    raise AttributeError("module 'rsarray.polynomial.polynomial' has no "
                          "attribute %r" % (name,))
 
 
@@ -223,7 +223,7 @@ def polyvalfromroots(x, roots, tensor=True):
     x = NX.asanyarray(x)
     roots = NX.asarray(roots)
     if roots.ndim == 0:
-        # 0 维根 = 单根（numpy 语义）
+        # 0 维根 = 单根（数组语义）
         rshape = (1,)
         rval = [roots.tolist()]
     else:
@@ -318,9 +318,9 @@ def _der1d(cvals, m, scl):
 def _int1d(cvals, m, k, lbnd, scl):
     cur = list(cvals)
     for i in range(m):
-        cur = [v * scl for v in cur]  # scl 每次积分都乘（numpy 语义）
+        cur = [v * scl for v in cur]  # scl 每次积分都乘（数组语义）
         if builtins.len(cur) == 1 and cur[0] == 0:
-            # 长度为 1 的零多项式：保持长度，只累加积分常数（numpy 语义）
+            # 长度为 1 的零多项式：保持长度，只累加积分常数（数组语义）
             cur = [cur[0] + k[i]]
         else:
             nxt = [0] + [cur[j] / (j + 1) for j in range(len(cur))]
@@ -339,7 +339,7 @@ def _check_axis(axis):
 
 
 def polyder(c, m=1, scl=1, axis=0):
-    """m 阶导数（每阶乘 scl）。axis 指定系数轴（numpy 默认 0）。"""
+    """m 阶导数（每阶乘 scl）。axis 指定系数轴（默认 0）。"""
     _check_axis(axis)
     NX = _NX()
     if m < 0:
@@ -353,7 +353,7 @@ def polyder(c, m=1, scl=1, axis=0):
 
 
 def polyint(c, m=1, k=[], lbnd=0, scl=1, axis=0):
-    """m 次积分（numpy 默认 k=[]、lbnd=0、scl=1、axis=0）。
+    """m 次积分（默认 k=[]、lbnd=0、scl=1、axis=0）。
     k 为各次积分常数（标量或长 m 序列，空序列=全零）；
     lbnd 标量：使第 i+1 次积分后多项式在 lbnd 处取 k[i]；scl 整体缩放。"""
     _check_axis(axis)
@@ -363,7 +363,7 @@ def polyint(c, m=1, k=[], lbnd=0, scl=1, axis=0):
     if isinstance(k, (list, tuple)):
         if len(k) > m:
             raise ValueError("Too many integration constants")
-        # 短序列零填充（numpy 语义）
+        # 短序列零填充（数组语义）
         klist = list(k) + [0] * (m - builtins.len(k))
     else:
         klist = [k] * m
@@ -383,7 +383,7 @@ def polyint(c, m=1, k=[], lbnd=0, scl=1, axis=0):
 
 def polyroots(c):
     """多项式根（Rust QR 伴矩阵特征值内核，降序约定）。
-    结果按 (实部, 虚部) 排序——实根升序，与 numpy 实根情形一致。"""
+    结果按 (实部, 虚部) 排序——实根升序，与 实根情形一致。"""
     NX = _NX()
     c = NX.asarray(c)
     cvals = c.tolist()
@@ -458,7 +458,7 @@ def _gauss_complex(A, bvec):
 
 def _lstsq_normal(V, ycol):
     """正规方程 (V^H V) c = V^H y 最小二乘（复数路径用；
-    rsnumpy 复数 lstsq 内核损坏，见 linalg 后续任务）。"""
+    rsarray 复数 lstsq 内核损坏，见 linalg 后续任务）。"""
     n = builtins.len(V)
     k = builtins.len(V[0])
     A = [[0j] * k for _ in range(k)]
@@ -530,7 +530,7 @@ def polyfit(x, y, deg, rcond=None, full=False, w=None, cov=False):
         if full:
             return sol, NX.array([]), NX.array([order + 1]), NX.array([])
         return sol
-    # 1 维 y → 1 维解（numpy 语义）；2 维 y 逐列
+    # 1 维 y → 1 维解（数组语义）；2 维 y 逐列
     Y = NX.array(yvals) if y.ndim == 1 else \
         NX.array([list(row) for row in yvals])
     sol, resids, rank, sv = NX.linalg.lstsq(NX.array(rows), Y, rcond=rcond)
@@ -594,7 +594,7 @@ def polydiv(u, v):
 
 
 def polypow(c, pow, maxpower=None):
-    """c 的 pow 次幂（pow=0 → [1]）。maxpower 为 numpy 预留参数。"""
+    """c 的 pow 次幂（pow=0 → [1]）。maxpower 为 预留参数。"""
     if isinstance(pow, bool) or not isinstance(pow, int):
         raise TypeError("pow must be an integer")
     if pow < 0:
@@ -791,7 +791,7 @@ def _broadcast_shape(shapes):
 
 
 def _polyvalnd(pts, c):
-    """Σ c[idx] Π p_a**idx[a]（点数组按 numpy 广播规则）。"""
+    """Σ c[idx] Π p_a**idx[a]（点数组按 广播规则）。"""
     NX = _NX()
     pts = [NX.asarray(p) for p in pts]
     if not pts:
@@ -886,7 +886,7 @@ def _py_der(cvals, m):
 
 
 class Polynomial:
-    """numpy.polynomial.Polynomial 兼容类（升序系数；默认 domain/window
+    """polynomial.Polynomial 兼容类（升序系数；默认 domain/window
     [-1, 1]；求值先把 x 从 domain 线性映射到 window）。"""
 
     def __init__(self, c, domain=None, window=None, symbol='x'):
@@ -1031,7 +1031,7 @@ class Polynomial:
     def roots(self):
         return polyroots(self._coef)
 
-    # ---- 比较（numpy Polynomial 无 __eq__；此处提供以便测试比较） ----
+    # ---- 比较（Polynomial 无 __eq__；此处提供以便测试比较） ----
     def __eq__(self, other):
         if not isinstance(other, Polynomial):
             return NotImplemented

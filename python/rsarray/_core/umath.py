@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: MIT
-"""numpy._core.umath 兼容门面：按名暴露 rsnumpy 的 ufunc 集合。
+"""rsarray._core.umath 兼容门面：按名暴露 rsarray 的 ufunc 集合。
 
-NumPy 中这是 C 层 ufunc 模块；rsnumpy 的 ufunc 是 Python 层可调用
-对象。本模块在导入时把 rsnumpy 的 ufunc 函数标记（``_rs_ufunc`` +
+参考实现中这是 C 层 ufunc 模块；rsarray 的 ufunc 是 Python 层可调用
+对象。本模块在导入时把 rsarray 的 ufunc 函数标记（``_rs_ufunc`` +
 ``.types`` 循环签名）并按同名导出，使 ``np._core.umath.__dict__``
 可直接按 ``isinstance(obj, np.ufunc)`` 迭代（test_umath_accuracy
 模块级代码依赖此）。
 """
 
-import rsnumpy as _np
+import rsarray as _np
 
-# numpy ufunc 循环签名（numpy 实际含 object 循环 OO->O 的标注了 object
+# ufunc 循环签名（实际含 object 循环 OO->O 的标注了 object
 # 循环；其余为数值循环）
 _UFUNC_TYPES = {
     'add': 'OO->O,dd->d',
@@ -103,16 +103,16 @@ del _name, _types, _f
 
 
 def _slice(a, start, stop, step):
-    """``numpy._core.umath._slice`` 等价：逐元素字符串切片。
+    """``rsarray._core.umath._slice`` 等价：逐元素字符串切片。
 
-    start/stop/step 为 int 标量或序列（rsnumpy.strings.slice 完成哨兵
-    归一后传入）；None 按 step 符号逐元素展开为 intp 极值（对齐 numpy
-    ``np.where(step < 0, ...)``）；step=0 → ValueError。返回与 a 同
+    start/stop/step 为 int 标量或序列（rsarray.strings.slice 完成哨兵
+    归一后传入）；None 按 step 符号逐元素展开为 intp 极值（step<0 取下界、
+    否则取上界）；step=0 → ValueError。返回与 a 同
     dtype 种类（S→S、U→U）、形状 = a.shape 的数组。
     """
     import builtins
-    import rsnumpy as _np
-    from rsnumpy import char as _char
+    import rsarray as _np
+    from rsarray import char as _char
     vals = _char._decode(_char._get_strings(a))
     shape = _char._shape_of(a)
     was_bytes = _char._a_was_bytes(a)
@@ -145,7 +145,7 @@ def _slice(a, start, stop, step):
     sp = _flat(step, 'step')
     if sp is None:
         sp = [1] * size
-    # 注意：本模块命名空间里 any 是 rsnumpy 的 ufunc（对生成器求值失真），
+    # 注意：本模块命名空间里 any 是 rsarray 的 ufunc（对生成器求值失真），
     # 必须用内置 any
     if builtins.any(s == 0 for s in sp):
         raise ValueError("slice step cannot be zero")
@@ -154,7 +154,7 @@ def _slice(a, start, stop, step):
     out = []
     for i, v in enumerate(vals):
         p_ = sp[i % len(sp)]
-        # numpy: start None → where(step<0, imax, 0)；stop None → where(step<0, imin, imax)
+        # —start None → where(step<0, imax, 0)；stop None → where(step<0, imin, imax)
         s_ = st[i % len(st)] if st else (_imax if p_ < 0 else 0)
         e_ = ep[i % len(ep)] if ep else (_imin if p_ < 0 else _imax)
         out.append(v[s_:e_:p_])
@@ -167,10 +167,10 @@ def _slice(a, start, stop, step):
 
 def __getattr__(name):
     if name == 'identity':
-        from rsnumpy._core import ufunc
+        from rsarray._core import ufunc
         return ufunc.identity
-    import rsnumpy
-    obj = getattr(rsnumpy, name, None)
+    import rsarray
+    obj = getattr(rsarray, name, None)
     if obj is not None and not name.startswith('_'):
         return obj
-    raise AttributeError(f"module 'rsnumpy._core.umath' has no attribute {name!r}")
+    raise AttributeError(f"module 'rsarray._core.umath' has no attribute {name!r}")

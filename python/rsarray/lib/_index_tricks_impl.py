@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: MIT
-"""mgrid/ogrid/r_ 的实现模块（numpy.lib._index_tricks_impl 对应）。
+"""mgrid/ogrid/r_ 的实现模块（lib._index_tricks_impl 对应）。
 
-rsnumpy 的 mgrid/ogrid/r_ 实现位于顶层模块；本模块以带完整文档的
+rsarray 的 mgrid/ogrid/r_ 实现位于顶层模块；本模块以带完整文档的
 包装对象暴露 mgrid，使 ``np.lib._index_tricks_impl.mgrid.__doc__``
-满足 NumPy 测试的文档长度契约。
+满足 测试的文档长度契约。
 """
 
 _MGRID_DOC = """\
@@ -37,20 +37,20 @@ out : ndarray
 
 
 class _MGrid:
-    """``np.mgrid`` 的带文档包装（调用转发到 rsnumpy 顶层实现）。"""
+    """``np.mgrid`` 的带文档包装（调用转发到 rsarray 顶层实现）。"""
 
     __doc__ = _MGRID_DOC
 
     def __call__(self, *ranges):
-        import rsnumpy
-        return rsnumpy.mgrid(*ranges)
+        import rsarray
+        return rsarray.mgrid(*ranges)
 
     def __getitem__(self, item):
-        # numpy 语义：mgrid[start:stop:step, ...] 等价于 mgrid(start:stop:step, ...)
-        import rsnumpy
+        # 数组语义：mgrid[start:stop:step, ...] 等价于 mgrid(start:stop:step, ...)
+        import rsarray
         if not isinstance(item, tuple):
             item = (item,)
-        return rsnumpy.mgrid(*item)
+        return rsarray.mgrid(*item)
 
     def __repr__(self):
         return "mgrid"
@@ -60,18 +60,18 @@ mgrid = _MGrid()
 
 
 class _OGGrid:
-    """``np.ogrid`` 的带文档包装（调用/下标转发到 rsnumpy 顶层实现）。"""
+    """``np.ogrid`` 的带文档包装（调用/下标转发到 rsarray 顶层实现）。"""
 
     def __call__(self, *ranges):
-        import rsnumpy
-        return rsnumpy.ogrid(*ranges)
+        import rsarray
+        return rsarray.ogrid(*ranges)
 
     def __getitem__(self, item):
-        # numpy 语义：ogrid[start:stop:step, ...] 等价于 ogrid(start:stop:step, ...)
-        import rsnumpy
+        # 数组语义：ogrid[start:stop:step, ...] 等价于 ogrid(start:stop:step, ...)
+        import rsarray
         if not isinstance(item, tuple):
             item = (item,)
-        return rsnumpy.ogrid(*item)
+        return rsarray.ogrid(*item)
 
     def __repr__(self):
         return "ogrid"
@@ -86,12 +86,12 @@ _REEXPORT_NAMES = (
 
 
 def __getattr__(name):
-    # 惰性从 rsnumpy 顶层取回（lib 在 rsnumpy 初始化期间导入，
+    # 惰性从 rsarray 顶层取回（lib 在 rsarray 初始化期间导入，
     # 模块级取属性会撞上部分初始化的命名空间）。
     if name in _REEXPORT_NAMES:
-        import rsnumpy
-        return getattr(rsnumpy, name)
-    raise AttributeError(f"module 'rsnumpy.lib._index_tricks_impl' has no "
+        import rsarray
+        return getattr(rsarray, name)
+    raise AttributeError(f"module 'rsarray.lib._index_tricks_impl' has no "
                          f"attribute {name!r}")
 
 

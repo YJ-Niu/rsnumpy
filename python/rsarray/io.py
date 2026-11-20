@@ -3,7 +3,7 @@
 
 from itertools import accumulate as _accumulate
 
-import rsnumpy.num_core as _core
+import rsarray.num_core as _core
 
 
 def _get_ndarray():
@@ -113,7 +113,7 @@ def loadtxt(fname, dtype=float, comments='#', delimiter=None, converters=None,
             converted = [
                 tuple(_convert_field(t, dtype[nm]) for nm, t in zip(names, row))
                 for row in rows]
-            import rsnumpy as _npmod
+            import rsarray as _npmod
             result = _npmod.array(converted, dtype=dtype)
             return result[0] if len(result) == 1 else result
         result = _get_ndarray()(rows)
@@ -129,7 +129,7 @@ def loadtxt(fname, dtype=float, comments='#', delimiter=None, converters=None,
             converted = [
                 tuple(_convert_field(t, dtype[nm]) for nm, t in zip(names, row))
                 for row in rows]
-            import rsnumpy as _npmod
+            import rsarray as _npmod
             result = _npmod.array(converted, dtype=dtype)
             return result[0] if len(result) == 1 else result
         result = _get_ndarray()(rows)
@@ -200,7 +200,7 @@ def _classify_gft_dtype(dtype):
 
 
 def _split_fields(line, delimiter):
-    """按 numpy LineSplitter 规则将一行拆成字段。
+    """按 LineSplitter 规则将一行拆成字段。
 
     - delimiter=None：先去除首尾换行，再按空白拆分。
     - 整数：定宽切片（空格有意义，仅去除换行）。
@@ -234,7 +234,7 @@ def genfromtxt(fname, dtype=float, comments='#', delimiter=None, skip_header=0,
                deletechars=None, replace_space='_', autostrip=False,
                case_sensitive=True, defaultfmt='f%i', unpack=None, usemask=False,
                loose=True, invalid_raise=True, max_rows=None, encoding=None):
-    """从文本文件或类文件对象加载数据，缺失值填充为 NaN（兼容 numpy.genfromtxt）。"""
+    """从文本文件或类文件对象加载数据，缺失值填充为 NaN（兼容 genfromtxt）。"""
     if hasattr(fname, 'read'):
         content = fname.read()
         if isinstance(content, bytes):
@@ -402,7 +402,7 @@ def genfromtxt(fname, dtype=float, comments='#', delimiter=None, skip_header=0,
         [parse_val(parts[ci], ci, 'f8') for ci in sel_indices]
         for parts in str_rows
     ]
-    # 单列数据压成一维，与 numpy 一致（如逐行单值 -> [0. 1. 2. ...]）。
+    # 单列数据压成一维，与标准语义一致（如逐行单值 -> [0. 1. 2. ...]）。
     if rows and all(len(r) == 1 for r in rows):
         data = [r[0] for r in rows]
     elif len(rows) == 1:

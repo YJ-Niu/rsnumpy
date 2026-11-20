@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""numpy._core.multiarray 兼容实现（C-helper 的 Python 版）。
+"""rsarray._core.multiarray 兼容实现（C-helper 的 Python 版）。
 
 提供 ``_vec_string``（字符串方法向量化）、``scalar``（pickle 协议
 构造标量）以及结构化数组二进制 pack/unpack 辅助。
@@ -11,8 +11,8 @@ __all__ = ['_vec_string', 'scalar', '_get_madvise_hugepage']
 
 
 def _rs():
-    import rsnumpy
-    return rsnumpy
+    import rsarray
+    return rsarray
 
 
 def _flat_values(arr):
@@ -35,9 +35,9 @@ def _is_string_array(arr):
 
 
 def _vec_string(a, descr, func, args=()):
-    """对字符串数组逐元素应用 str/bytes 方法（numpy ``_vec_string`` 兼容）。
+    """对字符串数组逐元素应用 str/bytes 方法（``_vec_string`` 兼容）。
 
-    校验顺序与 numpy 一致：args 类型 → 输入类型 → 广播 →
+    校验顺序与标准语义一致：args 类型 → 输入类型 → 广播 →
     结果 dtype → 方法存在 → 逐元素应用。
     """
     rs = _rs()
@@ -94,12 +94,12 @@ def _vec_string(a, descr, func, args=()):
 
 
 def scalar(dtype, obj):
-    """从 (dtype, value) 构造标量（numpy ``core.multiarray.scalar`` 兼容）。
+    """从 (dtype, value) 构造标量（``core.multiarray.scalar`` 兼容）。
 
-    - int 值按 numpy C 语义视为内存地址：rsnumpy 无地址协议，恒抛
+    - int 值按 C 语义视为内存地址：rsarray 无地址协议，恒抛
       RuntimeError（pickle 兼容性测试依赖此行为）。
     - 结构化 dtype 接受字段值元组，返回记录标量（_Record）。
-    - 纯 object dtype 不接受元组/列表（numpy 抛 TypeError）。
+    - 纯 object dtype 不接受元组/列表（抛 TypeError）。
     """
     rs = _rs()
     dt = rs.dtype(dtype)
@@ -124,7 +124,7 @@ def scalar(dtype, obj):
 
 
 def _get_madvise_hugepage(*args, **kwargs):
-    """rsnumpy 无 hugepage 支持。"""
+    """rsarray 无 hugepage 支持。"""
     return False
 
 
@@ -374,12 +374,12 @@ def unpack_array_bytes(data, dt, n, byteorder=None):
 
 
 def dot(a, b):
-    """ndarray 点积（numpy._core.multiarray.dot 兼容）。"""
-    import rsnumpy
-    return rsnumpy.dot(a, b)
+    """ndarray 点积（rsarray._core.multiarray.dot 兼容）。"""
+    import rsarray
+    return rsarray.dot(a, b)
 
 
 def _get_ndarray_c_version(*args, **kwargs):
-    """C 层 ndarray 版本号桩：rsnumpy 无对应 C 实现（相关测试经 conftest skip）。"""
+    """C 层 ndarray 版本号桩：rsarray 无对应 C 实现（相关测试经 conftest skip）。"""
     raise NotImplementedError(
-        "rsnumpy has no C _get_ndarray_c_version; test is expected to be skipped")
+        "rsarray has no C _get_ndarray_c_version; test is expected to be skipped")

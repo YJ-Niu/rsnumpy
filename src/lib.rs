@@ -84,7 +84,7 @@ pub(crate) fn parse_py_list_to_flat(data: &Bound<'_, PyAny>) -> PyResult<(Vec<f6
     } else if let Ok(val) = data.extract::<i32>() {
         Ok((vec![val as f64], vec![]))
     } else if let Ok(listed) = data.call_method0("tolist") {
-        // 数组类对象（如 numpy.ndarray / numpy 标量）：先转为 Python list 再解析。
+        // 数组类对象（如 ndarray / 标量）：先转为 Python list 再解析。
         parse_py_list_to_flat(&listed)
     } else {
         Err(PyTypeError::new_err("Unsupported data type"))
@@ -162,7 +162,7 @@ fn parse_py_categorized(data: &Bound<'_, PyAny>) -> PyResult<(Vec<f64>, Vec<usiz
     } else if let Ok(tuple) = data.cast::<PyTuple>() {
         tuple.iter().collect()
     } else if let Ok(listed) = data.call_method0("tolist") {
-        // 数组类对象（如 numpy.ndarray / numpy 标量）：转为 Python list 后再解析，
+        // 数组类对象（如 ndarray / 标量）：转为 Python list 后再解析，
         // 由 tolist 产出的 int/float/bool 保留原类别以正确推导 dtype。
         return parse_py_categorized(&listed);
     } else {
@@ -222,7 +222,7 @@ fn parse_py_categorized(data: &Bound<'_, PyAny>) -> PyResult<(Vec<f64>, Vec<usiz
 }
 
 /// 递归解析可能包含复数的 Python 序列，返回 (实部扁平, 虚部扁平, 形状, 是否含复数)。
-/// 实部/虚部等长（实数元素的虚部填 0）。numpy 复数数组通过 `tolist()` 回退处理。
+/// 实部/虚部等长（实数元素的虚部填 0）。复数数组通过 `tolist()` 回退处理。
 fn parse_py_complex(data: &Bound<'_, PyAny>) -> PyResult<(Vec<f64>, Vec<f64>, Vec<usize>, bool)> {
     // 标量实数（int/float/bool 均可 extract 为 f64）。
     if let Ok(v) = data.extract::<f64>() {
@@ -237,7 +237,7 @@ fn parse_py_complex(data: &Bound<'_, PyAny>) -> PyResult<(Vec<f64>, Vec<f64>, Ve
     } else if let Ok(tuple) = data.cast::<PyTuple>() {
         tuple.iter().collect()
     } else if let Ok(listed) = data.call_method0("tolist") {
-        // numpy 数组 / 标量等数组类对象：转为 Python 原生对象后再解析。
+        // 数组 / 标量等数组类对象：转为 Python 原生对象后再解析。
         return parse_py_complex(&listed);
     } else {
         return Err(PyTypeError::new_err("Unsupported data type"));
@@ -465,7 +465,7 @@ fn format_float_scalar(val: f64) -> String {
         };
     }
     if val == 0.0 {
-        // 保留负零符号，与 numpy 一致（例如 [-0.  0.  1.]）。
+        // 保留负零符号，与参考实现一致（例如 [-0.  0.  1.]）。
         return if val.is_sign_negative() {
             "-0.".to_string()
         } else {
@@ -493,7 +493,7 @@ fn format_float_scalar(val: f64) -> String {
     }
 }
 
-/// NdArray: 类似 NumPy ndarray 的多维数组
+/// NdArray: 类似 ndarray 的多维数组
 ///
 /// 复数支持：`data` 恒为实部（保留形状）；`imag` 为 `Some(虚部)`（与 `data` 同形状）
 /// 时表示复数数组，为 `None` 时表示实数数组（向后兼容，原有算子只需补 `imag: None`）。
@@ -559,7 +559,7 @@ impl NdArray {
 
     fn __repr__(&self) -> PyResult<String> {
         let arr_str = format_array_repr(&self.data, "");
-        Ok(format!("rsnumpy.ndarray({}) dtype=float64", arr_str))
+        Ok(format!("rsarray.ndarray({}) dtype=float64", arr_str))
     }
 
     fn __str__(&self) -> PyResult<String> {
@@ -837,7 +837,7 @@ impl NdArray {
         Ok(vec_usize_to_pytuple(py, &s).into_any())
     }
 
-    // NumPy 数组接口协议：底层恒为 f64，暴露为 '<f8' 供真实 numpy/matplotlib 直接消费。
+    // 数组接口协议：底层恒为 f64，暴露为 '<f8' 供 matplotlib 等第三方库直接消费。
     #[getter]
     fn __array_interface__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         build_array_interface(py, &self.data, "<f8")
@@ -847,7 +847,7 @@ impl NdArray {
     // 供 rsplotlib 等下游用 PyO3 `PyBuffer<f64>` 零拷贝读取，免去序列化为 bytes 的开销。
     // 消费方（如 PyBuffer::get）以 PyBUF_FULL_RO 请求，包含 shape/strides，故非连续数组亦可如实描述。
     //
-    // 缓冲区**可写**（与 numpy 一致，见 numpy buffer.c array_getbuffer）：rsnumpy 每个
+    // 缓冲区**可写**（与参考实现一致）：rsarray 每个
     // `NdArray` 都自持数据（`data: Array<f64, IxDyn>` 为拥有型，所有切片/索引路径均
     // `to_owned`/`from_shape_vec` 物化副本，无共享视图），故经缓冲写回不会破坏任何父数组。
     // 这让 scicore 等下游把计算结果直接写进输出数组（零拷贝），免去
@@ -911,7 +911,7 @@ impl NdArray {
             (*view).obj = slf.into_any().into_ptr();
             (*view).buf = buf_ptr;
             (*view).len = (len_elems as pyo3::ffi::Py_ssize_t) * itemsize;
-            // 数据自持（拥有型数组、无共享视图）→ 可写，与 numpy 默认行为一致。
+            // 数据自持（拥有型数组、无共享视图）→ 可写，与参考实现默认行为一致。
             (*view).readonly = 0;
             (*view).itemsize = itemsize;
             // f64 的格式字符为 "d"；使用静态 C 字符串，CPython 不会释放它。
@@ -1191,7 +1191,7 @@ impl NdArray {
     }
 
     fn astype(&self, dtype: &str) -> PyResult<NdArray> {
-        // rsnumpy 内部元素类型固定为 f64，这里只支持把 f64 截断为整数（int/int32/int64）。
+        // rsarray 内部元素类型固定为 f64，这里只支持把 f64 截断为整数（int/int32/int64）。
         // 对于 float* / 其它类型，保持 f64 行为（与旧版一致）。
         let dt = dtype.to_lowercase();
         let is_complex = matches!(
@@ -1229,7 +1229,7 @@ impl NdArray {
                 data: arr,
             })
         } else {
-            // float* 或其它：丢弃虚部（与 numpy astype 到实数类型一致）。
+            // float* 或其它：丢弃虚部（与 astype 到实数类型一致）。
             Ok(NdArray {
                 imag: None,
                 data: self.data.clone(),
@@ -1350,7 +1350,7 @@ impl NdArray {
     }
 
     fn __eq__(&self, other: &Bound<'_, PyAny>) -> PyResult<NdArray> {
-        // 精确 IEEE 比较（numpy 语义）：inf==inf 为 True、nan==nan 为 False；
+        // 精确 IEEE 比较（数组语义）：inf==inf 为 True、nan==nan 为 False；
         // 不得用 |a-b|<eps 容差（inf-inf=nan 会误判）。
         binary_op_lr(self, other, |a, b| if a == b { 1.0 } else { 0.0 })
     }
@@ -2360,7 +2360,7 @@ where
             data: out,
         });
     }
-    // 包装后的 rsnumpy ndarray（带 `_array` 的 Python 对象）：解包后再广播。
+    // 包装后的 rsarray ndarray（带 `_array` 的 Python 对象）：解包后再广播。
     // 必须在 f64 检查**之前**——包装对象会经 `__float__`（取首元素）被误读成标量，
     // 导致 `raw op wrapper` 算成 `raw op wrapper[0]` 而非逐元素。
     #[allow(clippy::collapsible_if)]
@@ -2539,7 +2539,7 @@ fn cbin_elem(ar: f64, ai: f64, br: f64, bi: f64, op: CBinOp) -> (f64, f64) {
     }
 }
 
-/// numpy 广播规则下的输出形状（尾维对齐）。
+/// 广播规则下的输出形状（尾维对齐）。
 fn broadcast_shape(a: &[usize], b: &[usize]) -> Result<Vec<usize>, String> {
     let n = a.len().max(b.len());
     let mut out = vec![0usize; n];
@@ -2776,7 +2776,7 @@ fn is_f_contiguous(shape: &[usize], strides: &[isize]) -> bool {
     true
 }
 
-/// ArrayFlags - 数组内存布局信息，与 NumPy 的 np.ndarray.flags 兼容
+/// ArrayFlags - 数组内存布局信息，与标准 ndarray.flags 兼容
 #[pyclass(name = "ArrayFlags")]
 struct ArrayFlags {
     shape: Vec<usize>,
@@ -2862,7 +2862,7 @@ impl NdArrayIter {
     }
 }
 
-// ========== f64 数组 → 指定 dtype 的原始字节（供 __array_interface__ 与 numpy 互操作） ==========
+// ========== f64 数组 → 指定 dtype 的原始字节（供 __array_interface__ 与第三方数组库互操作） ==========
 fn put_scalar_bytes(out: &mut Vec<u8>, le: &[u8], little: bool) {
     if little {
         out.extend_from_slice(le);

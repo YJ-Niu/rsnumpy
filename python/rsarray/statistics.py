@@ -3,7 +3,7 @@
 
 import builtins as _builtins
 
-import rsnumpy.num_core as _core
+import rsarray.num_core as _core
 
 
 def _nd():
@@ -63,7 +63,7 @@ def _reshape_nested(flat, shape):
 def _py_var_std(a, axis, ddof, want_std):
     """方差/标准差的原生实现（无外部依赖），支持实数与复数数组。
 
-    与 numpy 语义一致：var = mean(|x - mean|^2)，std = sqrt(var)；复数输入结果为实数。
+    与 数组语义一致：var = mean(|x - mean|^2)，std = sqrt(var)；复数输入结果为实数。
     支持 axis=None 或整数 axis。用于补齐 Rust 端在高维/复数场景下的能力缺口。
     """
     a_arr = a if hasattr(a, '_array') else _nd()(a)
@@ -78,7 +78,7 @@ def _py_var_std(a, axis, ddof, want_std):
 
     if axis is None:
         # 全归约返回带 .dtype 的 0-d ndarray（var/std 结果恒为实数 float64），
-        # 与 numpy 一致（np.var(complex) 返回带 .dtype 的 float64 标量）。
+        # 与标准语义一致（np.var(complex) 返回带 .dtype 的 float64 标量）。
         return _nd()(reduce_vals(flat), _dtype='float64')
 
     nd = len(shape)
@@ -116,13 +116,13 @@ def _py_var_std(a, axis, ddof, want_std):
 
     nested = _reshape_nested(result, out_shape)
     if not out_shape:
-        # 0-d 结果（全轴归约）返回带 .dtype 的 0-d ndarray，与 numpy 一致
+        # 0-d 结果（全轴归约）返回带 .dtype 的 0-d ndarray，与标准语义一致
         return _nd()(nested, _dtype='float64')
     return _nd()(nested)
 
 
 def _f64_scalar(v):
-    """把 Python float 包装为 rsnumpy float64 标量（带 shape/itemsize 语义）。"""
+    """把 Python float 包装为 rsarray float64 标量（带 shape/itemsize 语义）。"""
     try:
         from .__init__ import _SCALAR_CLASS_BY_DTYPE
         _cls = _SCALAR_CLASS_BY_DTYPE.get('float64')
@@ -134,7 +134,7 @@ def _f64_scalar(v):
 
 
 def _insert_keepdims(res, nd0, axes):
-    """在归约轴位置为 res 插入 size-1 轴（numpy keepdims=True 语义）。"""
+    """在归约轴位置为 res 插入 size-1 轴（keepdims=True 语义）。"""
     _axset = set(axes)
     _new_shape = []
     _si = 0
@@ -149,11 +149,11 @@ def _insert_keepdims(res, nd0, axes):
 
 def _reduce_given_mean(a, mean, axis, keepdims, ddof, want_std, out,
                        res_dt=None):
-    """基于预计算 mean 的 var/std（numpy mean= 语义）。
+    """基于预计算 mean 的 var/std（mean= 语义）。
 
     直接信任传入 mean（不重算）：var = sum(|x-mean|^2)/n_eff，
     std = sqrt(var)。支持 axis=None/int/tuple；keepdims 恢复 size-1 轴；
-    out 被填充并原样返回（numpy 语义）；res_dt 非空时按 numpy 规则重标
+    out 被填充并原样返回（数组语义）；res_dt 非空时按 规则重标
     结果 dtype（如 float16 输入保持 float16）。
     """
     _m = mean
@@ -163,7 +163,7 @@ def _reduce_given_mean(a, mean, axis, keepdims, ddof, want_std, out,
     except Exception:
         pass
     if not hasattr(a, '_array') and not hasattr(a, '_data'):
-        # list/tuple 输入（numpy 非 array 参数包装语义）；MaskedArray 有
+        # list/tuple 输入（非 array 参数包装语义）；MaskedArray 有
         # _data（非 _array），不可包装降级（否则 a - _m 走 ndarray 算术）
         a = _nd()(a)
     diff = a - _m
@@ -179,15 +179,15 @@ def _reduce_given_mean(a, mean, axis, keepdims, ddof, want_std, out,
         _n *= diff.shape[_ax]
     _n -= ddof
     _axset = set(_axes)
-    # 元素级 |x-mean|^2（实数即 (x-mean)^2，复数取模平方——numpy 语义）
+    # 元素级 |x-mean|^2（实数即 (x-mean)^2，复数取模平方——数组语义）
     _s = abs(diff) ** 2
     if _axset == set(range(nd)):
-        # 全归约：展平后直接求和；返回 float64 标量（numpy 语义带 .shape==()）
+        # 全归约：展平后直接求和；返回 float64 标量（数组语义带 .shape==()）
         _vals = _flatten_c(_s.tolist())
         _v = _builtins.sum(_vals) / _n
         res = _f64_scalar((_v ** 0.5) if want_std else _v)
         if res_dt is not None and str(res_dt) != 'float64':
-            from rsnumpy.lib._nanfunctions_impl import _scalar_of
+            from rsarray.lib._nanfunctions_impl import _scalar_of
             res = _scalar_of(res_dt, float(res))
         if out is not None:
             try:
@@ -225,10 +225,10 @@ def _reduce_given_mean(a, mean, axis, keepdims, ddof, want_std, out,
 
 
 def _check_reduce_axis(a, axis):
-    """归约 axis 校验（numpy 语义：越界 → AxisError）。
+    """归约 axis 校验（数组语义：越界 → AxisError）。
 
     越界 axis 直达 _core 会触发 Rust panic（进程 abort）。
-    返回归一化 axis：0-d 数组仅允许 axis=0（numpy 怪癖，返回自身），
+    返回归一化 axis：0-d 数组仅允许 axis=0（历史语义细节，返回自身），
     归一化为 None（全归约）——Rust 对 0-d 的 axis=0 也会 panic。
     """
     if axis is None:
@@ -243,12 +243,12 @@ def _check_reduce_axis(a, axis):
         _axes = [axis + _dim if axis < 0 else axis]
     if _dim == 0:
         if any(x != 0 for x in _axes):
-            from rsnumpy.exceptions import AxisError
+            from rsarray.exceptions import AxisError
             raise AxisError(
                 f"axis {axis} is out of bounds for array of dimension {_dim}")
         return None
     if any(x < 0 or x >= _dim for x in _axes):
-        from rsnumpy.exceptions import AxisError
+        from rsarray.exceptions import AxisError
         raise AxisError(
             f"axis {axis} is out of bounds for array of dimension {_dim}")
     return axis
@@ -256,11 +256,11 @@ def _check_reduce_axis(a, axis):
 
 def sum(a, axis=None, dtype=None, out=None, keepdims=False, initial=None, where=True):
     """计算数组元素之和。"""
-    # matrix：保持 2-D 方向（numpy 语义），委托 matrix.sum（在 .A 上计算，无递归）
+    # matrix：保持 2-D 方向（数组语义），委托 matrix.sum（在 .A 上计算，无递归）
     if type(a).__name__ == 'matrix':
         return a.sum(axis=axis, dtype=dtype)
     _ = out, initial, where
-    # 0-d 短路：Rust 归约对 0-d 输入会 abort；numpy 返回保持原 dtype 的 0-d
+    # 0-d 短路：Rust 归约对 0-d 输入会 abort；返回保持原 dtype 的 0-d
     _a_raw = _ensure_raw(a)
     arr_dtype = getattr(a, '_dtype', 'float64') if hasattr(a, '_dtype') else 'float64'
     res_dt = dtype if dtype is not None else arr_dtype
@@ -269,7 +269,7 @@ def sum(a, axis=None, dtype=None, out=None, keepdims=False, initial=None, where=
     axis = _check_reduce_axis(a, axis)
     raw_result = _core.sum(_a_raw, axis, keepdims)
     if axis is None and not keepdims:
-        # numpy 语义：全归约(0-d)返回带 .dtype 的标量对象(np.generic)，
+        # 数组语义：全归约(0-d)返回带 .dtype 的标量对象(np.generic)，
         # 而非 Python 标量。按输入 dtype 包装，保留 int64/float64。
         return _nd()._wrap(raw_result, _dtype=res_dt)
     return _nd()(raw_result, _dtype=res_dt)
@@ -278,14 +278,14 @@ def sum(a, axis=None, dtype=None, out=None, keepdims=False, initial=None, where=
 def mean(a, axis=None, dtype=None, out=None, keepdims=False, where=True):
     """计算数组元素的平均值。"""
     _ = where
-    # 0-d 短路：Rust 归约会 abort；numpy 返回按 dtype 规则标注的 0-d
+    # 0-d 短路：Rust 归约会 abort；返回按 dtype 规则标注的 0-d
     _a_raw = _ensure_raw(a)
     arr_dtype = getattr(a, '_dtype', 'float64') if hasattr(a, '_dtype') else 'float64'
     res_dt = _mean_result_dtype(dtype if dtype is not None else arr_dtype)
     if not tuple(getattr(_a_raw, 'shape', ())):
         return _nd()(_a_raw, _dtype=res_dt)
     axis = _check_reduce_axis(a, axis)
-    # numpy 语义：空数组 → NaN + "Mean of empty slice" 告警
+    # 数组语义：空数组 → NaN + "Mean of empty slice" 告警
     try:
         if _ensure_raw(a).size == 0:
             import warnings as _warn_mean
@@ -312,17 +312,17 @@ def mean(a, axis=None, dtype=None, out=None, keepdims=False, where=True):
         return _cur
     raw_result = _core.mean(_ensure_raw(a), axis, keepdims)
     if axis is not None:
-        # numpy semantics: reduction along an explicit axis returns an ndarray
+        # semantics: reduction along an explicit axis returns an ndarray
         # (0-d when all dimensions are reduced), never a Python scalar。
-        # 结果 dtype 按 numpy 规则（float/complex 保留精度，其余 float64）。
+        # 结果 dtype 按 规则（float/complex 保留精度，其余 float64）。
         res = _nd()(raw_result, _dtype=res_dt)
     elif hasattr(raw_result, 'ndim') and raw_result.ndim == 0:
-        # numpy 语义：全归约(0-d)返回带 .dtype 的标量对象(np.generic)，
+        # 数组语义：全归约(0-d)返回带 .dtype 的标量对象(np.generic)，
         # 而非 Python float。
         res = _nd()._wrap(raw_result, _dtype=res_dt)
     else:
         res = _wrap(raw_result)
-    # numpy 语义：out 被填充且被返回
+    # 数组语义：out 被填充且被返回
     if out is not None:
         try:
             out[...] = res
@@ -372,7 +372,7 @@ def _values_equal(a, b):
 
 
 def _var_std_result_dtype(dt):
-    """var/std 结果 dtype（numpy 语义）：int/uint/bool/complex/object → float64，
+    """var/std 结果 dtype（数组语义）：int/uint/bool/complex/object → float64，
     float 保留精度（float16/32/64/longdouble）。"""
     if isinstance(dt, str):
         s = dt.lstrip('<>=|')
@@ -385,7 +385,7 @@ def _var_std_result_dtype(dt):
 
 
 def _mean_result_dtype(dt):
-    """mean 结果 dtype（numpy 语义）：float/complex 保留精度，其余 float64。"""
+    """mean 结果 dtype（数组语义）：float/complex 保留精度，其余 float64。"""
     if isinstance(dt, str):
         s = dt.lstrip('<>=|')
         k = s[:1] if s else ''
@@ -398,20 +398,20 @@ def std(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False, where=True,
         correction=None, mean=None):
     """计算数组元素的标准差。"""
     _ = where
-    # 0-d 短路：Rust 归约会 abort；numpy 返回按 dtype 规则标注的 0-d
+    # 0-d 短路：Rust 归约会 abort；返回按 dtype 规则标注的 0-d
     # oracle 语义：未显式指定 dtype 时 var/std 结果恒 float64
     _a_raw = _ensure_raw(a)
     res_dt = dtype if dtype is not None else 'float64'
     if not tuple(getattr(_a_raw, 'shape', ())):
         return _nd()(0.0, _dtype=res_dt)
     axis = _check_reduce_axis(a, axis)
-    # numpy 兼容：correction 与 ddof 同义且互斥（ddof 非零且给了 correction 报错）
+    # 兼容：correction 与 ddof 同义且互斥（ddof 非零且给了 correction 报错）
     if correction is not None:
         if ddof != 0:
             raise ValueError(
                 "ddof and correction can't be provided simultaneously.")
         ddof = correction
-    # numpy 语义：空数组 → NaN + "Mean of empty slice" 告警
+    # 数组语义：空数组 → NaN + "Mean of empty slice" 告警
     try:
         if _ensure_raw(a).size == 0:
             import warnings as _warn_std
@@ -420,7 +420,7 @@ def std(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False, where=True,
     except Exception:
         pass
     if mean is not None:
-        # numpy mean= 语义：信任预计算 mean（参数名遮蔽模块级 mean，
+        # mean= 语义：信任预计算 mean（参数名遮蔽模块级 mean，
         # 旧实现误将其当函数调用致整个分支被 except 跳过）
         return _reduce_given_mean(a, mean, axis, keepdims, ddof, True, out,
                                   res_dt)
@@ -449,7 +449,7 @@ def var(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False, where=True,
         correction=None, mean=None):
     """计算数组元素的方差。"""
     _ = where
-    # 0-d 短路：Rust 归约会 abort；numpy 返回按 dtype 规则标注的 0-d
+    # 0-d 短路：Rust 归约会 abort；返回按 dtype 规则标注的 0-d
     # oracle 语义：未显式指定 dtype 时 var/std 结果恒 float64
     _a_raw = _ensure_raw(a)
     res_dt = dtype if dtype is not None else 'float64'
@@ -461,7 +461,7 @@ def var(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False, where=True,
             raise ValueError(
                 "ddof and correction can't be provided simultaneously.")
         ddof = correction
-    # numpy 语义：空数组 → NaN + "Mean of empty slice" 告警
+    # 数组语义：空数组 → NaN + "Mean of empty slice" 告警
     try:
         if _ensure_raw(a).size == 0:
             import warnings as _warn_var
@@ -470,7 +470,7 @@ def var(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False, where=True,
     except Exception:
         pass
     if mean is not None:
-        # numpy mean= 语义：信任预计算 mean（参数名遮蔽模块级 mean）
+        # mean= 语义：信任预计算 mean（参数名遮蔽模块级 mean）
         return _reduce_given_mean(a, mean, axis, keepdims, ddof, False, out,
                                   res_dt)
     if axis is not None:
@@ -532,7 +532,7 @@ def ptp(a, axis=None, out=None, keepdims=False):
 
 
 def _median_1d(col):
-    """1-d 中位数（numpy 语义：NaN 视为最大值排到末尾，取中间；偶数取均值）。"""
+    """1-d 中位数（数组语义：NaN 视为最大值排到末尾，取中间；偶数取均值）。"""
     col = list(col)
     if not col:
         import warnings as _w_med
@@ -574,7 +574,7 @@ def _seti(d, idx, v):
 
 
 def _median_reduce(vals, axis, fn):
-    """嵌套列表沿 axis 逐切片应用 fn（纯 Python，numpy 归约语义）。"""
+    """嵌套列表沿 axis 逐切片应用 fn（纯 Python，归约语义）。"""
     import itertools as _it
 
     def rec(data, depth):
@@ -599,7 +599,7 @@ def _median_reduce(vals, axis, fn):
 
 
 def _percentile_1d(col, q):
-    """1-d 百分位数（numpy 'linear' 语义；NaN 视为最大值排到末尾）。"""
+    """1-d 百分位数（'linear' 语义；NaN 视为最大值排到末尾）。"""
     col = list(col)
     n = len(col)
     if n == 0:
@@ -623,12 +623,12 @@ def _percentile_1d(col, q):
 
 
 def median(a, axis=None, out=None, overwrite_input=False, keepdims=False):
-    """计算数组的中位数（numpy 2.x 签名：overwrite_input/keepdims；
+    """计算数组的中位数（2.x 签名：overwrite_input/keepdims；
     axis 支持 int/元组；NaN 传染 slice；m8/M8 支持 NaT；子类保留）。
     纯 Python 实现（委托 _nanfunctions_impl._median_py）——Rust _core.median
     仅支持 f64/2D/线性，int/高维/元组轴会 panic abort。"""
     _ = overwrite_input
-    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    from rsarray.lib import _nanfunctions_impl as _nfi
     arr = a if hasattr(a, '_array') else _wrap(a)
     # 子类钩子（gh-3846）：override 了 mean 的 ndarray 子类 → 委托其 mean
     _NDC = _nd()
@@ -669,8 +669,8 @@ def average(a, axis=None, weights=None, returned=False):
 def percentile(a, q, axis=None, out=None, overwrite_input=False,
                method='linear', keepdims=False, weights=None,
                interpolation=None):
-    """计算数组的百分位数（numpy 2.x：method/weights；interpolation 为弃用别名）。"""
-    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    """计算数组的百分位数（2.x：method/weights；interpolation 为弃用别名）。"""
+    from rsarray.lib import _nanfunctions_impl as _nfi
     if interpolation is not None:
         if method == 'linear':
             method = interpolation
@@ -684,7 +684,7 @@ def percentile(a, q, axis=None, out=None, overwrite_input=False,
 
 def quantile(a, q, axis=None, out=None, method='linear', keepdims=False,
              weights=None, interpolation=None):
-    """计算数组的分位数（q ∈ [0,1]；numpy 2.x：method/weights）。"""
+    """计算数组的分位数（q ∈ [0,1]；2.x：method/weights）。"""
     if interpolation is not None:
         if method == 'linear':
             method = interpolation
@@ -692,7 +692,7 @@ def quantile(a, q, axis=None, out=None, method='linear', keepdims=False,
             raise ValueError(
                 "interpolation and method cannot be used simultaneously")
     # * 100（整数乘法）：Fraction q 保持精确（Fraction*int=Fraction）；
-    # 嵌套列表递归缩放（结果形状按平铺 q，numpy 断言可广播）
+    # 嵌套列表递归缩放（结果形状按平铺 q，断言可广播）
     def _scale_q(qq):
         if isinstance(qq, (list, tuple)):
             return [_scale_q(v) for v in qq]
@@ -704,7 +704,7 @@ def quantile(a, q, axis=None, out=None, method='linear', keepdims=False,
 
 def nanmedian(a, axis=None, out=None, overwrite_input=False, keepdims=False):
     """忽略 NaN 的中位数（委托 _nanfunctions_impl：Rust 快路径 + 逐 slice 归约）。"""
-    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    from rsarray.lib import _nanfunctions_impl as _nfi
     return _nfi.nanmedian(a, axis=axis, out=out,
                           overwrite_input=overwrite_input, keepdims=keepdims)
 
@@ -713,7 +713,7 @@ def nanpercentile(a, q, axis=None, out=None, overwrite_input=False,
                   method='linear', keepdims=False, weights=None,
                   interpolation=None):
     """忽略 NaN 的百分位数（委托 _nanfunctions_impl）。"""
-    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    from rsarray.lib import _nanfunctions_impl as _nfi
     return _nfi.nanpercentile(a, q, axis=axis, out=out,
                               overwrite_input=overwrite_input, method=method,
                               keepdims=keepdims, weights=weights,
@@ -721,14 +721,14 @@ def nanpercentile(a, q, axis=None, out=None, overwrite_input=False,
 
 
 def argmax(a, axis=None, out=None, keepdims=False):
-    """返回数组沿指定轴的最大值索引（全归约返回 intp 标量，numpy 语义）。"""
+    """返回数组沿指定轴的最大值索引（全归约返回 intp 标量，数组语义）。"""
     _ = out
     arr = a if hasattr(a, '_array') else _wrap(a)
     if axis is not None and axis < 0:
         axis += arr.ndim
     raw = _core.argmax_axis(_ensure_raw(arr), axis)
     if axis is None:
-        # 全归约返回带 .dtype 的 0-d intp（numpy 语义），而非 Python int
+        # 全归约返回带 .dtype 的 0-d intp（数组语义），而非 Python int
         return _nd()._wrap(raw, _dtype='int64')
     result = _nd()._wrap(raw, _dtype='int64')
     if keepdims:
@@ -746,7 +746,7 @@ def argmin(a, axis=None, out=None, keepdims=False):
         axis += arr.ndim
     raw = _core.argmin_axis(_ensure_raw(arr), axis)
     if axis is None:
-        # 全归约返回带 .dtype 的 0-d intp（numpy 语义），而非 Python int
+        # 全归约返回带 .dtype 的 0-d intp（数组语义），而非 Python int
         return _nd()._wrap(raw, _dtype='int64')
     result = _nd()._wrap(raw, _dtype='int64')
     if keepdims:
@@ -790,12 +790,12 @@ def lexsort(keys, axis=-1):
     if not isinstance(keys, (tuple, list)):
         keys = (keys,)
     nd = _nd()
-    # numpy 语义（gh-7528）：越界 axis → AxisError（避免 Rust panic）
+    # 数组语义（gh-7528）：越界 axis → AxisError（避免 Rust panic）
     _first = keys[0]
     _dim = int(_first.ndim) if hasattr(_first, 'ndim') else int(nd(_first).ndim)
     _ax = axis + _dim if axis < 0 else axis
     if _ax < 0 or _ax >= _dim:
-        from rsnumpy.exceptions import AxisError
+        from rsarray.exceptions import AxisError
         raise AxisError(
             f"axis {axis} is out of bounds for array of dimension {_dim}")
     raw_keys = []
@@ -1026,7 +1026,7 @@ def _hist_get_bin_edges(vals, bins, rng, weights):
             raise ValueError('`bins` must be positive, when an integer')
         fe, le = _hist_outer_edges(vals, rng)
     else:
-        import rsnumpy as _rs
+        import rsarray as _rs
         b_arr = bins if hasattr(bins, '_array') else _rs.array(bins)
         if b_arr.ndim > 1:
             raise ValueError('`bins` must be 1d, when an array')
@@ -1051,14 +1051,14 @@ def _hist_get_bin_edges(vals, bins, rng, weights):
 
 
 def _rs_flat(a):
-    import rsnumpy as _rs
+    import rsarray as _rs
     if hasattr(a, '_array'):
         return a.reshape((-1,)).tolist()
     return _rs.array(a).reshape((-1,)).tolist()
 
 
 def _rs_dtype_of(a):
-    import rsnumpy as _rs
+    import rsarray as _rs
     return (a if hasattr(a, '_array') else _rs.array(a)).dtype
 
 
@@ -1067,7 +1067,7 @@ def histogram(a, bins=10, range=None, weights=None, density=None):
     import bisect
     import math
     import warnings
-    import rsnumpy as _rs
+    import rsarray as _rs
     _ = density is None  # density 默认 None，等价 False
     if density is None:
         density = False
@@ -1100,7 +1100,7 @@ def histogram(a, bins=10, range=None, weights=None, density=None):
         if 0 <= b < nb:
             counts[b] += (w[i] if w is not None else 1)
     if density:
-        # numpy: n / db / n.sum()，n 是入界计数(含 outlier 会失真)
+        # —n / db / n.sum()，n 是入界计数(含 outlier 会失真)
         total = _builtins.sum(_builtins.float(c) for c in counts)
         if total > 0:
             counts = [_builtins.float(counts[i]) / (total * (edges[i + 1] - edges[i]))
@@ -1122,7 +1122,7 @@ _H2D_DEFAULT = object()
 
 def _hist2d_1d(a):
     """把输入展平为 float 列表。"""
-    import rsnumpy as _rs
+    import rsarray as _rs
     if hasattr(a, '_array'):
         return [_builtins.float(v) for v in a.reshape((-1,)).tolist()]
     return [_builtins.float(v) for v in _rs.array(a).reshape((-1,)).tolist()]
@@ -1130,7 +1130,7 @@ def _hist2d_1d(a):
 
 def _hist2d_edges(spec, vals, rng):
     """bin 规格(int 数 或 显式边界序列)+ range → 边界 float 列表。"""
-    import rsnumpy as _rs
+    import rsarray as _rs
     if isinstance(spec, (int, float)) and not isinstance(spec, bool):
         nb = _builtins.int(spec)
         if nb <= 0:
@@ -1152,7 +1152,7 @@ def _hist2d_edges(spec, vals, rng):
 
 def _hist2d_dispatch(x, y, bins, weights, kw):
     """__array_function__ dispatch：x/y/weights/bins 中非 ndarray 的 dispatchable 触发。"""
-    import rsnumpy as _rs
+    import rsarray as _rs
     cands = [x, y, weights]
     if isinstance(bins, (list, tuple)):
         cands.extend(bins)
@@ -1181,7 +1181,7 @@ def histogram2d(x, y, bins=_H2D_DEFAULT, range=_H2D_DEFAULT,
     H 形状 (nbins_x, nbins_y)，H[i, j] = x 落在第 i 个 x-bin、y 落在第 j 个 y-bin 的计数。
     """
     import bisect
-    import rsnumpy as _rs
+    import rsarray as _rs
     kw = {}
     if bins is not _H2D_DEFAULT:
         kw['bins'] = bins
@@ -1308,7 +1308,7 @@ def histogramdd(sample, bins=10, range=None, density=False, weights=None):
     size = 1
     for n in nbins:
         size *= n
-    # bin 总数过大（如 10 维 bins=2**10 → 2**100）→ numpy 语义抛 ValueError
+    # bin 总数过大（如 10 维 bins=2**10 → 2**100）→ 数组语义抛 ValueError
     try:
         H = [0.0] * size
     except OverflowError:
@@ -1349,7 +1349,7 @@ def histogramdd(sample, bins=10, range=None, density=False, weights=None):
                 rem //= nbins[i]
             flat_w.append(vol)
         H = [h / (total * v) if v else h for h, v in zip(H, flat_w)]
-    import rsnumpy as _npmod
+    import rsarray as _npmod
     H_arr = _npmod.array(H).reshape(tuple(nbins))
     return H_arr, [_wrap(e) for e in edges]
 

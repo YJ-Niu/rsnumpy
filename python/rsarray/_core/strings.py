@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
-"""numpy._core.strings 兼容门面：strings 底层 ufunc 的 Python 等价物。
+"""rsarray._core.strings 兼容门面：strings 底层 ufunc 的 Python 等价物。
 
-NumPy 中这是 C 层 ufunc 模块；rsnumpy 的 ufunc 是 Python 层可调用
+参考实现中这是 C 层 ufunc 模块；rsarray 的 ufunc 是 Python 层可调用
 对象。test_strings 的 gh-28829 回归测试依赖
 ``np._core.strings._expandtabs_length.reduce(...)`` 对非字符串输入抛
 ``_UFuncNoLoopError``（消息含 "did not contain a loop"）。
@@ -9,7 +9,7 @@ NumPy 中这是 C 层 ufunc 模块；rsnumpy 的 ufunc 是 Python 层可调用
 
 import builtins
 
-from rsnumpy._core._exceptions import _UFuncNoLoopError
+from rsarray._core._exceptions import _UFuncNoLoopError
 
 
 def _no_loop_error(ufunc_name):
@@ -33,7 +33,7 @@ class _StringsUFunc:
         return self._impl(*args, **kwargs)
 
     def reduce(self, a, *args, **kwargs):
-        # strings ufunc 无 reduce 语义：numpy 直接按 no-loop 报错
+        # strings ufunc 无 reduce 语义：直接按 no-loop 报错
         if not _is_string_input(a):
             raise _no_loop_error(self._name)
         raise _no_loop_error(self._name)
@@ -47,7 +47,7 @@ def _is_string_input(x):
 
 
 def _expandtabs_length_impl(a, tabsize=8):
-    from rsnumpy import char as _char
+    from rsarray import char as _char
     vals = _char._decode(_char._get_strings(a))
     ts = int(tabsize)
     out = []
@@ -65,7 +65,7 @@ def _expandtabs_length_impl(a, tabsize=8):
                 if ch in '\n\r':
                     line_pos = 0
         out.append(new_len)
-    from rsnumpy import ndarray as _nd
+    from rsarray import ndarray as _nd
     shape = _char._shape_of(a)
     if isinstance(a, (str, bytes)) or shape == ():
         res = _nd([builtins.float(out[0]) if out else 0], _dtype='int64')

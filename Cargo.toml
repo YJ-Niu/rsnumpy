@@ -1,13 +1,13 @@
 [package]
-name = "rsnumpy"
+name = "rsarray"
 version = "1.2.10"
 edition = "2024"
-description = "A Rust-powered NumPy-compatible array library."
+description = "A high-performance array library powered by Rust."
 license = "MIT"
-repository = "https://github.com/YJ-Niu/rsnumpy"
+repository = "https://github.com/YJ-Niu/rsarray"
 
 [lib]
-name = "rsnumpy"
+name = "rsarray"
 crate-type = ["cdylib"]
 
 [dependencies]

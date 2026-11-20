@@ -5,7 +5,7 @@ return a Python bool.
 """
 import pytest
 
-import rsnumpy as np
+import rsarray as np
 
 
 def _f(x):

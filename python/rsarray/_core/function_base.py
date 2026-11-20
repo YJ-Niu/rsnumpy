@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
-"""numpy._core.function_base 兼容实现（文档工具）。
+"""rsarray._core.function_base 兼容实现（文档工具）。
 
-``add_newdoc`` 与 NumPy 2.x 行为一致：文档无法写入时静默忽略，
+``add_newdoc`` 与 2.x 行为一致：文档无法写入时静默忽略，
 但被文档对象不存在时会抛错。
 """
 
@@ -20,7 +20,7 @@ def _needs_add_docstring(obj):
 
 
 def add_docstring(func, doc, appender=None):
-    """设置 docstring（失败静默；numpy ``add_docstring`` 简化版）。"""
+    """设置 docstring（失败静默；``add_docstring`` 简化版）。"""
     if not doc:
         return
     if appender:
@@ -59,12 +59,12 @@ def _add_docstring(obj, doc, warn_on_python):
 
 
 def add_newdoc(place, obj, doc, warn_on_python=True):
-    """为既有对象附加文档（numpy ``add_newdoc`` 兼容）。
+    """为既有对象附加文档（``add_newdoc`` 兼容）。
 
     Parameters
     ----------
     place : str
-        模块的绝对点分名（如 "numpy._core"）。
+        模块的绝对点分名（如 "rsarray._core"）。
     obj : str
         对象名（通常是类或函数名）。
     doc : str | tuple | list

@@ -1,22 +1,22 @@
 # SPDX-License-Identifier: MIT
-"""rsnumpy.linalg - 线性代数模块 - 薄包装，所有实现位于 Rust。"""
+"""rsarray.linalg - 线性代数模块 - 薄包装，所有实现位于 Rust。"""
 
 import sys as _sys
 from collections import namedtuple
 
-import rsnumpy.num_core as _core
+import rsarray.num_core as _core
 
 from ._pylinalg import NoValue
 
-# NumPy 2.x 语义：qr 的 reduced/complete 结果是有 .Q/.R 属性的命名元组
+# 2.x 语义：qr 的 reduced/complete 结果是有 .Q/.R 属性的命名元组
 QRResult = namedtuple('QRResult', ['Q', 'R'])
 # svd compute_uv=True 结果是有 .U/.S/.Vh 属性的命名元组（可作 3 元组解包）
 SVDResult = namedtuple('SVDResult', ['U', 'S', 'Vh'])
-# eig 结果是有 .eigenvalues/.eigenvectors 属性的命名元组（NumPy 2.x 语义）
+# eig 结果是有 .eigenvalues/.eigenvectors 属性的命名元组（2.x 语义）
 EigResult = namedtuple('EigResult', ['eigenvalues', 'eigenvectors'])
-# eigh 结果是有 .eigenvalues/.eigenvectors 属性的命名元组（NumPy 2.x 语义）
+# eigh 结果是有 .eigenvalues/.eigenvectors 属性的命名元组（2.x 语义）
 EighResult = namedtuple('EighResult', ['eigenvalues', 'eigenvectors'])
-# slogdet 结果是有 .sign/.logabsdet 属性的命名元组（NumPy 2.x 语义）
+# slogdet 结果是有 .sign/.logabsdet 属性的命名元组（2.x 语义）
 SlogdetResult = namedtuple('SlogdetResult', ['sign', 'logabsdet'])
 
 
@@ -57,7 +57,7 @@ def _round_array(arr):
 
 def _wrap(x):
     """包装/转换数组，避免类身份不一致问题。"""
-    from rsnumpy import ndarray
+    from rsarray import ndarray
     # 注意：裸 Rust 绑定类型 (builtins.ndarray) 与 Python 包装类的类名都叫
     # 'ndarray'，不能只靠类名判断"已包装"（旧逻辑把裸类型原样放行，导致
     # cholesky/svd 等返回 builtins.ndarray，`wrapper @ raw` 直接 TypeError）。
@@ -80,7 +80,7 @@ def _flatten_scalars(data):
 
 
 def _is_complex_arr(a):
-    """判断 rsnumpy 数组是否为复数数组。"""
+    """判断 rsarray 数组是否为复数数组。"""
     return bool(getattr(getattr(a, '_array', None), 'is_complex', False))
 
 
@@ -119,7 +119,7 @@ def _matmul_nested(a, na, b, nb):
     if na == 2 and nb >= 3:
         return [_matmul_nested(a, 2, sub, nb - 1) for sub in b]
     if na >= 3 and nb >= 3:
-        # 前导维须同形（rsnumpy 无完整广播；同形 zip 即可）
+        # 前导维须同形（rsarray 无完整广播；同形 zip 即可）
         return [_matmul_nested(sa, na - 1, sb, nb - 1) for sa, sb in zip(a, b)]
     raise ValueError("unsupported matmul shapes: {}D and {}D".format(na, nb))
 
@@ -130,7 +130,7 @@ def _matmul_wrap(res, a_shape, b_shape, is_c, a_dtype, b_dtype):
     Python 嵌套列表无法表达 (0, p) 这类零维形状（ndarray 会推成 1-d），
     且空列表推得 float64——须按 (lead, m, p) 显式 reshape/astype。
     """
-    from rsnumpy import ndarray
+    from rsarray import ndarray
 
     out = ndarray(res) if isinstance(res, list) else res
     if not isinstance(out, ndarray):
@@ -147,7 +147,7 @@ def _matmul_wrap(res, a_shape, b_shape, is_c, a_dtype, b_dtype):
         exp = tuple(reversed(lead)) + (a_shape[-2], b_shape[-1])
     if tuple(out.shape) != exp:
         out = out.reshape(exp)
-    # Python 列表只能表达 float64/complex128：按 numpy 提升规则还原位宽
+    # Python 列表只能表达 float64/complex128：按 提升规则还原位宽
     # （f32@f32→f32；c64@c64→c64；任一侧更宽则更宽）
     if is_c or 'complex' in a_dtype or 'complex' in b_dtype:
         res_dt = 'complex128' if 'complex128' in (a_dtype, b_dtype) \
@@ -160,7 +160,7 @@ def _matmul_wrap(res, a_shape, b_shape, is_c, a_dtype, b_dtype):
 
 
 def _dot_res_dtype(a_dtype, b_dtype):
-    """numpy 提升规则（linalg inexact/int 场景）：c64×c64→c64、
+    """提升规则（linalg inexact/int 场景）：c64×c64→c64、
     c64×其它→c128、f32×f32→f32（旧实现硬编码 float64 会破坏
     32 位结果的 dtype，测试按 dtype 选精度阈值）。"""
     if 'complex128' in (a_dtype, b_dtype):
@@ -332,7 +332,7 @@ def _eig_one(mat):
     """单个 2-d 矩阵特征分解：Rust 快路径（2x2/3x3 实输入），其余尺寸
     （含空/1x1）与全部复数输入走纯 Python 回退（Rust eig 不处理复数）。
     返回 (evals, evecs) 的嵌套 list。"""
-    from rsnumpy import ndarray as _nd
+    from rsarray import ndarray as _nd
 
     dt = getattr(mat, '_dtype', 'float64')
     if dt in ('complex64', 'complex128'):
@@ -410,7 +410,7 @@ def _svd_jacobi(mat, full_matrices=True, compute_uv=True):
     """通用 SVD（单侧 Jacobi 旋转），支持任意 m×n、float/complex。
 
     Rust 核心只覆盖 2×2，这里补齐一般形状，并实现 ``full_matrices`` /
-    ``compute_uv`` 语义（与 NumPy 一致：u 为 m×m（full）或 m×min（reduced），
+    ``compute_uv`` 语义（与 一致：u 为 m×m（full）或 m×min（reduced），
     vh 为 n×n（full）或 min×n（reduced），s 降序）。
     """
     import math
@@ -420,7 +420,7 @@ def _svd_jacobi(mat, full_matrices=True, compute_uv=True):
     k = min(m, n)
 
     if m == 0 or n == 0:
-        from rsnumpy import ndarray
+        from rsarray import ndarray
         if not compute_uv:
             return ndarray([])
         if full_matrices:
@@ -538,14 +538,14 @@ def _svd_jacobi(mat, full_matrices=True, compute_uv=True):
         vh_out = Vh
 
     if not compute_uv:
-        from rsnumpy import ndarray
+        from rsarray import ndarray
         return ndarray(sig)
 
     if not full_matrices:
         u_out = [row[:k] for row in u_out]
         vh_out = vh_out[:k]
 
-    from rsnumpy import ndarray
+    from rsarray import ndarray
     return (ndarray(u_out), ndarray(sig), ndarray(vh_out))
 
 
@@ -561,7 +561,7 @@ def _norm_out_dtype(dt):
 
 
 def _norm_vec(vals, ord):
-    """一维向量范数（NumPy 语义）：None/2→L2，1→L1，-1→1/Σ1/|x|（含 0 元
+    """一维向量范数（数组语义）：None/2→L2，1→L1，-1→1/Σ1/|x|（含 0 元
     inf 传播 → 0），0→非零计数，±inf→max/min，p>0→(Σ|x|^p)^{1/p}，
     p<0(p≠-1)→(Σ1/|x|^(-p))^{1/p}。"""
     import math
@@ -609,7 +609,7 @@ def _norm_vec(vals, ord):
 
 
 def _norm_mat(M, ord):
-    """二维矩阵范数（NumPy 语义）：None→Frobenius，±1→列和 max/min，
+    """二维矩阵范数（数组语义）：None→Frobenius，±1→列和 max/min，
     ±inf→行和 max/min，2/-2→最大/最小奇异值，'nuc'→核范数（奇异值和）。"""
     import math
 
@@ -652,7 +652,7 @@ class linalg_module:
     - svd: 奇异值分解
 
     【性能特点】
-    - 核心运算由Rust实现，性能接近原生NumPy
+    - 核心运算由Rust实现，性能接近原生
     - 支持复数矩阵运算
     - 支持批量矩阵操作（3D及以上）
 
@@ -663,7 +663,7 @@ class linalg_module:
     3. 推荐使用copy()创建独立副本再共享
 
     【使用示例】
-    >>> import rsnumpy as np
+    >>> import rsarray as np
     >>> # 矩阵乘法
     >>> A = np.array([[1, 2], [3, 4]])
     >>> B = np.array([[5, 6], [7, 8]])
@@ -691,7 +691,7 @@ class linalg_module:
         """计算两个数组的点积（内积）。
 
         【使用示例】
-        >>> import rsnumpy as np
+        >>> import rsarray as np
         >>> # 向量内积
         >>> v1 = np.array([1, 2, 3])
         >>> v2 = np.array([4, 5, 6])
@@ -728,7 +728,7 @@ class linalg_module:
         - 复数数组：支持复数运算
         - 性能：对于简单矩阵乘法，推荐使用matmul
         """
-        from rsnumpy import ndarray
+        from rsarray import ndarray
 
         def _to_arr(z):
             if hasattr(z, '_array'):
@@ -736,7 +736,7 @@ class linalg_module:
             if isinstance(z, (list, tuple)):
                 return ndarray(z)
             if hasattr(z, '__iter__') and not isinstance(z, (str, bytes)):
-                # .flat 等迭代器参数（numpy 语义：dot 接受可迭代对象）
+                # .flat 等迭代器参数（数组语义：dot 接受可迭代对象）
                 return ndarray(list(z))
             return ndarray(z)
 
@@ -757,7 +757,7 @@ class linalg_module:
         try:
             result = _core.linalg.dot(a_arr._array, b_arr._array)
         except ValueError:
-            # 回退：a 为 N-D、b 为 1-D 时按 numpy 语义沿 a 末轴收缩
+            # 回退：a 为 N-D、b 为 1-D 时按 数组语义沿 a 末轴收缩
             if b_arr.ndim == 1 and a_arr.ndim >= 1 and a_arr.shape[-1] == b_arr.shape[0]:
                 lead = tuple(a_arr.shape[:-1])
                 a2 = a_arr.reshape((-1, a_arr.shape[-1]))
@@ -776,7 +776,7 @@ class linalg_module:
     @staticmethod
     def inner(a, b):
         """计算两个数组的内积。"""
-        from rsnumpy import ndarray
+        from rsarray import ndarray
         result = _core.linalg.inner(_ensure(a), _ensure(b))
         a_dtype = getattr(a, '_dtype', 'float64')
         b_dtype = getattr(b, '_dtype', 'float64')
@@ -789,7 +789,7 @@ class linalg_module:
         """计算两个数组的矩阵乘积。
 
         【使用示例】
-        >>> import rsnumpy as np
+        >>> import rsarray as np
         >>> # 基本矩阵乘法
         >>> A = np.array([[1, 2], [3, 4]])
         >>> B = np.array([[5, 6], [7, 8]])
@@ -828,7 +828,7 @@ class linalg_module:
         - 大型矩阵会自动使用多线程（如支持）
         - 批量操作比Python循环快很多
         """
-        from rsnumpy import _broadcast_shape, ndarray, zeros
+        from rsarray import _broadcast_shape, ndarray, zeros
         a_arr = a if hasattr(a, '_array') else ndarray(a)
         b_arr = b if hasattr(b, '_array') else ndarray(b)
         # 空维快捷路径：k/m/n 任一为 0 → 结果为广播形状的全零数组
@@ -866,7 +866,7 @@ class linalg_module:
         """计算矩阵的逆。
 
         【使用示例】
-        >>> import rsnumpy as np
+        >>> import rsarray as np
         >>> # 单个矩阵求逆
         >>> A = np.array([[1, 2], [3, 4]])
         >>> A_inv = np.linalg.inv(A)
@@ -905,7 +905,7 @@ class linalg_module:
         - 对于病态矩阵，可能数值不稳定
         - 建议先用det()检查是否接近奇异
         """
-        from rsnumpy import ndarray
+        from rsarray import ndarray
         from ._pylinalg import _common_type, _stacked_2d
 
         a_arr = a if hasattr(a, '_array') else ndarray(a)
@@ -917,7 +917,7 @@ class linalg_module:
         n = shape[-1]
 
         def _as_result(arr):
-            # 结果保留输入的 ndarray 子类（numpy 语义）
+            # 结果保留输入的 ndarray 子类（数组语义）
             at = type(a_arr)
             if at is not ndarray and isinstance(a_arr, ndarray):
                 return at(arr)
@@ -943,13 +943,13 @@ class linalg_module:
 
     @staticmethod
     def det(a):
-        """计算矩阵的行列式（NumPy 2.x 语义）。
+        """计算矩阵的行列式（2.x 语义）。
 
         2-d 返回保输入 dtype 的 0-d 数组（整型输入 → float64）；
         stacked (...,M,M) 返回 (lead...) 数组；空矩阵 (0×0) 行列式为 1；
         全部尺寸走纯 Python LU（``_py_det``，列主元，复数支持）。
         """
-        from rsnumpy import (ndarray, float32, float64, complex64,
+        from rsarray import (ndarray, float32, float64, complex64,
                              complex128)
         from ._pylinalg import _common_type, _py_det, _stacked_2d
         _SCALAR = {'float32': float32, 'float64': float64,
@@ -969,7 +969,7 @@ class linalg_module:
 
     @staticmethod
     def norm(x, ord=None, axis=None, keepdims=False):
-        """向量或矩阵范数（NumPy 2.x 语义）。
+        """向量或矩阵范数（2.x 语义）。
 
         向量范数（1-d / axis 为整数）：None/2→L2、1→L1、-1、0、±inf、
         任意 p；矩阵范数（2-d axis=None / axis 为 2-元组）：None/'fro'→
@@ -978,7 +978,7 @@ class linalg_module:
         （整型）的 0-d 数组；axis/keepdims 时返回相应形状数组。
         """
         import itertools
-        import rsnumpy as _np
+        import rsarray as _np
         from ..exceptions import AxisError
 
         x_arr = x if hasattr(x, '_array') else _np.asarray(x)
@@ -1081,11 +1081,11 @@ class linalg_module:
 
     @staticmethod
     def vector_norm(x, /, *, ord=None, axis=None, keepdims=False):
-        """Array-API compatible vector norm (numpy.linalg.vector_norm)."""
-        import rsnumpy as _np
+        """Array-API compatible vector norm (linalg.vector_norm)."""
+        import rsarray as _np
         x_arr = x if hasattr(x, '_array') else _np.array(x)
         if x_arr.size == 0:
-            # NumPy 语义：ord=±inf 用 initial=0，其余范数空和为 0
+            # 数组语义：ord=±inf 用 initial=0，其余范数空和为 0
             r = _np.asarray(0.0)
             if keepdims and axis is None:
                 r = r.reshape((1,) * x_arr.ndim) if x_arr.ndim else r
@@ -1104,13 +1104,13 @@ class linalg_module:
 
     @staticmethod
     def solve(a, b):
-        """求解线性方程组 ax = b（NumPy 语义）。
+        """求解线性方程组 ax = b（数组语义）。
 
         a: (..., M, M) 方阵或堆栈；b: (M,) 或 (..., M, K)——b 的 lead
         维与 a 广播（b (M,) 对所有批次广播）；x 形状同 b（(M,) →
         (..., M)）；奇异矩阵抛 LinAlgError；dtype 随 a（整型 → float64）。
         """
-        from rsnumpy import ndarray
+        from rsarray import ndarray
         from ._pylinalg import _common_type, _stacked_2d
 
         a_arr = a if hasattr(a, '_array') else ndarray(a)
@@ -1121,7 +1121,7 @@ class linalg_module:
             raise LinAlgError(
                 "solve: last 2 dimensions of `a` must be square")
         m = a_shape[-1]
-        # b 三种形态（numpy gufunc (m,m),(m,n)->(m,n) 语义）：
+        # b 三种形态（gufunc (m,m),(m,n)->(m,n) 语义）：
         # (m,) → 单向量，广播过 a 全部 lead；(m, k) → 单个矩阵（无
         # lead，广播过 a 全部 lead）；(..., m, k) → lead 维与 a 广播。
         if len(b_shape) == 1:
@@ -1175,7 +1175,7 @@ class linalg_module:
                 return _solve_pinv(A.tolist(), b_rows)
 
         def _as_result(arr):
-            # 结果保留 b 的 ndarray 子类（numpy 语义）
+            # 结果保留 b 的 ndarray 子类（数组语义）
             bt = type(b_arr)
             if bt is not ndarray and isinstance(b_arr, ndarray):
                 return bt(arr)
@@ -1205,7 +1205,7 @@ class linalg_module:
             return _as_result(ndarray(rows).astype(res_dt))
 
         # stacked: a (lead..., m, m)；b (m,)/(m,k) 整体广播，
-        # (..., m, k) 按 numpy 广播规则逐子矩阵取 b 的对应子块
+        # (..., m, k) 按 广播规则逐子矩阵取 b 的对应子块
         lead, subs = _stacked_2d(a_arr)
         b_lead_full = (1,) * (len(out_lead) - len(b_lead)) + b_lead
 
@@ -1251,7 +1251,7 @@ class linalg_module:
 
     @staticmethod
     def lstsq(a, b, rcond=None):
-        """最小二乘解 min ||a·x - b||₂（SVD 法，NumPy 2.x 语义）。
+        """最小二乘解 min ||a·x - b||₂（SVD 法，2.x 语义）。
 
         返回 (x, residuals, rank, s)：s 为降序奇异值；rank = 大于
         ``rcond·s_max`` 的奇异值个数（rcond=None → 1e-15；rcond<0 → 机器
@@ -1260,7 +1260,7 @@ class linalg_module:
         维度不匹配抛 LinAlgError("Incompatible dimensions")。
         """
         import math
-        from rsnumpy import ndarray
+        from rsarray import ndarray
         from ._pylinalg import (_common_type, _real_dtype, _finfo_eps)
 
         a_arr = a if hasattr(a, '_array') else ndarray(a)
@@ -1358,10 +1358,10 @@ class linalg_module:
 
     @staticmethod
     def matrix_rank(a, tol=None, hermitian=False, *, rtol=None):
-        """矩阵秩（NumPy 2.x 语义）：2-d/1-d 返回 int；stacked (...,M,N)
+        """矩阵秩（2.x 语义）：2-d/1-d 返回 int；stacked (...,M,N)
         返回 intp 计数数组（rank = count(S > tol)，tol 默认
-        ``S.max() * max(M,N) * eps``）。rtol 与 tol 互斥（NumPy 2.0+）。"""
-        from rsnumpy import ndarray
+        ``S.max() * max(M,N) * eps``）。rtol 与 tol 互斥（2.0+）。"""
+        from rsarray import ndarray
         from ._pylinalg import (_common_type, _real_dtype, _finfo_eps)
 
         if tol is not None and rtol is not None:
@@ -1382,7 +1382,7 @@ class linalg_module:
                 if tol is not None:
                     t = tol
                 elif rtol is not None:
-                    # NumPy 语义：tol = S.max() * rtol（rtol 可逐批次）
+                    # 数组语义：tol = S.max() * rtol（rtol 可逐批次）
                     _ri = rtol_i if rtol_i is not None else float(rtol)
                     t = (max(vec) if vec else 0.0) * _ri
                 else:
@@ -1395,7 +1395,7 @@ class linalg_module:
             for d in shape[:-2]:
                 total *= d
             s2 = s.reshape((total, min(m, n)))
-            # rtol 支持标量或数组（NumPy 2.0+：广播到批次形状，逐批次
+            # rtol 支持标量或数组（2.0+：广播到批次形状，逐批次
             # tol = S.max() * rtol[i]）
             rtols = None
             if rtol is not None:
@@ -1428,7 +1428,7 @@ class linalg_module:
         if tol is None:
             max_abs = max((abs(v) for r in mat for v in r), default=0.0)
             if rtol is not None:
-                # NumPy 语义：tol = S.max() * rtol（max_abs 近似 S.max()）
+                # 数组语义：tol = S.max() * rtol（max_abs 近似 S.max()）
                 tol = max_abs * rtol
             else:
                 tol = max(nrows, ncols) * max_abs * 2.220446049250313e-16
@@ -1458,21 +1458,21 @@ class linalg_module:
 
     @staticmethod
     def eig(a):
-        """计算矩阵的特征值和特征向量（NumPy 2.x 语义）。
+        """计算矩阵的特征值和特征向量（2.x 语义）。
 
         返回 EigResult(eigenvalues, eigenvectors)：eigenvalues (..., n)
         恒为复数 dtype（f32→c64、f64/int→c128、c64→c64、c128→c128），
         eigenvectors (..., n, n) 同 dtype 且保留 a 的 ndarray 子类；
         stacked (..., n, n) 支持任意 lead 维；空尺寸返回同形状空复数数组。
         """
-        from rsnumpy import ndarray
+        from rsarray import ndarray
         from ._pylinalg import _stacked_2d
         a = a if hasattr(a, '_array') else ndarray(a)
         shape = tuple(a.shape)
         if len(shape) < 2 or shape[-2] != shape[-1]:
             raise LinAlgError(
                 "eig: last 2 dimensions of the array must be square")
-        # numpy：eig 输出恒为复数 dtype（实数输入 → 对应复数）
+        # —eig 输出恒为复数 dtype（实数输入 → 对应复数）
         dt = getattr(a, '_dtype', 'float64')
         if dt.startswith('complex'):
             res_dt = dt
@@ -1482,7 +1482,7 @@ class linalg_module:
             res_dt = 'complex128'
 
         def _as_result(arr):
-            # eigenvectors 保留 a 的 ndarray 子类（numpy 语义）
+            # eigenvectors 保留 a 的 ndarray 子类（数组语义）
             at = type(a)
             if at is not ndarray and isinstance(a, ndarray):
                 return at(arr)
@@ -1511,12 +1511,12 @@ class linalg_module:
 
     @staticmethod
     def eigvals(a):
-        """计算矩阵特征值（NumPy 语义：2-d 返回 (n,)，stacked 返回
+        """计算矩阵特征值（数组语义：2-d 返回 (n,)，stacked 返回
         (lead..., n)；输出 complex128，float32/complex64 输入为 complex64）。
         2x2/3x3 实输入走 Rust 快路径，其余尺寸走纯 Python QR 算法
         （``_eigvals_qr``，Hessenberg + 单位移 QR 迭代）。
         """
-        from rsnumpy import ndarray
+        from rsarray import ndarray
         from ._pylinalg import _eigvals_qr, _stacked_2d
 
         a_arr = a if hasattr(a, '_array') else ndarray(a)
@@ -1546,13 +1546,13 @@ class linalg_module:
             lapack_driver=None):
         """计算奇异值分解 A = u @ diag(s) @ vh。
 
-        支持 NumPy 的 ``full_matrices`` / ``compute_uv`` 关键字；2×2 走 Rust
+        支持 的 ``full_matrices`` / ``compute_uv`` 关键字；2×2 走 Rust
         核心，其余形状用单侧 Jacobi（``_svd_jacobi``）。stacked (...,M,N)
-        按切片循环；dtype 按 NumPy _commonType 规则传播（U/Vh 保持输入
+        按切片循环；dtype 按 _commonType 规则传播（U/Vh 保持输入
         dtype、S 为对应实 dtype）；含 inf/nan 抛 LinAlgError（模拟 LAPACK
         "SVD did not converge"）。
         """
-        from rsnumpy import ndarray, empty, eye
+        from rsarray import ndarray, empty, eye
         from ._pylinalg import (_common_type, _real_dtype, _nonfinite_check,
                                 _stacked_2d)
 
@@ -1695,24 +1695,24 @@ class linalg_module:
 
     @staticmethod
     def qr(a, mode='reduced'):
-        """计算 QR 分解（NumPy 语义）。
+        """计算 QR 分解（数组语义）。
 
-        modes: 'reduced'（默认）/ 'complete' / 'r' / 'raw'；NumPy >= 1.8 已移除
+        modes: 'reduced'（默认）/ 'complete' / 'r' / 'raw'；>= 1.8 已移除
         弃用别名 'full'/'f'/'economic'/'e'。2×2/3×3 reduced 走 Rust 核心，
         其余形状用纯 Python Householder（``_qr_householder``）；stacked
         (...,M,N) 按切片循环；空矩阵返回约定形状（complete 时 Q=I_m）；
         'raw' 返回 (h, tau)（FORTRAN 序 h (n,m) + tau (k,)）。
         """
-        from rsnumpy import ndarray, empty, eye
+        from rsarray import ndarray, empty, eye
         from ._pylinalg import (_common_type, _stacked_2d, _qr_raw)
 
-        # NumPy >= 1.8：弃用别名 'full'/'f'/'economic'/'e' 已移除。
+        # >= 1.8：弃用别名 'full'/'f'/'economic'/'e' 已移除。
         if mode in ('full', 'f'):
             raise ValueError(
-                f"mode {mode!r} is deprecated in NumPy 1.8, use 'complete'")
+                f"mode {mode!r} is deprecated in 1.8, use 'complete'")
         if mode in ('economic', 'e'):
             raise ValueError(
-                f"mode {mode!r} is deprecated in NumPy 1.8, use 'reduced'")
+                f"mode {mode!r} is deprecated in 1.8, use 'reduced'")
         if mode not in ('reduced', 'complete', 'r', 'raw'):
             raise ValueError(
                 f"mode {mode!r} is not recognized. Must be one of "
@@ -1741,9 +1741,9 @@ class linalg_module:
         if m == 0 or n == 0:
             res = _empty_res()
             if len(shape) > 2:
-                # stacked 空矩阵：numpy 语义把各分量广播到 (lead, ...)
+                # stacked 空矩阵：数组语义把各分量广播到 (lead, ...)
                 # （'r'/'raw' 同样适用，否则回 2-d 形状）
-                from rsnumpy import broadcast_to
+                from rsarray import broadcast_to
                 lead = shape[:-2]
                 res = tuple(broadcast_to(x, lead + x.shape) for x in res)
             if mode == 'r':
@@ -1807,7 +1807,7 @@ class linalg_module:
         """Householder 反射 QR，支持任意 m x n 与 reduced/complete 形态。"""
         import math
 
-        from rsnumpy import ndarray
+        from rsarray import ndarray
 
         if mode == 'reduced':
             want_complete = False
@@ -1895,7 +1895,7 @@ class linalg_module:
         float16 抛 TypeError（"unsupported in linalg"）；非正定/含
         inf/nan 抛 LinAlgError。
         """
-        from rsnumpy import ndarray, empty
+        from rsarray import ndarray, empty
         from ._pylinalg import (_common_type, _stacked_2d, _is_empty_2d,
                                 _py_cholesky, _nonfinite_check)
 
@@ -1930,14 +1930,14 @@ class linalg_module:
 
     @staticmethod
     def matrix_power(a, n):
-        """计算矩阵的幂（NumPy 2.x 语义）。
+        """计算矩阵的幂（2.x 语义）。
 
         ``n`` 须为整数（否则 TypeError）；0 → 单位矩阵（保持 dtype 与
         stacked 形状）；n>0 二进制快速幂（纯 Python，任意尺寸 / stacked
         (...,M,M)）；n<0 先求逆再乘方（奇异矩阵抛 LinAlgError，与
-        NumPy 一致）；非方阵抛 LinAlgError。
+        一致）；非方阵抛 LinAlgError。
         """
-        from rsnumpy import ndarray, array
+        from rsarray import ndarray, array
         from ._pylinalg import (_matrix_power_mat, _stacked_2d)
 
         if not isinstance(n, int):
@@ -1952,12 +1952,12 @@ class linalg_module:
             raise LinAlgError("Square matrix expected")
 
         dtype = getattr(a_arr, '_dtype', 'float64')
-        # subok：输入为 matrix 时结果保持 matrix（numpy matrix_power 语义）
+        # subok：输入为 matrix 时结果保持 matrix（matrix_power 语义）
         _is_mat = type(a).__name__ == 'matrix'
 
         def _fin(res):
             if _is_mat:
-                from rsnumpy import matrix as _mx
+                from rsarray import matrix as _mx
                 return _mx(res)
             return res
 
@@ -1967,7 +1967,7 @@ class linalg_module:
             except LinAlgError:
                 raise
             except ValueError:
-                # 奇异：底层抛 ValueError("Singular matrix")，NumPy 的
+                # 奇异：底层抛 ValueError("Singular matrix")，的
                 # matrix_power 抛 LinAlgError
                 raise LinAlgError("Singular matrix")
             return _fin(linalg_module.matrix_power(inv_a, -n))
@@ -2000,15 +2000,15 @@ class linalg_module:
 
     @staticmethod
     def pinv(a, rcond=None, hermitian=False, rtol=NoValue):
-        """计算 Moore-Penrose 伪逆（NumPy 2.x 参数语义）。
+        """计算 Moore-Penrose 伪逆（2.x 参数语义）。
 
         ``rcond``/``rtol`` 二选一：都未给用 1e-15；``rtol=None`` 用
-        ``max(M,N)*eps(结果 dtype)``（按 NumPy Array API 标准，dtype 取
+        ``max(M,N)*eps(结果 dtype)``（按 Array API 标准，dtype 取
         伪逆实际计算/返回的 dtype——int/bool 输入在 float64 上计算）；
         同时给两者抛 ValueError。空 2-d 输入走 empty 快捷路径（返回
         转置形状、正确 dtype 的空数组）。
         """
-        from rsnumpy import ndarray, empty
+        from rsarray import ndarray, empty
         from ._pylinalg import (_common_type, _is_empty_2d, _real_dtype,
                                 _finfo_eps)
 
@@ -2077,9 +2077,9 @@ class linalg_module:
 
     @staticmethod
     def trace(a, offset=0, axis1=-2, axis2=-1, dtype=None, out=None):
-        """计算矩阵的迹（numpy.linalg.trace 语义：默认 axis1=-2, axis2=-1；
+        """计算矩阵的迹（linalg.trace 语义：默认 axis1=-2, axis2=-1；
         stacked (...,M,N) 返回最后两轴各矩阵的迹；2-d offset=0 走 Rust 快路径）。"""
-        from rsnumpy import ndarray
+        from rsarray import ndarray
         _ = dtype, out
         a_arr = a if hasattr(a, '_array') else ndarray(a)
         sh = tuple(a_arr.shape)
@@ -2093,9 +2093,9 @@ class linalg_module:
 
     @staticmethod
     def diagonal(a, offset=0, axis1=-2, axis2=-1):
-        """返回矩阵的对角线元素（numpy.linalg.diagonal 语义：默认
+        """返回矩阵的对角线元素（linalg.diagonal 语义：默认
         axis1=-2, axis2=-1，支持任意维数组）。"""
-        from rsnumpy import ndarray
+        from rsarray import ndarray
         a_arr = a if hasattr(a, '_array') else ndarray(a)
         sh = tuple(a_arr.shape)
         if len(sh) < 2:
@@ -2145,13 +2145,13 @@ class linalg_module:
             范数类型。默认（及 2 / -2）走 SVD，其余用 ``norm(x, p) * norm(inv(x), p)``。
 
         【使用示例】
-        >>> import rsnumpy as np
+        >>> import rsarray as np
         >>> np.linalg.cond(np.array([[1., 0.], [0., 1.]]))
         1.0
         >>> np.linalg.cond(np.array([[1., 2.], [2., 4.]]))   # 奇异
         inf
         """
-        from rsnumpy import ndarray
+        from rsarray import ndarray
         from ._pylinalg import (_common_type, _real_dtype, _stacked_2d,
                                 _is_empty_2d)
 
@@ -2166,7 +2166,7 @@ class linalg_module:
         _, res_dt = _common_type(getattr(x_arr, '_dtype', 'float64'))
         res_dt = _real_dtype(res_dt)  # 条件数恒为实数
 
-        import rsnumpy as _np
+        import rsarray as _np
         lead, subs = _stacked_2d(x_arr)
         is_2d = len(shape) == 2
 
@@ -2194,7 +2194,7 @@ class linalg_module:
             return float(v)
 
         def _inv_or_nan(sub):
-            # 求逆失败（奇异/非有限）→ 全 nan 矩阵（NumPy gufunc errstate
+            # 求逆失败（奇异/非有限）→ 全 nan 矩阵（gufunc errstate
             # 语义）；返回 (矩阵, 是否失败)
             try:
                 return linalg_module.inv(sub), False
@@ -2213,7 +2213,7 @@ class linalg_module:
             return [sum(row) for row in vals]
 
         def _extreme(vals, mode):
-            # numpy max/min 语义：任一 nan → nan（Rust 归约用 f64::max/min
+            # max/min 语义：任一 nan → nan（Rust 归约用 f64::max/min
             # fold：忽略 nan、全 nan 返回 ∓inf，不兼容）
             m = None
             for v in vals:
@@ -2227,7 +2227,7 @@ class linalg_module:
             if p is None or p in (2, -2):
                 # 与公开 svd 同算法/同 dtype → 值与测试参照位级一致；
                 # 非有限输入公开 svd 抛异常 → 回退裸 _svd_jacobi
-                # （nan/inf 传播到结果，与 NumPy errstate 语义一致）
+                # （nan/inf 传播到结果，与 errstate 语义一致）
                 try:
                     s = linalg_module.svd(sub, compute_uv=False).tolist()
                 except Exception:
@@ -2243,7 +2243,7 @@ class linalg_module:
                 invx, inv_failed = _inv_or_nan(sub)
                 if p == 'nuc':
                     # 不能用 norm()：nan 会使其抛异常；svd 对 nan/不收敛
-                    # 输入抛 LinAlgError → nan（NumPy errstate 语义）
+                    # 输入抛 LinAlgError → nan（errstate 语义）
                     try:
                         sx = _flat0(linalg_module.svd(
                             sub, compute_uv=False).sum(-1))
@@ -2257,7 +2257,7 @@ class linalg_module:
                         (_np.abs(sub) ** 2).sum(-1).sum(-1)
                         * (_np.abs(invx) ** 2).sum(-1).sum(-1)))
                 elif _has_nan(sub) or inv_failed:
-                    # numpy max/min 语义路径（结果必为 nan 或转 inf，
+                    # max/min 语义路径（结果必为 nan 或转 inf，
                     # 无精度要求）
                     asub = [[abs(v) for v in row] for row in sub.tolist()]
                     ainv = [[abs(v) for v in row] for row in invx.tolist()]
@@ -2266,7 +2266,7 @@ class linalg_module:
                     r = _extreme(_sum_axis(asub, ax), mode) * \
                         _extreme(_sum_axis(ainv, ax), mode)
                 else:
-                    # 与 NumPy _cond_impl 同运算链（同 dtype/同顺序）
+                    # 与 _cond_impl 同运算链（同 dtype/同顺序）
                     if p == 1:
                         r = _flat0(_np.abs(sub).sum(-2).max(-1)) * \
                             _flat0(_np.abs(invx).sum(-2).max(-1))
@@ -2293,7 +2293,7 @@ class linalg_module:
 
     @staticmethod
     def eigh(a, UPLO='L'):
-        """Hermitian 或对称矩阵特征分解（NumPy 2.x 语义）。
+        """Hermitian 或对称矩阵特征分解（2.x 语义）。
 
         返回 EighResult(eigenvalues, eigenvectors)：eigenvalues (..., n)
         实数 dtype（f32/c64→f32，f64/c128/int→f64）升序；eigenvectors
@@ -2302,7 +2302,7 @@ class linalg_module:
         支持任意 lead 维；空尺寸返回同形状空数组；非方阵/非法 UPLO
         抛 ValueError。实对称走循环 Jacobi，复 Hermitian 走 2n 实嵌入。
         """
-        from rsnumpy import ndarray
+        from rsarray import ndarray
         from ._pylinalg import _stacked_2d, _herm_eigh
 
         u = UPLO if isinstance(UPLO, str) else ''
@@ -2321,7 +2321,7 @@ class linalg_module:
         vec_dt = dt if dt.startswith(('float', 'complex')) else 'float64'
 
         def _as_result(arr):
-            # eigenvectors 保留 a 的 ndarray 子类（numpy 语义）
+            # eigenvectors 保留 a 的 ndarray 子类（数组语义）
             at = type(a)
             if at is not ndarray and isinstance(a, ndarray):
                 return at(arr)
@@ -2354,8 +2354,8 @@ class linalg_module:
 
     @staticmethod
     def outer(a, b):
-        """外积（numpy.linalg.outer 兼容）：输入必须为一维。"""
-        import rsnumpy as _np
+        """外积（linalg.outer 兼容）：输入必须为一维。"""
+        import rsarray as _np
         a = _np.asarray(a)
         b = _np.asarray(b)
         if a.ndim != 1 or b.ndim != 1:
@@ -2364,13 +2364,13 @@ class linalg_module:
 
     @staticmethod
     def slogdet(a):
-        """(sign, log|det|) —— NumPy 2.x 语义：返回 SlogdetResult 命名元组
+        """(sign, log|det|) —— 2.x 语义：返回 SlogdetResult 命名元组
         （.sign/.logabsdet，可作 2 元组解包）。2-d 输入字段为标量（实输入
         float、复输入 complex，dtype 随输入）；stacked 返回 (lead...) 数组；
         空矩阵 (0×0) → (1, 0)；奇异 → (0, -inf)；全部尺寸走纯 Python
         LU（``_py_slogdet``）。
         """
-        from rsnumpy import (ndarray, float32, float64, complex64,
+        from rsarray import (ndarray, float32, float64, complex64,
                              complex128)
         from ._pylinalg import (_common_type, _real_dtype, _py_slogdet,
                                 _stacked_2d)
@@ -2395,8 +2395,8 @@ class linalg_module:
 
     @staticmethod
     def cross(a, b, axisa=-1, axisb=-1, axisc=-1, axis=None):
-        """向量叉积（numpy.linalg.cross 兼容）。"""
-        import rsnumpy as _np
+        """向量叉积（linalg.cross 兼容）。"""
+        import rsarray as _np
         if axis is not None:
             axisa = axisb = axisc = axis
         a = _np.asarray(a)
@@ -2418,8 +2418,8 @@ class linalg_module:
 
     @staticmethod
     def tensordot(a, b, axes=2):
-        """张量收缩（numpy.linalg.tensordot 兼容）。"""
-        import rsnumpy as _np
+        """张量收缩（linalg.tensordot 兼容）。"""
+        import rsarray as _np
         a = _np.asarray(a)
         b = _np.asarray(b)
         if isinstance(axes, int):
@@ -2447,14 +2447,14 @@ class linalg_module:
 
     @staticmethod
     def tensorinv(a, ind=2):
-        """N 维数组的'逆'（numpy.linalg.tensorinv 兼容）。
+        """N 维数组的'逆'（linalg.tensorinv 兼容）。
 
         a 的形状须'square'：prod(a.shape[:ind]) == prod(a.shape[ind:])，
         否则抛 LinAlgError；ind 为不超过 a.ndim 的正整数（否则
         ValueError）。返回相对 tensordot(a, b, ind) 的逆，形状
         a.shape[ind:] + a.shape[:ind]。
         """
-        import rsnumpy as _np
+        import rsarray as _np
         a = a if hasattr(a, '_array') else _np.asarray(a)
         shape = tuple(a.shape)
         nd = len(shape)
@@ -2473,7 +2473,7 @@ class linalg_module:
 
     @staticmethod
     def tensorsolve(a, b, axes=None):
-        """张量方程 a x = b 求解（numpy.linalg.tensorsolve 兼容）。
+        """张量方程 a x = b 求解（linalg.tensorsolve 兼容）。
 
         x 的全部指标与 a 的最右指标求和：tensordot(a, x,
         axes=x.ndim) == b；axes（int 元组）指定反转前移到 a 右端
@@ -2481,7 +2481,7 @@ class linalg_module:
         prod(a.shape[b.ndim:]) == prod(a.shape[:b.ndim])，否则抛
         LinAlgError；x 形状为 a 的末 (a.ndim - b.ndim) 轴。
         """
-        import rsnumpy as _np
+        import rsarray as _np
         a = a if hasattr(a, '_array') else _np.asarray(a)
         b = b if hasattr(b, '_array') else _np.asarray(b)
         an = len(tuple(a.shape))
@@ -2507,17 +2507,17 @@ class linalg_module:
 
     @staticmethod
     def matrix_norm(x, ord=None, axis=(-2, -1), keepdims=False, **kwargs):
-        """矩阵范数（numpy.linalg.matrix_norm 兼容）。
+        """矩阵范数（linalg.matrix_norm 兼容）。
 
-        Rust 层 norm 不接受元组 axis，这里按 NumPy 语义纯 Python 实现：
+        Rust 层 norm 不接受元组 axis，这里按 数组语义纯 Python 实现：
         ord=None/'fro' 弗罗贝尼乌斯范数、1/-1 列和范数、2/-2 奇异值
         范数、'nuc' 核范数；支持 ndim>2 的批量切片与 keepdims。
         """
-        import rsnumpy as _np
+        import rsarray as _np
 
         def _mat_norm_2d(m, o):
             if 0 in tuple(m.shape):
-                # NumPy 语义：空矩阵的各阶范数均为 0
+                # 数组语义：空矩阵的各阶范数均为 0
                 return 0.0
             if o in (None, 'fro'):
                 return _np.sqrt(_np.sum(abs(m) ** 2))
@@ -2557,8 +2557,8 @@ class linalg_module:
 
     @staticmethod
     def matrix_transpose(x, axes=None):
-        """矩阵转置（numpy.linalg.matrix_transpose 兼容）。"""
-        import rsnumpy as _np
+        """矩阵转置（linalg.matrix_transpose 兼容）。"""
+        import rsarray as _np
         x = _np.asarray(x)
         if x.ndim < 2:
             raise ValueError("array must be at least 2-dimensional")
@@ -2568,7 +2568,7 @@ class linalg_module:
 
     @staticmethod
     def eigvalsh(a, UPLO='L'):
-        """Hermitian/对称矩阵特征值（numpy.linalg.eigvalsh 兼容）。
+        """Hermitian/对称矩阵特征值（linalg.eigvalsh 兼容）。
 
         返回升序实数 dtype ndarray（f32/c64→f32，f64/c128/int→f64）；
         UPLO/stacked/空尺寸语义同 eigh。
@@ -2578,7 +2578,7 @@ class linalg_module:
 
 def issymmetric(a, tol=None):
     """判断矩阵是否对称。"""
-    from rsnumpy import ndarray
+    from rsarray import ndarray
     a_arr = a if hasattr(a, '_array') else ndarray(a)
     if len(a_arr.shape) != 2 or a_arr.shape[0] != a_arr.shape[1]:
         return False
@@ -2591,7 +2591,7 @@ def issymmetric(a, tol=None):
 
 
 # 将 linalg_module 的公有方法同时暴露为模块级函数，
-# 兼容 numpy 风格的 `from rsnumpy.linalg import det, inv, norm, solve, ...`。
+# 兼容 风格的 `from rsarray.linalg import det, inv, norm, solve, ...`。
 _this_module = _sys.modules[__name__]
 for _name in dir(linalg_module):
     if not _name.startswith('_'):
@@ -2599,5 +2599,5 @@ for _name in dir(linalg_module):
 del _this_module, _name
 
 
-# 多矩阵连乘（numpy.linalg.multi_dot 兼容）：DP 求最优乘法顺序。
+# 多矩阵连乘（linalg.multi_dot 兼容）：DP 求最优乘法顺序。
 from ._linalg import _multi_dot_matrix_chain_order, multi_dot  # noqa: E402,F401

@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: MIT
-"""Stride-based view helpers (a compatible subset of `numpy.lib.stride_tricks`).
+"""Stride-based view helpers (a compatible subset of `lib.stride_tricks`).
 
-`rsnumpy` arrays always own one contiguous row-major buffer, so a true
+`rsarray` arrays always own one contiguous row-major buffer, so a true
 zero-copy *view* with arbitrary strides is not representable here the way it is
-in NumPy.  `as_strided` therefore gathers into a fresh array.
+in .  `as_strided` therefore gathers into a fresh array.
 
 The important consequence is about **negative strides that reach before the
-start of the array you pass**.  NumPy reads that memory from the parent buffer,
-because `parent[k:]` is a view sharing storage.  In rsnumpy basic slicing copies
+start of the array you pass**.  reads that memory from the parent buffer,
+because `parent[k:]` is a view sharing storage.  In rsarray basic slicing copies
 and `.base` is `None`, so the earlier elements simply are not reachable; the
 caller has the start of the new copy and nothing behind it.  Such accesses are
 rejected with a `ValueError` naming the offending offset, rather than silently
@@ -15,10 +15,10 @@ wrapping around Python-style into the tail of the buffer.
 
 Reads that stay inside the array -- including backwards traversal via a
 negative stride, as long as the offsets do not go below zero -- behave exactly
-as NumPy's.
+as the reference implementation's.
 """
 
-import rsnumpy as np
+import rsarray as np
 
 __all__ = ['as_strided']
 
@@ -34,20 +34,20 @@ def as_strided(x, shape=None, strides=None, subok=False, writeable=True,
     shape : sequence of int, optional
         Shape of the result.  Defaults to `x.shape`.
     strides : sequence of int, optional
-        Strides of the result **in bytes**, NumPy-style.  Defaults to the
+        Strides of the result **in bytes**, -style.  Defaults to the
         C-contiguous strides of `shape`.
     subok : bool, optional
-        Accepted for NumPy compatibility; rsnumpy has no subclass hierarchy.
+        Accepted for compatibility; rsarray has no subclass hierarchy.
     writeable : bool, optional
-        Accepted for NumPy compatibility.  The result owns its memory, so it is
+        Accepted for compatibility.  The result owns its memory, so it is
         always writeable and writes never reach `x`.
     check_bounds : bool, optional
-        Accepted for NumPy compatibility.  Bounds are always checked
+        Accepted for compatibility.  Bounds are always checked
         (out-of-range strides raise ValueError below).
 
     Returns
     -------
-    out : rsnumpy.ndarray
+    out : rsarray.ndarray
         A new array with the requested shape, gathered from `x`.
 
     Raises
@@ -67,7 +67,7 @@ def as_strided(x, shape=None, strides=None, subok=False, writeable=True,
     itemsize = int(x.itemsize)
     # Element-count steps; a stride that is not a whole number of elements
     # cannot be walked element-wise at all.  Strides on length-1 axes are
-    # never walked (offset contribution is always 0), so NumPy's "relaxed
+    # never walked (offset contribution is always 0), so 's "relaxed
     # strides" allow arbitrary values there — skip the check for them.
     for value, dim in zip(strides, shape):
         if dim > 1 and value % itemsize != 0:
@@ -92,8 +92,8 @@ def as_strided(x, shape=None, strides=None, subok=False, writeable=True,
         if offset < 0:
             raise ValueError(
                 f'strided access reaches element {offset}, before the start of '
-                f'the array. NumPy would serve that from the parent buffer, '
-                f'but rsnumpy slicing copies, so there is nothing there to '
+                f'the array. would serve that from the parent buffer, '
+                f'but rsarray slicing copies, so there is nothing there to '
                 f'read; build those values explicitly or pass an array whose '
                 f'own storage begins further back.')
         if offset >= size:

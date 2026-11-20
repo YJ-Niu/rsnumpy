@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: MIT
-"""多项式旧 API 移植（与 numpy 2.x lib/_polynomial_impl.py 行为对齐）。
+"""多项式旧 API 移植（与 2.x lib/_polynomial_impl.py 行为对齐）。
 
 包含 poly / roots / polyint / polyder / polyfit / polyval / polyadd /
-polysub / polymul / polydiv / poly1d，覆盖官方 numpy TestPolynomial 语义：
+polysub / polymul / polydiv / poly1d，覆盖官方 TestPolynomial 语义：
 poly1d 的 str/repr 对齐排版（_raise_power）、power 索引的 __getitem__/
 __setitem__、p/q 返回 (商, 余数) 元组、polyfit 的 cov 参数、roots 的
 dtype 保持（float32 输入 → float32 根）。
@@ -12,23 +12,23 @@ import warnings as _py_warnings
 
 
 def _NX():
-    import rsnumpy
-    return rsnumpy
+    import rsarray
+    return rsarray
 
 
 class RankWarning(UserWarning):
-    """polyfit 秩不足（病态拟合）告警，对应 numpy.exceptions.RankWarning。"""
+    """polyfit 秩不足（病态拟合）告警，对应 exceptions.RankWarning。"""
 
 
 def _isscalar(x):
-    """numpy isscalar 语义：0-d 数组/Python 标量/标量对象视为标量。"""
+    """isscalar 语义：0-d 数组/Python 标量/标量对象视为标量。"""
     if hasattr(x, 'ndim'):
         return getattr(x, 'ndim', 1) == 0
     return isinstance(x, (int, float, complex, bool))
 
 
 def _mintypecode(typechars, typeset='GDFgdf', default='d'):
-    """最小可容纳类型字符（numpy mintypecode 的 typeset='GDFgdf' 子集语义）。
+    """最小可容纳类型字符（mintypecode 的 typeset='GDFgdf' 子集语义）。
 
     输入字符全部在 typeset 内 → 返回其中尺寸最大者（容器须容纳全部）；
     有字符不在 typeset 内（int/bool 等）→ 安全回落到 default。
@@ -45,7 +45,7 @@ def _mintypecode(typechars, typeset='GDFgdf', default='d'):
 
 
 def _to_real_if_imag_zero(w, t_dtype):
-    """实输入矩阵的特征值若虚部全零 → 转实（numpy 向后兼容语义）。"""
+    """实输入矩阵的特征值若虚部全零 → 转实（向后兼容语义）。"""
     k = getattr(t_dtype, 'kind', 'f')
     if k != 'c' and hasattr(w, 'imag'):
         im = w.imag
@@ -68,7 +68,7 @@ def _convolve_full(a_list, b_list, dtype=None):
 
 
 def _conjugates_match(roots_list):
-    """复根序列是否全部成共轭对（此时系数为实，numpy poly 语义）。"""
+    """复根序列是否全部成共轭对（此时系数为实，poly 语义）。"""
     cs = sorted((complex(z) for z in roots_list),
                 key=lambda z: (z.real, z.imag))
     cj = sorted((z.conjugate() for z in cs),
@@ -116,11 +116,11 @@ def roots(p):
     # 非浮点输入 → 转浮点（int → float64）
     if not issubclass(p.dtype.type, (NX.floating, NX.complexfloating)):
         p = p.astype(float)
-    # 伴随矩阵 + 纯 Python 复 QR（rsnumpy linalg.eigvals 复特征值精度不足）
+    # 伴随矩阵 + 纯 Python 复 QR（rsarray linalg.eigvals 复特征值精度不足）
     p_list = p.tolist()
     while len(p_list) > 1 and p_list[0] == 0:
         p_list = p_list[1:]
-    # 系数含 NaN：伴矩阵特征值未定义，与 numpy 一致抛 LinAlgError
+    # 系数含 NaN：伴矩阵特征值未定义，与标准语义一致抛 LinAlgError
     import math
     def _has_nan(v):
         try:
@@ -128,7 +128,7 @@ def roots(p):
         except (TypeError, ValueError, OverflowError):
             return False
     if any(_has_nan(v) for v in p_list):
-        import rsnumpy as _np
+        import rsarray as _np
         raise _np.linalg.LinAlgError(
             "Eigenvalues did not converge: coefficients contain NaN")
     deg = len(p_list) - 1
@@ -260,7 +260,7 @@ def polyfit(x, y, deg, rcond=None, full=False, w=None, cov=False):
 
 def polyval(p, x):
     """Horner 法求值；x 为 poly1d 时返回复合多项式。
-    MaskedArray 输入时结果恢复掩码（numpy 语义）。"""
+    MaskedArray 输入时结果恢复掩码（数组语义）。"""
     NX = _NX()
     p = NX.asarray(p)
     _mask = None
@@ -276,7 +276,7 @@ def polyval(p, x):
         y = y * x + pv
     if _mask is not None:
         return NX.ma.array(y, mask=_mask)
-    # ndarray 子类输入：结果保留子类（numpy 语义）
+    # ndarray 子类输入：结果保留子类（数组语义）
     try:
         if type(x) is not NX.ndarray and isinstance(x, NX.ndarray):
             y = y.view(type(x))
@@ -286,7 +286,7 @@ def polyval(p, x):
 
 
 def _inv_square(a):
-    """N×N 逆矩阵（高斯消元 + 部分选主元；rsnumpy linalg.inv 仅 2x2/3x3）。"""
+    """N×N 逆矩阵（高斯消元 + 部分选主元；rsarray linalg.inv 仅 2x2/3x3）。"""
     NX = _NX()
     n = len(a)
     M = [list(row) for row in a.tolist()]
@@ -459,7 +459,7 @@ _poly_mat = _re.compile(r"\*\*([0-9]*)")
 
 
 def _raise_power(astr, wrap=70):
-    """numpy poly1d 对齐排版：把 "c x**p" 拆成两行（指数行 + 系数行）。"""
+    """poly1d 对齐排版：把 "c x**p" 拆成两行（指数行 + 系数行）。"""
     n = 0
     line1 = ''
     line2 = ''
@@ -497,7 +497,7 @@ def _coef_parts(coeff):
 
 
 class poly1d:
-    """一维多项式类（兼容 numpy.poly1d 接口：power 索引、str 对齐排版、
+    """一维多项式类（兼容 poly1d 接口：power 索引、str 对齐排版、
     p/q 返回 (商, 余数) 元组、可变系数 c）。"""
 
     __hash__ = None
@@ -508,8 +508,8 @@ class poly1d:
 
     @coeffs.setter
     def coeffs(self, value):
-        # numpy 中 p.coeffs 是自身缓冲区视图：+= 就地（无 setter），
-        # setattr 整体替换 → AttributeError。rsnumpy 算术恒产生新对象，
+        # 中 p.coeffs 是自身缓冲区视图：+= 就地（无 setter），
+        # setattr 整体替换 → AttributeError。rsarray 算术恒产生新对象，
         # 以 shape 区分：与现系数同 shape 视为 += / *= 类运算结果，接受；
         # 异 shape 整体替换 → AttributeError。
         NX = _NX()
@@ -556,7 +556,7 @@ class poly1d:
         self._variable = 'x' if variable is None else variable
 
     def __array__(self, t=None, copy=None):
-        # rsnumpy asarray 无 copy 关键字：copy=None 语义 = 按需转换
+        # rsarray asarray 无 copy 关键字：copy=None 语义 = 按需转换
         NX = _NX()
         if t:
             return NX.asarray(self.coeffs, t)
@@ -564,7 +564,7 @@ class poly1d:
 
     def __repr__(self):
         vals = repr(self.coeffs)
-        # rsnumpy 数组 repr 为 "array([...])"，与 numpy 同款切片
+        # rsarray 数组 repr 为 "array([...])"，与 同款切片
         if vals.startswith('array(') and vals.endswith(')'):
             vals = vals[6:-1]
         return f"poly1d({vals})"

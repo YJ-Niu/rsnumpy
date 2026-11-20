@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: MIT
-"""numpy._core._multiarray_tests 兼容实现（C 测试辅助的 Python 版）。"""
+"""rsarray._core._multiarray_tests 兼容实现（C 测试辅助的 Python 版）。"""
 
 __all__ = ['array_indexing']
 
 
 def _rs():
-    import rsnumpy
-    return rsnumpy
+    import rsarray
+    return rsarray
 
 
 def array_indexing(op, array, *args):
@@ -35,14 +35,14 @@ def array_indexing(op, array, *args):
 
 
 # ---------------------------------------------------------------------------
-# C 内部测试辅助桩：rsnumpy 无对应 C 实现；相关测试由 conftest 的
+# C 内部测试辅助桩：rsarray 无对应 C 实现；相关测试由 conftest 的
 # _SKIP_MARKERS 源串匹配跳过（这些函数在测试模块顶层被 import，
 # 故此处必须存在可导入的名字）。
 # ---------------------------------------------------------------------------
 
 def _not_implemented(name):
     raise NotImplementedError(
-        f"rsnumpy has no C helper {name!r}; test is expected to be skipped")
+        f"rsarray has no C helper {name!r}; test is expected to be skipped")
 
 
 def create_custom_field_dtype(*args, **kwargs):
@@ -75,15 +75,15 @@ __all__ = __all__ + ['create_custom_field_dtype', 'get_c_wrapping_array',
 
 
 def run_scalar_intp_converter(x):
-    """标量 → intp 转换（numpy._core._multiarray_tests 同名 C 桩）。"""
-    import rsnumpy
-    return rsnumpy.intp(x)
+    """标量 → intp 转换（rsarray._core._multiarray_tests 同名 C 桩）。"""
+    import rsarray
+    return rsarray.intp(x)
 
 
 def run_scalar_intp_from_sequence(x):
-    """序列 → intp 转换（numpy._core._multiarray_tests 同名 C 桩）。"""
-    import rsnumpy
-    return tuple(rsnumpy.intp(v) for v in x)
+    """序列 → intp 转换（rsarray._core._multiarray_tests 同名 C 桩）。"""
+    import rsarray
+    return tuple(rsarray.intp(v) for v in x)
 
 
 # ---- npymath 冒烟函数桩（test_npymath_* 用，Python math/cmath 实现） ----

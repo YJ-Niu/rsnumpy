@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: MIT
-"""掩码记录数组（numpy.ma.mrecords 兼容实现）。
+"""掩码记录数组（ma.mrecords 兼容实现）。
 
 MaskedRecords：基于结构化（记录）数据的掩码数组；逐记录访问返回
 带字段接口的记录对象。
 """
 
-import rsnumpy as np
+import rsarray as np
 from .core import MaskedArray, asarray, getmaskarray, nomask
 
 
 class _MaskedRecord(tuple):
-    """带字段访问的记录（numpy.ma.mrecords 记录语义）。"""
+    """带字段访问的记录（ma.mrecords 记录语义）。"""
 
     def __new__(cls, values, dtype_obj, mask=None, parent=None, index=0):
         obj = tuple.__new__(cls, tuple(values))
@@ -37,7 +37,7 @@ class _MaskedRecord(tuple):
 
 
 class MaskedRecords(MaskedArray):
-    """记录型掩码数组（numpy.ma.mrecords.MaskedRecords 兼容子集）。"""
+    """记录型掩码数组（ma.mrecords.MaskedRecords 兼容子集）。"""
 
     def __init__(self, data=None, mask=False, dtype=None, fill_value=None,
                  **kwargs):
@@ -67,17 +67,17 @@ class MaskedRecords(MaskedArray):
 
 
 def mrecarray(data=None, dtype=None, shape=None, **kwargs):
-    """构造 MaskedRecords（numpy.ma.mrecords.mrecarray 兼容）。"""
+    """构造 MaskedRecords（ma.mrecords.mrecarray 兼容）。"""
     return MaskedRecords(data, mask=kwargs.pop('mask', False),
                          dtype=dtype, fill_value=kwargs.pop('fill_value', None),
                          **kwargs)
 
 
 def fromarrays(*args, **kwargs):
-    """从列数组构造 MaskedRecords（numpy.ma.mrecords.fromarrays 兼容）。
+    """从列数组构造 MaskedRecords（ma.mrecords.fromarrays 兼容）。
 
-    单 list/tuple 参数按列解包（numpy 语义）；MaskedArray 列取其底层
-    数据（rec 层不理解 ma；掩码位置数据保留原值，与 numpy 一致）。
+    单 list/tuple 参数按列解包（数组语义）；MaskedArray 列取其底层
+    数据（rec 层不理解 ma；掩码位置数据保留原值，与标准语义一致）。
     """
     mask = kwargs.pop('mask', None)
     if len(args) == 1 and isinstance(args[0], (list, tuple)):
@@ -104,18 +104,18 @@ def fromarrays(*args, **kwargs):
 
 
 def fromrecords(recs, **kwargs):
-    """从记录序列构造 MaskedRecords（numpy.ma.mrecords.fromrecords 兼容）。"""
+    """从记录序列构造 MaskedRecords（ma.mrecords.fromrecords 兼容）。"""
     arr = np.rec.fromrecords(recs, **kwargs)
     return MaskedRecords(arr)
 
 
 def fromtextfile(name, **kwargs):
     raise NotImplementedError(
-        "rsnumpy.ma.mrecords.fromtextfile is not implemented")
+        "rsarray.ma.mrecords.fromtextfile is not implemented")
 
 
 def addfield(a, data, name, dtype=None, newbytes=0):
-    """给记录数组追加字段（numpy.ma.mrecords.addfield 兼容）。"""
+    """给记录数组追加字段（ma.mrecords.addfield 兼容）。"""
     a = asarray(a)
     if not np.dtype(a.data.dtype).names:
         raise TypeError("addfield: a must be a record array")

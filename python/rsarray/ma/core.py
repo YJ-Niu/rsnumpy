@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: MIT
-"""掩码数组核心（numpy.ma.core 兼容子集）。
+"""掩码数组核心（ma.core 兼容子集）。
 
-包装底层 ndarray 与逐元素布尔掩码；提供 numpy.ma.core 移植测试
+包装底层 ndarray 与逐元素布尔掩码；提供 ma.core 移植测试
 直接引用的公共名与辅助函数。
 """
 
 import builtins
 import warnings
 
-import rsnumpy as np
+import rsarray as np
 
 
 def _flatten(seq):
@@ -51,7 +51,7 @@ def _fields_leaf_count(dt):
 
 def _leaf_count(data):
     """掩码长度语义：普通数组 = size；结构化数组 = size × 每记录字段叶子数
-    （numpy：结构化 ma 的掩码为字段级）。"""
+    （—结构化 ma 的掩码为字段级）。"""
     dt = getattr(data, 'dtype', None)
     names = getattr(dt, 'names', None)
     size = int(getattr(data, 'size', 0) or 0)
@@ -65,15 +65,15 @@ def _is_ma(a):
 
 
 class MAError(ValueError):
-    """掩码数组错误（numpy.ma.core.MAError 兼容）。"""
+    """掩码数组错误（ma.core.MAError 兼容）。"""
 
 
 class MaskError(Exception):
-    """掩码相关错误（numpy.ma.core.MaskError 兼容）。"""
+    """掩码相关错误（ma.core.MaskError 兼容）。"""
 
 
 class MaskedArrayFutureWarning(FutureWarning):
-    """numpy.ma.core.MaskedArrayFutureWarning 兼容占位。"""
+    """ma.core.MaskedArrayFutureWarning 兼容占位。"""
 
 
 _ma_argsort_default = object()
@@ -81,7 +81,7 @@ _ma_reduce_default = object()
 
 
 def _ma_mask_or(m1, m2, size):
-    """掩码按位或，双方各自广播到 size（numpy 广播语义：1 → 全部重复，
+    """掩码按位或，双方各自广播到 size（广播语义：1 → 全部重复，
     n < size → 平铺裁剪）。"""
     def bc(m):
         if len(m) == size:
@@ -115,7 +115,7 @@ class MaskedArray:
             elif dtype is not None:
                 data = data.view(dtype)
         self._data = data
-        # 掩码长度语义（numpy）：普通数组 = size；结构化数组 = size ×
+        # 掩码长度语义：普通数组 = size；结构化数组 = size ×
         # 每记录字段叶子数（字段级掩码）。展平后按叶子数对齐：
         # 单值广播、不足补 False、超长截断——不做记录级截断（那会
         # 丢失字段级掩码信息）。
@@ -137,7 +137,7 @@ class MaskedArray:
         self.fill_value = self._as_fill(fill_value)
 
     def _as_fill(self, fv):
-        """fill_value 规范化：按 data dtype 存为 0-d 数组（numpy.ma 语义：
+        """fill_value 规范化：按 data dtype 存为 0-d 数组（ma 语义：
         x.fill_value.dtype == x.dtype；不可转换则存原值）。"""
         if fv is None:
             return None
@@ -211,7 +211,7 @@ class MaskedArray:
         return list(self._mask)
 
     def tolist(self):
-        """numpy.ma 语义：返回值（masked 位置保留原数据）。"""
+        """ma 语义：返回值（masked 位置保留原数据）。"""
         return self._data.tolist()
 
     def copy(self):
@@ -219,7 +219,7 @@ class MaskedArray:
         return MaskedArray(self._data.copy(), list(self._mask))
 
     def _as_fill(self, fv):
-        """fill_value 规范化：按 data dtype 存为 0-d 数组（numpy.ma 语义：
+        """fill_value 规范化：按 data dtype 存为 0-d 数组（ma 语义：
         x.fill_value.dtype == x.dtype；不可转换则存原值）。"""
         if fv is None:
             return None
@@ -265,7 +265,7 @@ class MaskedArray:
                            fill_value=self.fill_value)
 
     def _ma_extreme(self, which, axis=None):
-        """掩码感知 min/max：掩码位填 ±inf 后归约（numpy.ma 语义：忽略
+        """掩码感知 min/max：掩码位填 ±inf 后归约（ma 语义：忽略
         masked 元素）。axis=None 返回 0-d MaskedArray；axis 返回轴归约。"""
         import math as _math
         d = self._data
@@ -350,17 +350,17 @@ class MaskedArray:
                            fill_value=self.fill_value)
 
     def min(self, axis=None, out=None, keepdims=False):
-        """掩码感知最小值（numpy.ma 语义：忽略 masked 元素）。"""
+        """掩码感知最小值（ma 语义：忽略 masked 元素）。"""
         _ = out, keepdims
         return self._ma_extreme('min', axis)
 
     def max(self, axis=None, out=None, keepdims=False):
-        """掩码感知最大值（numpy.ma 语义：忽略 masked 元素）。"""
+        """掩码感知最大值（ma 语义：忽略 masked 元素）。"""
         _ = out, keepdims
         return self._ma_extreme('max', axis)
 
     # ------------------------------------------------------------------
-    # 转置族（numpy.ma 语义：结果保留掩码）
+    # 转置族（ma 语义：结果保留掩码）
     # ------------------------------------------------------------------
     def _ma_rebuild(self, data, mask_flat):
         out = MaskedArray(data, mask=False)
@@ -391,11 +391,11 @@ class MaskedArray:
         return self.swapaxes(self.ndim - 2, self.ndim - 1)
 
     def argsort(self, axis=_ma_argsort_default, kind=None, order=None):
-        """掩码感知 argsort（numpy.ma.argsort 兼容，gh-8701 警告语义）。"""
+        """掩码感知 argsort（ma.argsort 兼容，gh-8701 警告语义）。"""
         return _ma_argsort_impl(self, axis, kind, order)
 
     # ------------------------------------------------------------------
-    # 算术/比较 dunder：掩码按位或传播（numpy.ma 语义的核心子集）
+    # 算术/比较 dunder：掩码按位或传播（ma 语义的核心子集）
     # ------------------------------------------------------------------
     def _ma_binop(self, other, op, reflected=False):
         if isinstance(other, _MaskedConstant):
@@ -468,14 +468,14 @@ class MaskedArray:
                            fill_value=self.fill_value)
 
     def __abs__(self):
-        # numpy.abs 是一元算子：不能走二元 _ma_binop（会双参调用 op）。
+        # abs 是一元算子：不能走二元 _ma_binop（会双参调用 op）。
         # mask 恒等传播（|x| 不改变掩码）。
         res = np.abs(self._data)
         fill = self.fill_value if self.fill_value is not None else None
         return MaskedArray(res, mask=list(self._mask), fill_value=fill)
 
     def _ma_cmp(self, other, op):
-        # numpy.ma _comparison 权威语义：
+        # ma _comparison 权威语义：
         # - mask = self.mask OR other.mask
         # - data = op(raw data)
         # - 仅 ==/!=：掩码位的 data 改为 op(self_mask, other_mask)
@@ -604,7 +604,7 @@ class MaskedArray:
                 m_flat = [False] * (int(res.size)
                                     if hasattr(res, 'size') else 0)
             return MaskedArray(res, m_flat)
-        # 标量索引返回 0-d MaskedArray（numpy.ma 语义：掩码信息不能丢，
+        # 标量索引返回 0-d MaskedArray（ma 语义：掩码信息不能丢，
         # 否则后续比较走 ndarray 标量分支抛 Unsupported operand type）
         try:
             mv = bool(self._mask[int(key)]) if int(key) < len(self._mask) \
@@ -644,7 +644,7 @@ def getdata(a):
 
 
 def getmask(a):
-    """numpy.ma.getmask 兼容：非掩码数组返回 nomask。"""
+    """ma.getmask 兼容：非掩码数组返回 nomask。"""
     if _is_ma(a):
         return a._mask
     return nomask
@@ -681,7 +681,7 @@ def masked_invalid(data, copy=True):
 
 
 class _MaskedConstant:
-    """np.ma.masked 单例：按 numpy 语义表现为 0-d float64 MaskedArray
+    """np.ma.masked 单例：按 数组语义表现为 0-d float64 MaskedArray
     （值 0.0、全掩码）。委托给惰性创建的 MaskedArray 实例。"""
 
     # 哨兵：np.add 等核心 ufunc 据此短路返回常量自身（避免循环导入）
@@ -706,7 +706,7 @@ class _MaskedConstant:
         return getattr(self._as_ma(), name)
 
     def __int__(self):
-        # numpy 语义：int(masked) 对整型目标抛 MaskError（不可静默取值）
+        # 数组语义：int(masked) 对整型目标抛 MaskError（不可静默取值）
         raise MaskError("Cannot convert masked constant to int")
 
     def __float__(self):
@@ -715,7 +715,7 @@ class _MaskedConstant:
     def __index__(self):
         return 0
 
-    # numpy 语义：与 masked 常量的任何二元运算都返回 masked 单例自身
+    # 数组语义：与 masked 常量的任何二元运算都返回 masked 单例自身
     def _masked_ret(self, *args, **kwargs):
         return self
 
@@ -753,7 +753,7 @@ MaskType = np.bool_
 
 
 # ---------------------------------------------------------------------------
-# 掩码构造器（numpy.ma.core.masked_* 兼容）
+# 掩码构造器（ma.core.masked_* 兼容）
 # ---------------------------------------------------------------------------
 
 def masked_equal(a, value, copy=True):
@@ -797,7 +797,7 @@ def masked_outside(a, left, right, copy=True):
 
 
 def masked_object(a, copy=True):
-    """掩掉 None 与 NaN 元素（numpy.ma.masked_object 兼容）。"""
+    """掩掉 None 与 NaN 元素（ma.masked_object 兼容）。"""
     a = np.array(a, copy=copy) if not hasattr(a, '_array') else a
     vals = a.tolist()
     flat = _flatten(vals)
@@ -806,13 +806,13 @@ def masked_object(a, copy=True):
 
 
 def masked_where(condition, a, **kwargs):
-    """按条件生成掩码数组（numpy.ma.masked_where 兼容）。"""
+    """按条件生成掩码数组（ma.masked_where 兼容）。"""
     cond = np.array(condition, dtype=bool) if not hasattr(condition, '_array') else condition
     return MaskedArray(a, mask=cond)
 
 
 def mvoid(a):
-    """全部掩码的掩码数组（numpy.ma.mvoid 兼容）。"""
+    """全部掩码的掩码数组（ma.mvoid 兼容）。"""
     return MaskedArray(a, mask=True)
 
 
@@ -821,7 +821,7 @@ def mvoid(a):
 # ---------------------------------------------------------------------------
 
 def common_fill_value(dtype):
-    """dtype 的默认填充值（numpy.ma.common_fill_value 兼容）。"""
+    """dtype 的默认填充值（ma.common_fill_value 兼容）。"""
     dt = np.dtype(dtype)
     kind = dt.kind
     if kind in ('U', 'S'):
@@ -875,7 +875,7 @@ def minimum_fill_value(dt):
 
 
 def make_mask(a, shrink=True, mask=nomask):
-    """为 a 构造布尔掩码（numpy.ma.make_mask 兼容）。"""
+    """为 a 构造布尔掩码（ma.make_mask 兼容）。"""
     if mask is nomask:
         if _is_ma(a):
             return a._mask if a._mask.__class__ is list else nomask
@@ -907,7 +907,7 @@ def flatten_mask(mask):
 
 
 def mask_or(a, b):
-    """两个掩码按位或（numpy.ma.mask_or 兼容）。"""
+    """两个掩码按位或（ma.mask_or 兼容）。"""
     ma_ = getmaskarray(a)
     mb_ = getmaskarray(b)
     if ma_ is nomask:
@@ -918,7 +918,7 @@ def mask_or(a, b):
 
 
 def fix_invalid(a):
-    """把 inf/NaN 掩掉（numpy.ma.fix_invalid 兼容）。"""
+    """把 inf/NaN 掩掉（ma.fix_invalid 兼容）。"""
     a = asarray(a)
     data = a.data
     bad = ~np.isfinite(data)
@@ -931,7 +931,7 @@ def fix_invalid(a):
 
 
 def count(a, axis=None, **kwargs):
-    """未掩码元素计数（numpy.ma.count 兼容）。"""
+    """未掩码元素计数（ma.count 兼容）。"""
     a = asarray(a) if not _is_ma(a) else a
     m = getmaskarray(a)
     if m is nomask:
@@ -943,20 +943,20 @@ def count(a, axis=None, **kwargs):
 
 
 def filled(a, fill_value=None):
-    """掩码位置填值后返回普通数组（numpy.ma.filled 兼容）。"""
+    """掩码位置填值后返回普通数组（ma.filled 兼容）。"""
     if _is_ma(a):
         return a.filled(fill_value)
     return a
 
 
 def anom(a, tol=1e-05):
-    """掩掉 |x| <= tol 的"异常零"值（numpy.ma.anom 兼容）。"""
+    """掩掉 |x| <= tol 的"异常零"值（ma.anom 兼容）。"""
     a = np.asarray(a)
     return MaskedArray(a, mask=(np.abs(a) <= tol))
 
 
 def minmax(a):
-    """返回 (未掩码最小, 未掩码最大)（numpy.ma.minmax 兼容）。"""
+    """返回 (未掩码最小, 未掩码最大)（ma.minmax 兼容）。"""
     a = asarray(a)
     c = a.compressed()
     if c.size == 0:
@@ -966,7 +966,7 @@ def minmax(a):
 
 def masked_print_option(legacy_print=False):
     import warnings
-    warnings.warn("numpy.ma.masked_print_option is deprecated and will be "
+    warnings.warn("ma.masked_print_option is deprecated and will be "
                   "removed; it is a no-op.", DeprecationWarning, stacklevel=2)
 
     def f(x):
@@ -976,11 +976,11 @@ def masked_print_option(legacy_print=False):
 
 def fromflex(fld, **kwargs):
     raise NotImplementedError(
-        "rsnumpy.ma.fromflex is not implemented (numpy flexible file format)")
+        "rsarray.ma.fromflex is not implemented (flexible file format)")
 
 
 def flatten_structured_array(a, out_dtype=None):
-    """单字段结构化数组 → 普通数组（numpy.ma.flatten_structured_array 兼容）。"""
+    """单字段结构化数组 → 普通数组（ma.flatten_structured_array 兼容）。"""
     dt = np.dtype(getattr(a, 'dtype', a))
     if dt.names and len(dt.names) == 1:
         return a[dt.names[0]]
@@ -988,7 +988,7 @@ def flatten_structured_array(a, out_dtype=None):
 
 
 def anomalies(a, axis=None, dtype=None):
-    """标准分数（z-score），掩码感知（numpy.ma.anomalies 兼容）。
+    """标准分数（z-score），掩码感知（ma.anomalies 兼容）。
 
     结果 = (a - mean)/std，沿 axis 归一化；std == 0 的位置与输入掩码
     位置一并掩码。
@@ -1026,7 +1026,7 @@ def anomalies(a, axis=None, dtype=None):
 
 
 def allequal(a, b):
-    """两数组逐元素相等（只在双方都未掩码的位置比较，numpy.ma.allequal 兼容）。"""
+    """两数组逐元素相等（只在双方都未掩码的位置比较，ma.allequal 兼容）。"""
     a = asarray(a)
     b = asarray(b)
     if a.shape != b.shape:
@@ -1047,7 +1047,7 @@ def allequal(a, b):
 
 
 def alltrue(a, axis=None, **kwargs):
-    """未掩码元素全为真（掩码元素忽略，numpy.ma.alltrue 兼容）。"""
+    """未掩码元素全为真（掩码元素忽略，ma.alltrue 兼容）。"""
     a = asarray(a)
     if axis is None:
         c = a.compressed()
@@ -1060,7 +1060,7 @@ def alltrue(a, axis=None, **kwargs):
 
 
 def sometrue(a, axis=None, **kwargs):
-    """任一未掩码元素为真（掩码元素忽略，numpy.ma.sometrue 兼容）。"""
+    """任一未掩码元素为真（掩码元素忽略，ma.sometrue 兼容）。"""
     a = asarray(a)
     if axis is None:
         c = a.compressed()
@@ -1073,26 +1073,26 @@ def sometrue(a, axis=None, **kwargs):
 
 
 # ---------------------------------------------------------------------------
-# 构造器与 re-export（numpy.ma.core 公共名从 rsnumpy 顶层取回）
+# 构造器与 re-export（ma.core 公共名从 rsarray 顶层取回）
 # ---------------------------------------------------------------------------
 
 def zeros(shape, dtype=float, **kwargs):
-    """全零掩码数组（numpy.ma.zeros 兼容）。"""
+    """全零掩码数组（ma.zeros 兼容）。"""
     return MaskedArray(np.zeros(shape, dtype=dtype))
 
 
 def ones(shape, dtype=float, **kwargs):
-    """全一掩码数组（numpy.ma.ones 兼容）。"""
+    """全一掩码数组（ma.ones 兼容）。"""
     return MaskedArray(np.ones(shape, dtype=dtype))
 
 
 def empty(shape, dtype=float, **kwargs):
-    """未初始化掩码数组（numpy.ma.empty 兼容）。"""
+    """未初始化掩码数组（ma.empty 兼容）。"""
     return MaskedArray(np.empty(shape, dtype=dtype))
 
 
 def full(shape, fill_value, dtype=None, **kwargs):
-    """定值掩码数组（numpy.ma.full 兼容）。"""
+    """定值掩码数组（ma.full 兼容）。"""
     return MaskedArray(np.full(shape, fill_value, dtype=dtype))
 
 
@@ -1150,7 +1150,7 @@ for _n, _v in _copy_names().items():
     globals()[_n] = _v
 del _copy_names, _n, _v
 
-# 二元 ufunc 对 masked 常量短路（numpy 语义：add(masked, x) → masked）
+# 二元 ufunc 对 masked 常量短路（数组语义：add(masked, x) → masked）
 _MA_BIN_UFUNCS = (
     'add', 'subtract', 'divide', 'equal', 'not_equal',
     'greater', 'greater_equal', 'less', 'less_equal',
@@ -1175,7 +1175,7 @@ for _n in _MA_BIN_UFUNCS:
 del _MA_BIN_UFUNCS, _ma_ufunc_shortcircuit, _n
 
 
-# ---- 掩码感知 argsort / minmax（numpy.ma 语义；覆盖上面从 np 拷贝的同名函数）----
+# ---- 掩码感知 argsort / minmax（ma 语义；覆盖上面从 np 拷贝的同名函数）----
 
 def _ma_argsort_impl(a, axis, kind=None, order=None):
     # gh-8701：>1-d 的默认 axis（None/展平）未来将变为 -1
@@ -1203,17 +1203,17 @@ def _ma_argsort_impl(a, axis, kind=None, order=None):
 
 
 def argsort(a, axis=_ma_argsort_default, kind=None, order=None):
-    """掩码感知 argsort（numpy.ma.argsort 兼容；gh-8701 警告语义）。"""
+    """掩码感知 argsort（ma.argsort 兼容；gh-8701 警告语义）。"""
     return _ma_argsort_impl(asarray(a), axis, kind, order)
 
 
 class _ma_minmax:
-    """numpy.ma.minimum/maximum：可调二元算子 + .reduce（1.13 axis 警告语义）。"""
+    """ma.minimum/maximum：可调二元算子 + .reduce（1.13 axis 警告语义）。"""
 
     def __init__(self, name, use_min):
         self.__name__ = name
         self._use_min = use_min
-        self.__doc__ = "mask-aware %s (numpy.ma.%s compatible)" % (name, name)
+        self.__doc__ = "mask-aware %s (ma.%s compatible)" % (name, name)
 
     def __call__(self, a, b, **kw):
         return (np.minimum(a, b, **kw) if self._use_min
@@ -1267,7 +1267,7 @@ class _ma_minmax:
 minimum = _ma_minmax('minimum', True)
 maximum = _ma_minmax('maximum', False)
 
-# numpy 遗留别名：product = prod。np.product 在顶层于 ma 导入之后才挂载，
+# 遗留别名：product = prod。np.product 在顶层于 ma 导入之后才挂载，
 # _copy_names 时尚不可见，这里显式补齐。
 product = prod
 
@@ -1276,7 +1276,7 @@ product = prod
 # ---- 循环之后以覆盖从 np 拷贝的同名函数）
 
 def nonzero(a):
-    """掩码感知 nonzero：返回未掩码非零元素的索引元组（numpy.ma.nonzero）。"""
+    """掩码感知 nonzero：返回未掩码非零元素的索引元组（ma.nonzero）。"""
     a = asarray(a)
     m = getmaskarray(a)
     ok = a.data != 0
@@ -1288,7 +1288,7 @@ def nonzero(a):
 
 
 def cumsum(a, axis=None, dtype=None, out=None):
-    """掩码感知累计和（numpy.ma.cumsum 兼容；掩码保留）。"""
+    """掩码感知累计和（ma.cumsum 兼容；掩码保留）。"""
     a = asarray(a)
     d = a.data
     res = d.cumsum() if axis is None else d.cumsum(axis=axis)
@@ -1299,7 +1299,7 @@ def cumsum(a, axis=None, dtype=None, out=None):
 
 
 def compress(condition, a, axis=None, out=None):
-    """按条件提取元素（numpy.ma.compress 兼容；掩码位置不选入）。"""
+    """按条件提取元素（ma.compress 兼容；掩码位置不选入）。"""
     a = asarray(a)
     cond = np.asarray(condition)
     if axis is not None:
@@ -1319,7 +1319,7 @@ def compress(condition, a, axis=None, out=None):
 
 def empty(shape, dtype=None, order='C', *, device=None, like=None,
           fill_value=None, hardmask=False):
-    """掩码空数组（numpy.ma.empty 兼容；精确签名）。"""
+    """掩码空数组（ma.empty 兼容；精确签名）。"""
     _ = order, device, like, hardmask
     arr = np.empty(shape, dtype=dtype)
     fv = common_fill_value(arr.dtype) if fill_value is None else fill_value
@@ -1332,7 +1332,7 @@ def empty(shape, dtype=None, order='C', *, device=None, like=None,
 
 def empty_like(prototype, /, dtype=None, order='K', subok=True,
                shape=None, *, device=None):
-    """同形状掩码空数组（numpy.ma.empty_like 兼容；精确签名）。"""
+    """同形状掩码空数组（ma.empty_like 兼容；精确签名）。"""
     _ = order, subok, device
     proto = prototype.data if isinstance(prototype, MaskedArray) else prototype
     if shape is not None:
@@ -1344,7 +1344,7 @@ def empty_like(prototype, /, dtype=None, order='K', subok=True,
 
 
 def squeeze(a, axis=None, *, fill_value=None, hardmask=False):
-    """压缩单元素轴（numpy.ma.squeeze 兼容；精确签名）。"""
+    """压缩单元素轴（ma.squeeze 兼容；精确签名）。"""
     _ = hardmask
     a = asarray(a)
     res = a.data.squeeze(axis=axis) if axis is not None else a.data.squeeze()
@@ -1363,7 +1363,7 @@ def squeeze(a, axis=None, *, fill_value=None, hardmask=False):
 
 
 def identity(n, dtype=None, *, like=None, fill_value=None, hardmask=False):
-    """单位矩阵（numpy.ma.identity 兼容；精确签名）。"""
+    """单位矩阵（ma.identity 兼容；精确签名）。"""
     _ = like, hardmask
     arr = np.identity(n, dtype=dtype)
     fv = common_fill_value(arr.dtype) if fill_value is None else fill_value

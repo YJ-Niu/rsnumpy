@@ -1,34 +1,34 @@
 # SPDX-License-Identifier: MIT
-"""rsnumpy.lib - 兼容 numpy.lib 的子模块集合。"""
+"""rsarray.lib - 工具子模块集合。"""
 
 from . import recfunctions
 from . import stride_tricks
 from . import _index_tricks_impl
 
-# numpy.lib._shape_base_impl 的兼容引用(suppress_warnings 等按模块过滤用)
+# 形状操作 impl 的兼容引用(suppress_warnings 等按模块过滤用)
 from .. import _extra as _shape_base_impl
 
-__all__ = ['recfunctions', 'stride_tricks', 'add_newdoc', 'NumpyVersion',
+__all__ = ['recfunctions', 'stride_tricks', 'add_newdoc', 'Version',
            '_index_tricks_impl', '_shape_base_impl']
 
 
 def add_newdoc(where, obj, doc):
-    """Stub: record a docstring for ``where.obj`` (no-op in rsnumpy)."""
+    """Stub: record a docstring for ``where.obj`` (no-op in rsarray)."""
     pass
 
 
-class NumpyVersion:
-    """NumPy 版本字符串比较器（numpy.lib.NumpyVersion 兼容）。
+class Version:
+    """版本字符串比较器（x.y.z 三段基线 + 预发布/dev/本地后缀次序）。
 
     支持 '1.21.0'、'1.21.0rc1'、'1.21.0.dev0+git...'、'1.21.0.dev-<hash>'
-    等形式；与字符串或其他 NumpyVersion 比较（<, <=, >, >=, ==, !=）。
+    等形式；与字符串或其他 Version 比较（<, <=, >, >=, ==, !=）。
     """
 
     def __init__(self, version, strict=False):
         import re
         self.vstring = str(version)
         self.strict = strict
-        # 官方语义：x.y.z 三段基线必须完整，可选预发布（aN/bN/rcN）、
+        # 语义：x.y.z 三段基线必须完整，可选预发布（aN/bN/rcN）、
         # dev 后缀（.dev0 / .dev-<hash>）与本地后缀（+<...>）；
         # '1.9'、'1,9.0'、'1.7.x' 等非法形式抛 ValueError。
         m = re.match(
@@ -48,9 +48,8 @@ class NumpyVersion:
         #   final.dev < aN.dev < aN < aN+1.dev < ... < bN.dev < bN <
         #   rcN.dev < rcN < final
         # - dev 版本比其所属基线低半步；
-        # - final 基线的 dev 版本低于所有预发布（官方 1.0.dev0 < 1.0a1）；
-        # - dev 后缀（hash 等）不参与比较（'1.9.0.dev-a' == '1.9.0.dev-b'，
-        #   官方语义）。
+        # - final 基线的 dev 版本低于所有预发布（1.0.dev0 < 1.0a1）；
+        # - dev 后缀（hash 等）不参与比较（'1.9.0.dev-a' == '1.9.0.dev-b'）。
         if self._pre is None:
             base = (4, 0)
         else:
@@ -63,7 +62,7 @@ class NumpyVersion:
         return self.vstring
 
     def __repr__(self):
-        return f'<numpy.lib.NumpyVersion {self.vstring!r}>'
+        return f'<rsarray.lib.Version {self.vstring!r}>'
 
     def __eq__(self, other):
         return self._compare(other) == 0
@@ -88,8 +87,8 @@ class NumpyVersion:
 
     def _compare(self, other):
         if isinstance(other, str):
-            other = NumpyVersion(other)
-        if not isinstance(other, NumpyVersion):
+            other = Version(other)
+        if not isinstance(other, Version):
             return NotImplemented
         return (self._key() > other._key()) - (self._key() < other._key())
 
@@ -100,4 +99,4 @@ def __getattr__(name):
                 '_stride_tricks_impl'):
         from importlib import import_module
         return import_module(f'.{name}', __name__)
-    raise AttributeError(f"module 'rsnumpy.lib' has no attribute {name!r}")
+    raise AttributeError(f"module 'rsarray.lib' has no attribute {name!r}")

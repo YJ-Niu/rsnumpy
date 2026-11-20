@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: MIT
-"""纯 Python linalg 回退算法与共享 helper（NumPy 语义对照实现）。
+"""纯 Python linalg 回退算法与共享 helper（数组语义对照实现）。
 
 Rust 核心只覆盖小方阵（2×2/3×3）；本模块提供通用形状算法：
 Cholesky、LU 行列式、快速矩阵幂、矩阵范数，以及 dtype 规则 /
 nonfinite 检查 / stacked 切片等共享 helper。
 所有矩阵运算用 Python 浮点（f64）完成，构造结果时再 astype 回
-输入对应的输出 dtype（与 NumPy _commonType 规则一致，精度只升不降）。
+输入对应的输出 dtype（与 _commonType 规则一致，精度只升不降）。
 """
 
 import cmath
@@ -32,7 +32,7 @@ __all__ = [
 
 
 class _NoValue:
-    """未提供参数的哨兵（对应 NumPy 的 _NoValue）。"""
+    """未提供参数的哨兵（对应 的 _NoValue）。"""
 
     def __repr__(self):
         return '<no value>'
@@ -64,7 +64,7 @@ def _is_inexact(dt):
 
 
 def _common_type(a_dtype):
-    """(计算 dtype, 返回 dtype)——NumPy _commonType 语义。
+    """(计算 dtype, 返回 dtype)——_commonType 语义。
 
     inexact（除 float16）保持原 dtype；float16 → TypeError；
     int/bool/其它 → float64。
@@ -82,7 +82,7 @@ def _result_dtype(a_dtype):
 
 def _nonfinite_check(mat, msg="SVD did not converge"):
     """嵌套矩阵含 inf/nan 时抛 LinAlgError（模拟 LAPACK 不收敛）。"""
-    from rsnumpy.linalg import LinAlgError
+    from rsarray.linalg import LinAlgError
 
     def scan(v):
         if isinstance(v, (list, tuple)):
@@ -102,7 +102,7 @@ def _nonfinite_check(mat, msg="SVD did not converge"):
 def _stacked_2d(arr):
     """ndarray (...,M,N) → (lead_shape, [2-d 子数组, ...])。2-d 时 lead=(())。
 
-    注意：不能用 reshape((-1, M, N))——size-0 时 rsnumpy 把 -1 解成 0，
+    注意：不能用 reshape((-1, M, N))——size-0 时 rsarray 把 -1 解成 0，
     会丢掉 lead 维（(3,0,5) 变 (0,0,5)）；这里显式算 total。
     """
     shape = arr.shape
@@ -207,7 +207,7 @@ def _py_cholesky(mat, upper=False):
     只用下三角（lower）或上三角（upper）+对角；非正定抛 LinAlgError。
     返回嵌套列表（与输入同 complex/float 性）。
     """
-    from rsnumpy.linalg import LinAlgError
+    from rsarray.linalg import LinAlgError
 
     n = len(mat)
     if upper:

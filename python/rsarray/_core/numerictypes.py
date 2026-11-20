@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: MIT
-"""numpy._core.numerictypes 兼容实现（标量类型表与转换工具）。
+"""rsarray._core.numerictypes 兼容实现（标量类型表与转换工具）。
 
-对齐 NumPy 2.x 语义；与更新版 NumPy 行为不一致处（如 ``sctype2char(1)``
-抛 ValueError）以 rsnumpy 测试契约为准。
+对齐 2.x 语义；与更新版 行为不一致处（如 ``sctype2char(1)``
+抛 ValueError）以 rsarray 测试契约为准。
 """
 
 __all__ = [
@@ -12,8 +12,8 @@ __all__ = [
 ]
 
 from builtins import bytes, complex, float, int, object, str  # noqa: F401
-# 注意：bool 不从此处导入——nt.bool 必须指向 rsnumpy 标量类（numpy
-# numerictypes 语义），由模块 __getattr__ 回落到 rsnumpy.bool。
+# 注意：bool 不从此处导入——nt.bool 必须指向 rsarray 标量类（参考实现
+# numerictypes 语义），由模块 __getattr__ 回落到 rsarray.bool。
 
 _TYPECODES = {
     'Character': 'c',
@@ -29,8 +29,8 @@ _TYPECODES = {
 
 
 def _rs():
-    import rsnumpy
-    return rsnumpy
+    import rsarray
+    return rsarray
 
 
 def _concrete_scalar_types():
@@ -77,7 +77,7 @@ def _type_char(t):
 
 
 def _sctypes_table():
-    """kind 分组 → 标量类型列表（numpy ``sctypes`` 语义）。"""
+    """kind 分组 → 标量类型列表（``sctypes`` 语义）。"""
     rs = _rs()
     groups = (
         ('int', rs.signedinteger),
@@ -89,7 +89,7 @@ def _sctypes_table():
     table = {key: [] for key, _ in groups}
     for t in _concrete_scalar_types():
         # object_ 不可带参构造（dtype('O').type(0) 会崩），不入 sctypes
-        # 'others'（numpy sctypes 语义下 object 亦非数值分组成员）。
+        # 'others'（sctypes 语义下 object 亦非数值分组成员）。
         if getattr(t, '__name__', '') in ('object_', 'object'):
             continue
         for key, abstract in groups:
@@ -102,7 +102,7 @@ def _sctypes_table():
 
 
 def _sctype_dict():
-    """名称 → 标量类型类（numpy ``sctypeDict`` 语义，含平台别名）。"""
+    """名称 → 标量类型类（``sctypeDict`` 语义，含平台别名）。"""
     rs = _rs()
     pairs = (
         ('bool', 'bool'),
@@ -129,7 +129,7 @@ def _sctype_dict():
 
 
 def _module_attr(name):
-    """PEP 562：按需暴露类型表与全部标量类型（numpy numerictypes 兼容）。"""
+    """PEP 562：按需暴露类型表与全部标量类型（numerictypes 兼容）。"""
     if name == 'sctypes':
         return _sctypes_table()
     if name in ('sctypeDict', 'typeDict'):
@@ -141,7 +141,7 @@ def _module_attr(name):
     if obj is not None and not name.startswith('_'):
         return obj
     raise AttributeError(
-        f"module 'rsnumpy._core.numerictypes' has no attribute {name!r}")
+        f"module 'rsarray._core.numerictypes' has no attribute {name!r}")
 
 
 def __getattr__(name):
@@ -149,7 +149,7 @@ def __getattr__(name):
 
 
 def issctype(rep):
-    """判断对象是否代表标量数据型（numpy ``issctype`` 兼容）。"""
+    """判断对象是否代表标量数据型（``issctype`` 兼容）。"""
     rs = _rs()
     if not isinstance(rep, (type, rs.dtype)):
         return False
@@ -163,7 +163,7 @@ def issctype(rep):
 
 
 def obj2sctype(rep, default=None):
-    """返回对象对应的标量类型（numpy ``obj2sctype`` 兼容）。"""
+    """返回对象对应的标量类型（``obj2sctype`` 兼容）。"""
     rs = _rs()
     try:
         if isinstance(rep, type) and issubclass(rep, rs.generic):
@@ -184,7 +184,7 @@ def obj2sctype(rep, default=None):
 
 
 def sctype2char(sctype):
-    """返回标量类型对应的单字符表示（numpy ``sctype2char`` 兼容）。
+    """返回标量类型对应的单字符表示（``sctype2char`` 兼容）。
 
     - 数组/标量实例 → 取其 dtype；
     - 抽象 generic 子类、第三方标量类型 → KeyError；

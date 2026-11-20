@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""补充的 NumPy 兼容 API。
+"""补充的 标准兼容 API。
 
 计算全部复用已有的 Rust 原语（_core 或已导出的顶层函数），本层仅做组合与包装，
 不重复实现底层数值循环。热点函数可在后续通过 Rust 层进一步优化。
@@ -11,7 +11,7 @@ import cmath as _cmath
 import math as _math
 import re as _re
 
-import rsnumpy.num_core as _core
+import rsarray.num_core as _core
 
 builtin_max = max
 builtin_min = min
@@ -24,7 +24,7 @@ builtin_sum = sum
 
 
 def _np():
-    import rsnumpy as _n
+    import rsarray as _n
     return _n
 
 
@@ -152,7 +152,7 @@ def exp2(x):
 
 
 def floor_divide(x1, x2):
-    """逐元素向下整除（除零按浮点错误状态处理，numpy 语义）。"""
+    """逐元素向下整除（除零按浮点错误状态处理，数组语义）。"""
     np = _np()
     a = _asarray(x1)
     b = _asarray(x2)
@@ -296,7 +296,7 @@ def _nextafter_prec(a, b, st, width, ufmt):
 def nextafter(x1, x2):
     """逐元素返回 x1 朝 x2 方向的下一个可表示浮点数。
 
-    numpy 语义：结果 dtype 跟随输入提升，next-ULP 按该精度计算
+    数组语义：结果 dtype 跟随输入提升，next-ULP 按该精度计算
     （f16/f32/f64 各自的相邻可表示值）。Rust 核心统一以 f64 存储，
     f16/f32 结果在 Python 层按 IEEE 位级 next-ULP 计算（struct 'e'/'f'
     的 C 转换保证 round-half-even），f64 结果走 Rust 快速路径。
@@ -485,7 +485,7 @@ def prod(a, axis=None, dtype=None, out=None, keepdims=False, initial=None, where
     arr = _asarray(a)
     dt = getattr(arr, '_dtype', 'float64')
     res_dt = dtype if dtype is not None else dt
-    # 0-d 短路：Rust 归约对 0-d 输入会 abort；numpy 返回保持原 dtype 的 0-d
+    # 0-d 短路：Rust 归约对 0-d 输入会 abort；返回保持原 dtype 的 0-d
     if not tuple(getattr(arr._array, 'shape', ())):
         res = _wrap(arr._array, _dtype=res_dt)
         if initial is not None:
@@ -536,7 +536,7 @@ def _nan_result_dtype(a, kind, axis=None, keepdims=False):
     if kind == 'mean':
         return 'float64'
     if kind in ('var', 'std'):
-        # numpy 语义：int/uint/bool/complex 输入 → float64；float 保留精度
+        # 数组语义：int/uint/bool/complex 输入 → float64；float 保留精度
         if not isinstance(dt, str):
             return 'float64'
         _k = dt.lstrip('<>=|')[:1]
@@ -551,7 +551,7 @@ def _nan_result_dtype(a, kind, axis=None, keepdims=False):
 def nansum(a, axis=None, dtype=None, out=None, keepdims=False, initial=None,
            where=True):
     """忽略 NaN 求和（委托 _nanfunctions_impl：Rust 快路径 + 逐 slice 归约）。"""
-    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    from rsarray.lib import _nanfunctions_impl as _nfi
     return _nfi.nansum(a, axis=axis, dtype=dtype, out=out, keepdims=keepdims,
                        initial=initial, where=where)
 
@@ -559,28 +559,28 @@ def nansum(a, axis=None, dtype=None, out=None, keepdims=False, initial=None,
 def nanprod(a, axis=None, dtype=None, out=None, keepdims=False, initial=None,
             where=True):
     """忽略 NaN 求积（委托 _nanfunctions_impl：Rust 快路径 + 逐 slice 归约）。"""
-    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    from rsarray.lib import _nanfunctions_impl as _nfi
     return _nfi.nanprod(a, axis=axis, dtype=dtype, out=out, keepdims=keepdims,
                         initial=initial, where=where)
 
 
 def nanmax(a, axis=None, out=None, keepdims=False, initial=None, where=True):
     """忽略 NaN 求最大值（委托 _nanfunctions_impl）。"""
-    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    from rsarray.lib import _nanfunctions_impl as _nfi
     return _nfi.nanmax(a, axis=axis, out=out, keepdims=keepdims,
                        initial=initial, where=where)
 
 
 def nanmin(a, axis=None, out=None, keepdims=False, initial=None, where=True):
     """忽略 NaN 求最小值（委托 _nanfunctions_impl）。"""
-    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    from rsarray.lib import _nanfunctions_impl as _nfi
     return _nfi.nanmin(a, axis=axis, out=out, keepdims=keepdims,
                        initial=initial, where=where)
 
 
 def nanmean(a, axis=None, dtype=None, out=None, keepdims=False, where=True):
     """忽略 NaN 求均值（委托 _nanfunctions_impl）。"""
-    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    from rsarray.lib import _nanfunctions_impl as _nfi
     return _nfi.nanmean(a, axis=axis, dtype=dtype, out=out, keepdims=keepdims,
                         where=where)
 
@@ -588,7 +588,7 @@ def nanmean(a, axis=None, dtype=None, out=None, keepdims=False, where=True):
 def nanvar(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False,
            where=True, correction=None, mean=None):
     """忽略 NaN 求方差（委托 _nanfunctions_impl）。"""
-    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    from rsarray.lib import _nanfunctions_impl as _nfi
     return _nfi.nanvar(a, axis=axis, dtype=dtype, out=out, ddof=ddof,
                        keepdims=keepdims, where=where, correction=correction,
                        mean=mean)
@@ -597,7 +597,7 @@ def nanvar(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False,
 def nanstd(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False,
            where=True, correction=None, mean=None):
     """忽略 NaN 求标准差（委托 _nanfunctions_impl）。"""
-    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    from rsarray.lib import _nanfunctions_impl as _nfi
     return _nfi.nanstd(a, axis=axis, dtype=dtype, out=out, ddof=ddof,
                        keepdims=keepdims, where=where, correction=correction,
                        mean=mean)
@@ -605,32 +605,32 @@ def nanstd(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False,
 
 def nanargmax(a, axis=None, out=None, keepdims=False):
     """忽略 NaN 的最大值索引（委托 _nanfunctions_impl）。"""
-    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    from rsarray.lib import _nanfunctions_impl as _nfi
     return _nfi.nanargmax(a, axis=axis, out=out, keepdims=keepdims)
 
 
 def nanargmin(a, axis=None, out=None, keepdims=False):
     """忽略 NaN 的最小值索引（委托 _nanfunctions_impl）。"""
-    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    from rsarray.lib import _nanfunctions_impl as _nfi
     return _nfi.nanargmin(a, axis=axis, out=out, keepdims=keepdims)
 
 
 def nancumsum(a, axis=None, dtype=None, out=None):
     """忽略 NaN 的累积和（NaN 视为 0，委托 _nanfunctions_impl）。"""
-    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    from rsarray.lib import _nanfunctions_impl as _nfi
     return _nfi.nancumsum(a, axis=axis, dtype=dtype, out=out)
 
 
 def nancumprod(a, axis=None, dtype=None, out=None):
     """忽略 NaN 的累积积（NaN 视为 1，委托 _nanfunctions_impl）。"""
-    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    from rsarray.lib import _nanfunctions_impl as _nfi
     return _nfi.nancumprod(a, axis=axis, dtype=dtype, out=out)
 
 
 def nanquantile(a, q, axis=None, out=None, method='linear', keepdims=False,
                 weights=None, interpolation=None):
     """忽略 NaN 的分位数（委托 _nanfunctions_impl）。"""
-    from rsnumpy.lib import _nanfunctions_impl as _nfi
+    from rsarray.lib import _nanfunctions_impl as _nfi
     return _nfi.nanquantile(a, q, axis=axis, out=out, method=method,
                             keepdims=keepdims, weights=weights,
                             interpolation=interpolation)
@@ -654,7 +654,7 @@ def count_nonzero(a, axis=None, *, keepdims=False):
     np = _np()
     arr = _asarray(a)
     # 字符串数组（S/U）：非空元素为真（"" / b"" 为假）→ 转 0/1 掩码
-    # 后走数值路径（numpy 语义）
+    # 后走数值路径（数组语义）
     if getattr(arr, '_str_dtype', None) is not None or \
             str(getattr(arr, '_dtype', '')) in ('string_', 'bytes_'):
         _vals_c = []
@@ -675,9 +675,9 @@ def count_nonzero(a, axis=None, *, keepdims=False):
             arr = np.array([_bools_c[0] if _bools_c else 0.0])
     if axis is None:
         return _core.count_nonzero(arr._array)
-    # numpy 风格的 axis 校验：重复 axis 抛 ValueError，非整数抛 TypeError，
+    # 风格的 axis 校验：重复 axis 抛 ValueError，非整数抛 TypeError，
     # 越界抛 AxisError
-    from rsnumpy.exceptions import AxisError as _AxisError
+    from rsarray.exceptions import AxisError as _AxisError
     if isinstance(axis, (tuple, list)):
         if len(set(axis)) != len(axis):
             raise ValueError("repeated axis in input")
@@ -855,7 +855,7 @@ def setxor1d(ar1, ar2, assume_unique=False):
 
 
 def isin(element, test_elements, assume_unique=False, invert=False, kind=None):
-    """逐元素判断 element 是否属于 test_elements（numpy 语义；NaN 视为相等）。
+    """逐元素判断 element 是否属于 test_elements（数组语义；NaN 视为相等）。
 
     kind：None/'sort' 不限制；'table' 仅支持整数/布尔（float/object/timedelta
     报 ValueError），整数表范围超出 dtype 表示范围时 RuntimeError。
@@ -978,7 +978,7 @@ def size(a, axis=None):
     if axis is None:
         return arr.size
     if isinstance(axis, (tuple, list)):
-        # numpy 语义：元组 axis → 对应轴大小乘积；空元组 → 1
+        # 数组语义：元组 axis → 对应轴大小乘积；空元组 → 1
         if len(axis) == 0:
             return 1
         n = 1
@@ -993,7 +993,7 @@ def isscalar(element):
     if isinstance(element, (int, float, complex, bool, bytes, str)):
         return True
     try:
-        import rsnumpy as _rn
+        import rsarray as _rn
         if isinstance(element, _rn.generic):
             return True
     except Exception:
@@ -1005,7 +1005,7 @@ def isscalar(element):
             return True
     except Exception:
         pass
-    # PEP 3141（numpy 语义）:numbers.Number 子类视为标量——裸 Number()
+    # PEP 3141（数组语义）:numbers.Number 子类视为标量——裸 Number()
     # 实例既无 __index__ 也无 __float__(那分别是 Integral/Real 的方法),
     # 须用 isinstance 判定;rs 标量(非 int 子类)靠 __index__/__float__ 兼容。
     if hasattr(element, '__len__'):
@@ -1031,7 +1031,7 @@ def iterable(y):
 
 
 def iscomplexobj(x):
-    """判断对象是否为复数类型（numpy 语义：dtype.kind / 元素级检测）。"""
+    """判断对象是否为复数类型（数组语义：dtype.kind / 元素级检测）。"""
     if isinstance(x, builtins.complex):
         return True
     if isinstance(x, (list, tuple)):
@@ -1076,7 +1076,7 @@ def isnat(x):
 
 def _is_inf_check(x, out, positive):
     """isposinf/isneginf 共用实现：complex 输入抛 TypeError，标量返回
-    bool 标量，支持 out 参数（numpy 语义）。"""
+    bool 标量，支持 out 参数（数组语义）。"""
     np = _np()
     arr = _asarray(x)
     try:
@@ -1111,7 +1111,7 @@ def isposinf(x, out=None):
 
 
 def real(val):
-    """返回实部（Python 标量输入返回 float，numpy 语义）。"""
+    """返回实部（Python 标量输入返回 float，数组语义）。"""
     np = _np()
     if isinstance(val, builtins.complex):
         return float(val.real)
@@ -1128,7 +1128,7 @@ def real(val):
 
 
 def imag(val):
-    """返回虚部（Python 标量输入返回 float，numpy 语义）。"""
+    """返回虚部（Python 标量输入返回 float，数组语义）。"""
     np = _np()
     if isinstance(val, builtins.complex):
         return float(val.imag)
@@ -1176,7 +1176,7 @@ def angle(z, deg=False):
 def real_if_close(a, tol=100):
     """若虚部接近 0 则返回实部，否则原样返回。
 
-    numpy 语义：int tol 为机器精度倍数（tol * eps），非 int tol 为绝对阈值。
+    数组语义：int tol 为机器精度倍数（tol * eps），非 int tol 为绝对阈值。
     """
     if not iscomplexobj(a):
         return _asarray(a)
@@ -1193,7 +1193,7 @@ def real_if_close(a, tol=100):
 
 
 def nan_to_num(x, copy=True, nan=0.0, posinf=None, neginf=None):
-    """将 NaN/Inf 替换为有限数（numpy 语义）。
+    """将 NaN/Inf 替换为有限数（数组语义）。
 
     0-d / 标量输入返回对应标量（int64/float64/complex128）；
     copy=False 时原地修改并返回同一对象。
@@ -1274,7 +1274,7 @@ def atleast_2d(*arys):
 
 
 def atleast_3d(*arys):
-    """确保输入至少为三维（numpy 语义：0-d→(1,1,1)；1-d→(1,n,1)；
+    """确保输入至少为三维（数组语义：0-d→(1,1,1)；1-d→(1,n,1)；
     2-d→(n,m,1)——第 3 维追加在末尾，非前置补 1）。"""
     out = []
     for a in arys:
@@ -1291,7 +1291,7 @@ def atleast_3d(*arys):
 
 
 def broadcast_shapes(*shapes):
-    """按 NumPy 规则计算广播后的形状。"""
+    """按 标准规则计算广播后的形状。"""
     result = ()
     for shape in shapes:
         shp = tuple(shape)
@@ -1311,7 +1311,7 @@ def broadcast_shapes(*shapes):
 
 
 def broadcast_arrays(*args, subok=False):
-    """将多个数组广播到公共形状（subok 接受以兼容 numpy；rsnumpy 无子类体系）。"""
+    """将多个数组广播到公共形状（subok 接受以兼容标准签名；rsarray 无子类体系）。"""
     _ = subok
     np = _np()
     arrs = [_asarray(a) for a in args]
@@ -1320,9 +1320,9 @@ def broadcast_arrays(*args, subok=False):
 
 
 def block(arrays):
-    """按嵌套列表组装数组块（numpy 语义）。
+    """按嵌套列表组装数组块（数组语义）。
 
-    校验与 numpy _block 一致：顶层 tuple 拒绝（TypeError）、空列表
+    校验与 _block 一致：顶层 tuple 拒绝（TypeError）、空列表
     ValueError（消息含 'empty'）、嵌套深度不匹配 ValueError（消息含
     'depths are mismatched'）、单数组/标量输入返回副本（list_ndim==0）。
     """
@@ -1339,10 +1339,10 @@ def block(arrays):
         return _asarray(x).ndim
 
     def _depths_match(x, depth):
-        """numpy _block_check_depths_match：所有叶子索引长度一致才算匹配。
+        """_block_check_depths_match：所有叶子索引长度一致才算匹配。
 
         空 list 返回 depth+1 并带 None 标记（参与深度比较——如 [1, []] 应先报
-        深度不匹配）；tuple 在任意层级拒绝（numpy 同款 TypeError）。"""
+        深度不匹配）；tuple 在任意层级拒绝（同款 TypeError）。"""
         if isinstance(x, tuple):
             raise TypeError(
                 "arrays is a tuple. Only lists can be used to arrange "
@@ -1392,9 +1392,9 @@ def block(arrays):
 
     result = _build(arrays, 0)
     if list_depth == 0:
-        # numpy 语义：单数组/标量输入返回副本（_block_concatenate 的边缘处理）
+        # 数组语义：单数组/标量输入返回副本（_block_concatenate 的边缘处理）
         result = result.copy()
-    # 内存序（numpy 语义）：全部叶子数组 F 序 → 结果 F 序
+    # 内存序（数组语义）：全部叶子数组 F 序 → 结果 F 序
     # （concatenate 不传播 _rs_order 标记，在此统一恢复）。
     if result.ndim > 1:
         def _all_f(x):
@@ -1426,7 +1426,7 @@ def array_split(ary, indices_or_sections, axis=0):
         bounds = bounds[:-1]
     else:
         bounds = list(indices_or_sections)
-    # 零分配广播视图：只调逻辑形状（numpy 语义：split 产出视图，不物化）
+    # 零分配广播视图：只调逻辑形状（数组语义：split 产出视图，不物化）
     _ovr = getattr(arr, '_rs_shape_override', None)
     result = []
     prev = 0
@@ -1439,7 +1439,7 @@ def array_split(ary, indices_or_sections, axis=0):
             _res._rs_shape_override = tuple(_shp)
             result.append(_res)
         else:
-            # 切片切分（numpy 视图语义；避免 list(range(巨大轴)) 的内存爆炸）
+            # 切片切分（视图语义；避免 list(range(巨大轴)) 的内存爆炸）
             _key = [slice(None)] * _ndim
             _key[axis] = slice(prev, b)
             result.append(arr[tuple(_key)])
@@ -1448,9 +1448,9 @@ def array_split(ary, indices_or_sections, axis=0):
 
 
 def unstack(x, axis=0):
-    """沿指定轴拆成子数组元组（NumPy 2.1）。
+    """沿指定轴拆成子数组元组（2.1）。
 
-    numpy 语义：负 axis 归一化；越界（正向未归一化前 |axis| 超出 ndim）
+    数组语义：负 axis 归一化；越界（正向未归一化前 |axis| 超出 ndim）
     抛 ValueError 而非 IndexError。"""
     np = _np()
     arr = _asarray(x)
@@ -1475,7 +1475,7 @@ def take_along_axis(arr, indices, axis):
     a = _asarray(arr)
     idx = _asarray(indices)
     if axis is None:
-        # numpy 官方语义（_shape_base_impl.take_along_axis）
+        # 标准语义（_shape_base_impl.take_along_axis）
         if len(idx.shape) != 1:
             raise ValueError(
                 "when axis=None, `indices` must have a single dimension.")
@@ -1485,13 +1485,13 @@ def take_along_axis(arr, indices, axis):
     if axis < 0:
         axis += _ndim
     if not 0 <= axis < _ndim:
-        from rsnumpy.exceptions import AxisError as _AxisError
+        from rsarray.exceptions import AxisError as _AxisError
         raise _AxisError(
             f"axis {axis} is out of bounds for array of dimension {_ndim}")
     if len(idx.shape) != _ndim:
         raise ValueError(
             "indices and array must have the same number of dimensions")
-    # numpy 语义：indices 必须是整数数组（bool/float 均不允许 → IndexError）
+    # 数组语义：indices 必须是整数数组（bool/float 均不允许 → IndexError）
     _k = getattr(getattr(idx, '_dtype_obj', None), 'kind', None)
     if _k is None:
         _idn = str(getattr(idx, '_dtype', ''))
@@ -1500,7 +1500,7 @@ def take_along_axis(arr, indices, axis):
         raise IndexError(
             "arrays used as indices must be of integer (or boolean) type")
     if tuple(idx.shape) != tuple(a.shape):
-        # numpy 语义：非 axis 维度上 a 与 indices 双向广播
+        # 数组语义：非 axis 维度上 a 与 indices 双向广播
         # （结果 axis 维 = indices 的 axis 维）
         _a_rest = a.shape[:axis] + a.shape[axis + 1:]
         _i_rest = idx.shape[:axis] + idx.shape[axis + 1:]
@@ -1524,7 +1524,7 @@ def put_along_axis(arr, indices, values, axis):
     v = _asarray(values)
     _flat_mode = axis is None
     if axis is None:
-        # numpy 官方语义（_shape_base_impl.put_along_axis）
+        # 标准语义（_shape_base_impl.put_along_axis）
         if len(idx.shape) != 1:
             raise ValueError(
                 "when axis=None, `indices` must have a single dimension.")
@@ -1534,7 +1534,7 @@ def put_along_axis(arr, indices, values, axis):
     if axis < 0:
         axis += _ndim
     if not 0 <= axis < _ndim:
-        from rsnumpy.exceptions import AxisError as _AxisError
+        from rsarray.exceptions import AxisError as _AxisError
         raise _AxisError(
             f"axis {axis} is out of bounds for array of dimension {_ndim}")
     if len(idx.shape) != _ndim:
@@ -1547,14 +1547,14 @@ def put_along_axis(arr, indices, values, axis):
     if _k not in ('i', 'u'):
         raise IndexError(
             "arrays used as indices must be of integer (or boolean) type")
-    # values 广播到 indices 形状（numpy 官方语义）
+    # values 广播到 indices 形状（标准语义）
     if tuple(v.shape) != tuple(idx.shape):
         v = _np().broadcast_to(v, tuple(idx.shape))
     if tuple(idx.shape) == tuple(a.shape):
         _core.put_along_axis(a._array, idx._array, v._array, axis)
         return None
-    # numpy 官方实现（_make_along_axis_idx）：正交 arange 花式索引 +
-    # 标准 setitem，写入落回原数组（rsnumpy 的切片 getitem 是拷贝，
+    # 标准实现（_make_along_axis_idx）：正交 arange 花式索引 +
+    # 标准 setitem，写入落回原数组（rsarray 的切片 getitem 是拷贝，
     # 切片回写方案不可行）。
     _shp_ones = (1,) * len(a.shape)
     _fancy = []
@@ -1592,7 +1592,7 @@ _INT_WRAP_BITS = {'int8': 8, 'int16': 16, 'int32': 32, 'int64': 64,
 def copyto(dst, src, casting="same_kind", where=True):
     """将 src 的值复制到 dst（就地，Rust 实现）。
 
-    标量 src 按目标 dtype 语义预转换：整数 dtype 按位宽回绕（numpy wrap
+    标量 src 按目标 dtype 语义预转换：整数 dtype 按位宽回绕（wrap
     语义，300→int8=44）；字符串标量无法解析按 0；字符串 dtype 数组直接
     写 _raw_data（Rust copyto 会把字符串写成 None 占位）。"""
     _ = casting, where
@@ -1625,7 +1625,7 @@ def place(arr, mask, vals):
 
 
 def putmask(a, mask, values):
-    """按布尔掩码逐元素写入值（与 numpy.putmask 一致：a[i]=v[i] where mask[i]）。"""
+    """按布尔掩码逐元素写入值（与 putmask 一致：a[i]=v[i] where mask[i]）。"""
     arr = _asarray(a)
     m = _asarray(mask)
     v = _asarray(values)
@@ -1742,7 +1742,7 @@ def trim_zeros(filt, trim="fb"):
 def ediff1d(ary, to_end=None, to_begin=None):
     """一维相邻元素差分，可选 to_begin/to_end 前后拼接。
 
-    语义（numpy 2.x）：diff = ary[1:] - ary[:-1]（一维），结果 =
+    语义（2.x）：diff = ary[1:] - ary[:-1]（一维），结果 =
     to_begin + diff + to_end。to_begin/to_end 可为标量或一维数组；
     dtype 须与 ary same_kind 可转（float→int 等禁止，抛 TypeError），
     Python int 标量按 ary dtype 补码回绕（如 int16 上 2**16 → 0）。
@@ -1821,7 +1821,7 @@ def cross(a, b, axisa=-1, axisb=-1, axisc=-1, axis=None):
         raise ValueError("Cross product requires 3-element vectors")
     Ab, Bb = np.broadcast_arrays(Am, Bm)
     # 混合整型先提升到公共 dtype（uint8*int32 逐元素乘法会按操作数
-    # dtype 回绕，与 numpy cross 的提升语义不一致）。
+    # dtype 回绕，与 cross 的提升语义不一致）。
     _rd = np.result_type(A, B)
     Ab = Ab.astype(_rd.name)
     Bb = Bb.astype(_rd.name)
@@ -1862,7 +1862,7 @@ def outer(a, b, out=None):
     br = np.reshape(bv, (1, bv.size))
     res = np.multiply(ar, br)
     if out is not None:
-        # numpy 语义:out 形状须与结果一致,结果写入 out 并返回 out
+        # 数组语义:out 形状须与结果一致,结果写入 out 并返回 out
         if tuple(out.shape) != (av.size, bv.size):
             raise ValueError(
                 "non-broadcastable output operand with shape "
@@ -1878,7 +1878,7 @@ def kron(a, b):
     np = _np()
     _nd = np.ndarray
     # masked 输入：值 = filled(1) 的 kron；掩码 = m_a/m_b 按结果索引
-    # 取模 OR（对角外有任一因子被掩码即掩码，numpy ma.kron 语义）
+    # 取模 OR（对角外有任一因子被掩码即掩码，ma.kron 语义）
     _ma = getattr(np, 'ma', None)
     if _ma is not None and (_ma.isMaskedArray(a) or _ma.isMaskedArray(b)):
         import itertools
@@ -1897,7 +1897,7 @@ def kron(a, b):
         mask = np.array(mask_flat, dtype=bool).reshape(out_shape)
         return _ma.MaskedArray(data, mask=mask)
     # 官方语义：结果类型由 __array_priority__ 更高的子类决定
-    # (numpy: kron(a, ma) → ma 的类型)
+    # (—kron(a, ma) → ma 的类型)
     _subcls = None
     for _x in (a, b):
         if isinstance(_x, _nd) and type(_x) is not _nd:
@@ -1911,7 +1911,7 @@ def kron(a, b):
     if A.ndim == 1 and B.ndim == 1:
         res = outer(A, B).ravel()
     else:
-        # numpy 语义：kron[a_idx * bsh + b_idx] = a[a_idx] * b[b_idx]。
+        # 数组语义：kron[a_idx * bsh + b_idx] = a[a_idx] * b[b_idx]。
         # 等价于 tile(A, bsh) 逐块重复 × B 逐元素展开（repeat ash 次）。
         _nd2 = builtins.max(A.ndim, B.ndim)
         ash = (1,) * (_nd2 - A.ndim) + tuple(A.shape)
@@ -1956,7 +1956,7 @@ def tensordot(a, b, axes=2):
     它比einsum更高效，但灵活性稍低。
 
     【使用示例】
-    >>> import rsnumpy as np
+    >>> import rsarray as np
 
     # 1. 矩阵乘法：收缩最后1个维度
     >>> A = np.array([[1, 2], [3, 4]])
@@ -2077,7 +2077,7 @@ def tensordot(a, b, axes=2):
     n2 = _math.prod(B.shape[i] for i in notin_b) if notin_b else 1
 
     # 重塑为2D矩阵进行matmul
-    # 零收缩维(nc=0):numpy 语义结果是全零数组(形状由非收缩维决定)。
+    # 零收缩维(nc=0):数组语义结果是全零数组(形状由非收缩维决定)。
     # Rust matmul 对零尺寸维返回失真结果(如 size 1),须预检短路。
     if nc == 0:
         outshape0 = tuple(A.shape[i] for i in notin_a) + tuple(
@@ -2136,7 +2136,7 @@ def tri(N, M=None, k=0, dtype=None):
 def _tril_triu_masked(arr, mask, invert=False):
     """按 (N,M) 布尔掩码取 arr 最后两维的三角（where，避免 inf*0=nan，保留 dtype）。
 
-    rsnumpy where 不会把小的 leading 维广播到大的，N>2 时先把掩码 repeat 到全形；
+    rsarray where 不会把小的 leading 维广播到大的，N>2 时先把掩码 repeat 到全形；
     2-D 时掩码与 arr 同形，直接使用。
     """
     np = _np()
@@ -2343,10 +2343,10 @@ def kaiser(M, beta):
 
 
 def _conv_corr_mode(mode):
-    """convolve/correlate 的 mode 校验(精确对齐 numpy C 层语义)。
+    """convolve/correlate 的 mode 校验(精确对齐 C 层语义)。
 
     字符串:仅 'valid'/'same'/'full';整数:legacy 0=valid 1=same 2=full;
-    其余类型/取值分别 TypeError/ValueError(numpy 消息)。
+    其余类型/取值分别 TypeError/ValueError(消息)。
     """
     if isinstance(mode, str):
         if mode in ('valid', 'same', 'full'):
@@ -2433,14 +2433,14 @@ def _boolmask(arr):
 
 
 def _check_array_function(a):
-    """numpy 语义:子类 __array_function__ 返回 NotImplemented 时抛
-    TypeError(numpy 对未接管的函数统一报错)。"""
+    """数组语义:子类 __array_function__ 返回 NotImplemented 时抛
+    TypeError(对未接管的函数统一报错)。"""
     _af = getattr(a, '__array_function__', None)
-    if _af is not None and type(a) is not getattr(__import__('rsnumpy'), 'ndarray'):
+    if _af is not None and type(a) is not getattr(__import__('rsarray'), 'ndarray'):
         try:
             if _af(type(a), [a], (), None) is NotImplemented:
                 raise TypeError(
-                    "no implementation found for 'numpy.all' on types that "
+                    "no implementation found for 'all' on types that "
                     "implement __array_function__: "
                     f"[{type(a).__module__}.{type(a).__name__}]")
         except TypeError:
@@ -2487,17 +2487,17 @@ def astype(x, dtype, copy=True, casting="unsafe"):
     np_ = _np()
     if not hasattr(x, '_array'):
         if isinstance(x, np_.generic):
-            # numpy 语义:标量 astype 返回标量(经 0-d 数组路径转换)
+            # 数组语义:标量 astype 返回标量(经 0-d 数组路径转换)
             return np_.array(x).astype(dtype)[()]
-        # numpy 语义:模块级 astype 只接受数组输入(list 等先经 asarray)
-        raise TypeError("Input should be a NumPy array")
+        # 数组语义:模块级 astype 只接受数组输入(list 等先经 asarray)
+        raise TypeError("Input should be a array")
     return x.astype(dtype, copy=copy)
 
 
 def ascontiguousarray(a, dtype=None, copy=None, subok=True):
-    """返回 C 连续数组（rsnumpy 数组始终连续）。
+    """返回 C 连续数组（rsarray 数组始终连续）。
 
-    copy/subok 为 numpy 2.x 兼容参数，当前实现忽略（数组恒连续）。
+    copy/subok 为 2.x 兼容参数，当前实现忽略（数组恒连续）。
     """
     _ = copy, subok
     arr = _np().asarray(a)
@@ -2505,7 +2505,7 @@ def ascontiguousarray(a, dtype=None, copy=None, subok=True):
 
 
 def asfortranarray(a, dtype=None, copy=None, subok=True):
-    """返回 Fortran 连续数组（rsnumpy 视为等价）。"""
+    """返回 Fortran 连续数组（rsarray 视为等价）。"""
     return ascontiguousarray(a, dtype, copy=copy, subok=subok)
 
 
@@ -2524,7 +2524,7 @@ def asarray_chkfinite(a, dtype=None, order=None):
 
 
 def require(a, dtype=None, requirements=None, *, like=None):
-    """返回满足要求的数组（numpy require 语义）。
+    """返回满足要求的数组（require 语义）。
 
     requirements 接受单个标志名或标志名列表；未知标志抛 KeyError，
     同时要求 C 与 F 连续抛 ValueError；已满足的标志不产生副本
@@ -2577,7 +2577,7 @@ def require(a, dtype=None, requirements=None, *, like=None):
         arr = arr.copy()
     elif need_f and not arr.flags.f_contiguous:
         arr = arr.copy()
-        # rsnumpy 存储为扁平 C 序缓冲：以 _rs_order 标记 F 布局（flags/strides 语义）
+        # rsarray 存储为扁平 C 序缓冲：以 _rs_order 标记 F 布局（flags/strides 语义）
         arr._rs_order = 'F'
     elif need_contiguous and not (arr.flags.c_contiguous or arr.flags.f_contiguous):
         arr = arr.copy()
@@ -2591,7 +2591,7 @@ def require(a, dtype=None, requirements=None, *, like=None):
 
 
 def isfortran(a):
-    """判断是否为 Fortran 连续（rsnumpy 恒为 C 连续）。"""
+    """判断是否为 Fortran 连续（rsarray 恒为 C 连续）。"""
     _ = a
     return False
 
@@ -2654,12 +2654,12 @@ def indices(dimensions, dtype=None, sparse=False):
     dims = tuple(int(d) for d in dimensions)
     n = len(dims)
     if n == 0:
-        # numpy：np.indices(()) → 空 (0,) 数组（dense）/ 空元组（sparse）
+        # —np.indices(()) → 空 (0,) 数组（dense）/ 空元组（sparse）
         if sparse:
             return ()
         return np.array([], dtype=dtype or "int64")
     if 0 in dims:
-        # numpy：np.indices((0,)) → 空 (1, 0) 数组（dense）
+        # —np.indices((0,)) → 空 (1, 0) 数组（dense）
         _dt_i = dtype or "int64"
 
         def _mk(_shape):
@@ -2704,7 +2704,7 @@ def unravel_index(indices, shape, order='C'):
     for _d0 in dims:
         _prod *= _d0
     if _prod > 2**63 - 1:
-        # numpy 语义（gh-9538）：乘积溢出 intp → ValueError（勿让 Rust 溢出）
+        # 数组语义（gh-9538）：乘积溢出 intp → ValueError（勿让 Rust 溢出）
         raise ValueError(
             "shape exceeds the maximum size representable by intp")
     if isinstance(indices, (list, tuple)):
@@ -2774,7 +2774,7 @@ def ravel_multi_index(multi_index, dims, mode='raise', order='C'):
     for _d0 in dims_list:
         _prod *= _d0
     if _prod > 2**63 - 1:
-        # numpy 语义（gh-7546）：乘积溢出 intp → ValueError
+        # 数组语义（gh-7546）：乘积溢出 intp → ValueError
         raise ValueError(
             "product of dims exceeds the maximum size representable by intp")
     # 每维模式（mode 可为字符串或每维元组）
@@ -2805,7 +2805,7 @@ def ravel_multi_index(multi_index, dims, mode='raise', order='C'):
     _shps = [tuple(getattr(_m, 'shape', ())) for _m in idxs]
     _bshape = (tuple(broadcast_shapes(*_shps)) if builtins.len(_shps) > 1
                else _shps[0]) if _shps else ()
-    # 任一维索引为空 → 空结果（numpy 语义，避免对空数组取 [0] 越界）
+    # 任一维索引为空 → 空结果（数组语义，避免对空数组取 [0] 越界）
     if idxs and builtins.any(builtins.len(_flat(_m)) == 0 for _m in idxs):
         nd = _np().ndarray
         return nd(_reshape_list([], _bshape), _dtype='int64')
@@ -2868,7 +2868,7 @@ def apply_along_axis(func1d, axis, arr, *args, **kwargs):
     axis = axis % nd
     inds = [range(a.shape[i]) for i in range(nd) if i != axis]
     combos = list(_it.product(*inds)) if inds else [()]
-    # numpy 语义：任一迭代维长度为 0 时无切片可调用 → ValueError
+    # 数组语义：任一迭代维长度为 0 时无切片可调用 → ValueError
     if not combos or builtins.any(a.shape[i] == 0 for i in range(nd) if i != axis):
         raise ValueError(
             "Cannot apply_along_axis when any iteration dimensions are 0")
@@ -2919,7 +2919,7 @@ def apply_along_axis(func1d, axis, arr, *args, **kwargs):
                 return _as_scalar(arr_v) if not outer else arr_v
             return np.reshape(arr_v, outer)
     r_shape = tuple(_asarray(r0).shape)
-    import rsnumpy.ma as _ma
+    import rsarray.ma as _ma
     if _ma.isMaskedArray(r0):
         # MaskedArray 结果：分别堆叠 data 与 mask(moveaxis 各自处理
         # 后再合成,避免 moveaxis 降级丢失掩码)
@@ -2944,7 +2944,7 @@ def apply_along_axis(func1d, axis, arr, *args, **kwargs):
         src = list(range(len(outer), len(outer) + len(r_shape)))
         dst = list(range(axis, axis + len(r_shape)))
         stacked = np.moveaxis(stacked, src, dst)
-    # numpy 语义:输出类型跟随 func1d 返回值的子类(其次输入子类)
+    # 数组语义:输出类型跟随 func1d 返回值的子类(其次输入子类)
     _out_cls = None
     if isinstance(r0, np.ndarray) and type(r0) is not np.ndarray:
         _out_cls = type(r0)
@@ -3001,7 +3001,7 @@ def piecewise(x, condlist, funclist, *args, **kw):
                 f = funclist[k]
                 out[i] = f(flat[i], *args, **kw) if callable(f) else f
                 applied = True
-                break  # numpy 行为：匹配第一个条件即停止
+                break  # 行为：匹配第一个条件即停止
         if not applied and has_default:
             f = default_f
             out[i] = f(flat[i], *args, **kw) if callable(f) else f
@@ -3032,7 +3032,7 @@ def bitwise_count(x):
 def packbits(a, axis=None, bitorder='big'):
     """将布尔/整数数组按比特打包为 uint8。
 
-    axis（numpy 语义）：沿该轴每 8 个元素打包为 1 字节，该轴长度变为
+    axis（数组语义）：沿该轴每 8 个元素打包为 1 字节，该轴长度变为
     ceil(n/8)，其他维不变；None → flatten 打包为 1-d。
     """
     np = _np()
@@ -3041,7 +3041,7 @@ def packbits(a, axis=None, bitorder='big'):
         if isinstance(bitorder, str):
             raise ValueError("bitorder must be 'big' or 'little'")
         raise TypeError("bitorder must be 'big' or 'little'")
-    # numpy 语义：仅接受整数/布尔类型，float 抛 TypeError
+    # 数组语义：仅接受整数/布尔类型，float 抛 TypeError
     if getattr(arr.dtype, 'kind', 'f') not in 'iub':
         raise TypeError(
             "Expected an input array of integer or boolean type")
@@ -3082,7 +3082,7 @@ def packbits(a, axis=None, bitorder='big'):
 def unpackbits(a, axis=None, count=None, bitorder='big'):
     """将 uint8 数组展开为比特。
 
-    count（numpy 语义）：正数 → 沿位轴截断/零填充到该长度；负数 → 在
+    count（数组语义）：正数 → 沿位轴截断/零填充到该长度；负数 → 在
     全展开长度（该轴 n*8）上收缩；结果长度为负 → ValueError；0 → 空轴。
     axis 沿给定轴展开（每字节 8 位替换该轴，其他维不变）；None → flatten。
     """
@@ -3172,7 +3172,7 @@ def vecmat(x1, x2):
 # ========== 直方图分箱边界 ==========
 def histogram_bin_edges(a, bins=10, range=None, weights=None):
     """仅返回直方图的分箱边界（委托给 histogram，保证边界一致）。"""
-    from rsnumpy.statistics import histogram as _histogram
+    from rsarray.statistics import histogram as _histogram
     _h, edges = _histogram(a, bins=bins, range=range, weights=weights)
     return edges
 
@@ -3244,7 +3244,7 @@ def _promote2(n1, n2):
     k1, s1 = _DT_INFO[n1]
     k2, s2 = _DT_INFO[n2]
     if k1 == 'O' or k2 == 'O':
-        # object 吸收一切（numpy 语义）
+        # object 吸收一切（数组语义）
         return 'object'
     if k1 == 'b':
         return n2
@@ -3266,7 +3266,7 @@ def _promote2(n1, n2):
     return 'float64' if t > 8 else _int_name('i', t)
 
 
-# numpy 语义：数值类型 + 无宽度字符串 → 该类型可表示值的最长字符串长度
+# 数组语义：数值类型 + 无宽度字符串 → 该类型可表示值的最长字符串长度
 _STR_PROMO_WIDTH = {
     'bool': 5,
     'int8': 4, 'int16': 6, 'int32': 11, 'int64': 21,
@@ -3319,7 +3319,7 @@ def _raw_str_kind_width(x):
 
 
 def _void_promo(d1, d2):
-    """void/结构化提升（numpy 语义）：兼容（同为 void 同尺寸、或同字段名）
+    """void/结构化提升（数组语义）：兼容（同为 void 同尺寸、或同字段名）
     → 返回 type1；否则 TypeError。"""
     f1 = getattr(d1, 'fields', None)
     f2 = getattr(d2, 'fields', None)
@@ -3373,7 +3373,7 @@ def promote_types(type1, type2):
 
 
 def result_type(*arrays_and_dtypes):
-    """按 NumPy (NEP 50) 提升规则返回结果类型。
+    """按 (NEP 50) 提升规则返回结果类型。
 
     裸 Python 标量（int/float/complex，非 bool）是"弱标量"：不做值基提升——
     存在强操作数（数组/dtype/类型）时跟随其类别（float 标量把整数/bool 数组
@@ -3384,12 +3384,12 @@ def result_type(*arrays_and_dtypes):
     strong = []
     for x in arrays_and_dtypes:
         if x is None:
-            # numpy 语义：result_type(None) → object dtype
+            # 数组语义：result_type(None) → object dtype
             strong.append(_np().dtype('O'))
         elif isinstance(x, bool):
             strong.append(x)
         elif type(x) is int or type(x) is float or type(x) is complex:
-            # NEP 50：仅 Python 原生标量是"弱标量"；rsnumpy 标量类
+            # NEP 50：仅 Python 原生标量是"弱标量"；rsarray 标量类
             # （float32/int16 等，继承 float/int）是强操作数，保留自身 dtype。
             weak.append(x)
         else:
@@ -3419,7 +3419,7 @@ def result_type(*arrays_and_dtypes):
                 valid_names.append('float64')
     if not valid_names:
         # 纯 Python 标量：complex → complex128，float → float64，int → int64
-        # 注意：必须用 builtin_any——模块级 any 被 rsnumpy ufunc 遮蔽，
+        # 注意：必须用 builtin_any——模块级 any 被 rsarray ufunc 遮蔽，
         # 对生成器参数恒返回 True（会把一切弱标量误判为 complex）。
         if builtin_any(isinstance(w, complex) for w in weak):
             return _np().dtype('complex128')
@@ -3451,12 +3451,12 @@ def result_type(*arrays_and_dtypes):
 
 def can_cast(from_, to, casting='safe'):
     """判断能否按给定规则从一个类型转换到另一个类型。"""
-    # None 参数：numpy 语义 TypeError
+    # None 参数：数组语义 TypeError
     if from_ is None or to is None:
         raise TypeError(
             "can_cast: 'None' is not a valid dtype argument")
-    # numpy (NEP50) 语义：裸 Python 数值标量不可参与 cast 判断；
-    # 字符串参数（typecode / dtype spec）按 dtype 解析（numpy 语义）
+    # (NEP50) 语义：裸 Python 数值标量不可参与 cast 判断；
+    # 字符串参数（typecode / dtype spec）按 dtype 解析（数组语义）
     if isinstance(from_, (str, bytes)):
         try:
             _canon_dt(from_)
@@ -3478,7 +3478,7 @@ def can_cast(from_, to, casting='safe'):
     tn = _canon_dt_type(to)
     if casting in ('no', 'equiv'):
         # 'no'：typestr 完全一致（含字节序）；'equiv'：同 kind + itemsize
-        # （字节序无关，numpy 语义）。
+        # （字节序无关，数组语义）。
         if casting == 'no':
             try:
                 return _typestr_of(d_from) == _typestr_of(d_to)
@@ -3493,7 +3493,7 @@ def can_cast(from_, to, casting='safe'):
             if not _single_field_chain(d_from):
                 return False
         return True
-    # 数值 → 固定宽字符串：按最大值的十进制位宽判定（numpy 语义）。
+    # 数值 → 固定宽字符串：按最大值的十进制位宽判定（数组语义）。
     k_to = getattr(d_to, '_kind', '')
     if k_to in ('S', 'U') and fn in _NUM_STR_WIDTH:
         need_s, need_u = _NUM_STR_WIDTH[fn]
@@ -3517,7 +3517,7 @@ def can_cast(from_, to, casting='safe'):
         return True
     if casting == 'same_kind':
         k1, k2 = _DT_INFO[fn][0], _DT_INFO[tn][0]
-        # signed → unsigned 不属于 same_kind（numpy 语义）
+        # signed → unsigned 不属于 same_kind（数组语义）
         if k1 == 'i' and k2 == 'u':
             return False
     group = {'b': 0, 'u': 1, 'i': 1, 'f': 2, 'c': 3}
@@ -3525,7 +3525,7 @@ def can_cast(from_, to, casting='safe'):
 
 
 # 数值 → 固定宽字符串所需最小宽度（S, U）：按最大值十进制位宽（含符号位），
-# numpy can_cast 语义（bool→S5 'False'/U4 'True'，int32→11，int64→21，
+# can_cast 语义（bool→S5 'False'/U4 'True'，int32→11，int64→21，
 # uint64→20 等）。
 _NUM_STR_WIDTH = {
     'bool': (5, 4),
@@ -3536,7 +3536,7 @@ _NUM_STR_WIDTH = {
 
 def _single_field_chain(dt):
     """结构化 dtype 是否满足"单字段链"：仅一个字段，且该字段（或其子数组
-    基类型）递归满足同样条件。numpy 结构化→简单 unsafe cast 的判定。"""
+    基类型）递归满足同样条件。结构化→简单 unsafe cast 的判定。"""
     names = getattr(dt, '_names', None)
     if names is None:
         return True
@@ -3613,10 +3613,10 @@ def common_type(*arrays):
 
 def isdtype(dtype, kind):
     """判断 dtype 是否属于指定类别（Array API）。"""
-    # numpy 2.x 语义：首参必须是 dtype 实例或标量类型（不允许裸 str）
+    # 2.x 语义：首参必须是 dtype 实例或标量类型（不允许裸 str）
     if isinstance(dtype, str):
         raise TypeError(
-            "isdtype's first argument must be a rsnumpy dtype, not a string")
+            "isdtype's first argument must be a rsarray dtype, not a string")
     n = _canon_dt_type(dtype)
     k = _DT_INFO[n][0]
 
@@ -3760,14 +3760,14 @@ class printoptions:
         return False
 
 
-# ========== Dragon4 浮点格式化（numpy dragon4.c 的纯 Python 移植） ==========
-# 语义对齐 numpy 2.x（numpy/_core/src/multiarray/dragon4.c）：
-# - unique 模式：margin 唯一性停机（f32max 等边界值的停机与 numpy 逐位一致，
+# ========== Dragon4 浮点格式化（dragon4.c 的纯 Python 移植） ==========
+# 语义对齐 2.x 参考实现（dragon4 最短浮点表示）：
+# - unique 模式：margin 唯一性停机（f32max 等边界值的停机与 逐位一致，
 #   如 f32max -> '34028235...'，而非最短往返的 '340282347...'）
 # - fixed 模式：数字生成到 cutoff + 末位舍入
 # - trim: 'k'=保留, '.'=去零留点, '0'=留一个零, '-'=去零去点
 # - positional 永不切换科学记数；scientific 恒科学记数
-# - 输出缓冲 16384（numpy Dragon4_Scratch.repr），超出 RuntimeError
+# - 输出缓冲 16384（Dragon4_Scratch.repr），超出 RuntimeError
 import struct as _struct
 
 _D4_SPECS = {
@@ -3782,7 +3782,7 @@ _D4_BUF = 16384
 
 
 def _d4_dtype_of(x):
-    """format_float_* 目标 dtype：rsnumpy float 标量/0-d 数组 -> 其 dtype；其余 float64。"""
+    """format_float_* 目标 dtype：rsarray float 标量/0-d 数组 -> 其 dtype；其余 float64。"""
     dn = getattr(x, 'dtype', None)
     if dn is not None:
         try:
@@ -4036,7 +4036,7 @@ def _d4_trim(mode):
 def format_float_positional(x, precision=None, unique=True, fractional=True,
                             trim='k', sign=False, pad_left=None, pad_right=None,
                             min_digits=None):
-    """以定点记数格式化单个浮点数（numpy dragon4 语义）。"""
+    """以定点记数格式化单个浮点数（dragon4 语义）。"""
     tmode = _d4_trim(trim)
     if not unique and precision is None:
         raise TypeError("in non-unique mode `precision` must be supplied")
@@ -4083,7 +4083,7 @@ def format_float_positional(x, precision=None, unique=True, fractional=True,
 
 def format_float_scientific(x, precision=None, unique=True, trim='k', sign=False,
                             pad_left=None, exp_digits=None, min_digits=None):
-    """以科学记数格式化单个浮点数（numpy dragon4 语义）。"""
+    """以科学记数格式化单个浮点数（dragon4 语义）。"""
     tmode = _d4_trim(trim)
     if not unique and precision is None:
         raise TypeError("in non-unique mode `precision` must be supplied")
@@ -4128,7 +4128,7 @@ def format_float_scientific(x, precision=None, unique=True, trim='k', sign=False
 
 
 def _float_scalar_str(v, dt):
-    """rsnumpy float16/float32 标量的 numpy str() 语义（f64 直接用 Python str）。
+    """rsarray float16/float32 标量的 str() 语义（f64 直接用 Python str）。
     legacy='2.2' 时切换旧 cutoff（f16 无大值 cutoff；f32 cutoff 1e16）。"""
     x = float(v)
     if x != x:
@@ -4156,7 +4156,7 @@ def _float_scalar_str(v, dt):
     else:
         use_sci = ax < 1e-4 or ax >= (1e16 if legacy else 1e6)
     if use_sci:
-        # 单位数字尾无小数点（numpy 标量科学记数：'-1e+06'、'1e+16'）
+        # 单位数字尾无小数点（标量科学记数：'-1e+06'、'1e+16'）
         mant = digits[0] + ('.' + digits[1:] if len(digits) > 1 else '')
         exp_str = '%0*d' % (2, abs(de0)) if de0 else '00'
         return sign + mant + 'e' + ('+' if de0 >= 0 else '-') + exp_str
@@ -4166,15 +4166,15 @@ def _float_scalar_str(v, dt):
 
 
 # ========== 浮点错误状态 ==========
-# numpy 2.x 语义：状态存于 contextvars —— 每个 asyncio Task / 线程有独立
+# 2.x 语义：状态存于 contextvars —— 每个 asyncio Task / 线程有独立
 # 上下文副本，errstate 的 set/reset 经 token 恢复，天然并发安全（官方
 # test_asyncio_safe 依赖此语义：交叉的上下文互不破坏）。
 import contextvars as _contextvars
 
 _ERR_DEFAULT = {'divide': 'warn', 'over': 'warn', 'under': 'ignore',
                 'invalid': 'warn'}
-_err_state_ctx = _contextvars.ContextVar('rsnumpy_errstate', default=None)
-_err_call_ctx = _contextvars.ContextVar('rsnumpy_errcall', default=None)
+_err_state_ctx = _contextvars.ContextVar('rsarray_errstate', default=None)
+_err_call_ctx = _contextvars.ContextVar('rsarray_errcall', default=None)
 _BUFSIZE = [8192]
 _ERR_MODES = ('ignore', 'warn', 'raise', 'call', 'print')
 _NO_CALL = object()
@@ -4198,7 +4198,7 @@ def _current_errstate():
 
 
 def _fp_fire(kind, msg):
-    """按当前 errstate 处理一次浮点错误事件（numpy 语义）。"""
+    """按当前 errstate 处理一次浮点错误事件（数组语义）。"""
     state = _err_state_ctx.get()
     mode = (state or _ERR_DEFAULT).get(kind, 'warn')
     if mode == 'ignore':
@@ -4218,7 +4218,7 @@ def _fp_fire(kind, msg):
 
 
 def _fp_divide_check(num, den, res, op='true_divide'):
-    """true_divide 的 errstate 触发（numpy 语义）：除零 → 'divide'，
+    """true_divide 的 errstate 触发（数组语义）：除零 → 'divide'，
     0/0 → 'invalid'。仅当存在非 ignore 模式时扫描，避免常态开销。"""
     st = _err_state_ctx.get()
     eff = st or _ERR_DEFAULT
@@ -4254,7 +4254,7 @@ def _fp_divide_check(num, den, res, op='true_divide'):
 
 
 def _fp_arith_check(num, oth, res, op):
-    """add/subtract/multiply 的 errstate 触发（numpy 语义）：
+    """add/subtract/multiply 的 errstate 触发（数组语义）：
     overflow（有限输入 → ±inf）与 invalid（inf-inf / 0*inf / inf+(-inf)）。"""
     st = _err_state_ctx.get()
     eff = st or _ERR_DEFAULT
@@ -4342,7 +4342,7 @@ def _fp_arith_check(num, oth, res, op):
 
 
 def _check_err_mode(v, name=None):
-    """seterr 参数校验（numpy 语义：非字符串 → TypeError）。"""
+    """seterr 参数校验（数组语义：非字符串 → TypeError）。"""
     if not isinstance(v, str):
         raise TypeError(
             "seterr: argument must be a string or None, got "
@@ -4400,7 +4400,7 @@ def setbufsize(size):
 class errstate:
     """临时修改浮点错误处理状态的上下文管理器（可作装饰器，单次使用）。
 
-    numpy 2.x 语义：状态存于 contextvar（每个 Task/线程独立），退出经
+    2.x 语义：状态存于 contextvar（每个 Task/线程独立），退出经
     token 恢复到进入前的状态；实例不可重复进入。
     """
 
@@ -4468,7 +4468,7 @@ _CPX_STRICT_RE = _re.compile(
 
 
 def fromstring(string, dtype=float, count=-1, sep='', *, like=None):
-    """从文本字符串解析一维数组（numpy 语义：空 token/非法 token → ValueError）。"""
+    """从文本字符串解析一维数组（数组语义：空 token/非法 token → ValueError）。"""
     _ = like
     np = _np()
     if sep == '':
@@ -4483,7 +4483,7 @@ def fromstring(string, dtype=float, count=-1, sep='', *, like=None):
                or _dt_str in ('c8', 'c16', 'c', 'cdouble', 'csingle')
                or dtype in (builtins.complex, np.complex64, np.complex128))
     if _is_cpx:
-        # numpy 严格文本复数文法（Python complex() 过宽：容忍 '1+j' 等）：
+        # 严格文本复数文法（Python complex() 过宽：容忍 '1+j' 等）：
         # 纯实数 | 实数j | 实数±实数j；token 内不允许空白。
         def _cpx_tok(p):
             for ch in p:
@@ -4504,7 +4504,7 @@ def fromstring(string, dtype=float, count=-1, sep='', *, like=None):
 
 
 def savez_compressed(file, *args, **kwds):
-    """将多个数组保存为压缩 .npz 文件（rsnumpy 以非压缩格式落盘）。"""
+    """将多个数组保存为压缩 .npz 文件（rsarray 以非压缩格式落盘）。"""
     return _np().savez(file, *args, **kwds)
 
 
@@ -4541,12 +4541,12 @@ class vectorize:
     【重要性能提示】
     本实现使用Python循环逐元素调用原函数，对于大型数组性能较低。
     推荐替代方案：
-    1. 使用rsnumpy内置的向量化函数（如np.add, np.multiply等）
+    1. 使用rsarray内置的向量化函数（如np.add, np.multiply等）
     2. 使用np.frompyfunc创建真正的向量化函数
     3. 使用Rust层实现的函数（通过@jit装饰器，如项目支持）
 
     【使用示例】
-    >>> import rsnumpy as np
+    >>> import rsarray as np
     >>> # 标量函数
     >>> def my_func(x):
     ...     return x**2 + 1
@@ -4594,7 +4594,7 @@ class vectorize:
 
     【注意事项】
     - vectorize不支持真正的并行化，只是Python层面的循环封装
-    - 对于性能敏感的场景，请优先使用rsnumpy的内置函数
+    - 对于性能敏感的场景，请优先使用rsarray的内置函数
     - kwargs参数会显著降低性能（约5倍），建议使用位置参数
     """
 
@@ -4631,7 +4631,7 @@ class vectorize:
             # 检查是否为标量：不是列表/元组/ndarray，且不可迭代
             if isinstance(x, (list, tuple)):
                 return False
-            if hasattr(x, '_array'):  # rsnumpy ndarray
+            if hasattr(x, '_array'):  # rsarray ndarray
                 return False
             return not hasattr(x, '__iter__')
 
@@ -4891,7 +4891,7 @@ def einsum(subscripts, *operands, **kwargs):
     重复的索引表示求和，输出中出现的索引表示保留该维度。
 
     【使用示例】
-    >>> import rsnumpy as np
+    >>> import rsarray as np
 
     # 1. 矩阵乘法：'ij,jk->ik'
     >>> A = np.array([[1, 2], [3, 4]])
@@ -5283,10 +5283,10 @@ def roots(p):
 
 
 class poly1d:
-    """一维多项式类（兼容 numpy.poly1d 常用接口）。"""
+    """一维多项式类（兼容 poly1d 常用接口）。"""
 
     def __init__(self, c_or_r, r=False, variable=None):
-        """一维多项式类（兼容 numpy.poly1d 常用接口）。
+        """一维多项式类（兼容 poly1d 常用接口）。
 
         使用 next() + 生成器代替 while 循环查找前导零。
         """
@@ -5349,7 +5349,7 @@ class poly1d:
 
 # ========== emath（定义域外自动返回复数） ==========
 class _EMath:
-    """numpy.emath / numpy.lib.scimath 兼容命名空间。
+    """emath / lib.scimath 兼容命名空间。
 
     当实数域结果无效（如负数开方、超出反三角定义域）时自动返回复数。
     """
@@ -5436,7 +5436,7 @@ def get_include():
 
 def show_config(mode="stdout"):
     """打印/返回构建配置信息，兼容 np.show_config。"""
-    info_str = "rsnumpy build configuration:\n  backend: Rust (PyO3)\n  version: %s\n" % _np().__version__
+    info_str = "rsarray build configuration:\n  backend: Rust (PyO3)\n  version: %s\n" % _np().__version__
     if mode == "dicts":
         return {"backend": "rust", "version": _np().__version__}
     print(info_str)
@@ -5447,7 +5447,7 @@ def show_runtime():
     """打印运行时信息，兼容 np.show_runtime。"""
     import platform
     import sys
-    print("rsnumpy runtime:")
+    print("rsarray runtime:")
     print("  python:", sys.version.split()[0])
     print("  platform:", platform.platform())
     print("  version:", _np().__version__)
@@ -5457,7 +5457,7 @@ def show_runtime():
 def info(obj=None):
     """打印对象文档信息，兼容 np.info。"""
     if obj is None:
-        print("rsnumpy %s" % _np().__version__)
+        print("rsarray %s" % _np().__version__)
         return None
     doc = getattr(obj, "__doc__", None)
     name = getattr(obj, "__name__", repr(obj))
@@ -5484,7 +5484,7 @@ def threadsafe_copy(a):
     对于大型数组，考虑使用线程局部存储（thread-local storage）。
 
     【使用示例】
-    >>> import rsnumpy as np
+    >>> import rsarray as np
     >>> import threading
     >>>
     >>> # 创建共享数组
@@ -5526,7 +5526,7 @@ def threadsafe_view(a):
     - 共享状态管理
 
     【使用示例】
-    >>> import rsnumpy as np
+    >>> import rsarray as np
     >>> import threading
     >>>
     >>> # 创建线程安全视图
@@ -5568,7 +5568,7 @@ class _ThreadsafeArrayWrapper:
         """初始化包装器。
 
         参数：
-            array: rsnumpy ndarray
+            array: rsarray ndarray
             lock: threading.Lock 实例
         """
         self._array = array
@@ -5636,7 +5636,7 @@ def check_object_dtype(arr):
     - 调试辅助：理解性能瓶颈原因
 
     【使用示例】
-    >>> import rsnumpy as np
+    >>> import rsarray as np
     >>> arr = np.array([1, 'text', 3.14], dtype=object)
     >>> np.check_object_dtype(arr)
     ⚠️ 性能警告：数组使用 object dtype！
@@ -5667,7 +5667,7 @@ def suggest_dtype_for_data(data):
     避免 object dtype 性能陷阱。
 
     【使用示例】
-    >>> import rsnumpy as np
+    >>> import rsarray as np
     >>> # 字符串数据
     >>> strings = ['hello', 'world', 'test']
     >>> dtype = np.suggest_dtype_for_data(strings)
@@ -5725,14 +5725,14 @@ def memory_usage(arr, _deep=False):
     用于内存分析和泄漏检测，可配合 Python 标准库 tracemalloc 使用。
 
     参数：
-        arr: rsnumpy 数组或可转换为数组的对象
+        arr: rsarray 数组或可转换为数组的对象
         _deep: 是否递归计算嵌套对象的内存（对 object/string dtype 有意义）
 
     返回：
         int: 占用的字节数
 
     使用示例：
-        >>> import rsnumpy as np
+        >>> import rsarray as np
         >>> import sys
         >>> a = np.zeros((1000, 1000))
         >>> np.memory_usage(a)
@@ -5762,16 +5762,16 @@ def chunked_apply(func, arr, chunk_size, axis=0, **kwargs):
 
     参数：
         func: 应用于每个分块的函数（应接受数组作为第一个参数）
-        arr: 输入数组（rsnumpy.ndarray 或可转换的对象）
+        arr: 输入数组（rsarray.ndarray 或可转换的对象）
         chunk_size: 每个分块的大小（沿 axis 方向）
         axis: 分块的轴，默认为 0
         **kwargs: 传递给 func 的额外关键字参数
 
     返回：
-        rsnumpy.ndarray: 分块计算后的结果
+        rsarray.ndarray: 分块计算后的结果
 
     使用示例：
-        >>> import rsnumpy as np
+        >>> import rsarray as np
         >>> a = np.arange(1_000_000)
         >>> # 分块计算，每块 10000 个元素
         >>> result = np.chunked_apply(np.sqrt, a, chunk_size=10000)
@@ -5829,10 +5829,10 @@ def mmap_array(filename, dtype='float64', shape=None, offset=0):
         offset: 文件偏移量（字节），默认为 0
 
     返回：
-        rsnumpy.ndarray: 从文件读取的数组
+        rsarray.ndarray: 从文件读取的数组
 
     使用示例：
-        >>> import rsnumpy as np
+        >>> import rsarray as np
         >>> # 读取整个文件
         >>> a = np.mmap_array('data.bin', dtype='float64')
         >>> # 读取文件的一部分（跳过前 1000 字节）
@@ -5928,10 +5928,10 @@ class LazyArray:
         - 延迟计算到最后一刻，优化执行顺序
 
     参数：
-        data: 初始数组（rsnumpy.ndarray 或可转换对象）
+        data: 初始数组（rsarray.ndarray 或可转换对象）
 
     使用示例：
-        >>> import rsnumpy as np
+        >>> import rsarray as np
         >>> a = np.arange(1000.0)
         >>> # 链式调用，不立即计算
         >>> lazy = np.LazyArray(a)
@@ -6180,7 +6180,7 @@ class VarStringArray:
         return list(self._data)
 
     def to_ndarray(self):
-        """转换为 rsnumpy ndarray（object dtype）。"""
+        """转换为 rsarray ndarray（object dtype）。"""
         np = _np()
         return np.array(self._data, dtype=object)
 
@@ -6375,7 +6375,7 @@ class BigIntArray:
         return list(self._data)
 
     def to_ndarray(self):
-        """转换为 rsnumpy ndarray（object dtype）。"""
+        """转换为 rsarray ndarray（object dtype）。"""
         np = _np()
         return np.array(self._data, dtype=object)
 
@@ -6604,7 +6604,7 @@ __all__ = [
 ]
 
 
-# ---- TestTextSignatures 兼容：numpy 2.x 风格 __text_signature__ 声明 ----
+# ---- TestTextSignatures 兼容：2.x 风格 __text_signature__ 声明 ----
 fromstring.__text_signature__ = (
     "(string, dtype='float64', count=-1, sep='', *, like=None)")
 frompyfunc.__text_signature__ = "(func, nin, nout, *, kwargs=None)"
@@ -6612,7 +6612,7 @@ datetime_data.__text_signature__ = "(dtype,)"
 promote_types.__text_signature__ = "(type1, type2)"
 
 
-# ---- 多项式旧 API：完整移植版覆盖上方薄实现（语义与 numpy 2.x 一致，
+# ---- 多项式旧 API：完整移植版覆盖上方薄实现（语义与 2.x 一致，
 # 实现见 polynomial/_npcompat.py：poly1d 对齐排版/pq 元组/polyfit cov/
 # roots dtype 保持等）。此处 re-import 使模块属性指向新实现，
 # __init__.py 的 __all__ 挂载循环随之导出新版本。 ----

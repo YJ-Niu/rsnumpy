@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: MIT
-"""完整的 dtype 语义实现（解析、属性、str/repr），逐字节对齐 numpy。
+"""完整的 dtype 语义实现（解析、属性、str/repr），逐字节对齐参考实现。
 
 DType 采用富数据模型，支持标量、结构化、子数组、标题、对齐等全部语法，
-并复刻 numpy 的 dtype str/repr 生成规则。
+并复刻 数组的 dtype str/repr 生成规则。
 """
 
 import builtins
@@ -69,7 +69,7 @@ def _round_up(offset, align):
     return ((offset + align - 1) // align) * align
 
 
-# Hook：rsnumpy 包注册解析器后，DType.type 返回 rsnumpy 标量类（numpy 语义：
+# Hook：rsarray 包注册解析器后，DType.type 返回 rsarray 标量类（数组语义：
 # np.dtype('int64').type 即 int64 标量类型）。未注册时 .type 回退 Python builtin。
 _TYPE_HOOK = None
 
@@ -107,7 +107,7 @@ class _DTypeMeta(type):
 
 
 class DType(metaclass=_DTypeMeta):
-    """元素数据类型，兼容 numpy.dtype 的属性与 str/repr。
+    """元素数据类型，兼容 dtype 的属性与 str/repr。
 
     【关于 object dtype】
     ⚠️ 性能警告：object dtype 会完全失去向量化的速度优势！
@@ -126,7 +126,7 @@ class DType(metaclass=_DTypeMeta):
     4. Python 对象：考虑使用列表或字典，而不是数组
 
     【使用示例】
-    >>> import rsnumpy as np
+    >>> import rsarray as np
     >>> # 不推荐：使用 object dtype（性能低）
     >>> arr = np.array([1, 'text', 3.14], dtype=object)  # 性能陷阱
     >>>
@@ -139,7 +139,7 @@ class DType(metaclass=_DTypeMeta):
                  '_names', '_fields', '_aligned', '_subdtype', '_titles',
                  '_dt_unit', '_type_override')
 
-    # 单例缓存：np.dtype('uint64') is np.dtype('ulong')（numpy 语义——
+    # 单例缓存：np.dtype('uint64') is np.dtype('ulong')（数组语义——
     # dtype 对象不可变，同类型同配置返回同一对象）
     _scalar_cache = {}
 
@@ -151,7 +151,7 @@ class DType(metaclass=_DTypeMeta):
 
     @property
     def _is_numeric(self):
-        # numpy 语义：数值类 dtype（b/i/u/f/c）为 True，其余（S/U/V/O/M/T）False
+        # 数组语义：数值类 dtype（b/i/u/f/c）为 True，其余（S/U/V/O/M/T）False
         return self._kind in ('b', 'i', 'u', 'f', 'c')
 
     def __new__(cls, name=None, fields=None, align=False):
@@ -168,7 +168,7 @@ class DType(metaclass=_DTypeMeta):
 
     def __init__(self, name=None, fields=None, align=False):
         # 向后兼容：DType('int64') / DType(<其他>) 构造标量。
-        # align=True：numpy 语义的对齐结构体（字段偏移按对齐要求填充）。
+        # align=True：数组语义的对齐结构体（字段偏移按对齐要求填充）。
         self._kind = None
         self._itemsize = 0
         self._byteorder = '|'
@@ -181,7 +181,7 @@ class DType(metaclass=_DTypeMeta):
         self._titles = None
         self._dt_unit = None
         self._type_override = None
-        # numpy (type, descr) 形式：np.dtype((np.record, dt)) → 结构化
+        # (type, descr) 形式：np.dtype((np.record, dt)) → 结构化
         # dtype 的 record 标记副本（.type = record）
         if (isinstance(name, tuple) and len(name) == 2
                 and isinstance(name[0], type)):
@@ -191,13 +191,13 @@ class DType(metaclass=_DTypeMeta):
                 self._copy_from(_base)
                 if getattr(_base, '_names', None) is not None:
                     try:
-                        import rsnumpy as _rn_rt
+                        import rsarray as _rn_rt
                         self._type_override = _rn_rt._Record
                     except Exception:
                         pass
                 return
         if name is None and fields is None:
-            # numpy 语义：dtype(None) / dtype() 无参 → object
+            # 数组语义：dtype(None) / dtype() 无参 → object
             name = 'O'
         if name is not None:
             src = _parse_any_dtype(name, False)
@@ -207,7 +207,7 @@ class DType(metaclass=_DTypeMeta):
         if align:
             self._aligned = True
             if self._names:
-                # numpy 语义：对齐结构体——每个字段偏移向上取整到自身
+                # 数组语义：对齐结构体——每个字段偏移向上取整到自身
                 # 对齐要求，itemsize 补齐到最大字段对齐数
                 _max_align = 1
                 _new_fields = {}
@@ -254,37 +254,37 @@ class DType(metaclass=_DTypeMeta):
 
     @property
     def type(self):
-        """该 dtype 对应的标量类型，对齐 `numpy.dtype.type`。
+        """该 dtype 对应的标量类型，对齐 `dtype.type`。
 
-        rsnumpy 注册 hook 后返回 rsnumpy 标量类（numpy 语义；标量类仍是
+        rsarray 注册 hook 后返回 rsarray 标量类（数组语义；标量类仍是
         builtin 子类型，`np.iscomplexobj(dtype.type(1))` 这类嗅探写法不受
         影响）；未注册 hook 时回退到可调用的 Python builtin 类型。
 
         【使用示例】
-        >>> import rsnumpy as np
+        >>> import rsarray as np
         >>> np.dtype('float64').type
-        <class 'rsnumpy.float64'>
+        <class 'rsarray.float64'>
         """
         # _type_override：record-view 与 C 宽度别名类（longlong 等）的源类
         # 标记，优先级最高（hook 按 str(dtype) 查表无法区分同规范名的实例）。
         ov = getattr(self, '_type_override', None)
         if ov is not None:
             return ov
-        # numpy 语义：子数组 dtype 本身是 void dtype（携带 .shape），
+        # 数组语义：子数组 dtype 本身是 void dtype（携带 .shape），
         # .type = np.void（如 ('i4',(2,)) → void，而非 int32）
         if self._subdtype is not None:
             try:
-                import rsnumpy
-                return getattr(rsnumpy, 'void', bytes)
+                import rsarray
+                return getattr(rsarray, 'void', bytes)
             except Exception:
                 return bytes
         # 结构化 dtype（V）：record-view（np.dtype((record,spec)) / .view(recarray)
-        # 标记）的 .type=record；普通结构化 .type=void（numpy 语义）。优先于
+        # 标记）的 .type=record；普通结构化 .type=void（数组语义）。优先于
         # hook——hook 对 V 返回字符串标量类是错的。
         if self._kind == 'V':
             try:
-                import rsnumpy
-                return getattr(rsnumpy, 'void', bytes)
+                import rsarray
+                return getattr(rsarray, 'void', bytes)
             except Exception:
                 return bytes
         if _TYPE_HOOK is not None:
@@ -327,7 +327,7 @@ class DType(metaclass=_DTypeMeta):
 
     @property
     def isnative(self):
-        """该 dtype 是否为原生字节序，对齐 `numpy.dtype.isnative`。"""
+        """该 dtype 是否为原生字节序，对齐 `dtype.isnative`。"""
         import sys
         bo = self._byteorder
         if bo in ('|', '=', '@', 'n', 'native'):
@@ -346,7 +346,7 @@ class DType(metaclass=_DTypeMeta):
             byte order ('S').
         """
         if order == 'S' or order == 'native':
-            # Swap byte order（numpy 语义：native 返回对侧字节序）
+            # Swap byte order（数组语义：native 返回对侧字节序）
             if self._byteorder == '<':
                 new_order = '>'
             elif self._byteorder == '>':
@@ -371,7 +371,7 @@ class DType(metaclass=_DTypeMeta):
 
     @names.setter
     def names(self, value):
-        # numpy 语义：dt.names = ('k', 'v') 重命名字段（给定的名字依次
+        # 数组语义：dt.names = ('k', 'v') 重命名字段（给定的名字依次
         # 对应现有字段；超出给定数的字段被隐藏——align=True 的填充字段
         # 即由此剔除）。
         new_names = tuple(value)
@@ -431,7 +431,7 @@ class DType(metaclass=_DTypeMeta):
         if self._subdtype is not None:
             return 'void%d' % self._itemsize
         if self._kind == 'S':
-            # numpy 2.x 语义：固定长字节串 name 为 str{itemsize}
+            # 2.x 语义：固定长字节串 name 为 str{itemsize}
             return 'str%d' % self._itemsize
         if self._kind == 'U':
             return 'str%d' % self._itemsize
@@ -441,7 +441,7 @@ class DType(metaclass=_DTypeMeta):
 
     @property
     def char(self):
-        """单字符类型码（numpy dtype.char 兼容）。"""
+        """单字符类型码（dtype.char 兼容）。"""
         mapping = {
             'bool': '?', 'bool_': '?',
             'int8': 'b', 'int16': 'h', 'int32': 'i', 'int64': 'l',
@@ -469,19 +469,19 @@ class DType(metaclass=_DTypeMeta):
                     b, sh = fdt._subdtype
                     return (n, _typestr(b), sh)
                 elif fdt._names is not None:
-                    # numpy 语义：嵌套结构化字段的 descr 全量保留子字段
+                    # 数组语义：嵌套结构化字段的 descr 全量保留子字段
                     return (n, fdt.descr)
                 else:
                     return (n, _typestr(fdt))
             # 使用列表推导代替显式 for 循环
             out = [_field_descr(n) for n in self._names]
-            # numpy 语义：字段偏移乱序（字段选择重排）时 descr 无定义
+            # 数组语义：字段偏移乱序（字段选择重排）时 descr 无定义
             _offs = [self._fields[n][1] for n in self._names]
             if any(_offs[i] > _offs[i + 1] for i in range(len(_offs) - 1)):
                 raise ValueError(
                     "dtype.descr is not defined for types with overlapping "
                     "or out-of-order fields")
-            # numpy 语义：字段选择后的尾部未用字节以 V 填充表达
+            # 数组语义：字段选择后的尾部未用字节以 V 填充表达
             try:
                 _total = self._itemsize
                 _last_n = self._names[-1]
@@ -557,7 +557,7 @@ class DType(metaclass=_DTypeMeta):
         if other is None:
             return False
         if isinstance(other, type):
-            # dtype 对象 == 标量类（numpy 语义：np.dtype('f4') == np.float32）
+            # dtype 对象 == 标量类（数组语义：np.dtype('f4') == np.float32）
             _nm = getattr(other, '__name__', None)
             if _nm:
                 try:
@@ -566,7 +566,7 @@ class DType(metaclass=_DTypeMeta):
                     return NotImplemented
             return NotImplemented
         # np.dtypes 命名空间的动态 dtype 类实例（ObjectDType/Float64DType/…，
-        # 仅带 _dt_name 属性的裸类）：按 dtype 名称比较（numpy 语义：
+        # 仅带 _dt_name 属性的裸类）：按 dtype 名称比较（数组语义：
         # np.dtype('O') == np.dtypes.ObjectDType()）
         _onm = getattr(other, '_dt_name', None)
         if _onm is not None:
@@ -623,14 +623,14 @@ def _clone_with_byteorder(dt, bo):
 def _width_alias_dtype(dt, name):
     """C 宽度别名名(longlong 等)→ 带 _type_override 源类标记的 dtype 克隆。
 
-    numpy 语义：dtype('longlong').type 是独立的 longlong 标量类（dtype
+    数组语义：dtype('longlong').type 是独立的 longlong 标量类（dtype
     本身仍是规范 8 字节整型）。必须克隆——直接改单例会污染同规范名
-    的其他 dtype 实例。rsnumpy 尚未完成初始化（模块导入早期）时优雅
+    的其他 dtype 实例。rsarray 尚未完成初始化（模块导入早期）时优雅
     回退为无标记 dtype。
     """
     try:
-        import rsnumpy
-        cls = getattr(rsnumpy, name)
+        import rsarray
+        cls = getattr(rsarray, name)
     except Exception:
         return dt
     d = _clone_with_byteorder(dt, getattr(dt, '_byteorder', None) or '=')
@@ -663,7 +663,7 @@ def _make_flexible(kind, width, bo):
         d._alignment = 4
         d._byteorder = '>' if bo == '>' else '='
     elif kind == 'T':
-        # numpy 2.x StringDType（变长字符串）：itemsize 恒 1，无宽度
+        # 2.x StringDType（变长字符串）：itemsize 恒 1，无宽度
         d._itemsize = 1
         d._alignment = 1
         d._byteorder = '|'
@@ -677,10 +677,10 @@ def _make_flexible(kind, width, bo):
 def _make_datetime(kind, unit, bo):
     """datetime64(M)/timedelta64(m) 伪 dtype：itemsize 8，单位存 _dt_unit。"""
     if kind == 'm':
-        # rsnumpy 的 timedelta 仅支持 generic 单位(numpy 语义:按单位
+        # rsarray 的 timedelta 仅支持 generic 单位(数组语义:按单位
         # 求值已弃用)
         import warnings as _w
-        _w.warn("The 'generic' unit for rsnumpy timedelta is deprecated",
+        _w.warn("The 'generic' unit for rsarray timedelta is deprecated",
                 DeprecationWarning, stacklevel=2)
     d = _new()
     d._kind = kind
@@ -796,7 +796,7 @@ def _parse_scalar_token(s):
         rest = s[4:]
         if rest == '' or rest.isdigit():
             return _make_flexible('V', int(rest) if rest else 0, bo)
-    # numpy 2.x StringDType：'T'（变长字符串，无宽度；'T<N>' 非 numpy 记法）
+    # 2.x StringDType：'T'（变长字符串，无宽度；'T<N>' 非 记法）
     if s == 'T':
         return _make_flexible('T', 0, bo)
     # flexible with width: S3, U10, V3, a3, or bare S/U/V/a
@@ -805,7 +805,7 @@ def _parse_scalar_token(s):
         if rest == '' or rest.isdigit():
             k = 'S' if s[0] == 'a' else s[0]
             width = int(rest) if rest else 0
-            # numpy 语义：S/U itemsize 不得超 intc max（超 → TypeError
+            # 数组语义：S/U itemsize 不得超 intc max（超 → TypeError
             # "data type ... not understood"；void 不受此限）
             if k in ('S', 'U') and \
                     width * (4 if k == 'U' else 1) > 2147483647:
@@ -831,7 +831,7 @@ def _parse_scalar_token(s):
         if orig in _WIDTH_ALIAS_TYPES:
             dt = _width_alias_dtype(dt, orig)
         return dt
-    # 规范化名 str<N>/bytes<N>：历史实现写 N=itemsize，numpy 规范为 N=itemsize*8
+    # 规范化名 str<N>/bytes<N>：历史实现写 N=itemsize，规范为 N=itemsize*8
     # （str4=U1、bytes3=S3 两种约定都要能往返，故双约定接受）。
     if low.startswith('str') and low[3:].isdigit():
         n = int(low[3:])
@@ -928,10 +928,10 @@ def _parse_tuple_dtype(obj, align):
     base = _parse_any_dtype(obj[0], align)
     shp = obj[1]
     # legacy 嵌套形式 (base, dtype字符串)（如 ('i8', 'i4,i4')）：外层 base
-    # 决定存储类型（numpy 语义），字符串不可当子数组 shape 拆字符。
+    # 决定存储类型（数组语义），字符串不可当子数组 shape 拆字符。
     if isinstance(shp, str):
         return base
-    # numpy legacy 形式：S/U 柔性 dtype 的 (type, int) = (type, 字符数)
+    # legacy 形式：S/U 柔性 dtype 的 (type, int) = (type, 字符数)
     # （np.dtype(('S', 5)) → S5、('U', 4) → U4）；负数或 itemsize 超 intc
     # max → ValueError "invalid itemsize in generic type tuple"。其余类型
     # 的 int 第二项仍按子数组 shape 处理。
@@ -986,9 +986,9 @@ def _resolve_scalar_obj(obj):
     if obj is object:
         return _make_scalar('object', None)
     if isinstance(obj, type):
-        # 协议：类级 __rsnumpy_dtype__ 声明该类对应的 dtype（rsnumpy 无
+        # 协议：类级 __rsarray_dtype__ 声明该类对应的 dtype（rsarray 无
         # 用户自定义 C 标量注册机制，测试标量类用它声明近似 dtype）。
-        _rdt = getattr(obj, '__rsnumpy_dtype__', None)
+        _rdt = getattr(obj, '__rsarray_dtype__', None)
         if _rdt is not None:
             return _parse_any_dtype(_rdt, False)
     name = getattr(obj, '__name__', None)
@@ -1002,7 +1002,7 @@ def _resolve_scalar_obj(obj):
 def _parse_any_dtype(obj, align):
     if isinstance(obj, DType):
         return obj
-    # ndarray 输入：np.dtype(arr) = arr.dtype（numpy 语义）
+    # ndarray 输入：np.dtype(arr) = arr.dtype（数组语义）
     if not isinstance(obj, (str, bytes, type, list, tuple, dict)) \
             and hasattr(obj, '_array'):
         return dtype(obj.dtype, align)
@@ -1015,17 +1015,17 @@ def _parse_any_dtype(obj, align):
     if isinstance(obj, dict):
         return _parse_dict_dtype(obj, align)
     if obj is None:
-        # numpy 语义：dtype(None) = object dtype
+        # 数组语义：dtype(None) = object dtype
         return _make_scalar('object', None)
-    # numpy dtype-like
+    # dtype-like
     if type(obj).__name__ == 'dtype' and hasattr(obj, 'names') and obj.names:
-        # 兼容 numpy 结构化 dtype（罕见路径）
+        # 兼容 结构化 dtype（罕见路径）
         return _parse_string_dtype(str(obj), align)
     return _resolve_scalar_obj(obj)
 
 
 def dtype(obj, align=False, copy=False):
-    """创建 dtype 对象（兼容 numpy.dtype 构造语义）。"""
+    """创建 dtype 对象（兼容 dtype 构造语义）。"""
     if isinstance(obj, DType):
         if align and obj._names is not None and not obj._aligned:
             names = list(obj._names)

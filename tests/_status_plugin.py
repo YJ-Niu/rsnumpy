@@ -12,7 +12,7 @@ test **file**, the worst outcome seen in that file:
 
 模式：
 
-* ``RSNUMPY_TEST_CONFIG_FULL=1``  —— 全量重建：sessionstart 先把
+* ``RSARRAY_TEST_CONFIG_FULL=1``  —— 全量重建：sessionstart 先把
   ``tests/**/test_*.py`` 全部候选置 0 落盘（覆盖旧文件），之后边跑边把
   跑完的文件翻成实际结果；collection 错误文件立即置 0。
 * 否则（merge 模式，``--test debug`` 用）—— 只更新本轮实际跑到的文件，
@@ -21,7 +21,7 @@ test **file**, the worst outcome seen in that file:
 只有 controller 进程写盘（xdist worker 只上报报告，不直接写），
 避免多进程并发写同一文件。
 
-Only writes anything when ``RSNUMPY_TEST_CONFIG`` is set, so plain
+Only writes anything when ``RSARRAY_TEST_CONFIG`` is set, so plain
 ``pytest tests`` runs are unaffected.
 """
 import os
@@ -33,7 +33,7 @@ _seen = {}     # relpath -> 已出过报告的 nodeid 集合（setup/call/teardo
 _config = None  # pytest.Config（pytest_configure 里保存）
 
 _HEADER = (
-    "# rsnumpy 测试配置: <测试文件> <标志> <passed>/<failed>/<skipped>\n"
+    "# rsarray 测试配置: <测试文件> <标志> <passed>/<failed>/<skipped>\n"
     "#   1 = 上次全部通过   0 = 存在 failed/skipped/error（或尚未跑通）\n"
     "# 由 build_wheel.sh 的测试阶段自动维护：每跑完一个文件立即更新（边测边更新），\n"
     "# --test debug 只跑标志为 0 的文件；--test all 全量重建。\n"
@@ -61,7 +61,7 @@ def _mark(rel, outcome):
 
 
 def _cfg_path():
-    cfg = os.environ.get("RSNUMPY_TEST_CONFIG")
+    cfg = os.environ.get("RSARRAY_TEST_CONFIG")
     return os.path.abspath(cfg) if cfg else None
 
 
@@ -124,7 +124,7 @@ def pytest_configure(config):
         return
     # FULL 模式：开场先把全部候选文件置 0 落盘——让"边测边更新"的清单从头完整，
     # 且中途退出后未跑的文件也是明确的 0（而不是旧文件里的过期标志）。
-    if os.environ.get("RSNUMPY_TEST_CONFIG_FULL") != "1":
+    if os.environ.get("RSARRAY_TEST_CONFIG_FULL") != "1":
         return
     cfg = _cfg_path()
     if not cfg:
@@ -180,6 +180,6 @@ def pytest_sessionfinish(session, exitstatus):
     # 兜底：把本轮全部结果再合并写一次（增量落盘已覆盖大多数情况）。
     if hasattr(session.config, "workerinput"):
         return
-    if not os.environ.get("RSNUMPY_TEST_CONFIG"):
+    if not os.environ.get("RSARRAY_TEST_CONFIG"):
         return
     _flush_all()

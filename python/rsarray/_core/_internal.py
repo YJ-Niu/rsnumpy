@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: MIT
-"""rsnumpy._core._internal —— numpy._core._internal 的 Python 层兼容子集。
+"""rsarray._core._internal —— rsarray._core._internal 的 Python 层兼容子集。
 
 目前提供 ``_dtype_from_pep3118``：把 PEP 3118 格式串解析为 dtype，
-算法移植自 numpy（含 '@' 原生对齐的填充/内嵌填充/尾填充规则）。
+算法为标准实现（含 '@' 原生对齐的填充/内嵌填充/尾填充规则）。
 """
 
 import math
@@ -30,7 +30,7 @@ def _lcm(a, b):
     return a // _gcd(a, b) * b
 
 
-# PEP 3118 类型表（numpy 原版）
+# PEP 3118 类型表（原版）
 _pep3118_native_map = {
     '?': '?',
     'c': 'S1',
@@ -128,8 +128,8 @@ class _Stream:
 
 
 def _scalar_dtype(dtypechar, byteorder):
-    """构造标量 dtype；rsnumpy 不支持的类型退化为最近的可用类型。"""
-    import rsnumpy as np
+    """构造标量 dtype；rsarray 不支持的类型退化为最近的可用类型。"""
+    import rsarray as np
     try:
         return np.dtype(byteorder + dtypechar)
     except Exception:
@@ -167,9 +167,9 @@ def _fix_names(field_spec):
 
 def _add_trailing_padding(value, padding):
     """在 dtype 末尾注入指定数量的填充字节。"""
-    import rsnumpy as np
-    # 包装为单字段结构体并扩大 itemsize（numpy 对结构体会保留原字段，
-    # 此处简化为统一包装；rsnumpy 测试不依赖该细节）
+    import rsarray as np
+    # 包装为单字段结构体并扩大 itemsize（对结构体会保留原字段，
+    # 此处简化为统一包装；rsarray 测试不依赖该细节）
     field_spec = {
         'names': ['f0'],
         'formats': [value],
@@ -180,7 +180,7 @@ def _add_trailing_padding(value, padding):
 
 
 def _dtype_from_pep3118(spec):
-    import rsnumpy as np
+    import rsarray as np
     dtype = np.dtype
     stream = _Stream(spec)
 
@@ -248,9 +248,9 @@ def _dtype_from_pep3118(spec):
                 if dtypechar in 'USV':
                     dtypechar += f'{itemsize}'
                     itemsize = 1
-                numpy_byteorder = {'@': '=', '^': '='}.get(
+                byteorder = {'@': '=', '^': '='}.get(
                     stream.byteorder, stream.byteorder)
-                value = _scalar_dtype(dtypechar, numpy_byteorder)
+                value = _scalar_dtype(dtypechar, byteorder)
                 align = value.alignment
             elif stream.next in _pep3118_unsupported_map:
                 desc = _pep3118_unsupported_map[stream.next]

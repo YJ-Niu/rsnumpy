@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""numpy.linalg._linalg 兼容实现（私有算法）。
+"""linalg._linalg 兼容实现（私有算法）。
 
 multi_dot 的矩阵链乘法顺序由动态规划给出（Cormen 教材的标准
 矩阵链乘 DP）。
@@ -7,7 +7,7 @@ multi_dot 的矩阵链乘法顺序由动态规划给出（Cormen 教材的标准
 
 
 def _multi_dot_matrix_chain_order(arrays, return_costs=False):
-    """用 DP 求最低成本的矩阵乘法顺序（numpy 同名函数兼容）。
+    """用 DP 求最低成本的矩阵乘法顺序（同名函数兼容）。
 
     arrays: 1-d/2-d 数组序列（1-d 仅允许在首/末位，成本计算按
     (1, n)/(n, 1) 处理）。return_costs=True 时返回 (split_table,
@@ -15,7 +15,7 @@ def _multi_dot_matrix_chain_order(arrays, return_costs=False):
     split[i][j] 为段 (i..j) 的最优切分点 k（0-based，i <= k < j）；
     split[i][i] = i；严格上三角（i<j）有效。
     """
-    import rsnumpy as np
+    import rsarray as np
     n = len(arrays)
     m = [[0] * n for _ in range(n)]
     s = [[i for i in range(n)] for _ in range(n)]
@@ -42,13 +42,13 @@ def _multi_dot_matrix_chain_order(arrays, return_costs=False):
 
 
 def multi_dot(arrays, out=None):
-    """按最优顺序连乘多个矩阵（numpy.linalg.multi_dot 兼容）。
+    """按最优顺序连乘多个矩阵（linalg.multi_dot 兼容）。
 
     arrays: list/tuple，至少 2 个（不足 → ValueError）；每个元素
     1-d/2-d，1-d 仅允许在首/末位；维数不匹配 → ValueError。
     out: 给定时原地写入并返回该对象本身（ret is out）。
     """
-    import rsnumpy as np
+    import rsarray as np
     if not isinstance(arrays, (list, tuple)) or len(arrays) < 2:
         raise ValueError("Expected an array-like of two or more matrices.")
     arrays = [np.asanyarray(a) for a in arrays]

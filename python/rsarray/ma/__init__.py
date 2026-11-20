@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: MIT
-"""掩码数组（numpy.ma 兼容层）。
+"""掩码数组（ma 兼容层）。
 
-子模块布局与 NumPy 一致：
+子模块布局与 一致：
 
-- ``rsnumpy.ma.core``：核心（MaskedArray / 构造器 / 掩码辅助）
-- ``rsnumpy.ma.extras``：统计与集合扩展
-- ``rsnumpy.ma.mrecords``：掩码记录数组
+- ``rsarray.ma.core``：核心（MaskedArray / 构造器 / 掩码辅助）
+- ``rsarray.ma.extras``：统计与集合扩展
+- ``rsarray.ma.mrecords``：掩码记录数组
 """
 
 from . import core
@@ -68,13 +68,13 @@ from .mrecords import (  # noqa: F401
     mrecarray,
 )
 
-# numpy.ma 顶层暴露 core 的全部公共名（test_old_ma 按此导入）
+# ma 顶层暴露 core 的全部公共名（test_old_ma 按此导入）
 for _n in dir(core):
     if not _n.startswith('_') and _n not in globals():
         globals()[_n] = getattr(core, _n)
 del _n
 
-# numpy.ma 顶层亦暴露 extras 的常用名
+# ma 顶层亦暴露 extras 的常用名
 for _n in ('atleast_1d', 'atleast_2d', 'atleast_3d', 'average', 'clump',
            'clump_masked', 'clump_unmasked', 'compress_nd', 'compress_rowcols',
            'corrcoef', 'cov', 'diagflat', 'ediff1d', 'flatnotmasked_contiguous',

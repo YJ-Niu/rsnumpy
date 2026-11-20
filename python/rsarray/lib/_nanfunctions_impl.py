@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: MIT
-"""numpy.lib._nanfunctions_impl 兼容实现。
+"""lib._nanfunctions_impl 兼容实现。
 
 包含:
-- 内部助手 _nan_mask / _replace_nan / _divide_by_count（numpy 2.x 语义）
+- 内部助手 _nan_mask / _replace_nan / _divide_by_count（2.x 语义）
 - Python 层逐 slice NaN 归约/分位数引擎（Rust 快路径不可用的场景:
   含 NaN、元组轴、keepdims/out、weighted、method 分位数等）
-- 14 个 nanX 的 re-export shim（__all__ 与 numpy 对齐）
+- 14 个 nanX 的 re-export shim（__all__ 与 对齐）
 """
 import builtins
 import math
@@ -19,7 +19,7 @@ __all__ = [
 
 
 def _rs():
-    import rsnumpy as _np
+    import rsarray as _np
     return _np
 
 
@@ -112,7 +112,7 @@ def _normalize_axes(axis, ndim):
 
 
 def _reduce_axes(axis, nd):
-    """axis → 归约轴元组；None = 全归约（所有轴，numpy 语义）。"""
+    """axis → 归约轴元组；None = 全归约（所有轴，数组语义）。"""
     if axis is None:
         return tuple(range(nd))
     return _normalize_axes(axis, nd)
@@ -131,7 +131,7 @@ def _slices(flat, shape, axes, wflat=None):
     out_size = _prod(out_shape) if out_shape else 1
     red_size = _prod(shape[i] for i in red_axes)
     if not axes and _prod(shape) == 0:
-        # 全归约空数组: 单个空 slice（numpy 语义 → NaN + 告警）
+        # 全归约空数组: 单个空 slice（数组语义 → NaN + 告警）
         yield [], None
         return
     for oi in range(out_size):
@@ -165,7 +165,7 @@ def _is_nan_v(v):
 
 
 def _ckey(v):
-    """complex 安全的排序/比较 key（numpy 按 (real, imag) 字典序）。"""
+    """complex 安全的排序/比较 key（按 (real, imag) 字典序）。"""
     if isinstance(v, complex):
         return (v.real, v.imag)
     return (float(v), 0.0)
@@ -192,7 +192,7 @@ def _nan_slice_reduce(a, axis, reducer, empty_value=None, allnan_value=None,
     reducer(clean_vals) -> value；空 slice → empty_value（默认 NaN），
     全 NaN slice → allnan_value（默认 NaN）。
     返回 (flat_results, axes, n_empty, n_allnan, ddof_bad)——
-    告警由调用方按各函数的 numpy 语义自行发出。
+    告警由调用方按各函数的 数组语义自行发出。
     """
     shape = tuple(a.shape)
     nd = len(shape)
@@ -346,7 +346,7 @@ def _initial_prod(a, initial):
 
 # ------------------------------------------------------------------ 分位数引擎
 
-# numpy 2.x 分位数 method 全集与"插值型"（参与结果 dtype 提升）子集
+# 2.x 分位数 method 全集与"插值型"（参与结果 dtype 提升）子集
 QUANTILE_METHODS = [
     'inverted_cdf', 'averaged_inverted_cdf', 'closest_observation',
     'interpolated_inverted_cdf', 'hazen', 'weibull', 'linear',
@@ -362,7 +362,7 @@ _INT64_MIN = -9223372036854775808  # m8/M8 的 NaT 哨兵（int64 存储）
 def _quantile_of(sorted_vals, q01, method, wsorted=None):
     """已排序（无 NaN）实值列表 + q01∈[0,1] → float。
 
-    实现 numpy 2.x 全部 13 个 method（虚指数公式按真实 numpy 2.5 逐点验证）；
+    实现 2.x 全部 13 个 method（虚指数公式按真实 2.5 逐点验证）；
     weights 仅支持 inverted_cdf（概念上按权重展开成重复观测再取无权重值）。
     """
     n = len(sorted_vals)
@@ -403,7 +403,7 @@ def _quantile_of(sorted_vals, q01, method, wsorted=None):
     elif m == 'nearest':
         vidx = round(q01 * (n - 1))  # Python round = 银行家舍入（tie→even）
     elif m == 'closest_observation':
-        # numpy 2.x（#26656）：tie 向"偶数阶统计量"——1-based 位置做
+        # 2.x（#26656）：tie 向"偶数阶统计量"——1-based 位置做
         # half-even 舍入，等价于 round(q*n) - 1
         vidx = round(q01 * n) - 1
     elif m == 'midpoint':
@@ -434,14 +434,14 @@ def _quantile_of(sorted_vals, q01, method, wsorted=None):
 def _percentile_engine(a, q, axis, keepdims, dtype, out=None, weights=None,
                        method='linear', nan_filter=True, scale=100.0,
                        sentinel=None, relabel=None):
-    """通用分位数引擎（Python 层，numpy 2.x 语义）。
+    """通用分位数引擎（Python 层，2.x 语义）。
     q: 标量或列表/数组（percentile 用 0-100、quantile 用 0-1，由 scale 归一）；
     method: 见 QUANTILE_METHODS（加权仅 inverted_cdf，公共层校验）；
     weights: 与 a 同形状，或 1-D（长度 = 归约轴长 → 广播；
              多轴时 = 每 slice 展平长 → 逐 slice 使用）；
     sentinel: m8/M8 哨兵（NaT=int64 最小值）——slice 含哨兵/为空 → 哨兵结果，
               数值结果 round 为 int；relabel: 结果数组 _dtype 标签（如 'm8[D]'）；
-    全归约 + 标量 q → rsnumpy 标量（带 .dtype、isscalar 为 True）；
+    全归约 + 标量 q → rsarray 标量（带 .dtype、isscalar 为 True）；
     out 被填充并返回；输入为 ndarray 子类时结果保持子类。
     """
     rs = _rs()
@@ -565,7 +565,7 @@ def _percentile_engine(a, q, axis, keepdims, dtype, out=None, weights=None,
     elif qarr:
         res = rs.array(_reshape_flat(results, out_q_shape), dtype=dtype)
     elif not red_shape and len(results) == 1:
-        # 全归约 + 标量 q → 标量（numpy 语义：带 .dtype 的 np.generic）
+        # 全归约 + 标量 q → 标量（数组语义：带 .dtype 的 np.generic）
         res = _scalar_of(dtype, results[0])
     else:
         res = rs.array(_reshape_flat(results, red_shape), dtype=dtype)
@@ -604,7 +604,7 @@ def _nan_mask(a, out=None):
     rs = _rs()
     a = rs.asanyarray(a)
     if _dt_kind(getattr(a, '_dtype', None)) not in 'fc':
-        # numpy 语义：不可能含 NaN 的类型恒返回 Python True（即使给出 out）
+        # 数组语义：不可能含 NaN 的类型恒返回 Python True（即使给出 out）
         if out is not None:
             rs.copyto(out, True)
         return True
@@ -657,7 +657,7 @@ def _divide_by_count(a, count, out=None):
     return out
 
 
-# ------------------------------------------------------------------ nanX 公共 API（numpy 2.x 签名）
+# ------------------------------------------------------------------ nanX 公共 API（2.x 签名）
 
 def _as_nd(a):
     rs = _rs()
@@ -670,7 +670,7 @@ def _obj_delegate(a, name, **kw):
     标准函数对 object 走 Rust 占位存储（结果恒 0.0/索引 0），NumberTypes
     的 O 用例以标准函数为 oracle，故此处保持一致；ndim>=2 仍用引擎读
     _raw_data 真值（test_object_array 语义）。"""
-    from rsnumpy import statistics as _st
+    from rsarray import statistics as _st
     fn = getattr(_st, name, None)
     if fn is None:
         fn = getattr(_rs(), name)
@@ -697,12 +697,12 @@ def _dtype_name(dtype):
 
 
 def _scalar_of(dtype, value):
-    """全归约单值 → rsnumpy 标量（带 .dtype/.ndim=0，isscalar 为 True）。"""
+    """全归约单值 → rsarray 标量（带 .dtype/.ndim=0，isscalar 为 True）。"""
     name = _dtype_name(dtype)
     if name in ('object', 'string_'):
         return value
     try:
-        from rsnumpy import _SCALAR_CLASS_BY_DTYPE
+        from rsarray import _SCALAR_CLASS_BY_DTYPE
         cls = _SCALAR_CLASS_BY_DTYPE.get(name)
         if cls is not None:
             return cls(value)
@@ -716,7 +716,7 @@ def _scalar_of(dtype, value):
 
 
 def _keep_subclass(result, src):
-    """输入为 ndarray 子类时结果保持同子类（numpy 归约保留子类语义）。"""
+    """输入为 ndarray 子类时结果保持同子类（归约保留子类语义）。"""
     rs = _rs()
     t = type(src)
     if t is rs.ndarray:
@@ -732,7 +732,7 @@ def _keep_subclass(result, src):
 
 
 def _reduction_dtype(kind, dt):
-    """nan 归约结果 dtype（numpy 语义）。
+    """nan 归约结果 dtype（数组语义）。
 
     minmax/sumprod：保留输入 dtype；mean/median：float/complex 保留精度，
     其余 float64；varstd：float 保留精度，其余 float64。
@@ -767,7 +767,7 @@ def _reduce_wrap(results, axes, shape, keepdims, dtype, out, src):
         shape_out = tuple(out_shape)
     if not shape_out and len(results) == 1:
         res = _scalar_of(dtype, results[0])
-        # numpy 语义：子类输入的全归约返回 0-d 子类 ndarray（非裸标量）
+        # 数组语义：子类输入的全归约返回 0-d 子类 ndarray（非裸标量）
         t = builtins.type(src)
         if (isinstance(t, builtins.type) and issubclass(t, rs.ndarray)
                 and t is not rs.ndarray and out is None):
@@ -841,7 +841,7 @@ def nansum(a, axis=None, dtype=None, out=None, keepdims=False, initial=None,
         return _obj_delegate(a, 'sum', axis=axis, dtype=dtype, out=out,
                              keepdims=keepdims, initial=initial, where=where)
     if where is True and initial is None and _simple_fast(a, axis, out):
-        import rsnumpy.num_core as _core
+        import rsarray.num_core as _core
         return _rs_reduce(_core.nansum, a, axis, keepdims, res_dt)
     if where is not True:
         a = _apply_where(a, where)
@@ -869,7 +869,7 @@ def nanprod(a, axis=None, dtype=None, out=None, keepdims=False, initial=None,
         return _obj_delegate(a, 'prod', axis=axis, dtype=dtype, out=out,
                              keepdims=keepdims, initial=initial, where=where)
     if where is True and initial is None and _simple_fast(a, axis, out):
-        import rsnumpy.num_core as _core
+        import rsarray.num_core as _core
         return _rs_reduce(_core.nanprod, a, axis, keepdims, res_dt)
     if where is not True:
         a = _apply_where(a, where)
@@ -890,7 +890,7 @@ def nanprod(a, axis=None, dtype=None, out=None, keepdims=False, initial=None,
 
 def _check_reduce_out(a, axis, out, op):
     """ufunc.reduce 语义：out 形状须与归约结果兼容，否则 ValueError
-    （错误信息与 numpy "reduction operation <op> ..." 一致，memmap 快路径测试依赖）。"""
+    （错误信息与 "reduction operation <op> ..." 一致，memmap 快路径测试依赖）。"""
     if out is None:
         return
     oshape = tuple(getattr(out, 'shape', ()))
@@ -919,7 +919,7 @@ def nanmax(a, axis=None, out=None, keepdims=False, initial=None, where=True):
         return _obj_delegate(a, 'max', axis=axis, out=out,
                              keepdims=keepdims, initial=initial, where=where)
     if where is True and initial is None and _simple_fast(a, axis, out):
-        import rsnumpy.num_core as _core
+        import rsarray.num_core as _core
         return _rs_reduce(_core.nanmax, a, axis, keepdims, dt)
     if where is not True:
         a = _apply_where(a, where)
@@ -948,7 +948,7 @@ def nanmin(a, axis=None, out=None, keepdims=False, initial=None, where=True):
         return _obj_delegate(a, 'min', axis=axis, out=out,
                              keepdims=keepdims, initial=initial, where=where)
     if where is True and initial is None and _simple_fast(a, axis, out):
-        import rsnumpy.num_core as _core
+        import rsarray.num_core as _core
         return _rs_reduce(_core.nanmin, a, axis, keepdims, dt)
     if where is not True:
         a = _apply_where(a, where)
@@ -976,7 +976,7 @@ def nanmean(a, axis=None, dtype=None, out=None, keepdims=False, where=True):
         raise TypeError(f"data type {dtype!r} not inexact")
     if dtype is not None and _dt_kind(dtype) in 'cFDG':
         # 复数 dtype：委托标准 mean（dtype 语义与 oracle 完全一致）
-        from rsnumpy import statistics as _st
+        from rsarray import statistics as _st
         return _st.mean(a, axis=axis, dtype=dtype, out=out, keepdims=keepdims,
                         where=where)
     res_dt = dtype if dtype is not None else _reduction_dtype('mean', dt)
@@ -984,7 +984,7 @@ def nanmean(a, axis=None, dtype=None, out=None, keepdims=False, where=True):
         return _obj_delegate(a, 'mean', axis=axis, dtype=dtype, out=out,
                              keepdims=keepdims, where=where)
     if where is True and _simple_fast(a, axis, out):
-        import rsnumpy.num_core as _core
+        import rsarray.num_core as _core
         return _rs_reduce(_core.nanmean, a, axis, keepdims, res_dt)
     if where is not True:
         a = _apply_where(a, where)
@@ -997,7 +997,7 @@ def nanmean(a, axis=None, dtype=None, out=None, keepdims=False, where=True):
 
 def _nan_var_std_given_mean(a, mean, axis, keepdims, ddof, want_std, out):
     """nanvar/nanstd(mean=...) 路径：信任给定均值，仅干净值参与计算
-    （numpy masked 语义：count 排除 NaN，NaN 位置零贡献）。"""
+    （masked 语义：count 排除 NaN，NaN 位置零贡献）。"""
     import builtins as _bi
     rs = _rs()
     a = _as_nd(a)
@@ -1106,7 +1106,7 @@ def nanvar(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False,
                                        False, out)
     if dtype is not None and _dt_kind(dtype) in 'cFDG':
         # 复数 dtype：委托标准 var（dtype 语义与 oracle 完全一致）
-        from rsnumpy import statistics as _st
+        from rsarray import statistics as _st
         return _st.var(a, axis=axis, dtype=dtype, out=out, ddof=ddof,
                        keepdims=keepdims, where=where)
     if _dt_kind(dt) == 'o' and len(tuple(a.shape)) <= 1:
@@ -1114,7 +1114,7 @@ def nanvar(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False,
                              ddof=ddof, keepdims=keepdims, where=where)
     res_dt = dtype if dtype is not None else _reduction_dtype('varstd', dt)
     if where is True and _simple_fast(a, axis, out):
-        import rsnumpy.num_core as _core
+        import rsarray.num_core as _core
         raw = _core.nanvar(a._array, axis, float(ddof), keepdims)
         return _keep_subclass(_rs().ndarray._wrap(raw, _dtype=res_dt), a)
     if where is not True:
@@ -1147,7 +1147,7 @@ def nanstd(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False,
                                        True, out)
     if dtype is not None and _dt_kind(dtype) in 'cFDG':
         # 复数 dtype：委托标准 std（dtype 语义与 oracle 完全一致）
-        from rsnumpy import statistics as _st
+        from rsarray import statistics as _st
         return _st.std(a, axis=axis, dtype=dtype, out=out, ddof=ddof,
                        keepdims=keepdims, where=where)
     if _dt_kind(dt) == 'o' and len(tuple(a.shape)) <= 1:
@@ -1155,7 +1155,7 @@ def nanstd(a, axis=None, dtype=None, out=None, ddof=0, keepdims=False,
                              ddof=ddof, keepdims=keepdims, where=where)
     res_dt = dtype if dtype is not None else _reduction_dtype('varstd', dt)
     if where is True and _simple_fast(a, axis, out):
-        import rsnumpy.num_core as _core
+        import rsarray.num_core as _core
         raw = _core.nanstd(a._array, axis, float(ddof), keepdims)
         return _keep_subclass(_rs().ndarray._wrap(raw, _dtype=res_dt), a)
     if where is not True:
@@ -1254,14 +1254,14 @@ def nanmedian(a, axis=None, out=None, overwrite_input=False, keepdims=False):
     k = _dt_kind(dt)
     shape = tuple(a.shape)
     if k == 'o' and len(shape) <= 1:
-        from rsnumpy import statistics as _st
+        from rsarray import statistics as _st
         return _st.median(a, axis=axis, out=out, keepdims=keepdims)
     # 0-d 与标准 median 一致：float/complex 保留精度，其余 float64
     #（int 输入 0-d 也转 float64，与 _median_py 的 res_dt 规则对齐）
     res_dt = (dt if k in 'efc' else 'float64') if len(shape) == 0 \
         else _reduction_dtype('median', dt)
     if _simple_fast(a, axis, out):
-        from rsnumpy import statistics as _st
+        from rsarray import statistics as _st
         return _st.median(a, axis=axis, out=out, keepdims=keepdims)
     results, axes, n_empty, n_allnan, _ = _nan_slice_reduce(a, axis, _py_median)
     if n_allnan:
@@ -1279,7 +1279,7 @@ def nanmedian(a, axis=None, out=None, overwrite_input=False, keepdims=False):
 
 
 def _validate_method(method):
-    """numpy 2.x 报错："<m> is not a valid method. Use one of: 'inverted_cdf', ..."""
+    """2.x 报错："<m> is not a valid method. Use one of: 'inverted_cdf', ..."""
     m = getattr(method, 'value', method)
     if m not in QUANTILE_METHODS:
         use = ', '.join("'%s'" % x for x in QUANTILE_METHODS)
@@ -1318,7 +1318,7 @@ def _m8_label_of(dt):
 
 def _q_values(q, scale):
     """q → (Python 数值列表, 数组 q 的 float 提升 dtype|None, 是否全 0/1, 是否数组)。
-    校验范围并按 scale 给出 numpy 2.x 精确报错信息。"""
+    校验范围并按 scale 给出 2.x 精确报错信息。"""
     msg = ("Percentiles must be in the range [0, 100]" if scale > 1
            else "Quantiles must be in the range [0, 1]")
     promote = None
@@ -1330,7 +1330,7 @@ def _q_values(q, scale):
         qvals = [q]
         qarr = False
     else:
-        # rsnumpy ndarray / 数值标量（有 .dtype）：参与提升
+        # rsarray ndarray / 数值标量（有 .dtype）：参与提升
         _dtq = getattr(q, '_dtype', None) or getattr(q, 'dtype', None)
         qk = _dt_kind(_dtq)
         if qk in 'efd':
@@ -1374,7 +1374,7 @@ def _frac_quantile(vs, qf, method):
         # Fraction 精确 half-even（Python round 对 Fraction 是精确 tie→even）
         vidx = round(qf * (n - 1))
     elif m == 'closest_observation':
-        # 1-based 位置 half-even（numpy #26656）：round(q*n) - 1
+        # 1-based 位置 half-even（#26656）：round(q*n) - 1
         vidx = round(qf * n) - 1
     elif m == 'midpoint':
         vidx = _Frac(math.floor(qf * (n - 1))
@@ -1410,7 +1410,7 @@ def _percentile_public(a, q, axis, out, overwrite_input, method, keepdims,
     k = _dt_kind(dt).lower()
     if k == 'c':
         raise TypeError(
-            "numpy is unable to avoid using the complex type with the "
+            "is unable to avoid using the complex type with the "
             "current version of the 'inplace-sort' used in the "
             "'nanpercentile' function. Please make sure to cast your "
             "input array to a real type before calling this function.")
@@ -1445,7 +1445,7 @@ def _percentile_public(a, q, axis, out, overwrite_input, method, keepdims,
             if isinstance(qv, _Frac):
                 res.append(_frac_quantile(vs, _Frac(qv) / _Frac(int(scale)), m))
             elif m in _INTERPOLATING_METHODS and fqv not in (0.0, 1.0):
-                # 浮点 q + 插值 method：float 结果（numpy 语义）
+                # 浮点 q + 插值 method：float 结果（数组语义）
                 res.append(_quantile_of([float(x) for x in vs], fqv, m))
             elif m == 'averaged_inverted_cdf':
                 kx = fqv * n
@@ -1478,14 +1478,14 @@ def _percentile_public(a, q, axis, out, overwrite_input, method, keepdims,
         flat = _flat_list(a.tolist())
         if flat and all(isinstance(v, _frac_type()) for v in flat):
             return _frac_out(_frac_results(sorted(flat)))
-    # ---- int/bool 输入 + Fraction q：numpy 语义——插值算术保持 Fraction
+    # ---- int/bool 输入 + Fraction q：数组语义——插值算术保持 Fraction
     #（q=Fraction(1), [1,2] → Fraction(2)；Fraction(.5) → Fraction(3,2)）
     if (k in 'iu?b' and axis is None and weights is None
             and any(isinstance(qv, _frac_type()) for qv in qvals)):
         vals0 = _flat_list(a.tolist())
         if vals0 and all(isinstance(v, (int, bool)) for v in vals0):
             return _frac_out(_frac_results(sorted(vals0)))
-    # ---- 结果 dtype 规则（numpy 2.x）
+    # ---- 结果 dtype 规则（2.x）
     interp = m in _INTERPOLATING_METHODS
     if k in 'ef':
         res_dt = _dtype_name(dt)
@@ -1516,7 +1516,7 @@ def _sel_idx(fqv, n, m):
 
 
 def _median_py(a, axis, out, keepdims):
-    """纯 Python 中位数（numpy 2.x 语义；任意 dtype/axis 形状，消除 Rust
+    """纯 Python 中位数（2.x 语义；任意 dtype/axis 形状，消除 Rust
     _core.median 的 f64/2D 限制与空 slice 减溢 abort）。
     NaN/NaT 传染 slice；空 slice → NaN + 两条 RuntimeWarning；
     m8/M8 在 int64 存储上计算（NaT=INT64_MIN），结果重贴标签；
@@ -1580,7 +1580,7 @@ def _median_py(a, axis, out, keepdims):
                 out[...] = res
             return out
         return res
-    # complex 保留自身 dtype（numpy 语义：median(c64) → c64；float64(c) 会
+    # complex 保留自身 dtype（数组语义：median(c64) → c64；float64(c) 会
     # 抛 TypeError 退化裸值）
     res_dt = _dtype_name(dt) if k in 'efc' else 'float64'
     return _reduce_wrap(results, axes, shape, keepdims, res_dt, out, a)
@@ -1614,7 +1614,7 @@ def nanquantile(a, q, axis=None, out=None, method='linear', keepdims=False,
 
 
 def _nancum_impl(a, axis, dtype, out, is_prod):
-    """忽略 NaN 的累积和/积（numpy 实现：NaN → 0/1 替换后委托标准
+    """忽略 NaN 的累积和/积（实现：NaN → 0/1 替换后委托标准
     cumsum/cumprod 内核——与标准结果逐位一致、标注规则天然一致）。"""
     rs = _rs()
     a = _as_nd(a)

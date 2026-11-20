@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: MIT
-"""rsnumpy.char - 向量化字符串操作模块（Rust 层实现，本模块为薄包装）。
+"""rsarray.char - 向量化字符串操作模块（Rust 层实现，本模块为薄包装）。
 
 所有元素级字符串运算由 Rust 端 ``num_core.char_str_op/char_int_op/
 char_bool_op/char_add/char_multiply`` 一次跨边界批量完成。
@@ -7,12 +7,12 @@ char_bool_op/char_add/char_multiply`` 一次跨边界批量完成。
 
 import builtins
 
-import rsnumpy.num_core as _core
+import rsarray.num_core as _core
 
 
 def _np_mod():
-    import rsnumpy
-    return rsnumpy
+    import rsarray
+    return rsarray
 
 
 def _get_strings(a):
@@ -78,7 +78,7 @@ def _nest(flat, dims):
 
 
 def _bc_shapes(shapes):
-    """numpy 式形状广播（尾对齐，1 可扩，短形状前导补 1）。"""
+    """式形状广播（尾对齐，1 可扩，短形状前导补 1）。"""
     ss = [builtins.tuple(reversed(s)) for s in shapes if s]
     out = []
     nd = builtins.max((builtins.len(s) for s in ss), default=0)
@@ -126,7 +126,7 @@ def _iter_indices(shape):
 
 
 def _str_input_kind(x):
-    """字符串输入种类（'S'/'U'/'T'）；非字符串输入返回 None（numpy: no-loop）。"""
+    """字符串输入种类（'S'/'U'/'T'）；非字符串输入返回 None（—no-loop）。"""
     if isinstance(x, bytes):
         return 'S'
     if isinstance(x, str):
@@ -147,8 +147,8 @@ def _str_input_kind(x):
 def _operand(x):
     """把 values 输入转成 (flat 列表, shape)；str 标量 → 单元素。
 
-    numpy 语义：数值标量/数组元素提升为 rsnumpy 标量（repr 为
-    'np.int64(1)' 等），保证 '%r' 格式化与 numpy 一致。"""
+    数组语义：数值标量/数组元素提升为 rsarray 标量（repr 为
+    'np.int64(1)' 等），保证 '%r' 格式化与标准语义一致。"""
     if x is None:
         return None, ()
     if isinstance(x, (str, bytes)):
@@ -163,7 +163,7 @@ def _operand(x):
         shape = _nested_shape(x)
     else:
         shape = _shape_of(x)
-    # 数值输入（标量已处理）：逐元素包装 rsnumpy 标量类（numpy '%r' 语义）。
+    # 数值输入（标量已处理）：逐元素包装 rsarray 标量类（'%r' 语义）。
     if flat and all(isinstance(v, (int, float)) for v in flat):
         from .__init__ import _SCALAR_CLASS_BY_DTYPE, int64 as _i64
         from .__init__ import float64 as _f64
@@ -197,7 +197,7 @@ def _wrap_str(vals, shape, was_bytes=False):
 def _str_op(op, a, arg1=None, arg2=None, arg3=None):
     """字符串算子薄包装：解码 → Rust → 编码 → 包装。
 
-    S 输入结果保持 S dtype（was_bytes 传递，numpy S→S 语义）。"""
+    S 输入结果保持 S dtype（was_bytes 传递，S→S 语义）。"""
     vals = _decode(_get_strings(a))
     out = _core.char_str_op(op, vals,
                             None if arg1 is None else _as_str_arg(arg1),
@@ -230,7 +230,7 @@ def _int_op(op, a, arg1=None, arg2=None, arg3=None):
     shape = _shape_of(a)
     from .__init__ import ndarray
     if isinstance(a, (str, bytes)) or shape == ():
-        # numpy 语义：标量输入 → 0-d int 数组。
+        # 数组语义：标量输入 → 0-d int 数组。
         res = ndarray([builtins.float(out[0]) if out else -1], _dtype='int64')
         return res.reshape(())
     res = ndarray([builtins.float(v) for v in out], _dtype='int64')
@@ -248,7 +248,7 @@ def _bool_op(op, a, arg1=None, other=None):
     shape = _shape_of(a)
     from .__init__ import ndarray
     if isinstance(a, (str, bytes)) or shape == ():
-        # numpy 语义：标量比较返回 0-d bool 数组（isinstance ndarray）。
+        # 数组语义：标量比较返回 0-d bool 数组（isinstance ndarray）。
         val = builtins.bool(out[0]) if out else False
         res = ndarray([1.0 if val else 0.0])
         res._dtype = 'bool'
@@ -265,7 +265,7 @@ def add(x1, x2):
     v1 = _decode(_get_strings(x1))
     v2 = _decode(_get_strings(x2))
     out = _core.char_add(v1, v2)
-    # numpy 语义：结果总字节数不得超 intc max（超 → TypeError，
+    # 数组语义：结果总字节数不得超 intc max（超 → TypeError，
     # large_string_addition 回归）
     if out:
         _w = 1 if _a_was_bytes(x1) else 4
@@ -291,7 +291,7 @@ def add(x1, x2):
 def multiply(a, i):
     """逐元素重复（np.char.multiply / np.strings.multiply 语义）。
 
-    numpy 语义：i 必须整型（float/bool → TypeError "unsupported type ...
+    数组语义：i 必须整型（float/bool → TypeError "unsupported type ...
     for operand 'i'"）；0-d 整数数组按标量处理；重复后总长超 intp 上限
     → OverflowError；i≤0 → 空串。"""
     vals = _decode(_get_strings(a))
@@ -332,7 +332,7 @@ def capitalize(a):
 
 
 def title(a):
-    """numpy title 语义（非字母后首字母大写）。"""
+    """title 语义（非字母后首字母大写）。"""
     return _str_op('title', a)
 
 
@@ -365,9 +365,9 @@ def rstrip(a, chars=None):
 
 
 def _pad_op(op, a, width, fillchar=None):
-    """center/ljust/rjust/zfill：width/fillchar 支持标量/数组（numpy 广播）。
+    """center/ljust/rjust/zfill：width/fillchar 支持标量/数组（广播）。
 
-    numpy 语义：fillchar 非单字符 → TypeError("The fill character must be
+    数组语义：fillchar 非单字符 → TypeError("The fill character must be
     exactly one character long")。"""
     vals = _decode(_get_strings(a))
     a_shape = _shape_of(a)
@@ -392,7 +392,7 @@ def _pad_op(op, a, width, fillchar=None):
             fc = _bc_get(fc_flat, fc_shape, idx)
             out.append(getattr(v, op)(w, fc))
     if was_bytes:
-        # numpy S (bytes) dtype 仅接受 ASCII：非 ASCII → ValueError
+        # S (bytes) dtype 仅接受 ASCII：非 ASCII → ValueError
         # ("'ascii' codec can't encode ...")
         out = [v.encode('ascii').decode('ascii') for v in out]
     res = _wrap_str(out, bshape, was_bytes=was_bytes)
@@ -419,10 +419,10 @@ def zfill(a, width):
 
 
 def replace(a, old, new, count=None):
-    """逐元素替换（old/new/count 支持数组广播，numpy 语义）。
+    """逐元素替换（old/new/count 支持数组广播，数组语义）。
 
-    ArrayLike 输入经 __array__ 转换（恰好一次，numpy 语义）。"""
-    from rsnumpy import asarray as _asarray
+    ArrayLike 输入经 __array__ 转换（恰好一次，数组语义）。"""
+    from rsarray import asarray as _asarray
     if not hasattr(a, '_raw_data'):
         a = _asarray(a)
     if not hasattr(old, '_raw_data'):
@@ -456,24 +456,24 @@ def replace(a, old, new, count=None):
 
 
 def expandtabs(a, tabsize=8):
-    """逐元素 str.expandtabs（numpy 语义：tab 对齐到下一个 tab stop，
+    """逐元素 str.expandtabs（数组语义：tab 对齐到下一个 tab stop，
     \\n/\\r 后列号归零）。
 
-    Python 层实现：numpy 按 ``incr = tabsize - (line_pos % tabsize)`` 对齐
+    Python 层实现：按 ``incr = tabsize - (line_pos % tabsize)`` 对齐
     tab stop，而 Rust ``char_str_op`` 每个 tab 固定插 ``tabsize`` 个空格
     不对齐；且结果超限时 Rust 层 abort 而非抛异常。故在此一次完成展开与
-    溢出检查（展开后长度 > INT_MAX → OverflowError，见 numpy PR #26589）。
+    溢出检查（展开后长度 > INT_MAX → OverflowError，见 PR #26589）。
     """
-    # 非字符串输入 → numpy ufunc no-loop 错误（TypeError 子类）
+    # 非字符串输入 → ufunc no-loop 错误（TypeError 子类）
     if not _str_input_kind(a):
-        from rsnumpy._core._exceptions import _UFuncNoLoopError
+        from rsarray._core._exceptions import _UFuncNoLoopError
         raise _UFuncNoLoopError(
             "'_expandtabs' ufunc did not contain a loop with signature "
             "matching types")
     ts = int(tabsize)
     vals = _decode(_get_strings(a))
     LIM = 2147483647  # INT_MAX
-    # 第一遍（对齐 numpy string_expandtabs_length）：仅计长度，超限即抛
+    # 第一遍（对齐 string_expandtabs_length）：仅计长度，超限即抛
     # OverflowError——不能先构建展开串（' ' * 2**63 会先 MemoryError）
     for v in vals:
         new_len = 0
@@ -507,22 +507,22 @@ def expandtabs(a, tabsize=8):
                 if ch in '\n\r':
                     line_pos = 0
         out.append(''.join(parts))
-    # 输出约定与 _str_op 一致（bytes 回转 / 标量 / shape 包装）；numpy
-    # 保留输入 dtype 种类（S→S、U→U，见 numpy/_core/strings.py expandtabs）
+    # 输出约定与 _str_op 一致（bytes 回转 / 标量 / shape 包装）；
+    # 保留输入 dtype 种类（S→S、U→U，见 strings 模块 expandtabs）
     _wb = _a_was_bytes(a)
     if _wb:
         out = [v.encode('utf-8', 'surrogateescape') for v in out]
     shape = _shape_of(a)
     if isinstance(a, (str, bytes)):
         return out[0] if out else ''
-    # 0-d 数组输入：numpy 返回数组（含 .dtype），非裸标量
+    # 0-d 数组输入：返回数组（含 .dtype），非裸标量
     if shape == ():
         return _wrap_str(out, (), was_bytes=_wb)
     return _wrap_str(out, shape, was_bytes=_wb)
 
 
 def join(sep, a):
-    """以 sep 连接序列元素（sep 支持数组逐元素，numpy 广播）。"""
+    """以 sep 连接序列元素（sep 支持数组逐元素，广播）。"""
     s = _decode(_get_strings(a))
     a_shape = _shape_of(a)
     if isinstance(sep, (str, bytes)):
@@ -566,9 +566,9 @@ def _bc_int_arg(x):
 
 
 def _range_search(a, sub, start, end, py_fn, kind):
-    """带 start/end 范围的逐元素搜索（numpy 广播语义，Python 实现）。
+    """带 start/end 范围的逐元素搜索（广播语义，Python 实现）。
 
-    numpy 语义：end=None → intp.max；start/end 按 slice 语义作用于
+    数组语义：end=None → intp.max；start/end 按 slice 语义作用于
     每个元素。kind='int' → int64 数组（find/rfind/count/index/rindex）；
     kind='bool' → bool 数组（startswith/endswith）。"""
     vals = _decode(_get_strings(a))
@@ -641,7 +641,7 @@ def count(a, sub, start=0, end=None):
 
 
 def _range_valid(st_, e_, ln):
-    """numpy 语义的区间有效性：负索引归一（不归零），start > end → 无效。
+    """数组语义的区间有效性：负索引归一（不归零），start > end → 无效。
 
     与 C 层 string_startswith/endswith 一致：('','',1,0)→False 而
     ('','',0,0)→True；('hello','',-3,-3)→True。"""
@@ -653,7 +653,7 @@ def _range_valid(st_, e_, ln):
 def startswith(a, prefix, start=0, end=None):
     """逐元素 startswith（检查 a[start:end] 前缀）；start/end 支持标量/数组。
 
-    numpy 语义：负索引先加长度归一，start > end → False（Python 原生
+    数组语义：负索引先加长度归一，start > end → False（Python 原生
     切片在此处不一致，故不走 v[st_:e_].startswith）。"""
     def _sw(v, s_, st_, e_):
         if not _range_valid(st_, e_, builtins.len(v)):
@@ -665,7 +665,7 @@ def startswith(a, prefix, start=0, end=None):
 def endswith(a, suffix, start=0, end=None):
     """逐元素 endswith（检查 a[start:end] 后缀）；start/end 支持标量/数组。
 
-    numpy 语义同 startswith（区间无效 → False）。"""
+    数组语义同 startswith（区间无效 → False）。"""
     def _ew(v, s_, st_, e_):
         if not _range_valid(st_, e_, builtins.len(v)):
             return False
@@ -711,10 +711,10 @@ def isalpha(a):
 
 
 def _unicode_only_guard(a, name):
-    """numpy unicode-only strings 函数无 bytes loop：S 输入 → no-loop
+    """unicode-only strings 函数无 bytes loop：S 输入 → no-loop
     错误（_UFuncNoLoopError 是 TypeError 子类）。"""
     if _a_was_bytes(a):
-        from rsnumpy._core._exceptions import _UFuncNoLoopError
+        from rsarray._core._exceptions import _UFuncNoLoopError
         raise _UFuncNoLoopError(
             f"'{name}' ufunc did not contain a loop with signature "
             "matching types")
@@ -753,7 +753,7 @@ def isupper(a):
 def split(a, sep=None, maxsplit=None):
     """逐元素分割（Rust 层暂不支持，回退 Python）。
 
-    numpy 的 split 返回 ragged object 数组，无法映射为规则字符串算子。
+    数组的 split 返回 ragged object 数组，无法映射为规则字符串算子。
     """
     s = _get_strings(a)
     result = [v.split(sep, maxsplit) if maxsplit is not None
@@ -879,7 +879,7 @@ def rpartition(a, sep):
 
 
 def mod(a, values):
-    """逐元素 % 格式化（numpy char.mod，支持广播）。"""
+    """逐元素 % 格式化（char.mod，支持广播）。"""
     s = _get_strings(a)
     a_shape = _shape_of(a)
     v_flat, v_shape = _operand(values)
@@ -949,7 +949,7 @@ def _nested_shape(data):
 
 
 def _rstrip_tree(x):
-    """递归 rstrip str/bytes 元素（numpy char.array 构造语义）。"""
+    """递归 rstrip str/bytes 元素（char.array 构造语义）。"""
     if isinstance(x, (str, bytes)):
         return x.rstrip()
     if isinstance(x, (builtins.list, builtins.tuple)):
@@ -958,7 +958,7 @@ def _rstrip_tree(x):
 
 
 class chararray:
-    """字符串/字节 ndarray（numpy chararray 语义，方法委托 Rust 算子）。
+    """字符串/字节 ndarray（chararray 语义，方法委托 Rust 算子）。
 
     组合代理：内部持有真实 ndarray（_inst），ndarray 协议经 __getattr__
     代理，元素级字符串方法经 _core.char_* 算子在 Rust 层完成。
@@ -978,7 +978,7 @@ class chararray:
             return _as_chararray(inst)
         if hasattr(obj, '_array'):
             if unicode is False:
-                # numpy 语义：U 数组 → S 需 ascii 编码，非 ascii 抛错。
+                # 数组语义：U 数组 → S 需 ascii 编码，非 ascii 抛错。
                 _rd = list(getattr(obj, '_raw_data', None) or [])
                 for _v in _rd:
                     if isinstance(_v, str):
@@ -1002,11 +1002,11 @@ class chararray:
             else:
                 inst = obj if not copy else obj.copy()
         else:
-            # numpy char.array：Python 输入构造期元素 rstrip
+            # char.array：Python 输入构造期元素 rstrip
             # （全空白元素 → 空串）。ndarray 输入保持原样。
             obj = _rstrip_tree(obj)
             if isinstance(obj, (str, bytes)):
-                # numpy 语义：单个 str/bytes 是 1 维单元素数组（|S3 / <U1），
+                # 数组语义：单个 str/bytes 是 1 维单元素数组（|S3 / <U1），
                 # 元素本身为完整字符串（len(A)==1, len(A[0])==len(输入)）。
                 inst = _array([obj], dtype='S' if isinstance(obj, bytes) else 'U')
             else:
@@ -1019,7 +1019,7 @@ class chararray:
                                        isinstance(flat0, str)):
                     inst = _array(obj, dtype='U')
                 elif unicode is False:
-                    # numpy 语义：强制 ascii 编码，非 ascii 抛 UnicodeEncodeError。
+                    # 数组语义：强制 ascii 编码，非 ascii 抛 UnicodeEncodeError。
                     for _v in _flatten(builtins.list(obj), []):
                         if isinstance(_v, str):
                             _v.encode('ascii')
@@ -1033,7 +1033,7 @@ class chararray:
         return getattr(self._inst, name)
 
     def astype(self, dtype, *a, **k):
-        # numpy 语义：S/U 结果保持 chararray，其余返回普通 ndarray。
+        # 数组语义：S/U 结果保持 chararray，其余返回普通 ndarray。
         res = self._inst.astype(dtype, *a, **k)
         from .__init__ import ndarray as _ndarray
         if isinstance(res, _ndarray) and res.dtype.kind in 'SU':
@@ -1132,9 +1132,9 @@ class chararray:
         if (chars is not None
                 and (isinstance(chars, (builtins.list, builtins.tuple))
                      or hasattr(chars, 'tolist'))):
-            # chars 数组：逐元素（numpy 广播 i % len）。
+            # chars 数组：逐元素（广播 i % len）。
             # strip：chars strip 后 C 截断（含 \0）；lstrip：chars lstrip 后
-            # 去尾部空白；rstrip：仅 chars rstrip（numpy C 实现语义）。
+            # 去尾部空白；rstrip：仅 chars rstrip（C 实现语义）。
             vals = _decode(self._vals())
             cs = _decode(_get_strings(chars))
 
@@ -1155,7 +1155,7 @@ class chararray:
                               was_bytes=kind == 'S')
         if kind in 'SU':
             if op == 'lstrip':
-                # lstrip 无参：仅空白 lstrip（不 \0 截断，numpy 语义）。
+                # lstrip 无参：仅空白 lstrip（不 \0 截断，数组语义）。
                 return self._apply(op, [chars])
             # strip/rstrip 无参：C 字符串截断（除 \0）+ 空白 op。
             vals = [v.split('\x00', 1)[0] for v in _decode(self._vals())]
@@ -1177,7 +1177,7 @@ class chararray:
         return _pad_op('zfill', self, width)
 
     def expandtabs(self, tabsize=8):
-        # Python 层实现（Rust 对含 \0 元素的处理与 numpy 不一致）。
+        # Python 层实现（Rust 对含 \0 元素的处理与 不一致）。
         vals = _decode(self._vals())
         out = [v.expandtabs(tabsize) for v in vals]
         try:
@@ -1332,7 +1332,7 @@ class chararray:
         ndim = builtins.len(shape)
 
         def _trim_tuple(v):
-            # numpy S/U 元组索引 getitem：C 字符串截断（含 \x00）+
+            # S/U 元组索引 getitem：C 字符串截断（含 \x00）+
             # 尾部空白去除（在 \x00 处停止）。
             if isinstance(v, str):
                 parts = v.split('\x00', 1)
@@ -1346,8 +1346,8 @@ class chararray:
 
         if isinstance(key, (int,)) and not isinstance(key, bool):
             if ndim > 1:
-                # numpy：n 维(n>1)整数索引 → (n-1) 维子数组。
-                # rsnumpy 的 ndarray [int] 返回标量——此处重建行。
+                # —n 维(n>1)整数索引 → (n-1) 维子数组。
+                # rsarray 的 ndarray [int] 返回标量——此处重建行。
                 flat = self._vals()
                 stride = 1
                 for d in shape[1:]:
@@ -1467,7 +1467,7 @@ class chararray:
         return add(other, self)
 
     def __mul__(self, other):
-        # numpy chararray 语义：仅整数倍重复，非整数 → ValueError
+        # chararray 语义：仅整数倍重复，非整数 → ValueError
         if not isinstance(other, int) or isinstance(other, bool):
             raise ValueError("Can only multiply by integers")
         return multiply(self, other)
@@ -1481,7 +1481,7 @@ class chararray:
         return mod(self, other)
 
     def _cmp(self, other, op):
-        # numpy chararray 语义：比较前对两侧值 strip 尾部空格
+        # chararray 语义：比较前对两侧值 strip 尾部空格
         # （'123' == '123  ' 为 True，'123' < '123  ' 为 False）
         a_vals = _decode(self._vals())
         if hasattr(other, '_vals'):
@@ -1552,14 +1552,14 @@ def asarray(obj, itemsize=None, unicode=None):
 
 
 def compare_chararrays(a1, a2, cmp='asciibetical', rstrip=False):
-    """逐元素比较字符数组（numpy.char.compare_chararrays 兼容）。
+    """逐元素比较字符数组（char.compare_chararrays 兼容）。
 
-    cmp 接受比较符号（'=='/'!='/'<'/'<='/'>'/>='，numpy 2.x ufunc
+    cmp 接受比较符号（'=='/'!='/'<'/'<='/'>'/>='，2.x ufunc
     语义）或 'asciibetical'/'lexicographic'（legacy，均按码点比较，
     默认语义为 a > b）。
     """
     import operator as _pyop
-    import rsnumpy as np
+    import rsarray as np
     _ops = {'==': _pyop.eq, '!=': _pyop.ne, '<': _pyop.lt,
             '<=': _pyop.le, '>': _pyop.gt, '>=': _pyop.ge}
     if cmp in _ops:
