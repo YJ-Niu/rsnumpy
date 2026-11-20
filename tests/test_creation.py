@@ -1,7 +1,7 @@
 """Array creation, shape metadata, and shape-manipulation ops."""
 import pytest
 
-import rsnumpy as np
+import rsarray as np
 
 
 def _f(x):

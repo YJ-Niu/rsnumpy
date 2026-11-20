@@ -12,7 +12,7 @@ enum IndexDesc {
     Slice(isize, isize, isize),
     Int(usize),
     Fancy(Vec<usize>),
-    /// 多维花式索引：扁平化下标 + 原始形状（用于 numpy 语义下的广播）。
+    /// 多维花式索引：扁平化下标 + 原始形状（用于 数组语义下的广播）。
     FancyMulti(Vec<usize>, Vec<usize>),
     /// 完整布尔掩码：覆盖所有维度，扁平化下标。
     FullBoolMask(Vec<usize>),
@@ -181,7 +181,7 @@ fn ndarray_to_index_desc(arr: &NdArray, dim_size: isize) -> IndexDesc {
     let vals: Vec<f64> = arr.data.iter().copied().collect();
     let shape = arr.data.shape().to_vec();
 
-    // 注意：rsnumpy 内部所有数组均为 f64，无法区分 bool/整数索引。
+    // 注意：rsarray 内部所有数组均为 f64，无法区分 bool/整数索引。
     // 布尔掩码索引应在 Python 层（__getitem__）提前处理，不进入 Rust 端。
     // 故此处始终将值视为整数索引，即使值为 0.0/1.0 也不作布尔掩码处理。
     let fancy: Vec<usize> = vals
@@ -277,7 +277,7 @@ fn compute_strides(shape: &[usize]) -> Vec<usize> {
     strides
 }
 
-/// 计算两个形状按 numpy 规则广播后的形状；不兼容时返回 None。
+/// 计算两个形状按标准规则广播后的形状；不兼容时返回 None。
 fn broadcast_shapes(a: &[usize], b: &[usize]) -> Option<Vec<usize>> {
     let n = a.len().max(b.len());
     let mut out = vec![0usize; n];
@@ -345,7 +345,7 @@ fn slice_and_int_index(
 }
 
 /// 依据已补齐的索引描述从单个 f64 数组中取值，返回结果数组（不含虚部）。
-/// 语义遵循 numpy 高级索引：整型轴移除，切片轴保留，花式索引按广播合并成一个块。
+/// 语义遵循标准高级索引：整型轴移除，切片轴保留，花式索引按广播合并成一个块。
 fn select_from(
     data: &Array<f64, IxDyn>,
     filled_indices: &[IndexDesc],
@@ -400,7 +400,7 @@ fn select_from(
         }
     }
 
-    // 每个源轴一种取值方式。存在高级索引时，整型索引按 numpy 语义并入高级组
+    // 每个源轴一种取值方式。存在高级索引时，整型索引按 数组语义并入高级组
     // （视为 0 维数组：广播不贡献输出维度，但参与连续性判定并在原位被消费）。
     enum AxisPlan {
         Slice(Vec<usize>),
@@ -441,7 +441,7 @@ fn select_from(
         }
     }
     let adv_ndim = adv_shape.len();
-    // 高级索引轴是否连续：连续则块留在原位，否则按 numpy 规则前置。
+    // 高级索引轴是否连续：连续则块留在原位，否则按标准规则前置。
     let contiguous = adv_axes.windows(2).all(|w| w[1] == w[0] + 1);
 
     enum OutAxis {

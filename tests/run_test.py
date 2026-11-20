@@ -1,10 +1,10 @@
-import rsnumpy as np
+import rsarray as np
 import time
 import math
 from io import StringIO
-from rsnumpy import array, argmin, sqrt, sum
-from rsnumpy.lib.recfunctions import repack_fields
-from rsnumpy.lib import recfunctions as rfn
+from rsarray import array, argmin, sqrt, sum
+from rsarray.lib.recfunctions import repack_fields
+from rsarray.lib import recfunctions as rfn
 
 start_time = time.time()
 
@@ -230,7 +230,7 @@ print(55, x[x > 5])
 a = np.array([np.nan, 1, 2, np.nan, 3, 4, 5])
 print(56, a[~np.isnan(a)])
 
-a = np.array([1, 2+6j, 5, 3.5+5j])
+a = np.array([1, 2 + 6j, 5, 3.5 + 5j])
 print(57, a[np.iscomplex(a)])
 
 x = np.arange(9)
@@ -357,7 +357,7 @@ print('原始数组是：')
 print(82, a)
 print('\n')
 for x in np.nditer(a, op_flags=['readwrite']):
-    x[...] = 2*x
+    x[...] = 2 * x
 print('修改后的数组是：')
 print(a)
 
@@ -620,7 +620,7 @@ c.flat = [u + v for (u, v) in b]
 print('调用 flat 函数：')
 print(132, c)
 print('\n')
-# 获得了和 NumPy 内建的广播支持相同的结果
+# 获得了和标准广播语义相同的结果
 
 print('x 与 y 的和：')
 print(133, x + y)
@@ -1068,18 +1068,18 @@ print(np.char.decode(a, 'cp500'))
 a = np.array([0, 30, 45, 60, 90])
 print('不同角度的正弦值：')
 # 通过乘 pi/180 转化为弧度
-print(np.sin(a*np.pi/180))
+print(np.sin(a * np.pi / 180))
 print('\n')
 print('数组中角度的余弦值：')
-print(np.cos(a*np.pi/180))
+print(np.cos(a * np.pi / 180))
 print('\n')
 print('数组中角度的正切值：')
-print(np.tan(a*np.pi/180))
+print(np.tan(a * np.pi / 180))
 
 mark_print()
 a = np.array([0, 30, 45, 60, 90])
 print('含有正弦值的数组：')
-sin = np.sin(a*np.pi/180)
+sin = np.sin(a * np.pi / 180)
 print(sin)
 print('\n')
 print('计算角度的反正弦，返回值以弧度为单位：')
@@ -1090,7 +1090,7 @@ print('通过转化为角度制来检查结果：')
 print(np.degrees(inv))
 print('\n')
 print('arccos 和 arctan 函数行为类似：')
-cos = np.cos(a*np.pi/180)
+cos = np.cos(a * np.pi / 180)
 print(cos)
 print('\n')
 print('反余弦：')
@@ -1101,7 +1101,7 @@ print('角度制单位：')
 print(np.degrees(inv))
 print('\n')
 print('tan 函数：')
-tan = np.tan(a*np.pi/180)
+tan = np.tan(a * np.pi / 180)
 print(tan)
 print('\n')
 print('反正切：')
@@ -1541,7 +1541,7 @@ print(a.T)
 
 mark_print()
 
-# import rsnumpy.matlib
+# import rsarray.matlib
 print(np.matlib.empty((2, 2)))
 print()
 print(np.matlib.zeros((2, 2)))
@@ -1602,7 +1602,7 @@ print(np.linalg.det(a), "\n")
 b = np.array([[6, 1, 1], [4, -2, 5], [2, 8, 7]])
 print(b)
 print(np.linalg.det(b))
-print(6*(-2*7 - 5*8) - 1*(4*7 - 5*2) + 1*(4*8 - -2*2))
+print(6 * (-2 * 7 - 5 * 8) - 1 * (4 * 7 - 5 * 2) + 1 * (4 * 8 - -2 * 2))
 print()
 
 x = np.array([[1, 2], [3, 4]])
@@ -2117,10 +2117,10 @@ names = ("i", "p", "n")
 print(np.genfromtxt(StringIO(data), delimiter=",", names=names))
 run_test()
 # General case .....
-print(np.genfromtxt(StringIO(data), delimiter=",", names=names, converters={"p": lambda x: float(x.strip("%"))/100}))
+print(np.genfromtxt(StringIO(data), delimiter=",", names=names, converters={"p": lambda x: float(x.strip("%")) / 100}))
 run_test()
 # Converted case ...
-print(np.genfromtxt(StringIO(data), delimiter=",", names=names, converters={1: lambda x: float(x.strip("%"))/100}))
+print(np.genfromtxt(StringIO(data), delimiter=",", names=names, converters={1: lambda x: float(x.strip("%")) / 100}))
 run_test()
 data = "1, , 3\n 4, 5, 6"
 print(np.genfromtxt(StringIO(data), delimiter=",", converters={1: lambda x: float(x.strip() or -999)}))

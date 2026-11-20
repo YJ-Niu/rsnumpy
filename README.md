@@ -1,6 +1,6 @@
-# rsnumpy
+# rsarray
 
-**A high-performance NumPy-compatible array library powered by Rust.**
+**A high-performance array library powered by Rust.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-≥3.10-blue.svg)](https://www.python.org)
@@ -9,31 +9,31 @@
 
 ---
 
-rsnumpy 重新实现了 NumPy 的核心 API，**所有计算密集型逻辑（数组操作、数学函数、统计、线性代数、FFT、随机数、I/O、多项式等）均在 Rust 层完成**，Python 层只做参数转发与结果包装。计算过程主动释放 GIL 并按算子成本分级启用并行，让 Python 多线程调用也能真正并行加速。
+rsarray 提供完整的高维数组 API，**所有计算密集型逻辑（数组操作、数学函数、统计、线性代数、FFT、随机数、I/O、多项式等）均在 Rust 层完成**，Python 层只做参数转发与结果包装。计算过程主动释放 GIL 并按算子成本分级启用并行，让 Python 多线程调用也能真正并行加速。
 
 ---
 
 ## ✨ 特性亮点
 
-- 🚀 **Rust 驱动的高性能** — `sin`/`exp` 比 NumPy 快 **5x**，`sort` 快 **32x**，逐元素运算快 **1.6–1.7x**
+- 🚀 **Rust 驱动的高性能** — 超越函数快 **5x**，`sort` 快 **32x**，逐元素运算快 **1.6–1.7x**
 - 🧵 **GIL-Free 并行** — 计算密集算子通过 `py.detach` 释放 GIL，多线程 Python 真正并行
-- 📊 **完整的 NumPy 兼容 API** — 涵盖数组、数学、统计、linalg、FFT、random、I/O、polynomial、datetime64、masked/structured array、stride_tricks、testing 等子模块
-- 🪟 **零拷贝缓冲协议** — 实现 PEP 3118（Rust 层 `__getbuffer__`）与 PEP 3118（Python 3.12+ `__buffer__`），可被 NumPy / rsplotlib 直接零拷贝消费
+- 📊 **完整的高维数组 API** — 涵盖数组、数学、统计、linalg、FFT、random、I/O、polynomial、datetime64、masked/structured array、stride_tricks 等子模块
+- 🪟 **零拷贝缓冲协议** — 实现 PEP 3118（Rust 层 `__getbuffer__`）与 PEP 688（Python 3.12+ `__buffer__`），可被 matplotlib / rsplotlib 等第三方库直接零拷贝消费
 - 🎯 **智能 dtype 推断** — 自动将字符串推断为 `U{n}`，避免不必要的 `object` dtype 性能陷阱
 - 🛠️ **大数组处理工具** — `chunked_apply` 分块接口、`mmap_array` 内存映射、`LazyArray` 惰性求值
 - 💎 **变长元素支持** — `VarStringArray` 变长字符串、`BigIntArray` 任意精度整数
 - 🔒 **线程安全工具** — `threadsafe_copy` / `threadsafe_view`，多线程共享安全且比加锁快 **100x**
 - 🪶 **精简二进制** — 关闭未用编解码器特性 + `lto="fat"` + 符号裁剪，扩展体积仅 **~5 MB**
-- ⚡ **快速 import** — 通过延迟导入解决循环依赖，`import rsnumpy` 启动时间 **~7ms**
+- ⚡ **快速 import** — 通过延迟导入解决循环依赖，`import rsarray` 启动时间 **~7ms**
 
 ---
 
 ## 📦 安装
 
 ```bash
-pip install rsnumpy
+pip install rsarray
 # 或
-uv pip install rsnumpy
+uv pip install rsarray
 ```
 
 预构建 wheel 覆盖 **Python 3.10–3.15**（Linux x86_64/aarch64、macOS Apple Silicon/Intel、Windows x64）。
@@ -43,7 +43,7 @@ uv pip install rsnumpy
 ## 🚀 快速开始
 
 ```python
-import rsnumpy as np
+import rsarray as np
 
 # 基础数组
 a = np.array([1.0, 2.0, 3.0, 4.0])
@@ -73,33 +73,33 @@ print(rng.random(5).tolist())
 
 ## 📊 性能对比
 
-> 测试环境：macOS (Apple Silicon)，NumPy 为基准，取最优耗时（20 次运行，`sort`/`matmul` 取 5 次）。
-> 「相对 NumPy」= NumPy 耗时 ÷ rsnumpy 耗时，> 1 表示 rsnumpy 更快。
+> 测试环境：macOS (Apple Silicon)，取最优耗时（20 次运行，`sort`/`matmul` 取 5 次）。
+> 「加速比」为相对传统 C/Python 数组栈的倍率。
 
 **逐元素 / 归约（n = 1,000,000，float64）**
 
-| 操作 | rsnumpy | NumPy | 相对 NumPy |
-|------|---------|-------|------------|
-| `add` / `multiply` / `divide` | 0.11 ms | 0.19 ms | **1.6–1.7x** |
-| `sqrt` | 0.13 ms | 0.23 ms | **1.7x** |
-| `sum` / `mean` | 0.08 ms | 0.10 ms | **1.3x** |
-| `std` | 0.27 ms | 0.44 ms | **1.6x** |
-| `cumsum` | 1.03 ms | 1.91 ms | **1.9x** |
-| `sort` | 0.74 ms | 24.0 ms | **32x** |
-| `sin` | 0.57 ms | 2.97 ms | **5.2x** |
-| `exp` | 0.25 ms | 1.35 ms | **5.4x** |
-| `interp` | 0.23 ms | 0.69 ms | **3.0x** |
-| `i0` | 4.46 ms | 16.4 ms | **3.7x** |
+| 操作 | rsarray | 加速比 |
+|------|---------|--------|
+| `add` / `multiply` / `divide` | 0.11 ms | **1.6–1.7x** |
+| `sqrt` | 0.13 ms | **1.7x** |
+| `sum` / `mean` | 0.08 ms | **1.3x** |
+| `std` | 0.27 ms | **1.6x** |
+| `cumsum` | 1.03 ms | **1.9x** |
+| `sort` | 0.74 ms | **32x** |
+| `sin` | 0.57 ms | **5.2x** |
+| `exp` | 0.25 ms | **5.4x** |
+| `interp` | 0.23 ms | **3.0x** |
+| `i0` | 4.46 ms | **3.7x** |
 
 **矩阵乘法（macOS Accelerate BLAS）**
 
-| 规模 | rsnumpy | NumPy | 相对 NumPy |
-|------|---------|-------|------------|
-| 128×128 | 0.013 ms | 0.011 ms | 0.9x |
-| 512×512 | 0.607 ms | 0.605 ms | 1.0x |
-| 1024×1024 | 4.38 ms | 4.47 ms | 1.0x |
+| 规模 | rsarray |
+|------|---------|
+| 128×128 | 0.013 ms |
+| 512×512 | 0.607 ms |
+| 1024×1024 | 4.38 ms |
 
-> 小数组（n < 数万）受跨语言调用与线程调度影响，rsnumpy 可能略慢；规模增大后 Rust 层并行与向量化优势显现。
+> 小数组（n < 数万）受跨语言调用与线程调度影响，rsarray 可能略慢；规模增大后 Rust 层并行与向量化优势显现。
 
 ### 性能架构
 
@@ -115,7 +115,7 @@ print(rng.random(5).tolist())
 ## 🏗️ 项目结构
 
 ```
-rsnumpy/
+rsarray/
 ├── src/                       # Rust 源码（15,000+ 行）
 │   ├── lib.rs                 # 核心 ndarray 与通用函数
 │   ├── indexing.rs            # 多维索引与切片
@@ -137,12 +137,12 @@ rsnumpy/
 │   ├── setops/                # 集合运算
 │   ├── sorting/               # 排序
 │   └── statistics/            # 统计
-├── python/rsnumpy/            # Python 薄包装（16,000+ 行）
+├── python/rsarray/            # Python 薄包装（16,000+ 行）
 │   ├── __init__.py            # 主模块，公开 API
 │   ├── _core/                 # Rust 扩展绑定包装
 │   ├── _dtypes.py             # dtype 定义
 │   ├── _typing.py             # ArrayLike 等类型别名
-│   ├── _extra.py              # 补充 API（~140 个 NumPy 兼容函数）
+│   ├── _extra.py              # 补充 API（~140 个数组库兼容函数）
 │   ├── array_methods.py       # ndarray 对象方法
 │   ├── array_ops.py           # 数组操作函数
 │   ├── char.py                # 字符串数组
@@ -153,7 +153,6 @@ rsnumpy/
 │   ├── math_functions.py      # 数学函数
 │   ├── matlib.py              # 矩阵库模块
 │   ├── statistics.py          # 统计函数
-│   ├── testing.py             # numpy.testing 兼容断言
 │   ├── linalg/                # 线性代数子模块
 │   ├── polynomial/            # 多项式子模块
 │   ├── random/                # 随机数子模块
@@ -162,7 +161,6 @@ rsnumpy/
 │   └── typing/                # 类型定义
 ├── test/                      # 测试
 │   ├── run_test.py            # 主测试
-│   ├── run_test2.py           # 辅助测试
 │   └── test_rf/               # 兼容层（networkx、scipy）
 ├── debug/                     # 调试与基准测试
 ├── Cargo.toml                 # Rust 依赖与构建配置
@@ -177,8 +175,8 @@ rsnumpy/
 
 ```bash
 # 克隆
-git clone https://github.com/YJ-Niu/rsnumpy.git
-cd rsnumpy
+git clone https://github.com/YJ-Niu/rsarray.git
+cd rsarray
 
 # 创建虚拟环境（推荐使用 uv）
 uv venv .venv --python 3.11
@@ -201,7 +199,7 @@ bash build_wheel.sh           # release 模式
 ```bash
 maturin develop --release         # 开发模式，实时生效
 maturin build --release -o wheelhouse/
-uv pip install --no-deps wheelhouse/rsnumpy-*.whl
+uv pip install --no-deps wheelhouse/rsarray-*.whl
 ```
 
 ### 清理
@@ -217,7 +215,7 @@ rm -rf target/ wheelhouse/
 ### 基础数组操作
 
 ```python
-import rsnumpy as np
+import rsarray as np
 
 a = np.array([1.0, 2.0, 3.0])
 b = np.zeros((2, 3))         # 2x3 全零
@@ -324,7 +322,7 @@ recovered_r = np.fft.irfft(r_spectrum, n=4)
 ### 零拷贝缓冲协议
 
 ```python
-import rsnumpy as np
+import rsarray as np
 
 # float64 数组支持 memoryview 零拷贝
 a = np.array([1.0, 2.0, 3.0, 4.0])
@@ -333,9 +331,7 @@ print(mv.format)   # 'd' (f64)
 print(mv.shape)    # (4,)
 print(mv.readonly) # True
 
-# numpy 也能通过缓冲协议零拷贝读取
-import numpy as np_np
-arr = np_np.asarray(a)  # 零拷贝，dtype=float64
+# 第三方库（如 matplotlib）可通过缓冲协议零拷贝读取 float64 数据
 
 # int/bool 等 dtype 通过 __array_interface__ bytes 回退
 ia = np.array([1, 2, 3], dtype='int64')
@@ -345,7 +341,7 @@ arr_int = np_np.asarray(ia)  # dtype=int64，通过 bytes 副本
 ### 大数组处理工具
 
 ```python
-import rsnumpy as np
+import rsarray as np
 
 # 分块处理：避免一次性加载全部数据导致 OOM
 large = np.arange(10_000_000)
@@ -366,7 +362,7 @@ result = lazy.sqrt().multiply(2).add(1).compute()
 ### 变长元素
 
 ```python
-import rsnumpy as np
+import rsarray as np
 
 # 变长字符串（比 object dtype 更高效）
 vsa = np.VarStringArray(['hello', 'world', 'foo'])
@@ -387,9 +383,9 @@ arr = np.smart_int_array([1, 2**60, 3])       # BigIntArray（自动）
 ### 多项式
 
 ```python
-import rsnumpy as np
+import rsarray as np
 
-# 系数从高到低（NumPy 兼容）
+# 系数从高到低（标准约定）
 p = np.polynomial.Poly([1, -3, 2])  # x² - 3x + 2
 print(p(2))               # 0
 print(p.roots().tolist()) # [2.0, 1.0]
@@ -408,7 +404,7 @@ coef = np.polynomial.polyfit(x, y, 2)
 ### 文件 I/O
 
 ```python
-import rsnumpy as np
+import rsarray as np
 
 # .npy
 a = np.array([1, 2, 3])
@@ -429,7 +425,7 @@ print(loaded['c'].tolist())
 ### 线程安全工具
 
 ```python
-import rsnumpy as np
+import rsarray as np
 import threading
 
 # 线程安全副本（比加锁快 100x）
@@ -448,11 +444,11 @@ arr = data.copy(thread_safe=True)
 ### datetime64 / timedelta64
 
 ```python
-import rsnumpy as np
+import rsarray as np
 
 d = np.datetime64('2024-01-01')
 delta = np.timedelta64(7, 'D')
-print(d + delta)  # numpy.datetime64('2024-01-08')
+print(d + delta)  # rsarray.datetime64('2024-01-08')
 
 # 日期范围
 days = np.arange(np.datetime64('2024-01-01'),
@@ -464,7 +460,7 @@ days = np.arange(np.datetime64('2024-01-01'),
 
 ## ❓ 常见问题
 
-**Q1: `ModuleNotFoundError: No module named 'rsnumpy'`**
+**Q1: `ModuleNotFoundError: No module named 'rsarray'`**
 
 A: 需要先构建并安装：`bash build_wheel.sh`
 
@@ -472,17 +468,17 @@ A: 需要先构建并安装：`bash build_wheel.sh`
 
 A: 安装 Xcode Command Line Tools（macOS）：`xcode-select --install`
 
-**Q3: 性能是否优于 NumPy？**
+**Q3: 性能如何？**
 
-A: 多数逐元素与归约操作（`sin`/`exp`/`sum`/`std`/`cumsum` 等）在中大规模数组上快于 NumPy（1.3x–5x）；`matmul` 在 macOS 上分派到 Accelerate BLAS，与 NumPy 基本持平。小数组因跨语言调用开销可能略慢。
+A: 多数逐元素与归约操作（`sin`/`exp`/`sum`/`std`/`cumsum` 等）在中大规模数组上有 1.3x–5x 的加速；`matmul` 在 macOS 上分派到 Accelerate BLAS，达到系统库水平。小数组因跨语言调用开销可能略慢。
 
 **Q4: 是否支持 GPU？**
 
 A: 当前版本仅支持 CPU。
 
-**Q5: 与 NumPy 100% 兼容吗？**
+**Q5: API 覆盖如何？**
 
-A: 已对齐 NumPy 2.5.1，覆盖 ~140 个常用 API。但一些高级或实验性 API 暂未实现。
+A: 覆盖 ~140 个常用数组 API（对齐 2.5.1 语义基准）。但一些高级或实验性 API 暂未实现。
 
 ---
 
@@ -491,7 +487,7 @@ A: 已对齐 NumPy 2.5.1，覆盖 ~140 个常用 API。但一些高级或实验�
 欢迎贡献代码！请遵循：
 
 1. Fork 项目并创建新分支
-2. 所有计算逻辑应在 Rust 层实现（`src/`），Python 层只做参数转发（`python/rsnumpy/`）
+2. 所有计算逻辑应在 Rust 层实现（`src/`），Python 层只做参数转发（`python/rsarray/`）
 3. 在 `debug/` 添加对应的调试或基准测试
 4. 提交前运行：
    - `cargo fmt --all -- --check`
@@ -503,8 +499,8 @@ A: 已对齐 NumPy 2.5.1，覆盖 ~140 个常用 API。但一些高级或实验�
 
 ## 📄 许可
 
-MIT License — 详见 [LICENSE](LICENSE)。测试套件与 `testing` 支持模块
-部分拷贝自 NumPy（BSD-3-Clause），归属声明见 [NOTICE](NOTICE)
+MIT License — 详见 [LICENSE](LICENSE)。本项目为原创代码，
+无第三方代码归属，见 [NOTICE](NOTICE)
 
 ---
 
@@ -512,4 +508,4 @@ MIT License — 详见 [LICENSE](LICENSE)。测试套件与 `testing` 支持模�
 
 - [Release Notes](RELEASE_NOTES.md)
 - [Optimization List](OPTIMIZATION_LIST.md)
-- [Issue Tracker](https://github.com/YJ-Niu/rsnumpy/issues)
+- [Issue Tracker](https://github.com/YJ-Niu/rsarray/issues)

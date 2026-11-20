@@ -61,13 +61,13 @@ jobs:
           sccache: "true"
 
       - name: Install built wheel
-        run: python -m pip install --no-index --find-links dist rsnumpy
+        run: python -m pip install --no-index --find-links dist rsarray
 
       - name: Run core test suite (pytest)
         # CI 门禁只跑简单核心 pytest 套件（buffer 协议、逐元素算术、构造、
         # 索引、归约、比较；已知缺口用 xfail 钉住）+ 冒烟测试（见下一步），
-        # 不跑 tests/ 整目录：NumPy 官方兼容基准（tests/test_rsnumpy_*.py，
-        # ~3400 用例）耗时过重，不进入 CI，需要时在本地手动跑。
+        # CI 门禁只覆盖核心语义测试；扩展测试目录（如存在）耗时过重，
+        # 不进入 CI，需要时在本地手动跑。
         run: |
           python -m pip install --quiet pytest
           # 命令必须单行：PowerShell（Windows CI）不支持 bash 式 "\" 续行，

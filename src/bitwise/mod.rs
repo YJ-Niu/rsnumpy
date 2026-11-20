@@ -97,7 +97,7 @@ fn binary_repr(num: i64, width: Option<usize>) -> String {
     }
 }
 
-/// 逐元素统计绝对值二进制表示中置位比特数（与 numpy.bitwise_count 一致，输出 uint8）。
+/// 逐元素统计绝对值二进制表示中置位比特数（与 bitwise_count 一致，输出 uint8）。
 #[pyfunction]
 fn bitwise_count(x: &NdArray) -> NdArray {
     NdArray {

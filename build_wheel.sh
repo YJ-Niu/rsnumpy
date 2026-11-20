@@ -25,10 +25,10 @@ sed -i.bak "s/^version = \".*\"/version = \"$VERSION\"/" pyproject.toml
 rm -f pyproject.toml.bak
 echo "  -> pyproject.toml version updated to $VERSION"
 
-# ========== 同步版本到 python/rsnumpy/__init__.py ==========
-sed -i.bak "s/^__version__ = \".*\"/__version__ = \"$VERSION\"/" python/rsnumpy/__init__.py 2>/dev/null || true
-rm -f python/rsnumpy/__init__.py.bak
-echo "  -> python/rsnumpy/__init__.py __version__ updated to $VERSION"
+# ========== 同步版本到 python/rsarray/__init__.py ==========
+sed -i.bak "s/^__version__ = \".*\"/__version__ = \"$VERSION\"/" python/rsarray/__init__.py 2>/dev/null || true
+rm -f python/rsarray/__init__.py.bak
+echo "  -> python/rsarray/__init__.py __version__ updated to $VERSION"
 
 # ========== 检查 cargo 是否可用（maturin 构建需要） ==========
 if ! command -v cargo; then
@@ -188,8 +188,8 @@ fi
 # ========== 构建后核心测试门禁（对本次构建的 wheel 把关） ==========
 # 每个成功安装的构建都必须通过 tests/ 下的核心 pytest 套件：buffer 协议、
 # 逐元素算术、构造、索引、归约、比较，并用 xfail 钉住已知缺口（修好后自动翻绿）。
-# 显式枚举核心测试文件（不跑 `pytest tests/` 整目录）——因为 tests/ 其余目录是
-# 「NumPy 参照基准」harness，单独作为非门禁报告跑（见下），不并入核心门禁。
+# 显式枚举核心测试文件（不跑 `pytest tests/` 整目录，避免收集非测试文件）；
+# --test debug|all 的全量测试报告（见下）与核心门禁共用 test_config.txt 机制。
 # SKIP_TESTS=1 可跳过（例如只要快速出 release wheel、不做验证时）。
 CORE_TEST_FILES=(
   tests/test_buffer.py
@@ -217,15 +217,13 @@ if [[ "$INSTALLED" -eq 1 && "${SKIP_TESTS:-0}" != "1" ]]; then
     exit 1
   fi
 
-  # ========== NumPy 参照基准：验证 rsnumpy 兼容性（非门禁报告） ==========
-  # 把 ./tests 下的全部测试（从 NumPy 官方测试树拷贝、导入已改为 rsnumpy）作为
-  # 参照基准跑一遍——被测对象是 rsnumpy，这些测试只是 ground truth。
-  # failed / error = rsnumpy 待修的 bug 或待补的 API，故只报告、不门禁；
+  # ========== 全量测试报告：--test debug|all（非门禁） ==========
+  # 对 ./tests 下核心 7 文件之外的测试文件逐文件跑 pytest 子进程，把
+  # passed/failed/skipped 结果回写 tests/test_config.txt。
+  # failed / error = rsarray 待修的 bug 或待补的 API，故只报告、不门禁；
   # 核心门禁仍是上面的 7 个核心文件。
-  #   * --continue-on-collection-errors：rsnumpy 尚未实现的子模块（f2py、
-  #     polynomial 各子模块、random.Generator 等）会让整个测试文件收集失败，
-  #     不能因此中断全量报告。
-  #   * RSNUMPY_COMPAT_SKIP_CRASHES=1：跳过已知会让 pytest 进程直接崩溃的用例；
+  #   * --continue-on-collection-errors：单个测试文件收集失败不中断全量报告。
+  #   * RSARRAY_COMPAT_SKIP_CRASHES=1：跳过已知会让 pytest 进程直接崩溃的用例；
   #     未在清单中的 crash 由 xdist worker 隔离（只损失该 worker 上的用例）。
   #
   # 测试模式（--test all|debug；本段仅在给出 --test 时到达）：
@@ -236,7 +234,7 @@ if [[ "$INSTALLED" -eq 1 && "${SKIP_TESTS:-0}" != "1" ]]; then
   #            tests/test_config.txt（全通过 → 1，存在 failed/skipped/error → 0）。
   #
   # 执行架构：每个测试文件一个独立 pytest 子进程（文件内 xdist 并行，默认 4 worker）：
-  #   * 崩溃隔离 —— 用例把 rsnumpy C 扩展打崩（Rust panic -> abort / segfault）
+  #   * 崩溃隔离 —— 用例把 rsarray C 扩展打崩（Rust panic -> abort / segfault）
   #     只损失该文件的进程，不再杀掉整份报告（旧的单个 xdist controller 在 worker
   #     或 controller 自身崩溃时会让整个运行被 abort 截断）。
   #   * 边测边更新 —— 每个文件跑完立即把计数（passed/failed/skipped）原子写回
@@ -245,7 +243,7 @@ if [[ "$INSTALLED" -eq 1 && "${SKIP_TESTS:-0}" != "1" ]]; then
   # 仅显式 --test debug|all 时跑全量 compat 报告（默认 off：无参 = 快测，
   # 只有上方核心门禁 + 下方冒烟测试，总时长 2 分钟内）。
   if [[ "$TEST_MODE" != "off" ]]; then
-  echo "Running rsnumpy-compatibility check over ./tests (non-gating report, mode=$TEST_MODE) ..."
+  echo "Running rsarray-compatibility check over ./tests (non-gating report, mode=$TEST_MODE) ..."
   # 文件内并行度默认 4（COMPAT_WORKERS 可覆盖，设为 0 强制单进程）——按文件起子进程
   # 后总并行度仍是 4：每个用例都是数组的重计算，并行度过高机器会满载发烫。
   COMPAT_WORKERS_N="${COMPAT_WORKERS:-4}"
@@ -256,7 +254,7 @@ if [[ "$INSTALLED" -eq 1 && "${SKIP_TESTS:-0}" != "1" ]]; then
   mkdir -p debug_test
   CONFIG_FILE="tests/test_config.txt"
 
-  CFG_HEADER='# rsnumpy 测试配置: <测试文件> <标志> <passed>/<failed>/<skipped>
+  CFG_HEADER='# rsarray 测试配置: <测试文件> <标志> <passed>/<failed>/<skipped>
 #   1 = 上次全部通过   0 = 存在 failed/skipped/error（或尚未跑通）
 # 由 build_wheel.sh 的测试阶段自动维护：每个文件一个 pytest 子进程，跑完立即
 # 写回结果（边测边更新；崩溃只影响该文件，计数列标 crash）。
@@ -341,7 +339,7 @@ PYEOF
   COMPAT_LOG="${COMPAT_LOG:-tests/${TEST_MODE}_report.log}"
   COMPAT_RC=0
   if [[ ${#TARGETS[@]} -gt 0 ]]; then
-    RUN_DIR=$(mktemp -d "${TMPDIR:-/tmp}/rsnumpy_compat.XXXXXX")
+    RUN_DIR=$(mktemp -d "${TMPDIR:-/tmp}/rsarray_compat.XXXXXX")
     : > "$COMPAT_LOG"
     _N=${#TARGETS[@]}
     _idx=0
@@ -355,7 +353,7 @@ PYEOF
       echo "  [$_idx/$_N] $f"
       set +e
       # 边测边显示：输出流式打印到终端（tee 同时追加完整日志），另存本文件输出供解析。
-      env RSNUMPY_COMPAT_SKIP_CRASHES=1 PYTHONUNBUFFERED=1 \
+      env RSARRAY_COMPAT_SKIP_CRASHES=1 PYTHONUNBUFFERED=1 \
         "$VENV_PY" -m pytest "$f" \
         -q -p no:cacheprovider --continue-on-collection-errors $JFLAGS \
         2>&1 | tee -a "$COMPAT_LOG" > "$RUN_DIR/out.log"
@@ -409,7 +407,7 @@ PYEOF
     rm -rf "$RUN_DIR"
     echo
     echo "  -> full log: $COMPAT_LOG"
-    echo "  -> rsnumpy compatibility report above (failed/error = rsnumpy bugs/gaps vs the numpy reference; non-gating, rc=$COMPAT_RC)."
+    echo "  -> full test report above (failed/error = rsarray bugs/gaps; non-gating, rc=$COMPAT_RC)."
 
     # all 模式：核心 7 文件不进本轮运行，但门禁已确认通过，配置里直接置 1
     # （否则 debug 模式会重复跑它们）。
@@ -426,18 +424,17 @@ PYEOF
     fi
   fi
   else
-    echo "Skipping the full rsnumpy-compatibility report (no --test given)."
+    echo "Skipping the full rsarray-compatibility report (no --test given)."
     echo "      './build_wheel.sh --test debug' 只重跑未通过文件；'--test all' 全量并重建清单。"
   fi
 
-  # ========== 冒烟测试：run_test.py / run_test2.py（非门禁报告） ==========
-  # 独立顺序执行脚本（非 pytest），验证 rsnumpy 核心功能无异常。
-  # failed = rsnumpy 存在未修复的 bug，故只报告、不门禁。
+  # ========== 冒烟测试：run_test.py（非门禁报告） ==========
+  # 独立顺序执行脚本（非 pytest），验证 rsarray 核心功能无异常。
+  # failed = rsarray 存在未修复的 bug，故只报告、不门禁。
   SMOKE_TESTS=(
     tests/run_test.py
-    tests/run_test2.py
   )
-  echo "Running rsnumpy smoke tests (non-gating report) ..."
+  echo "Running rsarray smoke tests (non-gating report) ..."
   mkdir -p debug_test
   for SMOKE_TEST in "${SMOKE_TESTS[@]}"; do
     set +e

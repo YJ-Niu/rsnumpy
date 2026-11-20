@@ -1,4 +1,4 @@
-"""Element-wise arithmetic on rsnumpy ndarrays.
+"""Element-wise arithmetic on rsarray ndarrays.
 
 Covers the core operations the scicore port relies on: binary ops (both
 operand directions), scalar ops (both directions), unary ops, pow, 2-D
@@ -8,11 +8,11 @@ these operations in isolation and are documented in test_known_gaps.py.
 """
 import pytest
 
-import rsnumpy as np
+import rsarray as np
 
 
 def _f(x):
-    """Flatten an rsnumpy result to a flat Python list of floats."""
+    """Flatten an rsarray result to a flat Python list of floats."""
     if hasattr(x, "tolist"):
         x = x.tolist()
     out = []
@@ -91,7 +91,7 @@ def test_wrapper_add_sub_div_with_raw():
 
 def test_raw_op_wrapper_elementwise():
     # Regression: ``raw op wrapper`` was misread as a scalar — ``binary_op``
-    # checked ``b.extract::<f64>()`` before recognizing the wrapped rsnumpy
+    # checked ``b.extract::<f64>()`` before recognizing the wrapped rsarray
     # ndarray (whose ``__float__`` returns its first element), so it computed
     # ``raw op wrapper[0]``.  Now element-wise.  See test_known_gaps.py.
     w = np.array([1.0, 2.0, 3.0])

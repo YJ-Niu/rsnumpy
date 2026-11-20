@@ -1,4 +1,4 @@
-"""Regression guard for the former known rsnumpy arithmetic gaps.
+"""Regression guard for the former known rsarray arithmetic gaps.
 
 In 2026-10 this module tracked four scicore integration gaps, all failing
 with ``TypeError: Unsupported operand type`` raised from ``ndarray.__add__``
@@ -16,7 +16,7 @@ is the core-level guard for the stft COLA expression.
 """
 import pytest
 
-import rsnumpy as np
+import rsarray as np
 
 
 def test_stft_expression_is_correct_in_isolation():

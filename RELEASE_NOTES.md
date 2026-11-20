@@ -1,7 +1,7 @@
 # Release Notes
 
-> Python 安装：`pip install rsnumpy` 或 `uv pip install rsnumpy`
-> 源码：<https://github.com/YJ-Niu/rsnumpy>
+> Python 安装：`pip install rsarray` 或 `uv pip install rsarray`
+> 源码：<https://github.com/YJ-Niu/rsarray>
 > 许可：MIT
 
 ---
@@ -20,16 +20,16 @@
 
 ---
 
-## v1.2.7 (2026-10-25) — NumPy 兼容修复与流水线提速
+## v1.2.7 (2026-10-25) — 语义兼容修复与流水线提速
 
-### 🐛 NumPy 兼容修复（6 组）
+### 🐛 语义兼容修复（6 组）
 
 - **`ndarray.__matmul__`**：非 ndarray 操作数转换失败时返回 `NotImplemented`，让 sparse 等第三方类型的 `__rmatmul__` 能正确路由回来（修复 kmeans2 的 `x @ cholesky` 调用链）
 - **`linalg._wrap`**：统一用包装类重构造结果，修复 `cholesky` / `svd` 之后 `.T` / `@` 操作链断裂的问题
-- **`flatnonzero`**：按 NumPy 语义返回 int64 索引数组
+- **`flatnonzero`**：按标准语义返回 int64 索引数组
 - **`bitwise_not`**：正确识别 bool dtype——布尔数组走逻辑非（`xor 1`），而非补码位取反
 - **反向位运算**：新增标量 `&` / `|` / `^` ndarray 的 `__rand__` / `__ror__` / `__rxor__`
-- **`statistics.std`**：新增 NumPy 兼容的 `correction` 参数（优先于 `ddof`）；指定 `axis` 时改走 Python 归约，规避 Rust 侧归约 panic
+- **`statistics.std`**：新增标准兼容的 `correction` 参数（优先于 `ddof`）；指定 `axis` 时改走 Python 归约，规避 Rust 侧归约 panic
 - **`frombuffer`**：修复 `min` 命名遮蔽问题（`_py_min`）
 - **`__capabilities__`**：键名改为 array_api_compat 约定的空格分隔格式（scipy vendored `_external` 以 `"boolean indexing"` 索引）
 
@@ -61,13 +61,13 @@
 ### ✨ 新功能
 
 - **`lib.stride_tricks`**：新增 `as_strided` 等步长技巧函数
-- **`testing` 子模块**：兼容 `numpy.testing` 的核心断言（`assert_` / `assert_equal` / `assert_allclose`），纯 Python 实现、不依赖 NumPy
+- **`testing` 子模块**：核心测试断言（`assert_` / `assert_equal` / `assert_allclose`），纯 Python 实现、零第三方依赖
 - **`polynomial.Polynomial`**：新增 polynomial 子模块兼容层与 `Polynomial` 别名
 - **`_typing` 模块**：提供 `ArrayLike` 等类型别名
 - **`ndarray.device` 属性**：明确声明仅支持 CPU
 - **linalg 增强**：新增 `qr` 分解、`cond` 条件数、通用版本 SVD、`vector_norm`
 - **random 增强**：新增 `vonmises` / `multivariate_normal` 等分布，补充 Python 实现的回退生成器
-- **`ma.getmask`**：兼容 `numpy.ma` 接口
+- **`ma.getmask`**：兼容标准掩码数组接口
 - **`searchsorted`** 等数组操作函数
 - **`loadtxt`** 支持类文件对象
 
@@ -107,7 +107,7 @@
 ### ⚡ 性能与体积
 
 - **二进制体积减小约 28%**：通过移除 `num_cpus` 依赖、改用标准库 `std::thread::available_parallelism()`，并配合 `lto="fat"` / `codegen-units=1` / `panic="abort"` / `strip="symbols"` 等编译选项，`num_core.cpython-*.so` 从 6.8 MB 降至约 5.1 MB
-- **导入速度提升约 130×**：`import rsnumpy` 首次导入时间从约 900 ms 降至约 7 ms（再次导入约 6 ms）。原因：`array_methods.py` 与 `__init__.py` 之间的循环依赖通过 `_get_deps()` 延迟导入解决
+- **导入速度提升约 130×**：`import rsarray` 首次导入时间从约 900 ms 降至约 7 ms（再次导入约 6 ms）。原因：`array_methods.py` 与 `__init__.py` 之间的循环依赖通过 `_get_deps()` 延迟导入解决
 - **零依赖标准库**：`num_cpus` 完全移除，构建时不再拉取额外 crate
 
 ### 🧵 线程与并行
@@ -133,7 +133,7 @@
 
 ### 🎯 智能类型推断
 
-- **自动识别固定长度字符串**：传入 `['hello', 'world']` 时默认推断为 `U5` 而非 `object`，与 NumPy 一致
+- **自动识别固定长度字符串**：传入 `['hello', 'world']` 时默认推断为 `U5` 而非 `object`，与标准语义一致
 - **混合类型数据建议**：`array()` 构造时若检测到可能回退到 `object` dtype，会打印性能警告并给出推荐 dtype
 - **大整数精度警告**：构造时若整数超过 ±2^53，会在 `array` 路径给出明确提示，建议改用 `BigIntArray`
 - **辅助工具**：`check_object_dtype(arr)` / `suggest_dtype_for_data(data)` 显式触发检测
@@ -146,7 +146,7 @@
 
 ### 🐛 关键修复
 
-- **循环导入导致 import 卡顿**：`array_methods.py` 与 `__init__.py` 互引导致 `import rsnumpy` 耗时 ~900 ms，改为延迟 `_get_deps()` 后降至 ~7 ms
+- **循环导入导致 import 卡顿**：`array_methods.py` 与 `__init__.py` 互引导致 `import rsarray` 耗时 ~900 ms，改为延迟 `_get_deps()` 后降至 ~7 ms
 - **`timedelta64` 比较非传递性**：统一 `__lt__` / `__gt__` 等运算符的语义，跨类型比较不再产生自相矛盾的结果
 - **pickle 反序列化安全**：`__setstate__` 引入 dtype 白名单与 `payload` 大小上限，阻止恶意构造的超大数组攻击
 - **`pad` 函数 DoS 防护**：`pad_width` 现在有上限校验，避免 `pad_width=10**18` 这类输入把进程拖死
@@ -160,7 +160,7 @@
 - **Rust 层函数下沉**：`choose` / `compress` / `copyto` 从 `_extra.py` 迁移至 `manipulation/mod.rs` 的 Rust 实现，Python 仅做参数转发
 - **`nansum` 并行化**：`statistics/mod.rs::nansum` 引入 rayon 并行，沿用现有 `PAR_THRESHOLD` / `PAR_THRESHOLD_CHEAP` / `PAR_THRESHOLD_MEDIUM` 模式
 - **`vectorize.__call__` 快速路径**：标量、单参数、双参数分别走最优路径；预绑定方法、缓存 `kwargs`，把 Python 层循环开销压到最低
-- **统一 `keepdims` 支持**：`nanmin` / `nanmax` / `nansum` / `nanprod` / `nanmean` / `nanvar` / `nanstd` / `nancumsum` / `nancumprod` / `count_nonzero` 等全部支持 `keepdims`，与 NumPy 行为一致
+- **统一 `keepdims` 支持**：`nanmin` / `nanmax` / `nansum` / `nanprod` / `nanmean` / `nanvar` / `nanstd` / `nancumsum` / `nancumprod` / `count_nonzero` 等全部支持 `keepdims`，与标准行为一致
 - **统计函数多算子轴归约**：`nanmin` / `nanmax` / `nansum` / `nanprod` 等已下沉至 Rust 实现
 
 ### 🧪 测试
@@ -178,7 +178,7 @@
 
 ### ✨ 功能增强
 
-- **统一 `keepdims` 行为**：归约算子（`sum` / `min` / `max` / `mean` / `std` / `var` / `nan*` 等）现在全部支持 `keepdims`，形状与 NumPy 一致
+- **统一 `keepdims` 行为**：归约算子（`sum` / `min` / `max` / `mean` / `std` / `var` / `nan*` 等）现在全部支持 `keepdims`，形状与标准语义一致
 - **多项式索引支持**：`polynomial.Poly` 现在支持任意位置的系数索引与切片
 - **复数梯度计算**：多项式模块的复数 `__call__` 路径在系数为复数时也能正确求值
 
@@ -190,7 +190,7 @@
 ### 🧹 重构
 
 - 大量函数实现统一并下沉，减少 Python 层重复逻辑
-- 批量新增 numpy 风格工具函数（位运算、统计、多项式等）
+- 批量新增数组工具函数（位运算、统计、多项式等）
 - 新增依赖模块初始化文件与测试用例
 
 ---
@@ -296,9 +296,9 @@
 
 ---
 
-## v1.1.0 (2026-07-09) — NumPy 2.5.1 对齐
+## v1.1.0 (2026-07-09) — 对齐 2.5.1 语义基准
 
-- 新增约 140 个 NumPy 兼容函数（别名、nan 系列、集合运算、窗函数、信号等）
+- 新增约 140 个兼容数组 API 函数（别名、nan 系列、集合运算、窗函数、信号等）
 - 改进 `transpose` 实现
 
 ---
@@ -312,7 +312,7 @@
 
 ## v1.0.7 (2026-07-07)
 
-- **NumPy 数组接口协议**：实现 `__array__` 等接口，支持 matplotlib 直接绘图
+- **数组接口协议**：实现 `__array__` 等接口，支持 matplotlib 直接绘图
 - 优化 `argmax` / `argmin` / `argsort` 实现
 
 ---

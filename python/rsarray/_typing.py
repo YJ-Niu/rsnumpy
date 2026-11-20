@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: MIT
+"""Type aliases and annotations for rsarray.
+
+This module provides type hints used across rsarray and by downstream
+projects such as rsSciPy.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Sequence, Union
+
+import rsarray as np
+
+# ArrayLike: anything that can be converted to an rsarray array
+ArrayLike = Union[
+    np.ndarray,
+    Sequence[Any],
+    int,
+    float,
+    complex,
+    bool,
+]
+
+__all__ = ['ArrayLike']

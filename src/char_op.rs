@@ -31,7 +31,7 @@ fn strip_to(s: &str, chars: Option<&str>, left: bool, right: bool) -> String {
     }
 }
 
-/// numpy title 语义：非字母后的首个字母大写，其余小写
+/// title 语义：非字母后的首个字母大写，其余小写
 fn np_title(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut prev_alpha = false;

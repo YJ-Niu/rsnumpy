@@ -3,13 +3,12 @@ requires = ["maturin>=1.13,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "rsnumpy"
+name = "rsarray"
 version = "1.2.10"
 requires-python = ">=3.10"
-description = "A Rust-powered NumPy-compatible array library."
+description = "A high-performance array library powered by Rust."
 readme = "PYPI.md"
-# PEP 639：license 表达式 + 随包分发的许可文件（NOTICE 声明 NumPy 测试
-# 代码的 BSD-3 归属，见仓库根目录 NOTICE）
+# PEP 639：license 表达式 + 随包分发的许可文件
 license = "MIT"
 license-files = ["LICENSE", "NOTICE"]
 authors = [
@@ -25,8 +24,8 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: 3.15",
-    "Programming Language :: Python :: Implementation :: CPython",
-    "Programming Language :: Python :: Implementation :: PyPy",
+    "Programming Language :: Implementation :: CPython",
+    "Programming Language :: Implementation :: PyPy",
     "Operating System :: MacOS",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
@@ -36,13 +35,13 @@ classifiers = [
 [tool.pytest.ini_options]
 # 钉 rootdir 到仓库根：缺此段时 pytest 不把 pyproject.toml 当 ini 文件，
 # rootdir 会向上漂移到盘符根（Windows CI 曾因此全盘收集）；无参运行只
-# 收集 tests/。norecursedirs 额外排除源码树：python/ 的包链
-# （python/rsnumpy[/testing[/tests]]）带完整 __init__.py，一旦被收集 pytest
-# 会把 python/ 插入 sys.path，import rsnumpy 会加载无 num_core 的源码树。
+# 收集 tests/。norecursedirs 额外排除源码树：python/ 的包链带完整
+# __init__.py，一旦被收集 pytest 会把 python/ 插入 sys.path，
+# import rsarray 会加载无 num_core 的源码树。
 testpaths = ["tests"]
 norecursedirs = ["python", "target", "wheelhouse", "dist", ".venv"]
 
 [tool.maturin]
-module-name = "rsnumpy.num_core"
+module-name = "rsarray.num_core"
 python-source = "python"
-include = ["python/rsnumpy/__init__.py", "python/rsnumpy/exceptions.py", "python/rsnumpy/_core/__init__.py", "python/rsnumpy/_core/numeric.py", "python/rsnumpy/linalg/__init__.py", "python/rsnumpy/random/__init__.py", "python/rsnumpy/fft/__init__.py", "python/rsnumpy/typing/__init__.py"]
+include = ["python/rsarray/__init__.py", "python/rsarray/exceptions.py", "python/rsarray/_core/__init__.py", "python/rsarray/_core/numeric.py", "python/rsarray/linalg/__init__.py", "python/rsarray/random/__init__.py", "python/rsarray/fft/__init__.py", "python/rsarray/typing/__init__.py"]

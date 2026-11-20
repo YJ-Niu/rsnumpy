@@ -36,7 +36,7 @@ static CURRENT_NUM_THREADS: AtomicUsize = AtomicUsize::new(0);
 
 /// 内部获取线程数（默认为 CPU 核心数）
 fn default_num_threads() -> usize {
-    if let Ok(threads_str) = std::env::var("RSNUMPY_NUM_THREADS")
+    if let Ok(threads_str) = std::env::var("RSARRAY_NUM_THREADS")
         && let Ok(threads) = threads_str.parse::<usize>()
         && threads > 0
     {
@@ -61,7 +61,7 @@ fn ensure_pool() -> Arc<ThreadPool> {
         let n = default_num_threads();
         let pool = ThreadPoolBuilder::new()
             .num_threads(n)
-            .thread_name(|i| format!("rsnumpy-wk-{}", i))
+            .thread_name(|i| format!("rsarray-wk-{}", i))
             .build()
             .expect("Failed to create rayon thread pool");
         CURRENT_NUM_THREADS.store(n, Ordering::SeqCst);
@@ -75,7 +75,7 @@ fn rebuild_pool(num_threads: usize) -> Arc<ThreadPool> {
     let n = num_threads.max(1).min(num_cpus_get());
     let pool = ThreadPoolBuilder::new()
         .num_threads(n)
-        .thread_name(|i| format!("rsnumpy-wk-{}", i))
+        .thread_name(|i| format!("rsarray-wk-{}", i))
         .build()
         .expect("Failed to create rayon thread pool");
     let arc_pool = Arc::new(pool);
@@ -105,7 +105,7 @@ where
 ///
 /// 【使用示例】
 /// ```python
-/// import rsnumpy as np
+/// import rsarray as np
 /// np.set_num_threads(8)          # 设为 8 线程
 /// np.set_num_threads(0)          # 恢复自动检测
 /// print(np.get_num_threads())    # 查看当前线程数
@@ -162,7 +162,7 @@ pub fn get_parallel_thresholds(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
 ///
 /// 【使用示例】
 /// ```python
-/// import rsnumpy as np
+/// import rsarray as np
 /// # 降低阈值，让更小的数组也走并行
 /// np.set_parallel_thresholds(expensive=1024, medium=2048, cheap=8192)
 /// # 恢复默认值
@@ -200,7 +200,7 @@ pub fn set_parallel_thresholds(
 ///
 /// 【使用示例】
 /// ```python
-/// import rsnumpy as np
+/// import rsarray as np
 /// with np.parallel_context(num_threads=4):
 ///     result = np.dot(large_matrix1, large_matrix2)
 /// # 自动恢复原线程数
