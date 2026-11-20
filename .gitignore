@@ -30,6 +30,7 @@ user_rules.md
 # OS
 .DS_Store
 .codebuddy
+.atomcode
 Thumbs.db
 
 # Data / plots
